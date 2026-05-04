@@ -26,7 +26,7 @@ import { useFonts, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
 import { GoldDieFace } from './AnimatedDice';
-import { InteractiveTutorialScreen } from './src/tutorial/InteractiveTutorialScreen';
+import { InteractiveTutorialScreen, type TutorialProgressPayload } from './src/tutorial/InteractiveTutorialScreen';
 import { tutorialBus } from './src/tutorial/tutorialBus';
 import { HappyBubble } from './src/components/HappyBubble';
 // RoamingDice inlined below (was ./components/RoamingDice)
@@ -39,6 +39,7 @@ import ExcellenceMeter from './components/ExcellenceMeter';
 import TutorialProgressMeter from './components/TutorialProgressMeter';
 import { SlindaCoin } from './components/SlindaCoin';
 import { HorizontalOptionWheel, type HorizontalWheelOption } from './components/HorizontalOptionWheel';
+import { AdSlot } from './src/components/AdSlot';
 import * as Localization from 'expo-localization';
 import { t, type MsgParams } from './shared/i18n';
 import {
@@ -48,11 +49,16 @@ import {
   type DifficultyStageId,
 } from './shared/difficultyStages';
 import { buildEqOpDisplayCycle, normalizeOperationToken } from './shared/equationOpCycle';
+import {
+  equationMatchesDiceAndResult,
+  extractEquationOperators,
+  validateEquationCommitsForDisplay,
+} from './shared/validation';
 
 const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', 'welcome.title')]);
 const RESULTS_POSSIBLE_TITLES = new Set([t('he', 'results.possibleTitle'), t('en', 'results.possibleTitle')]);
 import { LocaleProvider, useLocale } from './src/i18n/LocaleContext';
-import { disposeSfx, initializeSfx, playMeterCelebrateSequence, playSfx, setSfxMuted, setSfxVolume } from './src/audio/sfx';
+import { disposeSfx, initializeSfx, playSfx, setSfxMuted, setSfxVolume } from './src/audio/sfx';
 // TEMP: capture full stack trace for TypeError
 const _origConsoleError = console.error;
 const sendDebugLog = (hypothesisId: string, location: string, message: string, data: Record<string, unknown> = {}) => {
@@ -72,12 +78,9 @@ console.error = (...args: any[]) => {
   _origConsoleError(...args);
 };
 
-const pokerTableImg = Platform.OS === 'web'
-  ? require('./assets/table_ovale.png')
-  : require('./assets/table_green_nobg.png');
+const pokerTableImg = require('./assets/table_green_default.png');
 const gameBgImg = require('./assets/bg.jpg');
-/** רקע מסכי שחקן / מעבר תור — כחול־כהה, מובחן מתמונת הרקע של מסך המשחק (bg.jpg) */
-const playerScreensGradientColors = ['#070f1a', '#0f2840', '#153252'] as const;
+const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
 import { AuthProvider, useAuth } from './src/hooks/useAuth';
@@ -90,8 +93,10 @@ import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } 
 import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
 import { resolveGameTableSurface } from './src/theme/gameTableSurface';
-import { clamp, getWebGameLayout } from './src/theme/webLayout';
+import { resolveTurnTransitionBackdrop } from './src/theme/turnTransitionBackdrop';
+import { clamp, getWebGameLayout, WEB_GAME_PLAYFIELD_MAX_WIDTH } from './src/theme/webLayout';
 import { useWebViewportSize } from './src/hooks/useWebViewportSize';
+import { WebGameScreenFrame } from './src/components/layout/WebGameScreenFrame';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -135,6 +140,9 @@ const EQUATION_BUILDER_FINE_OFFSET_X = -15;
 const EXCELLENCE_METER_DEMO_VALUE = 65;
 const SHOW_LAYOUT_AXIS_GRID = __DEV__;
 const LAYOUT_AXIS_GRID_STEP = Platform.OS === 'web' ? 40 : 48;
+const SOUND_ON_ICON = '\u{1F50A}';
+const SOUND_OFF_ICON = '\u{1F507}';
+const MUSIC_ICON = '\u{1F3B5}';
 
 function devCheckHandLayout() {
   if (!__DEV__) return;
@@ -286,6 +294,47 @@ function useGameSafeArea() {
 type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
 type Operation = '+' | '-' | 'x' | '÷';
 type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
+
+const CLOSE_GLYPH = '×';
+const MINUS_GLYPH = '-';
+const STAR_GLYPH = '★';
+const STAGED_GLYPH = '✓';
+const TIMER_GLYPH = '⌛';
+const GUIDE_ARROW_GLYPH = '➜';
+const BACK_ARROW_GLYPH = '↩';
+const DOWN_ARROW_GLYPH = '↓';
+const SPARKLE_PRIMARY_GLYPH = '✦';
+const SPARKLE_SECONDARY_GLYPH = '✧';
+const SEARCH_EMOJI = '\u{1F50D}';
+const CARDS_EMOJI = '\u{1F3B4}';
+const REPEAT_EMOJI = '\u{1F501}';
+const LIGHTBULB_EMOJI = '\u{1F4A1}';
+const SHIELD_EMOJI = '\u{1F6E1}\uFE0F';
+const WARNING_EMOJI = '\u{26A0}\uFE0F';
+const NO_ENTRY_EMOJI = '\u{1F6AB}';
+const INITIAL_TUTORIAL_METER_STATE = {
+  percent: 0,
+  pulseKey: 0,
+  isCelebrating: false,
+  layerNumber: 1,
+  stepNumber: '1',
+};
+const SPARKLES_EMOJI = '\u2728';
+const ABACUS_EMOJI = '\u{1F9EE}';
+const CELEBRATION_EMOJI = '\u{1F389}';
+const TROPHY_EMOJI = '\u{1F3C6}';
+
+const FRACTION_DISPLAY: Record<Fraction, string> = {
+  '1/2': '½',
+  '1/3': '⅓',
+  '1/4': '¼',
+  '1/5': '⅕',
+};
+
+function getFractionDisplay(fraction: Fraction | string | null | undefined): string {
+  if (!fraction) return '?';
+  return FRACTION_DISPLAY[fraction as Fraction] ?? fraction;
+}
 
 interface Card {
   id: string;
@@ -562,6 +611,8 @@ interface GameState {
   possibleResultsInfoUses: number;
   /** ספירה רק פעם אחת בכל תור — גם אם הכפתור נלחץ כמה פעמים */
   possibleResultsInfoCountedThisTurn: boolean;
+  /** סלינדה: ניסיון אחד בלבד בכל מסך מעבר תור, גם אם המשתמש סגר בלי לבחור. */
+  slindaAttemptedThisTurn: boolean;
   /** מקוון: המשתמש סגר את בועת קלף זהה לפני ש-callback השני מהשרת הסיר את identicalCelebration */
   suppressIdenticalOverlayOnline: boolean;
   /** Bot configuration for offline vs-bot mode. null = pass-and-play (no bots). See spec §0.4. */
@@ -730,7 +781,7 @@ function TournamentInfoModal({
               />
             ) : null}
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={{ color: '#CBD5E1', fontSize: 22, fontWeight: '700' }}>?</Text>
+              <Text style={{ color: '#CBD5E1', fontSize: 22, fontWeight: '700' }}>{CLOSE_GLYPH}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -918,6 +969,7 @@ type GameAction =
   | { type: 'OPEN_JOKER_MODAL'; card: Card }
   | { type: 'CLOSE_JOKER_MODAL' }
   | { type: 'ADD_SLINDA_TO_HAND' }
+  | { type: 'MARK_SLINDA_ATTEMPT' }
   | { type: 'REPLACE_CARD_WITH_SLINDA'; cardId: string }
   | { type: 'DISMISS_IDENTICAL_ALERT' }
   | { type: 'SUPPRESS_ONLINE_IDENTICAL_OVERLAY' }
@@ -1482,6 +1534,7 @@ const initialState: GameState = {
   tournamentTable: [],
   possibleResultsInfoUses: 0,
   possibleResultsInfoCountedThisTurn: false,
+  slindaAttemptedThisTurn: false,
   suppressIdenticalOverlayOnline: false,
   botConfig: null,
   hostBotDifficulty: null,
@@ -1612,6 +1665,7 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     lastEquationDisplay: s.lastEquationDisplay,
     roundsPlayed: s.roundsPlayed + 1,
     possibleResultsInfoCountedThisTurn: false,
+    slindaAttemptedThisTurn: false,
     botPendingStagedIds: null,
     botPendingDemoActions: null,
     botNoSolutionTicks: 0,
@@ -1843,6 +1897,7 @@ function gameReducer(
         equationHandSlots: [null, null],
         equationHandPick: null,
         possibleResultsInfoCountedThisTurn: false,
+        slindaAttemptedThisTurn: false,
         botPendingStagedIds: null,
         botPendingDemoActions: null,
         botNoSolutionTicks: 0,
@@ -1945,6 +2000,24 @@ function gameReducer(
     }
     case 'CONFIRM_EQUATION': {
       if (st.phase !== 'building') return st;
+      if (!st.validTargets.some((target) => target.result === action.result)) {
+        return { ...st, message: tf('equation.invalidResult') };
+      }
+      if (!equationMatchesDiceAndResult(action.equationDisplay, action.result, st.dice)) {
+        return { ...st, message: tf('equation.displayMismatch') };
+      }
+      const equationOps = extractEquationOperators(action.equationDisplay);
+      if (equationOps.some((op) => !st.enabledOperators.includes(op))) {
+        return { ...st, message: tf('equation.operatorNotInStage') };
+      }
+      const commitValidation = validateEquationCommitsForDisplay(
+        st.players[st.currentPlayerIndex]?.hand ?? [],
+        action.equationDisplay,
+        action.equationCommits ?? [],
+      );
+      if ('errorKey' in commitValidation) {
+        return { ...st, message: tf(commitValidation.errorKey) };
+      }
       const isNewUser = st.guidanceEnabled !== false;
       const firstSolvedHint = isNewUser && !st.hasSeenSolvedHint;
       const equationHandSlots = deriveEquationHandSlotsFromCommits(st, action.equationCommits);
@@ -1952,7 +2025,7 @@ function gameReducer(
         ...st,
         phase: 'solved',
         equationResult: action.result,
-        equationOpsUsed: action.equationOps,
+        equationOpsUsed: equationOps,
         equationHandSlots,
         equationHandPick: null,
         lastEquationDisplay: action.equationDisplay,
@@ -2237,7 +2310,7 @@ function gameReducer(
         ns = checkWin(ns);
         if (ns.phase === 'game-over') return ns;
         const next = (ns.currentPlayerIndex + 1) % ns.players.length;
-        const blockFracUni = action.card.fraction === '1/2' ? '½' : action.card.fraction === '1/3' ? '?' : action.card.fraction === '1/4' ? '¼' : action.card.fraction === '1/5' ? '?' : action.card.fraction;
+        const blockFracUni = getFractionDisplay(action.card.fraction);
         const blockMsg = tf('local.fractionBlockToast', { name: cp.name, fraction: String(blockFracUni ?? action.card.fraction ?? '?') });
         return {
           ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
@@ -2248,6 +2321,7 @@ function gameReducer(
           hasPlayedCards: false, hasDrawnCard: false, lastCardValue: null, lastDiscardCount: 0,
           pendingFractionTarget: newTarget, fractionPenalty: denom,
           fractionAttackResolved: false,
+          slindaAttemptedThisTurn: false,
           lastMoveMessage: blockMsg,
           message: tf('local.fractionBlockMsg', { name: cp.name }),
           moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 1, description: blockMsg }],
@@ -2273,7 +2347,7 @@ function gameReducer(
       ns = checkWin(ns);
       if (ns.phase === 'game-over') return ns;
       const next = (ns.currentPlayerIndex + 1) % ns.players.length;
-      const fracUni = action.card.fraction === '1/2' ? '½' : action.card.fraction === '1/3' ? '?' : action.card.fraction === '1/4' ? '¼' : action.card.fraction === '1/5' ? '?' : action.card.fraction;
+      const fracUni = getFractionDisplay(action.card.fraction);
       const atkMsg = tf('local.fractionAttackToast', { name: cp.name, fraction: String(fracUni ?? action.card.fraction ?? '?') });
       return {
         ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
@@ -2284,6 +2358,7 @@ function gameReducer(
         hasPlayedCards: false, hasDrawnCard: false, lastCardValue: null, lastDiscardCount: 0,
         pendingFractionTarget: newTarget, fractionPenalty: denom,
         fractionAttackResolved: false,
+        slindaAttemptedThisTurn: false,
         lastMoveMessage: atkMsg,
         message: tf('local.fractionAttackMsg', { name: cp.name }),
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 1, description: atkMsg }],
@@ -2361,6 +2436,10 @@ function gameReducer(
       );
       return { ...st, players: updatedPlayers };
     }
+    case 'MARK_SLINDA_ATTEMPT': {
+      if (st.phase !== 'turn-transition' || st.slindaAttemptedThisTurn) return st;
+      return { ...st, slindaAttemptedThisTurn: true };
+    }
     case 'REPLACE_CARD_WITH_SLINDA': {
       const cpIdx = st.currentPlayerIndex;
       const cp = st.players[cpIdx];
@@ -2378,6 +2457,7 @@ function gameReducer(
         selectedCards: [],
         equationHandSlots: [null, null],
         equationHandPick: null,
+        slindaAttemptedThisTurn: true,
       };
     }
     case 'PLAY_JOKER': {
@@ -2746,17 +2826,17 @@ function gameReducer(
           autoDismissMs: 2400,
         };
         if (a.kind === 'checkPossibleResults') {
-          return { ...base, emoji: '??', message: tf('botOffline.explain.checkPossibleResults', { name }) };
+          return { ...base, emoji: SEARCH_EMOJI, message: tf('botOffline.explain.checkPossibleResults', { name }) };
         }
         if (a.kind === 'useMiniCards') {
-          return { ...base, emoji: '??', message: tf('botOffline.explain.useMiniCards', { name }) };
+          return { ...base, emoji: CARDS_EMOJI, message: tf('botOffline.explain.useMiniCards', { name }) };
         }
         // playIdentical — pick wild vs normal copy by the card type.
         const card = s.players[s.currentPlayerIndex]?.hand.find((c) => c.id === a.cardId);
         if (card?.type === 'wild') {
           return { ...base, emoji: '', message: tf('botOffline.explain.useIdenticalWild', { name }) };
         }
-        return { ...base, emoji: '??', message: tf('botOffline.explain.useIdentical', { name }) };
+        return { ...base, emoji: REPEAT_EMOJI, message: tf('botOffline.explain.useIdentical', { name }) };
       }
       function botActionCandidateCardId(a: BotAction): string | null {
         switch (a.kind) {
@@ -3136,7 +3216,7 @@ function GameProvider({ children }: { children: ReactNode }) {
         title: t('local.openingDrawTitle'),
         body: t('local.openingDrawBody', { name: firstName }),
         message: '',
-        emoji: '??',
+        emoji: '\uD83C\uDFB2',
         style: 'celebration' as any,
         autoDismissMs: dismissMs,
       },
@@ -3375,7 +3455,7 @@ function AppModal({
           <View style={mS.header}>
             <Text style={mS.title}>{title ?? ''}</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={mS.close}>?</Text>
+              <Text style={mS.close}>{CLOSE_GLYPH}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -3485,7 +3565,7 @@ function fractionCardCountFromKinds(fractions: boolean, kinds?: Fraction[] | nul
 }
 
 function formatOpsForRulesDisplay(ops: readonly Operation[]): string {
-  const sym: Record<Operation, string> = { '+': '+', '-': '?', 'x': '×', '÷': '÷' };
+  const sym: Record<Operation, string> = { '+': '+', '-': MINUS_GLYPH, 'x': '×', '÷': '÷' };
   return ops.map((o) => sym[o]).join(', ');
 }
 
@@ -3585,7 +3665,7 @@ function RulesContent({ state, pregame }: { state: GameState | null; pregame?: R
   });
   const cardTypeLines: { text: string; count: number; detail?: string }[] = [
     { text: t('rulesLine.numCard'), count: counts.numCount },
-    { text: t('rulesLine.fracCard'), count: counts.fracCount, detail: '½×6, ?×4, ¼×3, ?×2' },
+    { text: t('rulesLine.fracCard'), count: counts.fracCount, detail: '½×6, ⅓×4, ¼×3, ⅕×2' },
     { text: t('rulesLine.opCard'), count: counts.opCount },
     { text: t('rulesLine.jokerCard'), count: counts.jokerCount },
     { text: t('rulesLine.wildCard'), count: counts.wildCount },
@@ -4003,11 +4083,10 @@ const opColors: Record<string, { face: string; dark: string; light: string }> = 
   'x': { face: '#34A853', dark: '#1B5E2B', light: '#36944F' },
   '-': { face: '#FBBC05', dark: '#8B6800', light: '#DC9E00' },
 };
-// Android: Fredoka_700Bold font is missing Unicode math glyphs (× ? ÷).
-// iOS renders them fine; on Android fall back to ASCII-equivalent chars.
+// Android: compact labels read more reliably with ASCII for multiply/minus.
 const opDisplay: Record<string, string> = Platform.OS === 'android'
-  ? { 'x': 'x', '-': '-', '/': '÷', '+': '+', '×': 'x', '?': '-' }
-  : { 'x': '×', '-': '?', '/': '÷', '+': '+' };
+  ? { 'x': 'x', '-': MINUS_GLYPH, '/': '÷', '+': '+', '×': 'x', '−': MINUS_GLYPH }
+  : { 'x': '×', '-': MINUS_GLYPH, '/': '÷', '+': '+', '×': '×', '−': MINUS_GLYPH };
 const parallelOp: Record<string, string> = { '+': '-', '-': '+', 'x': '/', '/': 'x' };
 
 type StagedChipDisplay = {
@@ -4380,12 +4459,12 @@ function WildCard({ card, selected, onPress, small, testID }: { card: Card; sele
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 {resolved ? (
                   <>
-                    <Text style={{ fontSize: small ? 12 : 14, fontWeight: '700', color: '#6D28D9' }}>?</Text>
+                    <Text style={{ fontSize: small ? 12 : 14, fontWeight: '700', color: '#6D28D9' }}>{STAR_GLYPH}</Text>
                     <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>{card.resolvedValue}</Text>
                   </>
                 ) : (
                   <>
-                    <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>?</Text>
+                    <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>{STAR_GLYPH}</Text>
                     <Text style={{ fontSize: small ? 10 : 11, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>{state.mathRangeMax === 12 ? '0–12' : '0–25'}</Text>
                   </>
                 )}
@@ -4407,7 +4486,7 @@ function GameCard({ card, selected, active, onPress, small, testID }: { card: Ca
   }
 }
 
-const slindaCardImg = require('./assets/joker.jpg');
+const slindaPreviewCard: Card = { id: 'slinda-preview', type: 'joker' };
 
 function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: () => void; disabled?: boolean; testID?: string }) {
   const pulse = useRef(new Animated.Value(0)).current;
@@ -4450,33 +4529,29 @@ function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: 
         testID={testID}
         style={{
           borderRadius: frameRadius,
-          overflow: 'hidden',
           shadowColor: '#F59E0B',
-          shadowOpacity: 0.3,
+          shadowOpacity: 0.18,
           shadowRadius: 6,
           shadowOffset: { width: 0, height: 6 },
-          elevation: 8,
+          elevation: 4,
         }}
       >
-        <LinearGradient
-          colors={['rgba(255,249,196,0.96)', 'rgba(251,191,36,0.98)', 'rgba(180,83,9,0.98)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ padding: 2 }}
+        <View
+          pointerEvents="none"
+          style={{
+            width: cardWidth,
+            height: cardHeight,
+            borderRadius: frameRadius,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            backgroundColor: 'transparent',
+          }}
         >
-          <Image
-            source={slindaCardImg}
-            resizeMode="cover"
-            style={{
-              width: cardWidth,
-              height: cardHeight,
-              borderRadius: frameRadius,
-              borderWidth: 1,
-              borderColor: 'rgba(254,243,199,0.95)',
-              backgroundColor: '#0F172A',
-            }}
-          />
-        </LinearGradient>
+          <View style={{ transform: [{ scale: 0.66 }] }}>
+            <GameCard card={slindaPreviewCard} small />
+          </View>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -5560,7 +5635,7 @@ export { gameReducer, initialState, validateFractionPlay, validateIdenticalPlay,
 export { GameProvider, useGame };
 export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType, GamePhase, DiceResult, EquationOption };
 // EquationCommitPayload is exported above, near the GameAction union definition.
-const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data: { onConfirm: () => void } | null) => void; onResultChange?: (data: { result: number | null; ok: boolean; hasError: boolean } | null) => void; timerProgress?: number | null; interactive?: boolean; parensRight?: boolean; onParensRightChange?: (v: boolean) => void }>(function EquationBuilder({ onConfirmChange, onResultChange, timerProgress = null, interactive = true, parensRight: parensRightProp, onParensRightChange }, ref) {
+const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data: { onConfirm: () => void } | null) => void; onResultChange?: (data: { result: number | null; ok: boolean; hasError: boolean } | null) => void; onBuildStarted?: () => void; timerProgress?: number | null; interactive?: boolean; parensRight?: boolean; onParensRightChange?: (v: boolean) => void }>(function EquationBuilder({ onConfirmChange, onResultChange, onBuildStarted, timerProgress = null, interactive = true, parensRight: parensRightProp, onParensRightChange }, ref) {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
 
@@ -5592,6 +5667,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   const [dice1, setDice1] = useState<number | null>(null);
   const [dice2, setDice2] = useState<number | null>(null);
   const [dice3, setDice3] = useState<number | null>(null);
+  const buildStartedNotifiedRef = useRef(false);
   // Operators: null = empty, tap-to-cycle through allowed ops for current stage
   const [op1, setOp1] = useState<string | null>(null);
   const [op2, setOp2] = useState<string | null>(null);
@@ -5669,6 +5745,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     // Clear any pending timers from previous roll
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
+    buildStartedNotifiedRef.current = false;
 
     setDice1(null); setDice2(null); setDice3(null);
     setOp1(null); setOp2(null);
@@ -5762,6 +5839,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       dice1 !== null && dice2 !== null &&
       subResult === null
     ) return;
+    const isFirstBuildPick = dice1 === null && dice2 === null && dice3 === null;
+    if (isFirstBuildPick && !buildStartedNotifiedRef.current) {
+      buildStartedNotifiedRef.current = true;
+      onBuildStarted?.();
+    }
     if (dice1 === null) setDice1(dIdx);
     else if (dice2 === null) setDice2(dIdx);
     else if (dice3 === null) setDice3(dIdx);
@@ -5836,8 +5918,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     if (state.phase !== 'building') return;
     if (!state.dice) return;
     if (!tutorialBus.getL5aBlockFanTaps()) return;
-    // L5.1: equation starts empty — learner places dice manually (no prefill).
-    // L5.2: prefill d1+d2 so the layout mirrors 5.1.
+    // L5.1 and L5.2: pre-fill d1 (idx 0) and d2 (idx 1) so the equation
+    // shows `d1 [?] d2 = target`. This is the single authoritative prefill;
+    // the eqPickDice setTimeouts that used to do this were removed because
+    // they fired after this effect had already filled dice1+dice2, causing
+    // the fallthrough branch to incorrectly populate dice3.
     if (tutorialBus.getL5aDiceUnlocked()) {
       // Only clear stale operator values left over from L4.
       setOp1(null);
@@ -5935,6 +6020,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     if (!interactive) return;
     if (state.phase === 'solved') dispatch({ type: 'REVERT_TO_BUILDING' });
     if (hasEquationHand) dispatch({ type: 'CLEAR_EQ_HAND' });
+    buildStartedNotifiedRef.current = false;
     setDice1(null); setDice2(null); setDice3(null);
     setOp1(null); setOp2(null);
     setParensRight(false);
@@ -6330,13 +6416,18 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // Notify parent about confirm readiness
   const stableConfirm = useCallback(() => confirmRef.current(), []);
   const lastConfirmReadyRef = useRef<boolean | null>(null);
+  const hasEnoughDice = filledCount >= 2;
   useEffect(() => {
     if (!onConfirmChange) return;
-    const ready = ok && !isSolved && interactive;
+    const ready = showBuilder && !isSolved && interactive && (
+      state.isTutorial
+        ? ok
+        : hasEnoughDice
+    );
     if (lastConfirmReadyRef.current === ready) return;
     lastConfirmReadyRef.current = ready;
     onConfirmChange(ready ? { onConfirm: stableConfirm } : null);
-  }, [ok, isSolved, interactive, onConfirmChange, stableConfirm]);
+  }, [showBuilder, state.isTutorial, ok, hasEnoughDice, isSolved, interactive, onConfirmChange, stableConfirm]);
   useEffect(() => () => {
     lastConfirmReadyRef.current = null;
     onConfirmChange?.(null);
@@ -6520,13 +6611,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       );
     }
 
-    // Android: Fredoka_700Bold doesn't include Unicode math glyphs (×, ?, ÷).
-    // Use ASCII substitutes to guarantee they render on every device.
+    // Android: prefer ASCII for compact multiply/minus labels in the equation rail.
     const useAsciiOps = Platform.OS === 'android';
     const normalizedDisplayOp = displayOp === 'x'
       ? (useAsciiOps ? 'x' : '×')
       : displayOp === '-'
-        ? (useAsciiOps ? '-' : '?')
+        ? MINUS_GLYPH
         : displayOp;
     const isDivision = displayOp === '÷' || displayOp === '/';
     const divCl = opColors['/'];
@@ -6637,8 +6727,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     );
   };
 
-  const buildTitle = t('equation.buildTitle');
-
   // When the equation is confirmed, dim the dice pool + equation row so the
   // final answer (result box) pops. We apply this per-section instead of on
   // the whole wrap, so the result box can keep full opacity and pulse
@@ -6650,11 +6738,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       eqS.wrap,
       { transform: [{ translateX: EQUATION_BUILDER_FINE_OFFSET_X }, { translateY: EQUATION_BUILDER_FINE_OFFSET_Y }] },
     ]} testID="equation-area">
-      <View style={{ alignSelf: 'stretch', alignItems: 'center', marginBottom: 4 }}>
-        <Text style={{ color: '#000000', fontSize: 14, fontWeight: '800', textAlign: 'center' }}>
-          {buildTitle}
-        </Text>
-      </View>
       {/* Dice pool — בטוטוריאל נשאר גלוי גם אחרי האישור כדי שהשחקן
           יראה שמתוך שלוש הקוביות בחרנו שתיים בלבד (השלישית עדיין זמינה).
           חריג: בשיעור 6 (possible-results; מזוהה לפי state.showPossibleResults
@@ -7074,7 +7157,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   const fanCardW = webGameLayout?.fanCardWidth ?? FAN_CARD_W;
   const fanCardH = webGameLayout?.fanCardHeight ?? FAN_CARD_H;
   const fanH = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
-  const fanScreenWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
+  const fanScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
   useEffect(() => {
     tutorialBus.setFanLength(count);
   }, [count]);
@@ -7803,7 +7886,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
                     : card.type === 'operation'
                       ? (opDisplay[card.operation ?? '+'] ?? (card.operation ?? '+'))
                       : card.type === 'joker'
-                        ? '?'
+                        ? STAR_GLYPH
                         : card.type === 'wild'
                           ? (card.resolvedValue != null ? String(card.resolvedValue) : '?')
                           : ''}
@@ -7874,7 +7957,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
                 alignItems: 'center', justifyContent: 'center', zIndex: 10,
                 ...Platform.select({ ios: { shadowColor: '#FF9100', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 8 }, android: { elevation: 10 } }),
               }}>
-                <Text style={{ color: '#1A0A00', fontSize: 14, fontWeight: '900' }}>?</Text>
+                <Text style={{ color: '#1A0A00', fontSize: 14, fontWeight: '900' }}>{STAGED_GLYPH}</Text>
               </View>
             )}
           </Animated.View>
@@ -8060,7 +8143,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
                 title: t('fraction.challengeToastTitle'),
                 message: '',
                 body: `${t('fraction.counterHint')}\n\n${t('fraction.counterHintDetail')}`,
-                emoji: '???',
+                emoji: SHIELD_EMOJI,
                 style: 'info',
                 autoDismissMs: 10000,
               },
@@ -8473,22 +8556,22 @@ type FloatItem = { kind: 'sym'; sym: string; left: string; startY: number; size:
 const FLOAT_ITEMS: FloatItem[] = [
   // Operators
   { kind: 'sym', sym: '+', left: '8%', startY: 0.1, size: 28, speed: 1.0, drift: 12, opacity: 0.04 },
-  { kind: 'sym', sym: '?', left: '25%', startY: 0.5, size: 22, speed: 1.2, drift: -8, opacity: 0.04 },
+  { kind: 'sym', sym: MINUS_GLYPH, left: '25%', startY: 0.5, size: 22, speed: 1.2, drift: -8, opacity: 0.04 },
   { kind: 'sym', sym: '×', left: '50%', startY: 0.2, size: 32, speed: 0.8, drift: 15, opacity: 0.04 },
   { kind: 'sym', sym: '÷', left: '75%', startY: 0.7, size: 24, speed: 1.1, drift: -10, opacity: 0.04 },
   { kind: 'sym', sym: '+', left: '18%', startY: 0.8, size: 20, speed: 1.3, drift: 6, opacity: 0.04 },
-  { kind: 'sym', sym: '?', left: '60%', startY: 0.35, size: 26, speed: 0.9, drift: -14, opacity: 0.04 },
+  { kind: 'sym', sym: MINUS_GLYPH, left: '60%', startY: 0.35, size: 26, speed: 0.9, drift: -14, opacity: 0.04 },
   { kind: 'sym', sym: '×', left: '40%', startY: 0.65, size: 30, speed: 1.0, drift: 10, opacity: 0.04 },
   { kind: 'sym', sym: '÷', left: '88%', startY: 0.45, size: 22, speed: 1.15, drift: -6, opacity: 0.04 },
   // Fractions
   { kind: 'sym', sym: '½', left: '12%', startY: 0.25, size: 26, speed: 0.9, drift: -11, opacity: 0.06 },
   { kind: 'sym', sym: '¾', left: '68%', startY: 0.1, size: 24, speed: 1.05, drift: 8, opacity: 0.06 },
-  { kind: 'sym', sym: '?', left: '33%', startY: 0.55, size: 28, speed: 0.85, drift: -13, opacity: 0.06 },
-  { kind: 'sym', sym: '?', left: '80%', startY: 0.3, size: 22, speed: 1.25, drift: 7, opacity: 0.06 },
+  { kind: 'sym', sym: '⅓', left: '33%', startY: 0.55, size: 28, speed: 0.85, drift: -13, opacity: 0.06 },
+  { kind: 'sym', sym: '⅔', left: '80%', startY: 0.3, size: 22, speed: 1.25, drift: 7, opacity: 0.06 },
   { kind: 'sym', sym: '¼', left: '4%', startY: 0.7, size: 30, speed: 0.75, drift: -9, opacity: 0.06 },
-  { kind: 'sym', sym: '?', left: '45%', startY: 0.85, size: 20, speed: 1.35, drift: 12, opacity: 0.06 },
-  { kind: 'sym', sym: '?', left: '93%', startY: 0.4, size: 24, speed: 1.1, drift: -7, opacity: 0.06 },
-  { kind: 'sym', sym: '?', left: '55%', startY: 0.75, size: 26, speed: 0.95, drift: 14, opacity: 0.06 },
+  { kind: 'sym', sym: '⅕', left: '45%', startY: 0.85, size: 20, speed: 1.35, drift: 12, opacity: 0.06 },
+  { kind: 'sym', sym: '⅖', left: '93%', startY: 0.4, size: 24, speed: 1.1, drift: -7, opacity: 0.06 },
+  { kind: 'sym', sym: '⅗', left: '55%', startY: 0.75, size: 26, speed: 0.95, drift: 14, opacity: 0.06 },
   // Dice — same opacity/weight as symbols, colorless white outline
   { kind: 'dice', face: 6, left: '15%', startY: 0.15, size: 28, speed: 0.75, drift: 10,  opacity: 0.04 },
   { kind: 'dice', face: 3, left: '42%', startY: 0.6,  size: 22, speed: 1.1,  drift: -12, opacity: 0.04 },
@@ -8661,24 +8744,38 @@ function FloatingMathBackground() {
   );
 }
 
-function ConditionalFloatingBg() {
-  const { state } = useGame();
-  if (state.phase === 'pre-roll' || state.phase === 'building' || state.phase === 'solved') return null;
-  return <FloatingMathBackground />;
+type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room';
+
+function shouldShowAmbientBackground(playMode: ShellPlayMode, phase: GameState['phase']) {
+  if (playMode === 'tutorial') return false;
+  if (playMode === 'online' || playMode === 'mockup-room') return true;
+  return playMode === 'local' && (phase === 'turn-transition' || phase === 'game-over');
 }
 
-function ConditionalWalkingDice() {
+function AmbientBackground({
+  playMode,
+  opacity = 1,
+  forceVisible = false,
+}: {
+  playMode: ShellPlayMode;
+  opacity?: number;
+  forceVisible?: boolean;
+}) {
   const { state } = useGame();
-  // GameScreen has its own WalkingDice inside ImageBackground, so skip here
-  if (state.phase === 'pre-roll' || state.phase === 'building' || state.phase === 'solved') return null;
-  return <WalkingDice />;
-}
-
-function ConditionalRoamingCoins() {
-  const { state } = useGame();
-  // GameScreen renders its own RoamingCoins layer; hide here during active play
-  if (state.phase === 'pre-roll' || state.phase === 'building' || state.phase === 'solved') return null;
-  return <RoamingCoins />;
+  if (!forceVisible && !shouldShowAmbientBackground(playMode, state.phase)) return null;
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill,
+        opacity === 1 ? null : { opacity },
+      ]}
+    >
+      <WalkingDice />
+      <FloatingMathBackground />
+      <RoamingCoins />
+    </View>
+  );
 }
 
 // צלילי מספר שחקנים במסך הכניסה (2–6) — קבצים: players_2.mp3 … players_6.mp3
@@ -8893,9 +8990,10 @@ function StartScreen({
   }, [t]);
   const bounceAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
+  const compactStartScreen = SCREEN_H < 760;
   // גלגלת תלת־מימד: מרכז שורה i ב־scroll ב־(i+0.5)*ROW_H + PADDING_V; viewport center ? 110
   const WHEEL_ROW_H = 64;
-  const WHEEL_PADDING_V = 100;
+  const WHEEL_PADDING_V = compactStartScreen ? 64 : 76;
   const WHEEL_VIEWPORT_H = 220;
   const wheelCenterForIndex = (i: number) => WHEEL_PADDING_V + (i + 0.5) * WHEEL_ROW_H - WHEEL_VIEWPORT_H / 2;
   const WheelRow = useCallback(({ index, children }: { index: number; children: React.ReactNode }) => {
@@ -9034,19 +9132,79 @@ function StartScreen({
     });
   };
 
-  // תחתית מסע — תפריט קומפקטי כדי שסלינדה (פנים/מותג) תופיע במלואה
-  const MENU_H = 160;
   const bottomPad = safe.SAFE_BOTTOM_PAD || 12;
-  const PLAY_BTN_H = 56;
-  const totalBottomH = MENU_H + PLAY_BTN_H + bottomPad;
   const TOP_ACTIONS_TOP = safe.insets.top || 12;
-  // Reserve enough vertical space for the absolute top action buttons
-  // so they never overlap the Salinda hero image.
-  // Includes two stacked button rows (shop/themes + rules) plus wrap safety.
-  const TOP_ACTIONS_H = 74;
-  const HERO_TOP = TOP_ACTIONS_TOP + TOP_ACTIONS_H + 2;
-  // Shrink hero joker card to free vertical space for scrolling.
-  const JOKER_SIZE = Math.min(SCREEN_W * 0.52, 220) * 0.38;
+  const TOP_ACTIONS_SIDE_PAD = 16;
+  const topActionsRowGap = compactStartScreen ? 10 : 12;
+  const topActionsColumnGap = compactStartScreen ? 8 : 10;
+  const topActionsBackWidth = 128;
+  const topActionsBackHeight = 38;
+  const topActionsBackFontSize = 13;
+  const topActionsBackLift = compactStartScreen ? 18 : 20;
+  const topActionsPrimaryWidth = compactStartScreen ? 168 : 184;
+  const topActionsSecondaryWidth = compactStartScreen ? 108 : 120;
+  const topActionsButtonHeight = compactStartScreen ? 38 : 42;
+  const topActionsButtonFontSize = compactStartScreen ? 12 : 13;
+  const topActionsBackVisualHeight = topActionsBackHeight + 8;
+  const topActionsPrimaryVisualHeight = topActionsButtonHeight + 8;
+  const topActionsSecondaryVisualHeight = topActionsButtonHeight + 8;
+  const TOP_ACTIONS_H =
+    topActionsBackVisualHeight +
+    topActionsRowGap +
+    topActionsPrimaryVisualHeight +
+    topActionsRowGap +
+    topActionsSecondaryVisualHeight;
+  const topActionsInnerWidth = Math.max(240, SCREEN_W - TOP_ACTIONS_SIDE_PAD * 2);
+  const topActionGuideSideGap = Math.max(0, (topActionsInnerWidth - topActionsPrimaryWidth) / 2);
+  const topActionHeroSlotWidth = Math.max(34, topActionGuideSideGap - 10);
+  const topActionHeroSlotHeight = Math.max(34, topActionsBackVisualHeight + topActionsRowGap - 4);
+  const TOP_ACTION_HERO_SIZE = Math.min(topActionHeroSlotWidth, topActionHeroSlotHeight, compactStartScreen ? 58 : 64);
+  const topActionHeroInset = Math.max(4, (topActionGuideSideGap - TOP_ACTION_HERO_SIZE) / 2);
+  const topActionHeroTop = Math.max(0, topActionsBackVisualHeight + topActionsRowGap - TOP_ACTION_HERO_SIZE - 4);
+  const START_MENU_TOP = TOP_ACTIONS_TOP + TOP_ACTIONS_H + (compactStartScreen ? 4 : 6);
+  const backButtonLabel = isRTL
+    ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
+    : `${BACK_ARROW_GLYPH} ${t('gameEntry.back')}`;
+  const backButtonGlowStyle = {
+    borderRadius: 999,
+    backgroundColor: 'rgba(96,165,250,0.14)',
+    ...Platform.select({
+      ios: { shadowColor: '#60A5FA', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 16 },
+      android: { elevation: 12 },
+    }),
+  } as const;
+  const guideButtonGlowStyle = {
+    borderRadius: 999,
+    backgroundColor: 'rgba(236,72,153,0.16)',
+    ...Platform.select({
+      ios: { shadowColor: '#EC4899', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.92, shadowRadius: 18 },
+      android: { elevation: 16 },
+    }),
+  } as const;
+  const rulesButtonGlowStyle = {
+    borderRadius: 999,
+    backgroundColor: 'rgba(56,189,248,0.12)',
+    ...Platform.select({
+      ios: { shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.72, shadowRadius: 14 },
+      android: { elevation: 10 },
+    }),
+  } as const;
+  const shopButtonGlowStyle = {
+    borderRadius: 999,
+    backgroundColor: 'rgba(250,204,21,0.16)',
+    ...Platform.select({
+      ios: { shadowColor: '#FACC15', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.86, shadowRadius: 17 },
+      android: { elevation: 14 },
+    }),
+  } as const;
+  const letsPlayGlowStyle = {
+    borderRadius: 999,
+    backgroundColor: 'rgba(74,222,128,0.18)',
+    ...Platform.select({
+      ios: { shadowColor: '#34D399', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.88, shadowRadius: 18 },
+      android: { elevation: 14 },
+    }),
+  } as const;
 
   const stopDemoSimulation = useCallback(() => {
     if (demoSimTimerRef.current) {
@@ -9490,16 +9648,97 @@ function StartScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-      {/* כפתורי עזרה וחנות — בצד למעלה */}
-      <View style={{ position: 'absolute', top: TOP_ACTIONS_TOP, left: 16, right: 16, minHeight: TOP_ACTIONS_H, zIndex: 20, alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 8 }}>
-          {onHowToPlay && (
-            <LulosButton text={t('mode.howToPlay')} color="orange" width={132} height={34} fontSize={12} onPress={onHowToPlay} />
-          )}
-          <View style={{ alignItems: 'center', gap: 8 }}>
-            <LulosButton text={t('start.rulesButton')} color="blue" width={84} height={34} fontSize={11} onPress={() => setRulesOpen((prev) => !prev)} />
+      <AmbientBackground playMode="local" forceVisible />
+      {/* כפתורי עזרה וחנות — header קבוע מעל סלינדה */}
+      <View
+        testID="start-top-actions"
+        style={{
+          position: 'absolute',
+          top: TOP_ACTIONS_TOP,
+          left: TOP_ACTIONS_SIDE_PAD,
+          right: TOP_ACTIONS_SIDE_PAD,
+          minHeight: TOP_ACTIONS_H,
+          zIndex: 20,
+          alignItems: 'center',
+        }}
+      >
+        {onBackToChoice ? (
+          <View
+            style={{
+              width: '100%',
+              alignItems: isRTL ? 'flex-start' : 'flex-end',
+              marginTop: -topActionsBackLift,
+              marginBottom: topActionsRowGap,
+            }}
+          >
+            <LulosButton
+              text={backButtonLabel}
+              color="blue"
+              width={topActionsBackWidth}
+              height={topActionsBackHeight}
+              fontSize={topActionsBackFontSize}
+              testID="start-back-to-games"
+              onPress={onBackToChoice}
+              style={backButtonGlowStyle}
+            />
+          </View>
+        ) : null}
+        <Animated.View
+          testID="start-slinda-hero"
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: topActionHeroTop,
+            ...(isRTL ? { right: topActionHeroInset } : { left: topActionHeroInset }),
+            transform: [{ translateY: bounceAnim }],
+            width: TOP_ACTION_HERO_SIZE,
+            height: TOP_ACTION_HERO_SIZE,
+            zIndex: 1,
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 16 },
+              android: { elevation: 8 },
+            }),
+          }}
+        >
+          <Image
+            source={require('./assets/joker.jpg')}
+            style={{ width: TOP_ACTION_HERO_SIZE, height: TOP_ACTION_HERO_SIZE }}
+            resizeMode="contain"
+          />
+        </Animated.View>
+        <View style={{ alignItems: 'center', gap: topActionsRowGap }}>
+          {onHowToPlay ? (
+            <LulosButton
+              text={t('mode.howToPlay')}
+              color="purple"
+              width={topActionsPrimaryWidth}
+              height={topActionsButtonHeight}
+              fontSize={topActionsButtonFontSize}
+              textColor="#FFFFFF"
+              onPress={onHowToPlay}
+              style={guideButtonGlowStyle}
+            />
+          ) : null}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: topActionsColumnGap }}>
+            <LulosButton
+              text={t('start.rulesButton')}
+              color="blue"
+              width={topActionsSecondaryWidth}
+              height={topActionsButtonHeight}
+              fontSize={topActionsButtonFontSize}
+              onPress={() => setRulesOpen((prev) => !prev)}
+              style={rulesButtonGlowStyle}
+            />
             {onShop ? (
-              <LulosButton text={t('shop.openShop')} color="yellow" width={96} height={34} fontSize={12} onPress={onShop} />
+              <LulosButton
+                text={t('shop.openShop')}
+                color="yellow"
+                width={topActionsSecondaryWidth}
+                height={topActionsButtonHeight}
+                fontSize={topActionsButtonFontSize}
+                onPress={onShop}
+                style={shopButtonGlowStyle}
+              />
             ) : null}
           </View>
         </View>
@@ -10010,7 +10249,7 @@ function StartScreen({
                   <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700', marginBottom: 4 }}>{t('start.timerPickerMin')}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TouchableOpacity onPress={() => setCustomTimerSeconds((s) => Math.max(1, s - 60))} style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>?</Text>
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>{MINUS_GLYPH}</Text>
                     </TouchableOpacity>
                     <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '900', minWidth: 28, textAlign: 'center' }}>{Math.floor(customTimerSeconds / 60)}</Text>
                     <TouchableOpacity onPress={() => setCustomTimerSeconds((s) => Math.min(300, s + 60))} style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -10022,7 +10261,7 @@ function StartScreen({
                   <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700', marginBottom: 4 }}>{t('start.timerPickerSec')}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TouchableOpacity onPress={() => setCustomTimerSeconds((s) => Math.max(1, Math.floor(s / 60) * 60 + Math.max(0, (s % 60) - 5)))} style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>?</Text>
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>{MINUS_GLYPH}</Text>
                     </TouchableOpacity>
                     <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '900', minWidth: 28, textAlign: 'center' }}>{String(customTimerSeconds % 60).padStart(2, '0')}</Text>
                     <TouchableOpacity onPress={() => setCustomTimerSeconds((s) => Math.min(300, Math.floor(s / 60) * 60 + Math.min(55, (s % 60) + 5)))} style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -10062,30 +10301,11 @@ function StartScreen({
         </View>
         </View>
       </AppModal>
-      {/* סלינדה — מוצמדת מתחת לשורת הכפתורים העליונה (top + buttons + margin) */}
-      <View style={{ alignItems: 'center', justifyContent: 'flex-start', paddingTop: HERO_TOP }}>
-        <Animated.View style={{
-          transform: [{ translateY: bounceAnim }],
-          width: JOKER_SIZE,
-          height: JOKER_SIZE,
-          ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 24 },
-            android: { elevation: 12 },
-          }),
-        }}>
-          <Image
-            source={require('./assets/joker.jpg')}
-            style={{ width: JOKER_SIZE, height: JOKER_SIZE }}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </View>
-
-      {/* Bottom menu — הגלילה מתחילה מתחת לסלינדה ומשתרעת עד לתחתית */}
-      <View style={{ position: 'absolute', top: HERO_TOP + JOKER_SIZE + 10, bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: bottomPad, backgroundColor: 'transparent', zIndex: 10 }}>
+      {/* Bottom menu — הקלף עבר ל-header, ולכן הגלילה מתחילה מיד מתחתיו ותופסת יותר גובה שימושי */}
+      <View style={{ position: 'absolute', top: START_MENU_TOP, bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: bottomPad, backgroundColor: 'transparent', zIndex: 10 }}>
         <Animated.ScrollView
-          style={{ maxHeight: '100%', backgroundColor: 'transparent' }}
-          contentContainerStyle={{ paddingTop: WHEEL_PADDING_V, paddingBottom: WHEEL_PADDING_V }}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          contentContainerStyle={{ paddingTop: WHEEL_PADDING_V, paddingBottom: WHEEL_PADDING_V + 28 }}
           showsVerticalScrollIndicator={true}
           bounces={false}
           nestedScrollEnabled
@@ -10128,7 +10348,7 @@ function StartScreen({
               >
                 <LinearGradient colors={['#fde293','#FBBC05','#f9ab00','#e37400']} locations={[0,0.4,0.8,1]} style={hsS.stepBtn}>
                   <View style={hsS.stepBtnInner} />
-                  <Text style={hsS.stepBtnTxt}>?</Text>
+                  <Text style={hsS.stepBtnTxt}>{MINUS_GLYPH}</Text>
                 </LinearGradient>
               </TouchableOpacity>
               <Text style={hsS.stepVal}>{playerCount}</Text>
@@ -10183,8 +10403,8 @@ function StartScreen({
 
           {/* 3. טווח מספרים */}
           <WheelRow index={numberRangeWheelIndex}>
-          <LinearGradient colors={['#B45309', '#F59E0B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.rowRange]}>
+          <LinearGradient colors={['#188038', '#34A853']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
+          <View style={[hsS.row, hsS.startRowRange]}>
             <Text style={hsS.rowLabel}>{t('start.wheel.numberRange')}</Text>
             <View style={hsS.toggleGroup}>
               {([['full', '0-25'], ['easy', '0-12']] as const).map(([key, label]) => (
@@ -10199,8 +10419,8 @@ function StartScreen({
           </WheelRow>
 
           <WheelRow index={guidanceWheelIndex}>
-          <LinearGradient colors={['#0F766E', '#2DD4BF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.rowGuidance]}>
+          <LinearGradient colors={['#1A73E8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
+          <View style={[hsS.row, hsS.startRowGuidance]}>
             <Text style={hsS.rowLabel}>{t('start.wheel.guidanceRow')}</Text>
             <View style={hsS.toggleGroup}>
               {([
@@ -10263,7 +10483,15 @@ function StartScreen({
 
         {/* Start button — למטה, ללא מסגרת/רקע נוסף סביב הכפתור */}
         <View style={{ marginTop: 40, marginBottom: 4, alignItems: 'center' }}>
-          <CasinoButton text={t('start.letsPlay')} width={220} height={48} fontSize={19} testID="start-lets-play" onPress={startGame} />
+          <CasinoButton
+            text={t('start.letsPlay')}
+            width={220}
+            height={48}
+            fontSize={19}
+            testID="start-lets-play"
+            onPress={startGame}
+            style={letsPlayGlowStyle}
+          />
         </View>
         <TouchableOpacity
           onLongPress={() => {
@@ -10357,6 +10585,12 @@ const hsS = StyleSheet.create({
   // גווני גוגל — שורות הגלילה
   rowPlayers: {
     backgroundColor: 'rgba(52,168,83,0.92)',
+  },
+  startRowRange: {
+    backgroundColor: 'rgba(52,168,83,0.92)',
+  },
+  startRowGuidance: {
+    backgroundColor: 'rgba(66,133,244,0.92)',
   },
   rowRange: {
     backgroundColor: 'rgba(180,83,9,0.92)',
@@ -10792,10 +11026,10 @@ function PlayerNameModal({
                   }}
                 >
                   <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-                  <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>?</Text>
-                  <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>?</Text>
-                  <Text style={{ position: 'absolute', bottom: 8, left: 54, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>?</Text>
-                  <Text style={{ position: 'absolute', bottom: 10, right: 60, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>?</Text>
+                  <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                  <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                  <Text style={{ position: 'absolute', bottom: 8, left: 54, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                  <Text style={{ position: 'absolute', bottom: 10, right: 60, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
                   </View>
                   <TextInput
                     value={name}
@@ -11020,9 +11254,10 @@ function TurnTransition() {
   const { t, isRTL } = useLocale();
   const ta = isRTL ? 'right' : 'left';
   const { state, dispatch } = useGame();
+  const { activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
-  const turnScreenWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
+  const turnScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
   const turnScreenHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
   const turnHeaderLift = Platform.OS === 'web' ? 0 : -65;
   const handBottomOffset = webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
@@ -11045,9 +11280,18 @@ function TurnTransition() {
   const turnPlayerChipHeight = compactWebHud ? 58 : 64;
   const turnPlayerChipFontSize = compactWebHud ? 13 : 14;
   const turnMoreButtonSize = compactWebHud ? 48 : 56;
+  const turnTransitionBackdrop = resolveTurnTransitionBackdrop({
+    isTutorial: state.isTutorial,
+    tableThemeId,
+    tableSkinId: activeTableSkin?.id ?? null,
+  });
+  const turnTransitionGradientColors =
+    (turnTransitionBackdrop.gradientColors && turnTransitionBackdrop.gradientColors.length >= 2
+      ? turnTransitionBackdrop.gradientColors
+      : ['#0a1628', '#10213a']) as [string, string, ...string[]];
   const soundOn = state.soundsEnabled !== false;
   const mp = useMultiplayerOptional();
-  const { profile } = useAuth();
+  const { profile, consumeSlinda } = useAuth();
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
   const [storedPlayerProfiles, setStoredPlayerProfiles] = useState<StoredPlayerProfilesState>(EMPTY_STORED_PLAYER_PROFILES);
   const cp = state.players[state.currentPlayerIndex];
@@ -11150,7 +11394,7 @@ function TurnTransition() {
               target: String(Math.round(state.pendingFractionTarget)),
               penalty: String(state.fractionPenalty),
             }),
-        emoji: '??',
+        emoji: WARNING_EMOJI,
         style: 'warning',
         requireAck: isChallengedMe,
         autoDismissMs: isChallengedMe ? undefined : 14000,
@@ -11361,12 +11605,14 @@ function TurnTransition() {
           : null;
   const compactPlayerScreen = state.roundsPlayed > 0;
   const slindaOwned = profile?.slinda_owned === true;
-  const showSlindaSlot = slindaOwned && !state.isTutorial && !isOnlineSpectator && !isLocalBotTurn && !mp?.gameOverride;
+  const slindaEligible = slindaOwned && !state.isTutorial && !isOnlineSpectator && !isLocalBotTurn && !mp?.gameOverride;
+  const showSlindaSlot = slindaEligible && !state.slindaAttemptedThisTurn;
   const sorted = useMemo(() => (cp ? sortHandCards(cp.hand) : []), [cp]);
   const slindaModalLocked = slindaModalOpen || slindaBusy;
   const slindaSelectedCard = slindaSelectedCardId
     ? sorted.find((card) => card.id === slindaSelectedCardId) ?? null
     : null;
+  const slindaModalBoxHeight = Math.min(turnScreenHeight - 28, Platform.OS === 'web' ? 760 : 700);
 
   const resumePausedStartTurnTimer = useCallback(() => {
     if (pausedStartTurnRemainingMs == null) return;
@@ -11386,7 +11632,8 @@ function TurnTransition() {
   }, [pausedStartTurnRemainingMs, state.phase, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride]);
 
   const openSlindaModal = useCallback(() => {
-    if (!showSlindaSlot || slindaBusy) return;
+    if (!showSlindaSlot || slindaBusy || state.slindaAttemptedThisTurn) return;
+    dispatch({ type: 'MARK_SLINDA_ATTEMPT' });
     if (localStartTurnDeadlineAt != null) {
       setPausedStartTurnRemainingMs(Math.max(0, localStartTurnDeadlineAt - Date.now()));
       setLocalStartTurnDeadlineAt(null);
@@ -11396,7 +11643,7 @@ function TurnTransition() {
     setSlindaError(null);
     setSlindaDeadlineAt(Date.now() + SLINDA_SELECTION_TIMER_SECONDS * 1000);
     setSlindaModalOpen(true);
-  }, [localStartTurnDeadlineAt, showSlindaSlot, slindaBusy]);
+  }, [dispatch, localStartTurnDeadlineAt, showSlindaSlot, slindaBusy, state.slindaAttemptedThisTurn]);
 
   const closeSlindaModal = useCallback(() => {
     if (slindaBusy) return;
@@ -11407,26 +11654,54 @@ function TurnTransition() {
     resumePausedStartTurnTimer();
   }, [resumePausedStartTurnTimer, slindaBusy]);
 
-  const handleConfirmSlinda = useCallback(() => {
+  const handleConfirmSlinda = useCallback(async () => {
     if (!slindaSelectedCardId || slindaBusy) return;
+    const selectedCardId = slindaSelectedCardId;
+    setSlindaBusy(true);
     setSlindaError(null);
-    if (tooltipCard?.id === slindaSelectedCardId) setTooltipCard(null);
-    dispatch({ type: 'REPLACE_CARD_WITH_SLINDA', cardId: slindaSelectedCardId });
-    setSlindaModalOpen(false);
-    setSlindaSelectedCardId(null);
-    setSlindaDeadlineAt(null);
-    resumePausedStartTurnTimer();
-  }, [dispatch, resumePausedStartTurnTimer, slindaBusy, slindaSelectedCardId, tooltipCard]);
+    try {
+      const consumeResult = await consumeSlinda();
+      if (consumeResult !== 'ok') {
+        dispatch({
+          type: 'PUSH_NOTIFICATION',
+          payload: {
+            id: `slinda-use-${Date.now()}`,
+            title: 'סלינדה',
+            message: '',
+            body: consumeResult === 'not_owned'
+              ? 'הסלינדה כבר נוצלה. כדי להשתמש שוב צריך לרכוש אותה מחדש.'
+              : 'לא הצלחנו להפעיל את סלינדה. התור ממשיך בלי שימוש.',
+            style: 'warning',
+            autoDismissMs: 6500,
+          },
+        });
+        setSlindaModalOpen(false);
+        setSlindaSelectedCardId(null);
+        setSlindaDeadlineAt(null);
+        resumePausedStartTurnTimer();
+        return;
+      }
+      if (tooltipCard?.id === selectedCardId) setTooltipCard(null);
+      dispatch({ type: 'REPLACE_CARD_WITH_SLINDA', cardId: selectedCardId });
+      setSlindaModalOpen(false);
+      setSlindaSelectedCardId(null);
+      setSlindaDeadlineAt(null);
+      resumePausedStartTurnTimer();
+    } finally {
+      setSlindaBusy(false);
+    }
+  }, [consumeSlinda, dispatch, resumePausedStartTurnTimer, slindaBusy, slindaSelectedCardId, tooltipCard]);
 
   useEffect(() => {
     if (!slindaModalOpen) return;
-    if (state.phase === 'turn-transition' && showSlindaSlot) return;
+    if (slindaBusy) return;
+    if (state.phase === 'turn-transition' && slindaEligible) return;
     setSlindaModalOpen(false);
     setSlindaSelectedCardId(null);
     setSlindaError(null);
     setSlindaDeadlineAt(null);
     setPausedStartTurnRemainingMs(null);
-  }, [slindaModalOpen, showSlindaSlot, state.phase]);
+  }, [slindaBusy, slindaEligible, slindaModalOpen, state.phase]);
 
   useEffect(() => {
     if (!slindaModalOpen || slindaDeadlineAt == null || slindaBusy) return;
@@ -11473,13 +11748,19 @@ function TurnTransition() {
   const HEADER_PAD = 0;
   const BTN_STRIP_H = handBottomOffset;
   return (
-    <View style={{ flex: 1, width: turnScreenWidth, minHeight: 0, overflow: 'visible' }} collapsable={false}>
+    <WebGameScreenFrame width={turnScreenWidth} testID="turn-transition-playfield">
+    <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }} collapsable={false}>
       {/* רקע נפרד ממסך המשחק — מסך המשחק משתמש ב־bg.jpg; כאן מעבר כחול כדי שלא ייראה כמו אותו מסך.
           בטוטוריאל אנחנו מחליפים לכהה אטום כדי שלא יציץ כחול שקוף סביב המניפה. */}
-      {state.isTutorial ? (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1628' }]} />
+      {turnTransitionBackdrop.kind === 'solid' ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: turnTransitionBackdrop.backgroundColor }]} />
       ) : (
-        <LinearGradient colors={[...playerScreensGradientColors]} start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={turnTransitionGradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.85, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
       )}
       {lockUiForBotTurn ? (
         <View
@@ -11511,7 +11792,7 @@ function TurnTransition() {
             />
           ) : null}
           <LulosButton
-            text={soundOn ? '??' : '??'}
+            text={soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}
             color="blue"
             width={hudSoundButtonWidth}
             height={hudButtonHeight}
@@ -11742,7 +12023,7 @@ function TurnTransition() {
                 }
                 if (card.type === 'wild') {
                   // Purple — matches WildCard gradient (#7C3AED ? #5B21B6)
-                  const wLabel = card.resolvedValue != null ? String(card.resolvedValue) : '?';
+                  const wLabel = card.resolvedValue != null ? String(card.resolvedValue) : STAR_GLYPH;
                   return (
                     <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#5B21B6', borderWidth: 2, borderColor: '#A78BFA', alignItems: 'center', justifyContent: 'center' }}>
                       <Text style={{ color: '#EDE9FE', fontSize: 14, fontWeight: '900' }}>{wLabel}</Text>
@@ -11764,7 +12045,7 @@ function TurnTransition() {
                   // Color-per-denominator — matches fracColors in game
                   const den = (card.fraction ?? '1/2').split('/')[1] ?? '2';
                   const fc = fracColors[den] ?? numRed;
-                  const fracLabel = card.fraction === '1/2' ? '½' : card.fraction === '1/3' ? '?' : card.fraction === '1/4' ? '¼' : card.fraction === '1/5' ? '?' : card.fraction ?? '?';
+                  const fracLabel = getFractionDisplay(card.fraction);
                   return (
                     <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: fc.face, alignItems: 'center', justifyContent: 'center' }}>
                       <Text style={{ color: fc.face, fontSize: 16, fontWeight: '900' }}>{fracLabel}</Text>
@@ -11775,7 +12056,7 @@ function TurnTransition() {
                   // Rainbow border feel — matches JokerCard multicolor
                   return (
                     <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#EA4335', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ color: '#EA4335', fontSize: 16, fontWeight: '900' }}>?</Text>
+                      <Text style={{ color: '#EA4335', fontSize: 16, fontWeight: '900' }}>{STAR_GLYPH}</Text>
                     </View>
                   );
                 }
@@ -11977,7 +12258,7 @@ function TurnTransition() {
                         containerStyle={{ marginBottom: 0 }}
                         showLabel={false}
                       />
-                      <Text style={{ color: '#FDE047', fontSize: 10, fontWeight: '900', marginTop: -2 }}>?</Text>
+                      <Text style={{ color: '#FDE047', fontSize: 10, fontWeight: '900', marginTop: -2 }}>{TIMER_GLYPH}</Text>
                     </View>
                   ) : undefined
                 }
@@ -12001,7 +12282,19 @@ function TurnTransition() {
         </View>
       )}
 
-      <AppModal visible={slindaModalOpen} onClose={closeSlindaModal} title={t('slindaBank.modalTitle')} testID="slinda-modal">
+      <AppModal
+        visible={slindaModalOpen}
+        onClose={closeSlindaModal}
+        title={t('slindaBank.modalTitle')}
+        testID="slinda-modal"
+        boxStyle={{
+          width: '100%',
+          maxWidth: 560,
+          height: slindaModalBoxHeight,
+          maxHeight: slindaModalBoxHeight,
+          paddingBottom: 16,
+        }}
+      >
         <View style={{ flex: 1, minHeight: 0 }}>
           <View style={{ alignItems: 'center', marginBottom: 12 }}>
             <HappyBubble
@@ -12010,6 +12303,7 @@ function TurnTransition() {
               text={t('slindaBank.bubbleBody')}
               withTail={false}
               maxWidth={340}
+              size={Platform.OS === 'web' ? 'normal' : 'compact'}
             />
           </View>
           <View style={{ alignItems: 'center', marginBottom: 6 }}>
@@ -12026,25 +12320,34 @@ function TurnTransition() {
             {slindaSelectedCard ? t('slindaBank.confirm') : t('slindaBank.pickCard')}
           </Text>
           <ScrollView
+            style={{ flex: 1, minHeight: 0 }}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, paddingBottom: 8 }}
+            contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: 12, paddingHorizontal: 4, paddingBottom: 8 }}
           >
             {sorted.map((card) => {
               const selected = slindaSelectedCardId === card.id;
               return (
-                <View key={card.id} style={{ width: 112, alignItems: 'center', marginBottom: 10 }}>
-                  <GameCard
-                    card={card}
-                    small
-                    selected={selected}
-                    testID={`slinda-option-${card.id}`}
-                    onPress={() => {
-                      if (slindaBusy) return;
-                      setSlindaSelectedCardId((prev) => (prev === card.id ? null : card.id));
-                      setSlindaError(null);
-                    }}
-                  />
-                </View>
+                <TouchableOpacity
+                  key={card.id}
+                  activeOpacity={0.92}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected, disabled: slindaBusy }}
+                  disabled={slindaBusy}
+                  testID={`slinda-option-${card.id}`}
+                  onPress={() => {
+                    setSlindaSelectedCardId((prev) => (prev === card.id ? null : card.id));
+                    setSlindaError(null);
+                  }}
+                  style={{ width: 112, alignItems: 'center', marginBottom: 10 }}
+                >
+                  <View pointerEvents="none">
+                    <GameCard
+                      card={card}
+                      small
+                      selected={selected}
+                    />
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </ScrollView>
@@ -12145,7 +12448,7 @@ function TurnTransition() {
             <HappyBubble
               tone="welcome"
               title={t('ui.welcomeHowTitle')}
-              text={isRTL ? 'לעוד הסברים עברו למדריך "מדריך בפעולה" במסך הבית.' : 'For more guidance, open the "Interactive Guide" on the home screen.'}
+              text={t('ui.welcomeHowBody')}
               withTail={false}
               maxWidth={340}
             />
@@ -12160,6 +12463,7 @@ function TurnTransition() {
         </View>
       )}
     </View>
+    </WebGameScreenFrame>
   );
 }
 
@@ -12219,10 +12523,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { state, dispatch } = useGame();
   const { t, isRTL } = useLocale();
   const { awardCoins } = useAuth();
-  const { table, background, activeTableSkin } = useActiveTheme();
+  const { table, background, activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
-  const gameScreenWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
+  const gameScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
   const gameScreenHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
   const handBottomOffset = webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
@@ -12248,7 +12552,35 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const gameTableSurface = activeTableSkin
     ? resolveGameTableSurface(activeTableSkin, pokerTableImg, { platform: Platform.OS })
     : null;
+  const gameFramedTableSurface = gameTableSurface?.presentation === 'framed' ? gameTableSurface : null;
   const fallbackTableSurface = resolveGameTableSurface(null, pokerTableImg, { platform: Platform.OS });
+  const gameTableBaseGradient = tableThemeId !== 'classic' ? table.gradient : null;
+  const tableShellStyle = {
+    alignSelf: 'center' as const,
+    width: '100%' as const,
+    height: tableHeight,
+    overflow: 'visible' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  };
+  const tableStageStyle = {
+    alignSelf: 'center' as const,
+    width: '100%' as const,
+    height: tableHeight,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    overflow: 'hidden' as const,
+    borderRadius: tableHeight / 2,
+  };
+  const tableStageImageStyle = {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    width: '100%' as const,
+    height: '100%' as const,
+  };
   const safe = useGameSafeArea();
   const isAndroid = Platform.OS === 'android';
   const androidStableDirection = isAndroid && isRTL ? ('ltr' as const) : undefined;
@@ -12345,6 +12677,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const [showMeterCelebrationOverlay, setShowMeterCelebrationOverlay] = useState(false);
   const [meterCelebrationRewardCoins, setMeterCelebrationRewardCoins] = useState(EXCELLENCE_METER_FULL_REWARD_COINS);
   const lastOverlayPulseRef = useRef<number>(0);
+  const meterCelebrateSoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (state.isTutorial || !state.lastCourageCoinsAwarded) return;
     const pulseId = state.courageRewardPulseId ?? 0;
@@ -12353,9 +12686,21 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     setMeterCelebrationRewardCoins(EXCELLENCE_METER_FULL_REWARD_COINS);
     setShowMeterCelebrationOverlay(true);
     if (state.soundsEnabled !== false) {
-      void playMeterCelebrateSequence({ cooldownMs: 0, volumeOverride: 0.8 });
+      if (meterCelebrateSoundTimeoutRef.current) {
+        clearTimeout(meterCelebrateSoundTimeoutRef.current);
+      }
+      meterCelebrateSoundTimeoutRef.current = setTimeout(() => {
+        meterCelebrateSoundTimeoutRef.current = null;
+        void playSfx('meterCelebrate', { cooldownMs: 0, volumeOverride: 0.8 });
+      }, 140);
     }
-  }, [state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
+    return () => {
+      if (meterCelebrateSoundTimeoutRef.current) {
+        clearTimeout(meterCelebrateSoundTimeoutRef.current);
+        meterCelebrateSoundTimeoutRef.current = null;
+      }
+    };
+  }, [state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial, state.soundsEnabled]);
   const cp = state.players[state.currentPlayerIndex];
   useEffect(() => {
     let cancelled = false;
@@ -12433,6 +12778,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const lastPlayerBorderColor = PLAYER_BUBBLE_BORDER_COLORS[lastPlayerIndex % PLAYER_BUBBLE_BORDER_COLORS.length];
   const [showCel,setShowCel] = useState(false);
   const [eqConfirm, setEqConfirm] = useState<{ onConfirm: () => void } | null>(null);
+  const [equationBuildStarted, setEquationBuildStarted] = useState(false);
   const eqBuilderRef = useRef<EquationBuilderRef>(null);
   // Refs used only for the guided full-build sub-phase of lesson-4 step-3:
   // the tutorial draws an arrow at the "אשר את התרגיל" / "בחרתי" buttons,
@@ -12448,6 +12794,21 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const [cardHintJokerSeen, setCardHintJokerSeen] = useState(false);
   const [cardHintOpSeen, setCardHintOpSeen] = useState(false);
   const [cardHintLoaded, setCardHintLoaded] = useState(false);
+  const lastEquationBuildRollSeqRef = useRef<number | null>(null);
+  const handleResetEquation = useCallback(() => {
+    setEquationBuildStarted(false);
+    eqBuilderRef.current?.resetAll();
+  }, []);
+  useEffect(() => {
+    if (state.dice == null) {
+      lastEquationBuildRollSeqRef.current = null;
+      return;
+    }
+    const nextRollSeq = state.diceRollSeq ?? 0;
+    if (lastEquationBuildRollSeqRef.current === nextRollSeq) return;
+    lastEquationBuildRollSeqRef.current = nextRollSeq;
+    setEquationBuildStarted(false);
+  }, [state.diceRollSeq, state.dice]);
   // "No identical card" is shown via NotificationZone; no local visibility state needed.
   useEffect(() => {
     Promise.all([AsyncStorage.getItem(CARD_HINT_JOKER_SEEN_KEY), AsyncStorage.getItem(CARD_HINT_OP_SEEN_KEY)]).then(([j, o]) => {
@@ -13069,6 +13430,14 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
   // Possible results toggle (moved before first reference to avoid TDZ)
   const [resultsOpen, setResultsOpenState] = useState(false);
+  const [resultsChipHiddenThisTurn, setResultsChipHiddenThisTurn] = useState(false);
+  const resultsChipTurnKey = `${state.roundsPlayed}:${state.currentPlayerIndex}`;
+  const resultsChipTurnKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (resultsChipTurnKeyRef.current === resultsChipTurnKey) return;
+    resultsChipTurnKeyRef.current = resultsChipTurnKey;
+    setResultsChipHiddenThisTurn(false);
+  }, [resultsChipTurnKey]);
   // Auto-open "possible results" during every bot turn so the player can
   // follow along with what the bot can build.
   useEffect(() => {
@@ -13122,7 +13491,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           title: t('fraction.challengeToastTitle'),
           message: '',
           body: t('fraction.cannotPlayHere'),
-          emoji: '??',
+          emoji: NO_ENTRY_EMOJI,
           style: 'warning',
           autoDismissMs: 5500,
         }});
@@ -13138,7 +13507,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             id: `frac-hint-${Date.now()}`,
             title: t('fraction.firstTapHintTitle'),
             message: t('fraction.firstTapHintBody'),
-            emoji: '??',
+            emoji: LIGHTBULB_EMOJI,
             style: 'info',
             autoDismissMs: 7000,
           },
@@ -13245,6 +13614,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     }
     setResultsChipBoostedPulse(false);
     setResultsOpenState(true);
+    if (!state.isTutorial && !isBotTurnAny) {
+      setResultsChipHiddenThisTurn(true);
+    }
     const shouldShowWildResultsGuidance =
       midGameHintsUnlocked &&
       tutLoaded &&
@@ -13259,14 +13631,14 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         {
           title: t('guidance.wildResultsTitle'),
           message: t('guidance.wildResultsBody'),
-          emoji: '??',
+          emoji: SPARKLES_EMOJI,
           style: 'info',
           autoDismissMs: 9000,
         },
         {
           title: t('guidance.wildResultsTitle'),
           message: t('guidance.wildResultsBody'),
-          emoji: '??',
+          emoji: SPARKLES_EMOJI,
           style: 'info',
           autoDismissMs: 9000,
         },
@@ -13278,7 +13650,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (!shouldCountUseThisOpen || nextInfoUse !== 3) {
       showOnb('onb_results', '', '', 'לפניך מוצגות במיני קלפים את התוצאות האפשריות. אם תלחץ עליהם תוכל לגלות את התרגיל');
     }
-  }, [resultsOpen, midGameHintsUnlocked, tutLoaded, showOnb, state.identicalAlert, state.pendingFractionTarget, state.possibleResultsInfoUses, state.possibleResultsInfoCountedThisTurn, state.guidanceEnabled, dispatch, hasWildForResults, showGuidance, t, playMiniResultTapSound]);
+  }, [resultsOpen, midGameHintsUnlocked, tutLoaded, showOnb, state.identicalAlert, state.pendingFractionTarget, state.possibleResultsInfoUses, state.possibleResultsInfoCountedThisTurn, state.guidanceEnabled, state.isTutorial, dispatch, hasWildForResults, showGuidance, t, playMiniResultTapSound, isBotTurnAny]);
 
   useEffect(() => {
     if (!resultsOpen || resultsMiniPulseSeen || !tutLoaded) return;
@@ -13504,7 +13876,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         title: t('fraction.defenseLookingForSolution'),
         message: '',
         body: '',
-        emoji: '??',
+        emoji: ABACUS_EMOJI,
         style: 'info',
         autoDismissMs: 6000,
       },
@@ -13560,7 +13932,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           ? t('guidance.hint.matchTopCard')
           : t('guidance.identicalShort'),
         body: isFirstIdenticalGuidance ? t('guidance.identicalBody') : '',
-        emoji: '??',
+        emoji: REPEAT_EMOJI,
         style: 'info',
         autoDismissMs: isFirstIdenticalGuidance ? 9000 : 5500,
       },
@@ -13646,7 +14018,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (!midGameHintsUnlocked) return;
     if (!guidanceEnabledRef.current || !tutLoaded || onbBlocked) return;
     if (state.phase !== 'building' || !state.dice) return;
-    showOnb('onb_build_equation', '??', t('onb.buildEquation.title'), t('onb.buildEquation.body'));
+    showOnb('onb_build_equation', ABACUS_EMOJI, t('onb.buildEquation.title'), t('onb.buildEquation.body'));
   }, [state.isTutorial, midGameHintsUnlocked, tutLoaded, onbBlocked, state.phase, state.dice, showOnb, t]);
 
   // מיני קלפים — רק בפעם הראשונה שהרצועה זמינה (לפי הגדרות המשחק)
@@ -13665,7 +14037,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (state.isTutorial) return;
     if (!guidanceEnabledRef.current || !tutLoaded || onbBlocked) return;
     if (state.lastDiscardCount > 0) {
-      showOnb('onb_first_discard', '??', t('onb.firstDiscard.title'), t('onb.firstDiscard.body'));
+      showOnb('onb_first_discard', CELEBRATION_EMOJI, t('onb.firstDiscard.title'), t('onb.firstDiscard.body'));
     }
   }, [state.isTutorial, tutLoaded, onbBlocked, state.lastDiscardCount, t]);
 
@@ -13676,7 +14048,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (state.phase === 'solved' && state.equationResult !== null && !state.hasPlayedCards) {
       showOnb(
         'onb_choose_cards_after_confirm',
-        '??',
+        CARDS_EMOJI,
         t('onb.chooseCardsAfterConfirm.title'),
         t('onb.chooseCardsAfterConfirm.body'),
       );
@@ -13824,7 +14196,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   useEffect(() => {
   }, [bottomPad, state.phase, state.players.length]);
   return (
-    <View style={{ flex: 1, width: gameScreenWidth, minHeight: 0, overflow: 'visible' }}>
+    <WebGameScreenFrame width={gameScreenWidth} testID="game-screen-playfield">
+    <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }}>
       {/* שכבות הרקע נפרסות מתחת ל-safe area; ה-UI עצמו נשאר ממוקם לפי ה-insets. */}
       <View pointerEvents="none" style={fullBleedBackgroundFrame}>
         {/* רקע מסך — ערכת הנושא של האווירה הכללית. בטוטוריאל תמיד כהה אטום. */}
@@ -13846,14 +14219,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             end={{ x: 0.85, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-        )}
-        {/* שולחן — ניתן לשינוי דרך ערכות נושא. */}
-        {!state.isTutorial && (
-          table.image ? (
-            <ImageBackground source={table.image} resizeMode="cover" style={[StyleSheet.absoluteFill, { backgroundColor: table.imageTint, opacity: 0.85 }]} />
-          ) : (
-            <LinearGradient colors={table.gradient!} style={[StyleSheet.absoluteFill, { opacity: 0.75 }]} />
-          )
         )}
         {/* ?? Background dice layers (decorative — hidden in tutorial mode) ?? */}
         {!state.isTutorial ? (
@@ -13947,7 +14312,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 style={{ marginBottom: -8 }}
               />
             )}
-            <LulosButton text={soundOn ? '??' : '??'} color="blue" width={hudSoundButtonWidth} height={hudButtonHeight} fontSize={hudSoundFontSize} onPress={toggleSoundsInGame} />
+            <LulosButton text={soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON} color="blue" width={hudSoundButtonWidth} height={hudButtonHeight} fontSize={hudSoundFontSize} onPress={toggleSoundsInGame} />
           </View>
         ) : null}
       </View>
@@ -13982,10 +14347,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   textShadowRadius: 2,
                 }}
               >
-                ?
+                {DOWN_ARROW_GLYPH}
               </Animated.Text>
               <View style={[alertBubbleStyle.box, { maxWidth: 280, paddingVertical: 12, paddingHorizontal: 12 }]}>
-                <Text style={alertBubbleStyle.title}>?? יש לך קלף זהה!</Text>
+                <Text style={alertBubbleStyle.title}>{`${REPEAT_EMOJI} יש לך קלף זהה!`}</Text>
                 <Text style={alertBubbleStyle.body}>הנח אותו על הערימה — דלג על קוביות והיפטר מקלף!</Text>
                 <IdenticalWildStarHint compact />
               </View>
@@ -14013,7 +14378,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           }}
           pointerEvents="box-none"
         >
-          {state.showPossibleResults && state.validTargets.length > 0 ? (
+          {state.showPossibleResults && state.validTargets.length > 0 && !resultsChipHiddenThisTurn ? (
             <ResultsSlot
               onToggle={toggleResultsBadges}
               filteredResults={filteredResultsForHand}
@@ -14068,17 +14433,17 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {parensRight ? (
                   <>
-                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'? '}</Text>
+                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'1 '}</Text>
                     <Text allowFontScaling={false} style={{ color: '#FED7AA', fontSize: 18, fontWeight: '900' }}>{'('}</Text>
-                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'??'}</Text>
+                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'2+3'}</Text>
                     <Text allowFontScaling={false} style={{ color: '#FED7AA', fontSize: 18, fontWeight: '900' }}>{')'}</Text>
                   </>
                 ) : (
                   <>
                     <Text allowFontScaling={false} style={{ color: '#FED7AA', fontSize: 18, fontWeight: '900' }}>{'('}</Text>
-                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'??'}</Text>
+                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{'1+2'}</Text>
                     <Text allowFontScaling={false} style={{ color: '#FED7AA', fontSize: 18, fontWeight: '900' }}>{')'}</Text>
-                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{' ?'}</Text>
+                    <Text allowFontScaling={false} style={{ color: '#FFF', fontSize: 14, fontWeight: '900' }}>{' 3'}</Text>
                   </>
                 )}
               </View>
@@ -14091,61 +14456,44 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       )}
 
       {/* ?? SLOT 3: שולחן ירוק + תרגיל + טיימר (מוקאפ תרגיל הועבר ליד תוצאות אפשריות) ?? */}
-      <View style={{position:'absolute',top:tableTop,left:0,right:0,zIndex:2,flexDirection:'row',justifyContent:'center',alignItems:'stretch',gap:0}}>
+      <View style={{position:'absolute',top:tableTop,left:0,right:0,zIndex:2,flexDirection:'row',justifyContent:'center',alignItems:'stretch',gap:0,transform:[{ translateX: EQUATION_TABLE_SHIFT_X }]}}>
         <View style={{width:tableWidth,maxWidth:'100%',minWidth:0,justifyContent:'flex-end',paddingBottom:tableBottomPadding}}>
-          {gameTableSurface ? (
-            <ImageBackground
-              source={gameTableSurface.source as any}
-              style={{
-                alignSelf:'center',
-                width:'100%',
-                height:tableHeight,
-                justifyContent:'center',
-                alignItems:'center',
-                paddingVertical:10,
-                paddingHorizontal:8,
-                overflow:'hidden',
-                borderRadius: tableHeight / 2,
-              }}
-              resizeMode={gameTableSurface.resizeMode}
-            >
-              <EquationBuilder ref={eqBuilderRef} onConfirmChange={setEqConfirm} timerProgress={equationTimerProgress} interactive={!isOnlineWaiting} parensRight={parensRight} onParensRightChange={setParensRight} />
-            </ImageBackground>
-          ) : table.gradient ? (
-            <LinearGradient
-              colors={table.gradient}
-              style={{
-                alignSelf:'center',
-                width:'100%',
-                height:tableHeight,
-                justifyContent:'center',
-                alignItems:'center',
-                paddingVertical:10,
-                paddingHorizontal:8,
-                overflow:'hidden',
-                borderRadius: 999,
-              }}
-            >
-              <EquationBuilder ref={eqBuilderRef} onConfirmChange={setEqConfirm} timerProgress={equationTimerProgress} interactive={!isOnlineWaiting} parensRight={parensRight} onParensRightChange={setParensRight} />
-            </LinearGradient>
-          ) : (
-            <ImageBackground
-              source={fallbackTableSurface.source as any}
-              style={{
-                alignSelf:'center',
-                width:'100%',
-                height:tableHeight,
-                justifyContent:'center',
-                alignItems:'center',
-                paddingVertical:10,
-                paddingHorizontal:8,
-                overflow:'hidden',
-              }}
-              resizeMode={fallbackTableSurface.resizeMode}
-            >
-              <EquationBuilder ref={eqBuilderRef} onConfirmChange={setEqConfirm} timerProgress={equationTimerProgress} interactive={!isOnlineWaiting} parensRight={parensRight} onParensRightChange={setParensRight} />
-            </ImageBackground>
-          )}
+          <View style={tableShellStyle}>
+            {gameFramedTableSurface ? (
+              <Image
+                source={gameFramedTableSurface.source as any}
+                resizeMode={gameFramedTableSurface.resizeMode}
+                style={tableStageImageStyle}
+              />
+            ) : (
+              <View style={tableStageStyle}>
+                {gameTableSurface ? (
+                  <Image
+                    source={gameTableSurface.source as any}
+                    resizeMode={gameTableSurface.resizeMode}
+                    style={tableStageImageStyle}
+                  />
+                ) : gameTableBaseGradient ? (
+                  <LinearGradient
+                    colors={gameTableBaseGradient}
+                    style={tableStageImageStyle}
+                  />
+                ) : (
+                  <Image
+                    source={fallbackTableSurface.source as any}
+                    resizeMode={fallbackTableSurface.resizeMode}
+                    style={tableStageImageStyle}
+                  />
+                )}
+                <EquationBuilder ref={eqBuilderRef} onConfirmChange={setEqConfirm} onBuildStarted={() => setEquationBuildStarted(true)} timerProgress={equationTimerProgress} interactive={!isOnlineWaiting} parensRight={parensRight} onParensRightChange={setParensRight} />
+              </View>
+            )}
+            {gameFramedTableSurface ? (
+              <View style={tableStageStyle}>
+                <EquationBuilder ref={eqBuilderRef} onConfirmChange={setEqConfirm} onBuildStarted={() => setEquationBuildStarted(true)} timerProgress={equationTimerProgress} interactive={!isOnlineWaiting} parensRight={parensRight} onParensRightChange={setParensRight} />
+              </View>
+            ) : null}
+          </View>
           {!l5GuidedTutorial ? <StagingZone /> : null}
         </View>
       </View>
@@ -14272,77 +14620,86 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           }}
           pointerEvents="auto"
         >
-          <Animated.View
-            ref={confirmBtnWrapperRef}
-            onLayout={() => {
-              if (!state.isTutorial || !tutorialBus.getL4Step3Mode()) return;
-              confirmBtnWrapperRef.current?.measureInWindow?.((x, y, w, h) => {
-                tutorialBus.setLayout('confirmEqBtn', { top: y, left: x, width: w, height: h });
-              });
-            }}
-            style={[
-              Platform.select({
-                ios: {
-                  shadowColor: '#FF6B00',
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.75,
-                  shadowRadius: 16,
-                },
-                android: { elevation: 14 },
-              }),
-              // Tutorial "breathing" pulse — a subtle scale loop that draws
-              // the eye without hiding the button text. Driven by the shared
-              // `tutorialResultPulse` so it stays in step with any sibling
-              // tutorial animations.
-              state.isTutorial && tutorialBus.getL4Step3Mode()
-                ? {
-                    transform: [
-                      {
-                        scale: tutorialResultPulse.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 1.06],
-                        }),
-                      },
-                    ],
-                  }
-                : null,
-            ]}
-          >
-            {/* L4 step 3: pulsing ? arrow next to the confirm button */}
-            {state.isTutorial && tutorialBus.getL4Step3Mode() && !!eqConfirm && (
+          {(() => {
+            const showTutorialConfirm = state.isTutorial && (tutorialBus.getL4Step3Mode() || tutorialBus.getManualEqConfirm());
+            const showBuildPlaceholder = !state.isTutorial && !equationBuildStarted;
+            const confirmLabel = showBuildPlaceholder ? t('equation.buildTitle') : t('game.buildingEquationNext');
+            const confirmDisabled = showBuildPlaceholder || !eqConfirm;
+            const showTutorialPulse = state.isTutorial && tutorialBus.getL4Step3Mode();
+            return (
               <Animated.View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  right: -44,
-                  top: -136,
-                  opacity: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
-                  transform: [
-                    { translateX: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }) },
-                    { scale: tutorialResultPulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.9, 1.2, 0.9] }) },
-                  ],
+                ref={confirmBtnWrapperRef}
+                onLayout={() => {
+                  if (!state.isTutorial || !tutorialBus.getL4Step3Mode()) return;
+                  confirmBtnWrapperRef.current?.measureInWindow?.((x, y, w, h) => {
+                    tutorialBus.setLayout('confirmEqBtn', { top: y, left: x, width: w, height: h });
+                  });
                 }}
+                style={[
+                  Platform.select({
+                    ios: {
+                      shadowColor: '#FF6B00',
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.75,
+                      shadowRadius: 16,
+                    },
+                    android: { elevation: 14 },
+                  }),
+                  // Tutorial "breathing" pulse — a subtle scale loop that draws
+                  // the eye without hiding the button text. Driven by the shared
+                  // `tutorialResultPulse` so it stays in step with any sibling
+                  // tutorial animations.
+                  showTutorialPulse
+                    ? {
+                        transform: [
+                          {
+                            scale: tutorialResultPulse.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [1, 1.06],
+                            }),
+                          },
+                        ],
+                      }
+                    : null,
+                ]}
               >
-                <Text style={{ fontSize: 32, color: '#FDE047', fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>{'?'}</Text>
+                {/* L4 step 3: pulsing ? arrow next to the confirm button */}
+                {showTutorialPulse && !!eqConfirm && (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      right: -44,
+                      top: -136,
+                      opacity: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+                      transform: [
+                        { translateX: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }) },
+                        { scale: tutorialResultPulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.9, 1.2, 0.9] }) },
+                      ],
+                    }}
+                  >
+                    <Text style={{ fontSize: 32, color: '#FDE047', fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>{GUIDE_ARROW_GLYPH}</Text>
+                  </Animated.View>
+                )}
+                <LulosButton
+                  text={confirmLabel}
+                  color="orange"
+                  width={220}
+                  height={48}
+                  fontSize={17}
+                  textColor="#FFFFFF"
+                  disabled={confirmDisabled}
+                  onPress={() => {
+                    if (confirmDisabled || !eqConfirm) return;
+                    if (showTutorialConfirm && tutorialBus.getL4Step3Mode()) {
+                      tutorialBus.emitUserEvent({ kind: 'eqConfirmedByUser' });
+                    }
+                    eqConfirm.onConfirm();
+                  }}
+                />
               </Animated.View>
-            )}
-            <LulosButton
-              text={t('game.buildingEquationNext')}
-              color="orange"
-              width={220}
-              height={48}
-              fontSize={17}
-              textColor="#FFFFFF"
-              disabled={!eqConfirm}
-              onPress={() => {
-                if (!eqConfirm) return;
-                if (state.isTutorial && tutorialBus.getL4Step3Mode()) {
-                  tutorialBus.emitUserEvent({ kind: 'eqConfirmedByUser' });
-                }
-                eqConfirm.onConfirm();
-              }}
-            />
-          </Animated.View>
+            );
+          })()}
         </View>
       )}
       {state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length > 0 && !l5GuidedTutorial && (
@@ -14473,7 +14830,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               <View style={{flexShrink:0,minHeight:52,alignItems:'center',justifyContent:'center',gap:8,paddingTop:6,flexDirection:'row',flexWrap:'wrap',transform:[{translateY:40}]}}>
                 {/* איפוס התרגיל — רק ב-building */}
                 {bl && !state.hasPlayedCards && state.dice && state.pendingFractionTarget === null && !state.isTutorial && (
-                  <LulosButton text={t('game.resetEquation')} color="blue" width={120} height={38} fontSize={14} onPress={() => eqBuilderRef.current?.resetAll()} />
+                  <LulosButton text={t('game.resetEquation')} color="blue" width={120} height={38} fontSize={14} disabled={!equationBuildStarted} onPress={handleResetEquation} />
                 )}
                 {showBackToEquation && (
                   <LulosButton text={t('game.backToEquation')} color="blue" width={132} height={38} fontSize={14} onPress={() => setSolveExerciseHidden(false)} />
@@ -14599,7 +14956,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   ],
                 }}
               >
-                <Text style={{ fontSize: 44, lineHeight: 48, color: '#FDE047', fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, transform: [{ rotate: '180deg' }] }}>?</Text>
+                <Text style={{ fontSize: 44, lineHeight: 48, color: '#FDE047', fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6, transform: [{ rotate: '180deg' }] }}>{GUIDE_ARROW_GLYPH}</Text>
               </Animated.View>
             )}
           </View>
@@ -14682,7 +15039,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             />
             {!state.isTutorial && (
               <TouchableOpacity
-                onPress={() => dispatch({ type: 'REVERT_TO_BUILDING' })}
+                disabled
                 style={{
                   paddingHorizontal: 18,
                   paddingVertical: 8,
@@ -14690,6 +15047,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   backgroundColor: 'rgba(255,255,255,0.08)',
                   borderWidth: 1,
                   borderColor: 'rgba(255,255,255,0.18)',
+                  opacity: 0,
                 }}
               >
                 <Text style={{ color: '#D1D5DB', fontSize: 13, fontWeight: '600' }}>
@@ -14715,6 +15073,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       />
 
     </View>
+    </WebGameScreenFrame>
   );
 }
 
@@ -14723,24 +15082,40 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 // ???????????????????????????????????????????????????????????????
 
 const CC = ['#EAB308','#3B82F6','#EF4444','#22C55E','#8B5CF6','#F97316'];
-function Confetti() {
-  const an = useRef(Array.from({length:30},()=>({x:new Animated.Value(Math.random()*SCREEN_W),y:new Animated.Value(-20),r:new Animated.Value(0),c:CC[Math.floor(Math.random()*CC.length)]}))).current;
-  useEffect(()=>{an.forEach(a=>{const d=2000+Math.random()*2000,dl=Math.random()*1500;Animated.parallel([Animated.timing(a.y,{toValue:SCREEN_H+20,duration:d,delay:dl,useNativeDriver:true}),Animated.timing(a.r,{toValue:Math.random()*720-360,duration:d,delay:dl,useNativeDriver:true})]).start();});}, []);
+function Confetti({ width, height }: { width: number; height: number }) {
+  const an = useRef(Array.from({length:30},()=>({x:new Animated.Value(Math.random()*width),y:new Animated.Value(-20),r:new Animated.Value(0),c:CC[Math.floor(Math.random()*CC.length)]}))).current;
+  useEffect(() => {
+    an.forEach(a => {
+      a.x.setValue(Math.random() * width);
+      a.y.setValue(-20);
+      a.r.setValue(0);
+      const d = 2000 + Math.random() * 2000;
+      const dl = Math.random() * 1500;
+      Animated.parallel([
+        Animated.timing(a.y, { toValue: height + 20, duration: d, delay: dl, useNativeDriver: true }),
+        Animated.timing(a.r, { toValue: Math.random() * 720 - 360, duration: d, delay: dl, useNativeDriver: true }),
+      ]).start();
+    });
+  }, [an, height, width]);
   return <View style={StyleSheet.absoluteFill} pointerEvents="none">{an.map((a,i)=><Animated.View key={i} style={{position:'absolute',width:10,height:10,borderRadius:2,backgroundColor:a.c,transform:[{translateX:a.x as any},{translateY:a.y as any},{rotateZ:a.r.interpolate({inputRange:[-360,360],outputRange:['-360deg','360deg']}) as any}]}} />)}</View>;
 }
 
 function GameOver() {
   const { t } = useLocale();
-  const { state } = useGame();
-  const { dispatch } = useGame();
+  const { state, dispatch } = useGame();
+  const viewport = useWebViewportSize();
+  const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
+  const gameOverWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
+  const gameOverHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
   const sorted = [...state.players].sort((a,b)=>a.hand.length-b.hand.length);
   const winningPlayedCards = (state.lastTurnPlayedCards?.length ?? 0) > 0
     ? state.lastTurnPlayedCards
     : state.currentTurnPlayedCards;
   return (
-    <View style={{flex:1,justifyContent:'center',alignItems:'center',padding:24}}>
-      <Confetti />
-      <Text style={{fontSize:56,marginBottom:8}}>??</Text>
+    <WebGameScreenFrame width={gameOverWidth} testID="game-over-playfield">
+    <View style={{flex:1,width:'100%',justifyContent:'center',alignItems:'center',padding:24}}>
+      <Confetti width={gameOverWidth} height={gameOverHeight} />
+      <Text style={{fontSize:56,marginBottom:8}}>{TROPHY_EMOJI}</Text>
       <View style={{ marginBottom: 24, alignItems: 'center' }}>
         <HappyBubble
           tone="celebrate"
@@ -14754,14 +15129,19 @@ function GameOver() {
           <View style={{backgroundColor:'rgba(15,23,42,0.72)',borderRadius:12,padding:16,width:'100%',marginBottom:14}}>
             <Text style={{color:'#C7D2FE',fontSize:11,fontWeight:'700',letterSpacing:1,marginBottom:10,textAlign:'center'}}>המהלך המנצח</Text>
             {state.lastEquationDisplay ? (
-              <Text style={{color:'#F8FAFC',fontSize:20,fontWeight:'800',textAlign:'center'}}>
-                {formatEquationForDisplay(state.lastEquationDisplay)}
-              </Text>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>
+                  תרגיל הקוביות
+                </Text>
+                <Text style={{color:'#F8FAFC',fontSize:20,fontWeight:'800',textAlign:'center'}}>
+                  {formatEquationForDisplay(state.lastEquationDisplay)}
+                </Text>
+              </View>
             ) : null}
             {winningPlayedCards.length > 0 ? (
               <View style={{marginTop: state.lastEquationDisplay ? 12 : 0, alignItems:'center'}}>
                 <Text style={{ color: 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>
-                  הקלפים שהונחו
+                  קלפי היד שהשלימו את התוצאה
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingHorizontal: 8 }}>
                   {winningPlayedCards.map((card: Card, i: number) => {
@@ -14769,7 +15149,7 @@ function GameOver() {
                       return <MiniResultCard key={card.id} value={card.value!} index={i} />;
                     }
                     if (card.type === 'wild') {
-                      const wLabel = card.resolvedValue != null ? String(card.resolvedValue) : '?';
+                      const wLabel = card.resolvedValue != null ? String(card.resolvedValue) : STAR_GLYPH;
                       return (
                         <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#5B21B6', borderWidth: 2, borderColor: '#A78BFA', alignItems: 'center', justifyContent: 'center' }}>
                           <Text style={{ color: '#EDE9FE', fontSize: 14, fontWeight: '900' }}>{wLabel}</Text>
@@ -14789,7 +15169,7 @@ function GameOver() {
                     if (card.type === 'fraction') {
                       const den = (card.fraction ?? '1/2').split('/')[1] ?? '2';
                       const fc = fracColors[den] ?? numRed;
-                      const fracLabel = card.fraction === '1/2' ? '½' : card.fraction === '1/3' ? '?' : card.fraction === '1/4' ? '¼' : card.fraction === '1/5' ? '?' : card.fraction ?? '?';
+                      const fracLabel = getFractionDisplay(card.fraction);
                       return (
                         <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: fc.face, borderWidth: 2, borderColor: fc.dark, alignItems: 'center', justifyContent: 'center' }}>
                           <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '900' }}>{fracLabel}</Text>
@@ -14805,6 +15185,11 @@ function GameOver() {
                 </ScrollView>
               </View>
             ) : null}
+            {state.lastEquationDisplay && winningPlayedCards.length > 0 ? (
+              <Text style={{ color: 'rgba(255,255,255,0.56)', fontSize: 11, textAlign: 'center', marginTop: 10, lineHeight: 16 }}>
+                התרגיל למעלה מגיע מהקוביות, והקלפים למטה הם הקלפים מהיד ששוחקו כדי להגיע לאותה תוצאה.
+              </Text>
+            ) : null}
           </View>
         ) : null}
         <View style={{backgroundColor:'rgba(55,65,81,0.5)',borderRadius:12,padding:16,width:'100%'}}>
@@ -14815,6 +15200,7 @@ function GameOver() {
       <LulosButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
       <LulosButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
     </View>
+    </WebGameScreenFrame>
   );
 }
 
@@ -15660,7 +16046,7 @@ function NotificationZone() {
             </View>
             {!needsAck && (
               <TouchableOpacity activeOpacity={0.9} onPress={dismiss} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,215,0,0.2)', borderWidth: 1.5, borderColor: 'rgba(255,215,0,0.5)', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '900' }}>?</Text>
+                <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '900' }}>{CLOSE_GLYPH}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -15781,14 +16167,15 @@ function PlayerWaitingScreen({
   const handBottomOffset = webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
-  const waitingScreenWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
+  const waitingScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
   const safe = useGameSafeArea();
   const bottomPad = handBottomOffset + handStripHeight + safe.insets.bottom;
   const sorted = useMemo(() => sortHandCards(myHand), [myHand]);
   const emptySet = useMemo(() => new Set<string>(), []);
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
   return (
-    <View style={{ flex: 1, width: waitingScreenWidth, minHeight: 0, overflow: 'hidden' }}>
+    <WebGameScreenFrame width={waitingScreenWidth} testID="player-waiting-playfield">
+    <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
       <LinearGradient colors={[...playerScreensGradientColors]} start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, paddingTop: 8, paddingBottom: bottomPad }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingTop: 4, paddingBottom: 4 }}>
@@ -15839,6 +16226,7 @@ function PlayerWaitingScreen({
         </View>
       </View>
     </View>
+    </WebGameScreenFrame>
   );
 }
 
@@ -15848,6 +16236,14 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const mp = useMultiplayerOptional();
   const { t } = useLocale();
   const safe = useGameSafeArea();
+  const viewport = useWebViewportSize();
+  const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
+  const viewportWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
+  const playfieldWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
+  const waitingViewButtonLeft =
+    Platform.OS === 'web'
+      ? Math.max(16, Math.round((viewportWidth - playfieldWidth) / 2) + 16)
+      : 16;
   const myPlayerIndex = (state as any).myPlayerIndex ?? 0;
   const myPlayerState = state.players[myPlayerIndex] as any;
   const isEliminatedSpectator = !!myPlayerState?.isEliminated || !!myPlayerState?.isSpectator;
@@ -16036,7 +16432,7 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           style={{
             position: 'absolute',
             bottom: 100,
-            left: 16,
+            left: waitingViewButtonLeft,
             backgroundColor: 'rgba(37,99,235,0.9)',
             paddingHorizontal: 14,
             paddingVertical: 10,
@@ -16065,6 +16461,7 @@ function MenuCapsuleButton({
   onPress,
   testID,
   textColor,
+  fontSize,
   style,
 }: {
   text: string;
@@ -16072,6 +16469,7 @@ function MenuCapsuleButton({
   onPress: () => void;
   testID?: string;
   textColor?: string;
+  fontSize?: number;
   style?: any;
 }) {
   return (
@@ -16080,7 +16478,7 @@ function MenuCapsuleButton({
       color={color}
       width={MENU_CAPSULE_WIDTH}
       height={MENU_CAPSULE_HEIGHT}
-      fontSize={MENU_CAPSULE_FONT_SIZE}
+      fontSize={fontSize ?? MENU_CAPSULE_FONT_SIZE}
       testID={testID}
       textColor={textColor}
       onPress={onPress}
@@ -16102,12 +16500,16 @@ function MenuCoinButton({
 }) {
   const { t, locale } = useLocale();
   const safeCoins = Math.max(0, Math.floor(Number(coins) || 0));
+  const shopButtonLabel = locale === 'he' ? 'החנות' : t('shop.openShop');
+  const accessibilityLabel = locale === 'he'
+    ? `${shopButtonLabel}. ${safeCoins} מטבעות`
+    : `Shop. You earned ${safeCoins} coins`;
   return (
     <TouchableOpacity
       activeOpacity={0.92}
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={locale === 'he' ? `פתח חנות, ${safeCoins} מטבעות` : `Open shop, ${safeCoins} coins`}
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       style={[
         {
@@ -16154,45 +16556,43 @@ function MenuCoinButton({
               flexDirection: locale === 'he' ? 'row-reverse' : 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              paddingHorizontal: 18,
-              gap: 12,
+              paddingHorizontal: 16,
+              gap: 8,
             }}
           >
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.82}
+              style={{
+                color: '#7C2D12',
+                fontSize: locale === 'he' ? 16 : 15,
+                fontWeight: '900',
+                lineHeight: locale === 'he' ? 18 : 17,
+                flexShrink: 1,
+              }}
+            >
+              {shopButtonLabel}
+            </Text>
             <View
               style={{
-                width: 48,
-                height: 40,
+                width: 38,
+                height: 38,
                 alignItems: 'center',
                 justifyContent: 'center',
-                transform: [{ translateX: locale === 'he' ? 2 : 0 }],
               }}
             >
               <View
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
                   backgroundColor: 'rgba(255,248,205,0.38)',
                 }}
               />
-              <SlindaCoin size={34} spin />
-            </View>
-            <View style={{ minWidth: 96, alignItems: locale === 'he' ? 'flex-end' : 'flex-start' }}>
-              <Text
-                style={{
-                  color: '#5B2D00',
-                  fontSize: 20,
-                  fontWeight: '900',
-                  lineHeight: 22,
-                }}
-              >
-                {safeCoins}
-              </Text>
-              <Text style={{ color: '#7C2D12', fontSize: 11, fontWeight: '800', lineHeight: 12 }}>
-                {t('shop.openShop')}
-              </Text>
+              <SlindaCoin size={30} spin />
             </View>
           </View>
         </LinearGradient>
@@ -16219,10 +16619,18 @@ function PlayModeChoiceScreen({
   const insets = useSafeAreaInsets();
   const preferredNameSeededRef = useRef(false);
   const compactMainMenu = SCREEN_H < 760;
-  const sectionGap = compactMainMenu ? 14 : 20;
-  const buttonGap = compactMainMenu ? 10 : 12;
-  const menuTopPadding = Math.max(insets.top, compactMainMenu ? 18 : 30);
+  const sectionGap = compactMainMenu ? 18 : 24;
+  const localeButtonGap = compactMainMenu ? 10 : 12;
+  const localeButtonWidth = compactMainMenu ? 124 : 132;
+  const localeButtonHeight = compactMainMenu ? 36 : 38;
+  const localeButtonFontSize = compactMainMenu ? 13 : 14;
+  const primaryButtonFontSize = compactMainMenu ? (locale === 'he' ? 18 : 17) : (locale === 'he' ? 20 : 18);
+  const secondaryButtonFontSize = compactMainMenu ? (locale === 'he' ? 17 : 16) : (locale === 'he' ? 19 : 17);
+  const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 22 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
+  const shopToPrimaryContentGap = 100;
+  const primaryStackGap = 28;
+  const guideButtonLabel = t('lobby.guideButton');
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
 
   useEffect(() => {
@@ -16242,113 +16650,134 @@ function PlayModeChoiceScreen({
   }, [onPreferredNameChange, preferredName]);
 
   return (
-    <ScrollView
-      style={{ flex: 1, width: '100%' }}
-      contentContainerStyle={{
-        flexGrow: 1,
-        alignItems: 'center',
-        justifyContent: compactMainMenu ? 'flex-start' : 'center',
-        paddingHorizontal: 24,
-        paddingTop: menuTopPadding,
-        paddingBottom: menuBottomPadding,
-      }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      contentInsetAdjustmentBehavior="always"
-    >
-      <View style={{ width: '100%', maxWidth: 320, alignItems: 'center' }}>
-      <View style={{ alignItems: 'center', marginBottom: sectionGap }}>
-        <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginBottom: 6 }}>{t('lang.label')}</Text>
-        <View testID="lobby-language-toggle" style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity testID="lobby-language-he" onPress={() => void setLocale('he')} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: locale === 'he' ? '#D97706' : '#1F2937' }}>
-            <Text style={{ color: locale === 'he' ? '#111827' : '#fff', fontWeight: '700', fontSize: 13 }}>{t('lang.he')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity testID="lobby-language-en" onPress={() => void setLocale('en')} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: locale === 'en' ? '#D97706' : '#1F2937' }}>
-            <Text style={{ color: locale === 'en' ? '#111827' : '#fff', fontWeight: '700', fontSize: 13 }}>{t('lang.en')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} style={{ marginBottom: sectionGap }} />
-      <Text style={{ alignSelf: 'stretch', color: '#D1D5DB', fontSize: 13, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>{t('lobby.yourName')}</Text>
-      <LinearGradient
-        colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          width: 280,
-          borderRadius: 26,
-          padding: 3,
-          marginBottom: 16,
-          shadowColor: '#4A3200',
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.32,
-          shadowRadius: 10,
-          elevation: 7,
+    <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
+      <AmbientBackground playMode="choose" forceVisible />
+      <ScrollView
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingHorizontal: 24,
+          paddingTop: menuTopPadding,
+          paddingBottom: menuBottomPadding,
+          minHeight: SCREEN_H,
         }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="always"
       >
-        <LinearGradient
-          colors={['#0B153C', '#142763', '#1B3F8C']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: 23,
-            overflow: 'hidden',
-            position: 'relative',
-          }}
-        >
-          <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-            <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>?</Text>
-            <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>?</Text>
-            <Text style={{ position: 'absolute', bottom: 7, left: 58, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>?</Text>
-            <Text style={{ position: 'absolute', bottom: 9, right: 62, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>?</Text>
+        <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
+        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center' }}>
+          <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginBottom: 8 }}>{t('lang.label')}</Text>
+          <View testID="lobby-language-toggle" style={{ flexDirection: 'row', gap: localeButtonGap, marginBottom: sectionGap }}>
+            <LulosButton
+              text={t('lang.he')}
+              color={locale === 'he' ? 'orange' : 'blue'}
+              width={localeButtonWidth}
+              height={localeButtonHeight}
+              fontSize={localeButtonFontSize}
+              testID="lobby-language-he"
+              onPress={() => void setLocale('he')}
+            />
+            <LulosButton
+              text={t('lang.en')}
+              color={locale === 'en' ? 'orange' : 'blue'}
+              width={localeButtonWidth}
+              height={localeButtonHeight}
+              fontSize={localeButtonFontSize}
+              testID="lobby-language-en"
+              onPress={() => void setLocale('en')}
+            />
           </View>
-          <TextInput
+          <MenuCapsuleButton
+            text={t('mode.play')}
+            color="green"
+            fontSize={primaryButtonFontSize}
+            testID="lobby-single-player"
+            onPress={onPlay}
             style={{
-              width: '100%',
-              backgroundColor: 'transparent',
-              borderWidth: 1,
-              borderColor: 'rgba(226,232,255,0.14)',
-              borderRadius: 21,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              color: '#EAF1FF',
-              fontSize: 16,
-              fontWeight: '800',
-              textAlign: 'center',
+              shadowColor: '#FF4FD8',
+              shadowOpacity: 0.9,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 0 },
+              elevation: 14,
+              borderRadius: 999,
+              backgroundColor: 'rgba(255,90,180,0.16)',
             }}
-            value={preferredName}
-            onChangeText={(name) => onPreferredNameChange(name.slice(0, 7))}
-            placeholder={t('lobby.namePlaceholder')}
-            placeholderTextColor="rgba(226,235,255,0.8)"
-            maxLength={7}
           />
-        </LinearGradient>
-      </LinearGradient>
-      <MenuCapsuleButton
-        text={t('tutorial.howToPlay')}
-        color="orange"
-        textColor="#FFFFFF"
-        testID="lobby-tutorial"
-        onPress={onHowToPlay}
-        style={{
-          marginBottom: buttonGap,
-          shadowColor: '#FF4FD8',
-          shadowOpacity: 0.9,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 0 },
-          elevation: 14,
-          borderRadius: 999,
-          backgroundColor: 'rgba(255,90,180,0.16)',
-        }}
-      />
-      <MenuCapsuleButton
-        text={t('mode.play')}
-        color="green"
-        testID="lobby-single-player"
-        onPress={onPlay}
-      />
-      </View>
-    </ScrollView>
+        </View>
+        <View style={{ flex: 1, width: '100%', justifyContent: 'flex-start', alignItems: 'center' }}>
+          <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: shopToPrimaryContentGap }}>
+            <View style={{ width: '100%', alignItems: 'center', marginBottom: primaryStackGap }}>
+              <Text style={{ alignSelf: 'stretch', color: '#D1D5DB', fontSize: 13, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>{t('lobby.yourName')}</Text>
+              <LinearGradient
+                colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  width: 280,
+                  borderRadius: 26,
+                  padding: 3,
+                  shadowColor: '#4A3200',
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.32,
+                  shadowRadius: 10,
+                  elevation: 7,
+                }}
+              >
+                <LinearGradient
+                  colors={['#0B153C', '#142763', '#1B3F8C']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    borderRadius: 23,
+                    overflow: 'hidden',
+                    position: 'relative',
+                  }}
+                >
+                  <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+                    <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', bottom: 7, left: 58, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', bottom: 9, right: 62, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                  </View>
+                  <TextInput
+                    style={{
+                      width: '100%',
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: 'rgba(226,232,255,0.14)',
+                      borderRadius: 21,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      color: '#EAF1FF',
+                      fontSize: 16,
+                      fontWeight: '800',
+                      textAlign: 'center',
+                    }}
+                    value={preferredName}
+                    onChangeText={(name) => onPreferredNameChange(name.slice(0, 7))}
+                    placeholder={t('lobby.namePlaceholder')}
+                    placeholderTextColor="rgba(226,235,255,0.8)"
+                    maxLength={7}
+                  />
+                </LinearGradient>
+              </LinearGradient>
+            </View>
+            <MenuCapsuleButton
+              text={guideButtonLabel}
+              color="orange"
+              textColor="#FFFFFF"
+              fontSize={secondaryButtonFontSize}
+              testID="lobby-tutorial"
+              onPress={onHowToPlay}
+              style={{ marginBottom: primaryStackGap }}
+            />
+            <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
+          </View>
+        </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -16363,65 +16792,78 @@ function GameEntryChoiceScreen({
   onPassAndPlay: () => void;
   onOnline: () => void;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const compactMainMenu = SCREEN_H < 760;
-  const buttonGap = compactMainMenu ? 10 : 12;
+  const buttonGap = 28;
+  const entryBlockTopGap = compactMainMenu ? 88 : 104;
   const menuTopPadding = Math.max(insets.top, compactMainMenu ? 18 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
+  const backButtonLabel = locale === 'he'
+    ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
+    : `${BACK_ARROW_GLYPH} ${t('gameEntry.back')}`;
 
   return (
-    <ScrollView
-      style={{ flex: 1, width: '100%' }}
-      contentContainerStyle={{
-        flexGrow: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 24,
-        paddingTop: menuTopPadding,
-        paddingBottom: menuBottomPadding,
-      }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      contentInsetAdjustmentBehavior="always"
-    >
-      <TouchableOpacity
-        accessibilityRole="button"
-        onPress={onBack}
-        style={{ alignSelf: 'flex-start', marginBottom: 20, paddingVertical: 8, paddingHorizontal: 4 }}
+    <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
+      <AmbientBackground playMode="game-entry" forceVisible />
+      <ScrollView
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: 'center',
+          paddingHorizontal: 24,
+          paddingTop: menuTopPadding,
+          paddingBottom: menuBottomPadding,
+          minHeight: SCREEN_H,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="always"
       >
-        <Text style={{ color: '#7DD3FC', fontSize: 14, fontWeight: '700' }}>{t('gameEntry.back')}</Text>
-      </TouchableOpacity>
-      <View style={{ width: '100%', maxWidth: 320, alignItems: 'center' }}>
-        <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
-          {t('gameEntry.title')}
-        </Text>
-        <Text style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', marginBottom: 22 }}>
-          {t('gameEntry.subtitle')}
-        </Text>
-        <MenuCapsuleButton
-          text={t('gameEntry.vsBot')}
-          color="green"
-          testID="lobby-play-bot"
-          onPress={onVsBot}
-          style={{ marginBottom: buttonGap }}
-        />
-        <MenuCapsuleButton
-          text={t('gameEntry.sameDevice')}
-          color="orange"
-          textColor="#FFFFFF"
-          testID="lobby-play-pass-and-play"
-          onPress={onPassAndPlay}
-          style={{ marginBottom: buttonGap }}
-        />
-        <MenuCapsuleButton
-          text={t('gameEntry.online')}
-          color="blue"
-          testID="lobby-join-room"
-          onPress={onOnline}
-        />
-      </View>
-    </ScrollView>
+        <View style={{ width: '100%', maxWidth: 360, alignItems: 'center', position: 'relative' }}>
+        <View style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }}>
+          <LulosButton
+            text={backButtonLabel}
+            color="blue"
+            width={128}
+            height={38}
+            fontSize={13}
+            testID="game-entry-back"
+            onPress={onBack}
+          />
+        </View>
+        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap }}>
+          <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
+            {t('gameEntry.title')}
+          </Text>
+          <Text style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', marginBottom: buttonGap }}>
+            {t('gameEntry.subtitle')}
+          </Text>
+          <MenuCapsuleButton
+            text={t('gameEntry.vsBot')}
+            color="green"
+            testID="lobby-play-bot"
+            onPress={onVsBot}
+            style={{ marginBottom: buttonGap }}
+          />
+          <MenuCapsuleButton
+            text={t('gameEntry.sameDevice')}
+            color="orange"
+            textColor="#FFFFFF"
+            testID="lobby-play-pass-and-play"
+            onPress={onPassAndPlay}
+            style={{ marginBottom: buttonGap }}
+          />
+          <MenuCapsuleButton
+            text={t('gameEntry.online')}
+            color="blue"
+            testID="lobby-join-room"
+            onPress={onOnline}
+          />
+        </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -16429,12 +16871,12 @@ function GameEntryChoiceScreen({
 //  ROUTER + APP + REGISTER
 // ???????????????????????????????????????????????????????????????
 
-function GameRouter() {
+function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellPlayMode) => void }) {
   const mp = useMultiplayerOptional();
   const { state, dispatch } = useGame();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
-  const [playMode, setPlayMode] = useState<'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room'>('choose');
+  const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
@@ -16443,10 +16885,10 @@ function GameRouter() {
   const soundOn = state.soundsEnabled !== false;
   const [salindaVolume, setSalindaVolume] = useState(0);
   const salindaVolumeRef = useRef(0);
-  const salindaPrevVolumeRef = useRef(0.14);
+  const salindaPrevVolumeRef = useRef(0);
   const [showSalindaPanel, setShowSalindaPanel] = useState(false);
   const [preferredName, setPreferredName] = useState('');
-  const [tutorialMeter, setTutorialMeter] = useState({ percent: 0, pulseKey: 0, isCelebrating: false });
+  const [tutorialMeter, setTutorialMeter] = useState(INITIAL_TUTORIAL_METER_STATE);
   const salindaTrackRef = useRef<View | null>(null);
   const trackWindowRef = useRef<{ y: number; h: number }>({ y: 0, h: 140 });
   const SALINDA_PANEL_H = 160;
@@ -16479,6 +16921,10 @@ function GameRouter() {
     });
   }, [state.phase, playMode, mp, state.soundsEnabled]);
 
+  useEffect(() => {
+    onPlayModeChange?.(playMode);
+  }, [onPlayModeChange, playMode]);
+
   const openCelebrationMockupRoom = useCallback(() => {
     setMockupReturnMode(playMode === 'online' ? 'online' : 'choose');
     setPlayMode('mockup-room');
@@ -16505,15 +16951,137 @@ function GameRouter() {
     AsyncStorage.setItem(PREFERRED_NAME_KEY, preferredName).catch(() => {});
   }, [preferredName]);
 
+  useEffect(() => {
+    let disposed = false;
+    const isGameScreenPhase =
+      state.phase === 'pre-roll' ||
+      state.phase === 'roll-dice' ||
+      state.phase === 'building' ||
+      state.phase === 'solved';
+    const shouldPlayWelcomeMusic =
+      soundOn &&
+      salindaVolume > 0 &&
+      playMode !== 'tutorial' &&
+      !isGameScreenPhase;
+
+    const stopWelcomeMusic = async (opts?: { fadeOutMs?: number }) => {
+      const sound = welcomeMusicRef.current;
+      welcomeMusicRef.current = null;
+      if (!sound) return;
+      try {
+        const fadeOutMs = opts?.fadeOutMs ?? 0;
+        if (fadeOutMs > 0) {
+          const steps = 8;
+          const stepMs = Math.max(16, Math.floor(fadeOutMs / steps));
+          const maxVol = Math.max(0, Math.min(0.4, salindaVolumeRef.current));
+          for (let i = steps - 1; i >= 0; i -= 1) {
+            if (disposed) return;
+            await sound.setVolumeAsync((maxVol * i) / steps);
+            await new Promise<void>((resolve) => setTimeout(resolve, stepMs));
+          }
+        }
+        await sound.stopAsync();
+      } catch (_) {
+        // ignore stop failures
+      }
+      try {
+        await sound.unloadAsync();
+      } catch (_) {
+        // ignore unload failures
+      }
+    };
+
+    const syncWelcomeMusic = async () => {
+      if (!shouldPlayWelcomeMusic) {
+        await stopWelcomeMusic({ fadeOutMs: isGameScreenPhase ? 420 : 0 });
+        return;
+      }
+      if (welcomeMusicRef.current) {
+        return;
+      }
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: false,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(
+          require('./assets/sounds/salinda_song.mp3'),
+          { isLooping: true, volume: 0, shouldPlay: true }
+        );
+        if (disposed) {
+          await sound.unloadAsync();
+          return;
+        }
+        welcomeMusicRef.current = sound;
+        const fadeInSteps = 8;
+        const fadeInStepMs = 25;
+        const targetVolume = Math.max(0, Math.min(0.4, salindaVolumeRef.current));
+        for (let i = 1; i <= fadeInSteps; i += 1) {
+          if (disposed) return;
+          await sound.setVolumeAsync((targetVolume * i) / fadeInSteps);
+          await new Promise<void>((resolve) => setTimeout(resolve, fadeInStepMs));
+        }
+      } catch (_) {
+        // ignore background music failures
+      }
+    };
+
+    void syncWelcomeMusic();
+    return () => {
+      disposed = true;
+    };
+  }, [playMode, salindaVolume, soundOn, state.phase]);
+
+  const welcomeVolRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const sound = welcomeMusicRef.current;
+    if (!sound) return;
+    const nextVolume = Math.max(0, Math.min(0.4, salindaVolume));
+    if (welcomeVolRafRef.current != null) {
+      cancelAnimationFrame(welcomeVolRafRef.current);
+    }
+    welcomeVolRafRef.current = requestAnimationFrame(() => {
+      welcomeVolRafRef.current = null;
+      const activeSound = welcomeMusicRef.current;
+      if (!activeSound) return;
+      activeSound.setVolumeAsync(nextVolume).catch(() => {});
+    });
+    return () => {
+      if (welcomeVolRafRef.current != null) {
+        cancelAnimationFrame(welcomeVolRafRef.current);
+        welcomeVolRafRef.current = null;
+      }
+    };
+  }, [salindaVolume]);
+
+  useEffect(() => {
+    return () => {
+      if (welcomeVolRafRef.current != null) {
+        cancelAnimationFrame(welcomeVolRafRef.current);
+        welcomeVolRafRef.current = null;
+      }
+      const sound = welcomeMusicRef.current;
+      welcomeMusicRef.current = null;
+      if (!sound) return;
+      sound.stopAsync().catch(() => {});
+      sound.unloadAsync().catch(() => {});
+    };
+  }, []);
+
   const tutorialExit = useCallback(() => {
     dispatch({ type: 'RESET_GAME' });
+    setTutorialMeter(INITIAL_TUTORIAL_METER_STATE);
     setPlayMode('choose');
   }, [dispatch]);
-  const handleTutorialProgressChange = useCallback((progress: { percent: number; celebrate: boolean }) => {
+  const handleTutorialProgressChange = useCallback((progress: TutorialProgressPayload) => {
     setTutorialMeter((prev) => ({
       percent: progress.percent,
       isCelebrating: progress.celebrate,
       pulseKey: progress.celebrate && !prev.isCelebrating ? prev.pulseKey + 1 : prev.pulseKey,
+      layerNumber: progress.layerNumber,
+      stepNumber: progress.stepNumber,
     }));
   }, []);
 
@@ -16521,29 +17089,26 @@ function GameRouter() {
     dispatch({ type: 'SET_SOUNDS_ENABLED', enabled: !soundOn });
   }, [dispatch, soundOn]);
   const openSalindaPanel = useCallback(() => setShowSalindaPanel((v) => !v), []);
+  const applySalindaRatio = useCallback((ratio: number) => {
+    const normalized = Math.max(0, Math.min(1, ratio));
+    const next = Math.round((0.4 * normalized) * 100) / 100;
+    salindaVolumeRef.current = next;
+    if (next > 0) salindaPrevVolumeRef.current = next;
+    setSalindaVolume(next);
+  }, []);
 
   const setSalindaVolumeClamped = useCallback((next: number) => {
     const clamped = Math.max(0, Math.min(0.4, next));
     salindaVolumeRef.current = clamped;
+    if (clamped > 0) salindaPrevVolumeRef.current = clamped;
     setSalindaVolume(clamped);
   }, []);
-  const adjustSalindaVolume = useCallback((delta: number) => {
-    const next = Math.max(0, Math.min(0.4, salindaVolumeRef.current + delta));
-    setSalindaVolumeClamped(next);
-  }, [setSalindaVolumeClamped]);
 
   useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(SALINDA_VOLUME_KEY).then((v) => {
-      if (cancelled || v == null) return;
-      const parsed = Number(v);
-      if (!Number.isFinite(parsed)) return;
-      const clamped = Math.max(0, Math.min(0.4, parsed));
-      salindaVolumeRef.current = clamped;
-      salindaPrevVolumeRef.current = clamped > 0 ? clamped : salindaPrevVolumeRef.current;
-      setSalindaVolume(clamped);
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    salindaVolumeRef.current = 0;
+    salindaPrevVolumeRef.current = 0;
+    setSalindaVolume(0);
+    AsyncStorage.setItem(SALINDA_VOLUME_KEY, '0').catch(() => {});
   }, []);
   useEffect(() => {
     AsyncStorage.setItem(SALINDA_VOLUME_KEY, String(salindaVolume)).catch(() => {});
@@ -16559,32 +17124,6 @@ function GameRouter() {
       setSalindaVolumeClamped(salindaPrevVolumeRef.current);
     }
   }, [soundOn, setSalindaVolumeClamped]);
-
-  useEffect(() => {
-    if (!showSalindaPanel || Platform.OS !== 'web') return;
-    const onPointerUp = () => setShowSalindaPanel(false);
-    window.addEventListener('pointerup', onPointerUp);
-    return () => window.removeEventListener('pointerup', onPointerUp);
-  }, [showSalindaPanel]);
-
-  const handleSalindaTrackLayout = useCallback(() => {
-    salindaTrackRef.current?.measureInWindow?.((x, y, width, height) => {
-      trackWindowRef.current = { y, h: height };
-    });
-  }, []);
-  const updateSalindaFromPointer = useCallback((pageY: number) => {
-    const { y, h } = trackWindowRef.current;
-    const relative = 1 - ((pageY - y) / Math.max(1, h));
-    setSalindaVolumeClamped(relative * 0.4);
-  }, [setSalindaVolumeClamped]);
-  const onSalindaTrackStart = useCallback((evt: any) => {
-    const pageY = evt?.nativeEvent?.pageY;
-    if (typeof pageY === 'number') updateSalindaFromPointer(pageY);
-  }, [updateSalindaFromPointer]);
-  const onSalindaTrackMove = useCallback((evt: any) => {
-    const pageY = evt?.nativeEvent?.pageY;
-    if (typeof pageY === 'number') updateSalindaFromPointer(pageY);
-  }, [updateSalindaFromPointer]);
 
   const showTutorialHeader = playMode === 'tutorial';
 
@@ -16704,6 +17243,17 @@ function GameRouter() {
     !(playMode === 'local' && (state.phase === 'pre-roll' || state.phase === 'roll-dice' || state.phase === 'building' || state.phase === 'solved'));
   const salindaRatio = Math.max(0, Math.min(1, salindaVolume / 0.4));
   const salindaFillPx = Math.round(SALINDA_TRACK_H * salindaRatio);
+  const salindaThumbBottom = Math.round(Math.max(0, Math.min(SALINDA_TRACK_H - 9, SALINDA_TRACK_H * salindaRatio - 9)));
+  const globalCtrlBtnH = SCREEN_W < 380 ? 36 : 40;
+  const globalCtrlRight = 14;
+  const soundExtrasBottom = Math.max(14, (insets.bottom || 0) + 12);
+  const globalMuteBottom = soundExtrasBottom;
+  const salindaMusicBottom = globalMuteBottom + globalCtrlBtnH + 8;
+  const tutorialHeaderTop = 12;
+  const tutorialHeaderActionMinWidth = 82;
+  const tutorialHeaderActionPaddingVertical = 8;
+  const tutorialHeaderActionPaddingHorizontal = 12;
+  const tutorialHeaderZIndex = 20000;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0a1628' }}>
@@ -16711,136 +17261,281 @@ function GameRouter() {
       <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
 
       {showGlobalMute && !showTutorialHeader && (
-        <View style={{ position: 'absolute', top: Math.max(insets.top + 8, 12), right: 12, zIndex: 40, alignItems: 'flex-end', gap: 8 }}>
+        <>
+          {showSalindaPanel && (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: salindaMusicBottom + globalCtrlBtnH + 10,
+                right: globalCtrlRight,
+                width: 44,
+                height: SALINDA_PANEL_H,
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+              }}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(e) => {
+                const pageY = e.nativeEvent.pageY;
+                salindaTrackRef.current?.measureInWindow?.((_, winY, __, winH) => {
+                  const h = winH > 1 ? winH : SALINDA_TRACK_H;
+                  trackWindowRef.current = { y: winY, h };
+                  const rel = pageY - winY;
+                  applySalindaRatio(1 - Math.max(0, Math.min(1, rel / h)));
+                });
+              }}
+              onResponderMove={(e) => {
+                const pageY = e.nativeEvent.pageY;
+                const { y: winY, h: winH } = trackWindowRef.current;
+                const h = winH > 1 ? winH : SALINDA_TRACK_H;
+                const rel = pageY - winY;
+                applySalindaRatio(1 - Math.max(0, Math.min(1, rel / h)));
+              }}
+              onResponderRelease={() => setShowSalindaPanel(false)}
+              onResponderTerminate={() => setShowSalindaPanel(false)}
+            >
+              <View
+                ref={salindaTrackRef}
+                collapsable={false}
+                style={{
+                  width: 6,
+                  height: SALINDA_TRACK_H,
+                  borderRadius: 3,
+                  backgroundColor: 'rgba(255,255,255,0.28)',
+                }}
+              >
+                {salindaFillPx > 0 ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: salindaFillPx,
+                      borderRadius: 3,
+                      backgroundColor: '#60A5FA',
+                    }}
+                  />
+                ) : null}
+                <View
+                  style={{
+                    position: 'absolute',
+                    bottom: salindaThumbBottom,
+                    left: -6,
+                    width: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    backgroundColor: salindaVolume > 0 ? '#BFDBFE' : 'rgba(191,219,254,0.35)',
+                    borderWidth: 2,
+                    borderColor: salindaVolume > 0 ? '#2563EB' : 'rgba(37,99,235,0.45)',
+                  }}
+                />
+              </View>
+            </View>
+          )}
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={soundOn ? t('game.soundOn') : t('game.soundOff')}
             onPress={toggleSounds}
             style={{
-              minWidth: 40,
-              height: 40,
-              borderRadius: 20,
-              paddingHorizontal: 10,
+              position: 'absolute',
+              bottom: globalMuteBottom,
+              right: globalCtrlRight,
+              width: globalCtrlBtnH,
+              height: globalCtrlBtnH,
+              borderRadius: globalCtrlBtnH / 2,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: 'rgba(15,23,42,0.82)',
+              backgroundColor: 'rgba(0,0,0,0.35)',
               borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.16)',
+              borderColor: 'rgba(255,255,255,0.25)',
+              zIndex: 9999,
             }}
           >
-            <Text style={{ fontSize: SCREEN_W < 380 ? 20 : 22 }}>{soundOn ? '🔊' : '🔇'}</Text>
+            <Text style={{ fontSize: SCREEN_W < 380 ? 20 : 22 }}>{soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t('game.music')}
+            onPress={openSalindaPanel}
+            style={{
+              position: 'absolute',
+              bottom: salindaMusicBottom,
+              right: globalCtrlRight,
+              width: globalCtrlBtnH,
+              height: globalCtrlBtnH,
+              borderRadius: globalCtrlBtnH / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(0,0,0,0.35)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.25)',
+              zIndex: 9999,
+              opacity: salindaVolume > 0 ? 1 : 0.48,
+            }}
+          >
+            <Text style={{ fontSize: SCREEN_W < 380 ? 18 : 20 }}>{MUSIC_ICON}</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
-          <View style={{ alignItems: 'flex-end' }}>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={t('game.music')}
-              onPress={openSalindaPanel}
-              style={{
-                minWidth: 40,
-                height: 40,
-                borderRadius: 20,
-                paddingHorizontal: 10,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: 'rgba(15,23,42,0.82)',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.16)',
-              }}
+      {showTutorialHeader ? (
+        <>
+          <View
+            style={{
+              position: 'absolute',
+              top: tutorialHeaderTop,
+              right: 12,
+              left: 12,
+              zIndex: tutorialHeaderZIndex,
+              elevation: 24,
+              pointerEvents: 'box-none',
+            }}
+          >
+            <View
+              testID="tutorial-header-row"
+              style={{ minHeight: 156, position: 'relative', pointerEvents: 'box-none' }}
             >
-              <Text style={{ fontSize: SCREEN_W < 380 ? 18 : 20 }}>🎵</Text>
-            </TouchableOpacity>
-
-            {showSalindaPanel && (
+              <View style={{ width: tutorialHeaderActionMinWidth, alignItems: 'center' }}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={t('tutorial.exit')}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  onPress={tutorialExit}
+                  testID="tutorial-header-exit"
+                  style={{
+                    minWidth: tutorialHeaderActionMinWidth,
+                    paddingVertical: tutorialHeaderActionPaddingVertical,
+                    paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(127, 29, 29, 0.96)',
+                    borderWidth: 1.5,
+                    borderColor: 'rgba(254, 202, 202, 0.7)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.28,
+                    shadowRadius: 6,
+                  }}
+                >
+                  <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
+                </TouchableOpacity>
+              </View>
               <View
                 style={{
-                  marginTop: 8,
-                  paddingHorizontal: 10,
-                  paddingVertical: 12,
-                  borderRadius: 18,
-                  backgroundColor: 'rgba(15,23,42,0.96)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.18)',
-                  minWidth: 72,
+                  position: 'absolute',
+                  top: 42,
+                  left: -12,
+                  minHeight: 116,
                   alignItems: 'center',
-                  gap: 10,
+                  justifyContent: 'flex-start',
+                  overflow: 'visible',
+                  pointerEvents: 'none',
                 }}
               >
-                <TouchableOpacity onPress={() => adjustSalindaVolume(0.04)} activeOpacity={0.8}>
-                  <Text style={{ color: '#F8FAFC', fontSize: 22, fontWeight: '900' }}>+</Text>
-                </TouchableOpacity>
+                <TutorialProgressMeter
+                  value={tutorialMeter.percent}
+                  pulseKey={tutorialMeter.pulseKey}
+                  isCelebrating={tutorialMeter.isCelebrating}
+                  testID="tutorial-header-meter"
+                />
                 <View
-                  ref={salindaTrackRef}
-                  onLayout={handleSalindaTrackLayout}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onResponderGrant={onSalindaTrackStart}
-                  onResponderMove={onSalindaTrackMove}
                   style={{
-                    width: 18,
-                    height: SALINDA_TRACK_H,
-                    borderRadius: 999,
-                    padding: 2,
-                    backgroundColor: 'rgba(255,255,255,0.08)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.12)',
-                    justifyContent: 'flex-end',
-                    overflow: 'hidden',
+                    marginTop: 6,
+                    gap: 4,
+                    minWidth: 74,
+                    alignItems: 'center',
                   }}
                 >
                   <View
                     style={{
                       width: '100%',
-                      height: Math.max(8, salindaFillPx),
-                      borderRadius: 999,
-                      backgroundColor: '#F59E0B',
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(8, 22, 44, 0.94)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(148, 163, 184, 0.4)',
                     }}
-                  />
+                  >
+                    <Text style={{ color: '#93C5FD', fontSize: 9, fontWeight: '800', lineHeight: 11 }}>
+                      {locale === 'he' ? 'שכבה' : 'Layer'}
+                    </Text>
+                    <Text
+                      style={{
+                        color: '#F8FAFC',
+                        fontSize: 13,
+                        fontWeight: '900',
+                        lineHeight: 15,
+                        writingDirection: 'ltr',
+                      }}
+                    >
+                      {tutorialMeter.layerNumber}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      width: '100%',
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(8, 22, 44, 0.94)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(74, 222, 128, 0.35)',
+                    }}
+                  >
+                    <Text style={{ color: '#86EFAC', fontSize: 9, fontWeight: '800', lineHeight: 11 }}>
+                      {locale === 'he' ? 'שלב' : 'Step'}
+                    </Text>
+                    <Text
+                      style={{
+                        color: '#F8FAFC',
+                        fontSize: 13,
+                        fontWeight: '900',
+                        lineHeight: 15,
+                        writingDirection: 'ltr',
+                      }}
+                    >
+                      {tutorialMeter.stepNumber}
+                    </Text>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => adjustSalindaVolume(-0.04)} activeOpacity={0.8}>
-                  <Text style={{ color: '#F8FAFC', fontSize: 22, fontWeight: '900' }}>?</Text>
-                </TouchableOpacity>
               </View>
-            )}
-          </View>
-        </View>
-      )}
-
-      {showTutorialHeader ? (
-        <View style={{ position: 'absolute', top: Math.max(insets.top + 4, 8), right: 8, left: 8, zIndex: 50, pointerEvents: 'box-none' }}>
-          <View
-            testID="tutorial-header-row"
-            style={{ alignSelf: 'flex-end', flexDirection: 'row', direction: 'ltr', alignItems: 'flex-start', gap: 8 }}
-          >
-            <LulosButton
-              text={t('tutorial.exit')}
-              color="red"
-              width={72}
-              height={32}
-              fontSize={11}
-              testID="tutorial-header-exit"
-              onPress={tutorialExit}
-              style={{ marginBottom: -8 }}
-            />
-            <LulosButton
-              text={soundOn ? '🔊' : '🔇'}
-              color="blue"
-              width={56}
-              height={32}
-              fontSize={14}
-              testID="tutorial-header-sound"
-              onPress={toggleSounds}
-            />
-            <View style={{ marginTop: -4, marginLeft: -11, alignItems: 'center', overflow: 'visible' }}>
-              <TutorialProgressMeter
-                value={tutorialMeter.percent}
-                pulseKey={tutorialMeter.pulseKey}
-                isCelebrating={tutorialMeter.isCelebrating}
-                testID="tutorial-header-meter"
-              />
             </View>
           </View>
-        </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={soundOn ? t('game.soundOn') : t('game.soundOff')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={toggleSounds}
+            testID="tutorial-header-sound"
+            style={{
+              position: 'absolute',
+              bottom: globalMuteBottom,
+              right: globalCtrlRight,
+              width: globalCtrlBtnH,
+              height: globalCtrlBtnH,
+              borderRadius: globalCtrlBtnH / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              borderWidth: 1,
+              borderColor: 'rgba(148, 163, 184, 0.45)',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.24,
+              shadowRadius: 6,
+              zIndex: tutorialHeaderZIndex,
+              elevation: 24,
+            }}
+          >
+            <Text style={{ fontSize: SCREEN_W < 380 ? 18 : 20 }}>{soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}</Text>
+          </TouchableOpacity>
+        </>
       ) : null}
     </View>
   );
@@ -16917,10 +17612,10 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   }, []);
 
   const operators = [
-    { sym: '?', color: '#E53935', style: { top: '22%', left: '10%' } as any },
+    { sym: '+', color: '#E53935', style: { top: '22%', left: '10%' } as any },
     { sym: '÷', color: '#1E88E5', style: { top: '18%', right: '10%' } as any },
-    { sym: '?', color: '#43A047', style: { bottom: '38%', left: '12%' } as any },
-    { sym: '?', color: '#FFA000', style: { bottom: '35%', right: '12%' } as any },
+    { sym: '×', color: '#43A047', style: { bottom: '38%', left: '12%' } as any },
+    { sym: MINUS_GLYPH, color: '#FFA000', style: { bottom: '35%', right: '12%' } as any },
   ];
   const splashHebrewWordmarkColor = Platform.OS === 'ios' && !Platform.isPad ? '#000000' : '#F59E0B';
 
@@ -16931,91 +17626,102 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
       transform: [{ scale: splashScale }],
       zIndex: 999,
     }}>
-      <LinearGradient
-        colors={['#0a1628', '#0f1d32']}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-      >
-        <StatusBar style="light" />
+      <View style={{ flex: 1 }}>
+        <LinearGradient
+          colors={['rgba(10,22,40,0.84)', 'rgba(15,29,50,0.9)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <AmbientBackground playMode="choose" opacity={0.92} forceVisible />
+        <LinearGradient
+          colors={['rgba(10,22,40,0.14)', 'rgba(15,29,50,0.26)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <StatusBar style="light" />
 
-        {/* Floating math operators */}
-        {operators.map((op, i) => (
-          <Animated.View key={i} style={{
-            position: 'absolute', ...op.style,
-            opacity: opScales[i],
-            transform: [{ scale: opScales[i] }, { translateY: opFloats[i] }],
-          }}>
-            <Text style={{ fontSize: 32, fontWeight: '700', color: op.color }}>{op.sym}</Text>
-          </Animated.View>
-        ))}
-
-        <Text
-          style={{
-            color: '#F59E0B',
-            fontSize: 24,
-            fontWeight: '800',
-            letterSpacing: 0.6,
-            marginBottom: 12,
-            writingDirection: 'rtl',
-          }}
-        >
-          משחק מחשבה
-        </Text>
-
-        {/* Joker image with golden glow — מסך טעינה (גודל מלא) */}
-        <Animated.View style={{
-          width: 220, height: 220, alignItems: 'center', justifyContent: 'center',
-          borderRadius: 24, overflow: 'hidden',
-          transform: [{ scale: jokerScale }, { translateY: jokerBounce }],
-          ...Platform.select({
-            ios: { shadowColor: '#FFB300', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 24 },
-            android: { elevation: 16 },
-          }),
-        }}>
-          <Image source={require('./assets/joker.jpg')} style={{ width: 220, height: 220 }} resizeMode="contain" />
-        </Animated.View>
-
-        {/* Brand wordmark */}
-        <Animated.View style={{ opacity: subtitleOpacity, marginTop: 24, alignItems: 'center' }}>
-          <Text style={{ color: '#F59E0B', fontSize: 22, fontWeight: '900', letterSpacing: 2, textAlign: 'center' }}>
-            Salinda
-          </Text>
-          <Text
-            style={{ color: splashHebrewWordmarkColor, fontSize: 16, fontWeight: '800', marginTop: 2, textAlign: 'center', writingDirection: 'rtl' }}
-          >
-            סלינדה
-          </Text>
-        </Animated.View>
-
-        {/* Loading bar */}
-        <View style={{ marginTop: 48, alignItems: 'center' }}>
-          <View style={{ width: 160, height: 3, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-            <Animated.View style={{
-              width: loadingWidth.interpolate({ inputRange: [0, 1], outputRange: [0, 160] }),
-              height: 3,
+          {/* Floating math operators */}
+          {operators.map((op, i) => (
+            <Animated.View key={i} style={{
+              position: 'absolute', ...op.style,
+              opacity: opScales[i],
+              transform: [{ scale: opScales[i] }, { translateY: opFloats[i] }],
             }}>
-              <LinearGradient
-                colors={['#FFB300', '#FF8F00']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={{ flex: 1, borderRadius: 2 }}
-              />
+              <Text style={{ fontSize: 32, fontWeight: '700', color: op.color }}>{op.sym}</Text>
             </Animated.View>
-          </View>
-          <Animated.Text style={{ color: 'rgba(245,158,11,0.8)', fontSize: 12, marginTop: 12, opacity: loadingTextOpacity }}>
-            ...טוען
-          </Animated.Text>
-        </View>
+          ))}
 
-        {/* Version */}
-        <View style={{ position: 'absolute', bottom: 32 }}>
-          <Text style={{ color: 'rgba(245,158,11,0.55)', fontSize: 10, textAlign: 'center' }}>v1.0.0</Text>
+          <Text
+            style={{
+              color: '#F59E0B',
+              fontSize: 24,
+              fontWeight: '800',
+              letterSpacing: 0.6,
+              marginBottom: 12,
+              writingDirection: 'rtl',
+            }}
+          >
+            משחק מחשבה
+          </Text>
+
+          {/* Joker image with golden glow — מסך טעינה (גודל מלא) */}
+          <Animated.View style={{
+            width: 220, height: 220, alignItems: 'center', justifyContent: 'center',
+            borderRadius: 24, overflow: 'hidden',
+            transform: [{ scale: jokerScale }, { translateY: jokerBounce }],
+            ...Platform.select({
+              ios: { shadowColor: '#FFB300', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 24 },
+              android: { elevation: 16 },
+            }),
+          }}>
+            <Image source={require('./assets/joker.jpg')} style={{ width: 220, height: 220 }} resizeMode="contain" />
+          </Animated.View>
+
+          {/* Brand wordmark */}
+          <Animated.View style={{ opacity: subtitleOpacity, marginTop: 24, alignItems: 'center' }}>
+            <Text style={{ color: '#F59E0B', fontSize: 22, fontWeight: '900', letterSpacing: 2, textAlign: 'center' }}>
+              Salinda
+            </Text>
+            <Text
+              style={{ color: splashHebrewWordmarkColor, fontSize: 16, fontWeight: '800', marginTop: 2, textAlign: 'center', writingDirection: 'rtl' }}
+            >
+              סלינדה
+            </Text>
+          </Animated.View>
+
+          {/* Loading bar */}
+          <View style={{ marginTop: 48, alignItems: 'center' }}>
+            <View style={{ width: 160, height: 3, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+              <Animated.View style={{
+                width: loadingWidth.interpolate({ inputRange: [0, 1], outputRange: [0, 160] }),
+                height: 3,
+              }}>
+                <LinearGradient
+                  colors={['#FFB300', '#FF8F00']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ flex: 1, borderRadius: 2 }}
+                />
+              </Animated.View>
+            </View>
+            <Animated.Text style={{ color: 'rgba(245,158,11,0.8)', fontSize: 12, marginTop: 12, opacity: loadingTextOpacity }}>
+              ...טוען
+            </Animated.Text>
+          </View>
+
+          {/* Version */}
+          <View style={{ position: 'absolute', bottom: 32 }}>
+            <Text style={{ color: 'rgba(245,158,11,0.55)', fontSize: 10, textAlign: 'center' }}>v1.0.0</Text>
+          </View>
         </View>
-      </LinearGradient>
+      </View>
     </Animated.View>
   );
 }
 
 function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowSplash: (v: boolean) => void }) {
   const insets = useSafeAreaInsets();
+  const [activePlayMode, setActivePlayMode] = useState<ShellPlayMode>('choose');
+  const viewport = useWebViewportSize();
+  const showAds = Platform.OS === 'web' && viewport.width >= 768;
   useEffect(() => {
     sendDebugLog('H3', 'index.tsx:AppShell.useEffect', 'AppShell mounted', {
       insetTop: insets.top,
@@ -17045,25 +17751,43 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
       appStateSub.remove();
     };
   }, []);
-  // מובייל: אין paddingBottom כאן — הרקע והמניפה עד קצה המסך; ה-safe התחתון מטופל במסכי המשחק (מניפה + כפתורים)
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: '#0a1628',
-        paddingTop: insets.top,
-        paddingBottom: 0,
-        paddingLeft: insets.left,
-        paddingRight: insets.right,
-      }}
-    >
+
+  const gameContent = (
+    <>
       <StatusBar style="light" />
-      <ConditionalWalkingDice />
-      <ConditionalFloatingBg />
-      <ConditionalRoamingCoins />
-      <GameRouter />
+      <AmbientBackground playMode={activePlayMode} />
+      <GameRouter onPlayModeChange={setActivePlayMode} />
       <NotificationZone />
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+    </>
+  );
+
+  // מובייל: אין paddingBottom כאן — הרקע והמניפה עד קצה המסך; ה-safe התחתון מטופל במסכי המשחק (מניפה + כפתורים)
+  if (Platform.OS !== 'web') {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: '#0a1628',
+          paddingTop: insets.top,
+          paddingBottom: 0,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        }}
+      >
+        {gameContent}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0a1628', flexDirection: 'column' }}>
+      <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center' }}>
+        <View style={{ flex: 1, maxWidth: WEB_GAME_PLAYFIELD_MAX_WIDTH, backgroundColor: '#0a1628' }}>
+          {gameContent}
+        </View>
+        <AdSlot slot="skyscraper" visible={showAds} />
+      </View>
     </View>
   );
 }
