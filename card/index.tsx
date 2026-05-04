@@ -4261,7 +4261,7 @@ function JokerCard({ card: _c, selected, onPress, small, testID }: { card: Card;
     { sym: '+', face: '#EA4335', dark: '#8B1A12', light: '#DC4736', pos: { top: 7, left: 7 } as any, rot: '-10deg' },
     { sym: '÷', face: '#2196F3', dark: '#0D5FA3', light: '#1F8CD9', pos: { top: 7, right: 7 } as any, rot: '10deg' },
     { sym: '×', face: '#34A853', dark: '#1B5E2B', light: '#36944F', pos: { bottom: 14, left: 7 } as any, rot: '10deg' },
-    { sym: '?', face: '#FBBC05', dark: '#8B6800', light: '#DC9E00', pos: { bottom: 14, right: 7 } as any, rot: '-10deg' },
+    { sym: '−', face: '#FBBC05', dark: '#8B6800', light: '#DC9E00', pos: { bottom: 14, right: 7 } as any, rot: '-10deg' },
   ];
 
   return (
@@ -9490,19 +9490,16 @@ function StartScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-      {/* כפתור חזרה + חוקים — בצד למעלה */}
+      {/* כפתורי עזרה וחנות — בצד למעלה */}
       <View style={{ position: 'absolute', top: TOP_ACTIONS_TOP, left: 16, right: 16, minHeight: TOP_ACTIONS_H, zIndex: 20, alignItems: 'center' }}>
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 8 }}>
-          {onBackToChoice && (
-            <LulosButton text={t('lobby.backToMode')} color="blue" width={104} height={30} fontSize={10} onPress={onBackToChoice} />
-          )}
           {onHowToPlay && (
             <LulosButton text={t('mode.howToPlay')} color="orange" width={132} height={34} fontSize={12} onPress={onHowToPlay} />
           )}
           <View style={{ alignItems: 'center', gap: 8 }}>
-            <LulosButton text={t('start.rulesButton')} color="blue" width={72} height={30} fontSize={10} onPress={() => setRulesOpen((prev) => !prev)} />
+            <LulosButton text={t('start.rulesButton')} color="blue" width={84} height={34} fontSize={11} onPress={() => setRulesOpen((prev) => !prev)} />
             {onShop ? (
-              <LulosButton text={t('shop.openShop')} color="yellow" width={84} height={30} fontSize={11} onPress={onShop} />
+              <LulosButton text={t('shop.openShop')} color="yellow" width={96} height={34} fontSize={12} onPress={onShop} />
             ) : null}
           </View>
         </View>
@@ -9571,7 +9568,6 @@ function StartScreen({
             <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 24 }}>?</Text>
                   <Text
                     style={{
                       color: '#FFFFFF',
@@ -10246,7 +10242,6 @@ function StartScreen({
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 26 }}>?</Text>
                   <Text style={[hsS.advancedEntryTitle, { textAlign: isRTL ? 'right' : 'left', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                     {t('start.advancedSetup.entryTitle')}
                   </Text>
