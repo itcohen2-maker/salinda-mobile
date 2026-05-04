@@ -98,7 +98,8 @@ import { clamp, getWebGameLayout, WEB_GAME_PLAYFIELD_MAX_WIDTH } from './src/the
 import { useWebViewportSize } from './src/hooks/useWebViewportSize';
 import { WebGameScreenFrame } from './src/components/layout/WebGameScreenFrame';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const { width: _SCREEN_W_RAW, height: SCREEN_H } = Dimensions.get('window');
+const SCREEN_W = Platform.OS === 'web' ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_RAW) : _SCREEN_W_RAW;
 
 /** אותו top לכפתור הקוביות המוזהב (GameScreen) ולכפתור «אני מוכן» (TurnTransition).
  *  clamp תחתון: כש־SCREEN_H קטן, ‎SCREEN_H - 140‎ שלילי — מסך המעבר עם overflow:hidden חותך את הכפתור ("נעלם"). */
@@ -5316,7 +5317,8 @@ function SolveExerciseChip({ equation, onPress, pulseKey = 0, loopPulse = false 
 // ?? RoamingDice — walking dice characters (inlined) ??
 const DICE_BODY = 40;
 const DICE_PAD = 40;
-const { width: SCREEN_W_DICE, height: SCREEN_H_DICE } = Dimensions.get('window');
+const { width: _SCREEN_W_DICE_RAW, height: SCREEN_H_DICE } = Dimensions.get('window');
+const SCREEN_W_DICE = Platform.OS === 'web' ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_DICE_RAW) : _SCREEN_W_DICE_RAW;
 const ROAM_MAX_Y = SCREEN_H_DICE * 0.45;
 const PIP_R = 3.5;
 
