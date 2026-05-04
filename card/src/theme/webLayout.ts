@@ -11,6 +11,7 @@ export type ContentWidthOptions = {
 export type WebGameLayout = {
   viewportWidth: number;
   viewportHeight: number;
+  playfieldWidth: number;
   contentWidth: number;
   tableWidth: number;
   tableHeight: number;
@@ -31,6 +32,8 @@ export type WebGameLayout = {
   goldActionButtonTop: number;
 };
 
+export const WEB_GAME_PLAYFIELD_MAX_WIDTH = 412;
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -46,9 +49,10 @@ export function getWebContentWidth(
 }
 
 export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
-  const viewportWidth = Math.max(320, Math.round(viewport.width || 0));
+  const viewportWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, Math.round(viewport.width || 0)));
   const viewportHeight = Math.max(568, Math.round(viewport.height || 0));
-  const contentWidth = getWebContentWidth(viewportWidth, { maxWidth: 1180, sidePadding: 32 });
+  const playfieldWidth = viewportWidth;
+  const contentWidth = playfieldWidth;
   const tableHeight = clamp(Math.round(viewportHeight * 0.18), 150, 188);
   const tableTop = clamp(Math.round(viewportHeight * 0.13), 92, 132);
   const handBottom = clamp(Math.round(viewportHeight * 0.06), 40, 72);
@@ -59,10 +63,10 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
   const handStripHeight = fanViewportHeight + handStripAboveFan;
   const handZoneTop = handBottom + handStripHeight;
   const miniResultsBottom = handZoneTop - 10;
-  const tableWidth = clamp(Math.round(contentWidth * 0.44), 300, 560);
+  const tableWidth = clamp(playfieldWidth - 24, 300, WEB_GAME_PLAYFIELD_MAX_WIDTH - 24);
   const tableBottomPadding = Math.max(56, Math.round(tableHeight * 0.4));
   const resultsTop = Math.max(68, tableTop - Math.round(tableHeight * 0.18));
-  const resultsRight = Math.max(20, Math.round((viewportWidth - tableWidth) / 2) - 4);
+  const resultsRight = Math.max(20, Math.round((playfieldWidth - tableWidth) / 2) - 4);
   const parensTop = Math.max(92, tableTop - Math.round(tableHeight * 0.18));
   const timerTop = tableTop + tableHeight + 32;
   const maxButtonTop = viewportHeight - (handBottom + handStripHeight + 132);
@@ -72,6 +76,7 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
   return {
     viewportWidth,
     viewportHeight,
+    playfieldWidth,
     contentWidth,
     tableWidth,
     tableHeight,
