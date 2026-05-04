@@ -95,7 +95,14 @@ export default function GameOver() {
               {i + 1}. {p.name}
               {p.hand.length === 0 ? ' ★' : ''}
             </Text>
-            <Text style={styles.standingCards}>{t('game.cardsLeft', { n: String(p.hand.length) })}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {(p.courageCoins ?? 0) > 0 ? (
+                <Text style={styles.coinBadge}>🪙×{p.courageCoins}</Text>
+              ) : (
+                <Text style={styles.standingCards}>—</Text>
+              )}
+              <Text style={styles.standingCards}>{t('game.cardsLeft', { n: String(p.hand.length) })}</Text>
+            </View>
           </View>
         ))}
       </View>
@@ -145,4 +152,9 @@ const styles = StyleSheet.create({
   },
   standingName: { color: '#D1D5DB', fontSize: 14 },
   standingCards: { color: '#9CA3AF', fontSize: 14 },
+  coinBadge: {
+    color: '#FCD34D',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 })

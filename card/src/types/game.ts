@@ -15,6 +15,7 @@ export interface Player {
   name: string
   hand: Card[]
   calledLolos: boolean
+  courageCoins?: number
 }
 
 export interface DiceResult {
