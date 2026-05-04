@@ -19,6 +19,14 @@ export default function TurnTransition() {
       <Text style={styles.name}>{currentPlayer?.name}</Text>
       <Text style={styles.cardCount}>{t('game.cardsInHand', { n: String(currentPlayer?.hand.length ?? 0) })}</Text>
 
+      {(currentPlayer?.courageCoins ?? 0) > 0 && (
+        <View style={styles.coinBox}>
+          <Text style={styles.coinText}>
+            🪙 ×{currentPlayer.courageCoins}{'  '}ממשיכים לתרגל! 💪
+          </Text>
+        </View>
+      )}
+
       {!!state.message && (
         <View style={styles.messageBox}>
           <Text style={styles.messageText}>{state.message}</Text>
@@ -49,6 +57,22 @@ const styles = StyleSheet.create({
   hint: { color: '#9CA3AF', fontSize: 14 },
   name: { color: '#FFF', fontSize: 32, fontWeight: '800', marginTop: 8 },
   cardCount: { color: '#6B7280', fontSize: 12, marginTop: 8 },
+  coinBox: {
+    backgroundColor: 'rgba(251,191,36,0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.35)',
+    padding: 10,
+    marginTop: 14,
+    width: '100%',
+    alignItems: 'center',
+  },
+  coinText: {
+    color: '#FDE68A',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   messageBox: {
     backgroundColor: 'rgba(234,179,8,0.1)',
     borderRadius: 10,
