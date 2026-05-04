@@ -11538,6 +11538,7 @@ function TurnTransition() {
                   value={meterPlayer.courageMeterPercent ?? 0}
                   pulseKey={meterPlayer.courageRewardPulseId ?? 0}
                   isCelebrating={state.lastCourageCoinsAwarded}
+                  courageCoins={meterPlayer.courageCoins ?? 0}
                   compact
                 />
               </View>
@@ -13934,6 +13935,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                     value={meterPlayer.courageMeterPercent ?? 0}
                     pulseKey={meterPlayer.courageRewardPulseId ?? 0}
                     isCelebrating={state.lastCourageCoinsAwarded}
+                    courageCoins={meterPlayer.courageCoins ?? 0}
                     compact
                   />
                 </View>

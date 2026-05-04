@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Animated, Easing, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Animated, Easing, TouchableOpacity, Text } from 'react-native';
+import { SlindaCoin } from './SlindaCoin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { playSfx } from '../src/audio/sfx';
 
@@ -22,6 +23,7 @@ type Props = {
   onPress?: () => void;
   title?: string;
   height?: number;
+  courageCoins?: number;
 };
 
 export default function ExcellenceMeter({
@@ -30,6 +32,7 @@ export default function ExcellenceMeter({
   pulseKey,
   isCelebrating = false,
   onPress,
+  courageCoins,
 }: Props) {
   const W = compact ? 45 : 55;
   const H = compact ? 80 : 110;
@@ -235,73 +238,84 @@ export default function ExcellenceMeter({
   }, [onPress, tapScale]);
 
   return (
-    <TouchableOpacity activeOpacity={1} onPress={handlePress} style={{ alignItems: 'center' }}>
-      <Animated.View style={{ transform: [{ scale: tapScale }], alignItems: 'center' }}>
-        <Animated.View
-          style={{
-            width: W,
-            height: H,
-            transform: [
-              { translateY: H / 2 },
-              { scaleX },
-              { scaleY },
-              { translateY: Animated.add(new Animated.Value(-H / 2), transY) as any },
-              { rotate: rotDeg },
-            ],
-          }}
-        >
-          <View style={[styles.glass, { width: W, height: H }]}>
-            <Animated.View style={[styles.pulseGlow, { opacity: glowOp }]} />
+    <View style={{ alignItems: 'center' }}>
+      <TouchableOpacity activeOpacity={1} onPress={handlePress} style={{ alignItems: 'center' }}>
+        <Animated.View style={{ transform: [{ scale: tapScale }], alignItems: 'center' }}>
+          <Animated.View
+            style={{
+              width: W,
+              height: H,
+              transform: [
+                { translateY: H / 2 },
+                { scaleX },
+                { scaleY },
+                { translateY: Animated.add(new Animated.Value(-H / 2), transY) as any },
+                { rotate: rotDeg },
+              ],
+            }}
+          >
+            <View style={[styles.glass, { width: W, height: H }]}>
+              <Animated.View style={[styles.pulseGlow, { opacity: glowOp }]} />
 
-            <Animated.View style={[styles.fillWrap, { height: fillPx }]}>
-              <LinearGradient
-                colors={['#16A34A', '#22C55E', '#7CFC00']}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 0.65, y: 0 }}
-                style={StyleSheet.absoluteFillObject}
-              />
-              <View style={styles.wave} />
-              <View style={styles.fillShine} />
-              <Animated.View
-                style={[StyleSheet.absoluteFillObject, { opacity: party, backgroundColor: 'rgba(255,190,80,0.45)' }]}
-              />
-            </Animated.View>
+              <Animated.View style={[styles.fillWrap, { height: fillPx }]}>
+                <LinearGradient
+                  colors={['#16A34A', '#22C55E', '#7CFC00']}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 0.65, y: 0 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <View style={styles.wave} />
+                <View style={styles.fillShine} />
+                <Animated.View
+                  style={[StyleSheet.absoluteFillObject, { opacity: party, backgroundColor: 'rgba(255,190,80,0.45)' }]}
+                />
+              </Animated.View>
 
-            <View style={styles.gloss} />
-          </View>
+              <View style={styles.gloss} />
+            </View>
 
-          {burstCoins.map((coin, i) => {
-            const size = COIN_BURST_CONFIGS[i].size;
-            const rotation = coin.r.interpolate({
-              inputRange: [-30, 30],
-              outputRange: ['-30deg', '30deg'],
-            });
-            return (
-              <Animated.Image
-                key={i}
-                source={COIN_IMG}
-                style={[
-                  styles.burstCoin,
-                  {
-                    width: size,
-                    height: size,
-                    bottom: H - 12,
-                    left: W / 2 - size / 2,
-                    opacity: coin.op,
-                    transform: [
-                      { translateX: coin.x },
-                      { translateY: coin.y },
-                      { scale: coin.s },
-                      { rotate: rotation },
-                    ],
-                  },
-                ]}
-              />
-            );
-          })}
+            {burstCoins.map((coin, i) => {
+              const size = COIN_BURST_CONFIGS[i].size;
+              const rotation = coin.r.interpolate({
+                inputRange: [-30, 30],
+                outputRange: ['-30deg', '30deg'],
+              });
+              return (
+                <Animated.Image
+                  key={i}
+                  source={COIN_IMG}
+                  style={[
+                    styles.burstCoin,
+                    {
+                      width: size,
+                      height: size,
+                      bottom: H - 12,
+                      left: W / 2 - size / 2,
+                      opacity: coin.op,
+                      transform: [
+                        { translateX: coin.x },
+                        { translateY: coin.y },
+                        { scale: coin.s },
+                        { rotate: rotation },
+                      ],
+                    },
+                  ]}
+                />
+              );
+            })}
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+
+      {(courageCoins ?? 0) > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 }}>
+          <SlindaCoin size={18} pulseKey={pulseKey} />
+          <Text style={{ color: '#FCD34D', fontSize: 11, fontWeight: '700' }}>
+            ×{courageCoins}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
