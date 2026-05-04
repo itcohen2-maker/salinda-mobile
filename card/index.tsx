@@ -1854,6 +1854,7 @@ function gameReducer(
         // adding it here keeps NEXT_TURN (online) in lockstep.
         botConfirmDemoShownThisTurn: false,
         botPostEquationPauseTicks: 0,
+        rolledTripleThisTurn: false,
       };
     }
     case 'BEGIN_TURN': {
@@ -1905,8 +1906,9 @@ function gameReducer(
       if (st.phase !== 'pre-roll' && !st.isTutorial) return st;
       const dice: DiceResult = action.values || rollDiceUtil();
       let ns: GameState = { ...st, dice };
+      ns = { ...ns, rolledTripleThisTurn: isTriple(dice) };
       if (isTriple(dice)) {
-        ns = { ...ns, message: tf('toast.tripleDice', { n: String(dice.die1) }), rolledTripleThisTurn: true };
+        ns = { ...ns, message: tf('toast.tripleDice', { n: String(dice.die1) }) };
         ns = applyCourageStepReward(ns, tf('courage.reason.tripleDice', { n: String(dice.die1) }));
       }
       const vt = generateValidTargets(dice, st.enabledOperators, st.allowNegativeTargets, st.mathRangeMax);

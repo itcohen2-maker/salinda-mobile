@@ -106,6 +106,18 @@ describe('rolledTripleThisTurn flag', () => {
     expect(next.rolledTripleThisTurn).toBe(false);
   });
 
+  it('is cleared to false by NEXT_TURN', () => {
+    const st: GameState = {
+      ...initialState,
+      phase: 'turn-transition',
+      players: [basePlayer([])],
+      currentPlayerIndex: 0,
+      rolledTripleThisTurn: true,
+    };
+    const next = gameReducer(st, { type: 'NEXT_TURN' }, tf);
+    expect(next.rolledTripleThisTurn).toBe(false);
+  });
+
   it('is cleared to false by endTurnLogic (via CONFIRM_STAGED path)', () => {
     const staged = { id: 'n5', type: 'number' as const, value: 5 };
     // Give the player enough cards so checkWin does not trigger (need > 2 remaining after play)
