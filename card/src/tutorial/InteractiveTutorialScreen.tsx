@@ -7,7 +7,9 @@
 // ============================================================
 
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { getWebGameLayout } from '../theme/webLayout';
+import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
@@ -310,9 +312,16 @@ function buildMiniCopyTutorialSetup(ts: number) {
   };
 }
 
+export type TutorialProgressPayload = {
+  percent: number;
+  celebrate: boolean;
+  layerNumber: number;
+  stepNumber: string;
+};
+
 interface Props {
   onExit: () => void;
-  onProgressChange?: (progress: { percent: number; celebrate: boolean }) => void;
+  onProgressChange?: (progress: TutorialProgressPayload) => void;
   // The host (index.tsx) passes the live game store. We dispatch
   // START_GAME + TUTORIAL_SET_HANDS to boot the underlying game.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -492,7 +501,8 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
 
 export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispatch, gameState }: Props): React.ReactElement | null {
   const { t, locale } = useLocale();
-  const dims = useWindowDimensions();
+  const tutorialViewport = useWebViewportSize();
+  const webTutorialLayout = Platform.OS === 'web' ? getWebGameLayout(tutorialViewport) : null;
   const [engine, dispatchEngine] = useReducer(
     (s: MimicState, a: MimicAction) => mimicReducer(s, a, LESSON_SHAPES),
     INITIAL_MIMIC_STATE,
@@ -518,10 +528,6 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // retriggers the animation every wrong attempt.
   const [wrongAttemptTick, setWrongAttemptTick] = useState(0);
   const wrongShakeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    onProgressChange?.(tutorialProgress);
-  }, [onProgressChange, tutorialProgress]);
 
   // (L5a wrong-tap feedback was removed when the lesson was rebuilt
   // around card placement — fan taps are now the correct first action.)
@@ -1293,6 +1299,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       if (evt.kind !== 'l5JokerFlowCompleted' || evt.op === '+') return;
       setL5JokerWrong(true);
       setL5FlowHintPhase('tapJoker');
+      tutorialBus.emitFanDemo({ kind: 'eqReset' });
       gameDispatch({ type: 'CLEAR_EQ_HAND' });
       if (l5JokerWrongTimerRef.current) clearTimeout(l5JokerWrongTimerRef.current);
       l5JokerWrongTimerRef.current = setTimeout(() => setL5JokerWrong(false), 2000);
@@ -1459,6 +1466,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   //    AND re-entry after GO_BACK (refs are re-armed in the intro cleanup). ──
   const eqLessonAdvancedRef = useRef(false);
   const eqLessonHandRiggedRef = useRef(false);
+  const l4Step3RiggedRef = useRef(false);
   const l5LessonAdvancedRef = useRef(false);
   const l5LessonHandRiggedRef = useRef(false);
   const rigL4 = () => {
@@ -1516,6 +1524,29 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.lessonIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
 
+  useEffect(() => {
+    const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3;
+    if (!isL4Step3) {
+      l4Step3RiggedRef.current = false;
+      return;
+    }
+    if (engine.phase === 'intro' || engine.phase === 'idle') {
+      l4Step3RiggedRef.current = false;
+      return;
+    }
+    if (engine.phase !== 'bot-demo' && engine.phase !== 'await-mimic') return;
+    if (!gameState?.players || gameState.players.length < 2) return;
+    if (l4Step3RiggedRef.current) return;
+    l4Step3RiggedRef.current = true;
+
+    gameDispatch({ type: 'CLEAR_EQ_HAND' });
+    if (gameState.phase === 'solved') {
+      gameDispatch({ type: 'REVERT_TO_BUILDING' });
+    }
+    rigL4();
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
+
   // ── Lesson 5 (op/joker) must run on the real EquationBuilder. Ensure the
   //    game is in `building` with visible dice and a hand that includes a joker. ──
   useEffect(() => {
@@ -1570,20 +1601,19 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       // Same swap rationale as L5b: put learner's hand at index 0 (= currentPlayerIndex
       // at L5 entry) so the fan shows the learner's own cards, not the bot's.
       gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [playerHand, botHand] });
-      // Pre-fill d1 and d2 so the equation shows `d1 [?] d2 = target`.
-      // The operator slot is intentionally left empty — the learner picks
-      // the `+` card from the fan and drops it on the empty slot.
-      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 0 }), 140);
-      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 1 }), 280);
+      // d1 and d2 are pre-filled by the self-prefill effect inside
+      // EquationBuilder (index.tsx L5.1 self-prefill) when L5aBlockFanTaps
+      // is ON and all dice slots are null. eqPickDice setTimeouts were
+      // removed because they fired AFTER the self-prefill had already filled
+      // dice1 and dice2, causing the 140ms eqPickDice to fall through to
+      // dice3 and incorrectly populate it (stuck equation with 3 dice).
     }
   }, [engine.lessonIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
 
-  // ── Lesson 5.1 (place-op): dice slots + operator `+` are pre-filled in the
-  //    rigging block above (eqPickDice × 2 + eqSetOp). The self-prefill effect
-  //    in index.tsx is no longer needed for step 0 — it only ran for step 0
-  //    previously, but now the explicit emits handle it. Previously the equation
-  //    started empty; the user reported "המישוואה לא מלאה ושואלת שאלה".
-  //    מיספרים"). Nothing to do here.
+  // ── Lesson 5.1 (place-op): d1+d2 dice slots are pre-filled by the
+  //    self-prefill effect inside EquationBuilder (index.tsx) — it fires
+  //    when L5aBlockFanTaps is ON and all dice slots are null. No eqPickDice
+  //    emits here; they were removed because they raced the self-prefill.
 
   // ── If the user skipped the dice lesson without rolling, fabricate
   //    dice values when celebrate begins so the "these are the numbers"
@@ -1644,6 +1674,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       setL5JokerOpen(false);
       setL5PendingJokerOp(null);
     }
+    if (engine.stepIndex === 2) {
+      // Step 5.3 (important-tip): clear any joker the learner placed in step
+      // 5.2 so ok=false and the confirm button is hidden while the tip shows.
+      gameDispatch({ type: 'CLEAR_EQ_HAND' });
+      tutorialBus.emitFanDemo({ kind: 'eqReset' });
+    }
     if (engine.stepIndex === 1) {
       // Step 5.2 (joker-place — "meet Slinda"): mirror 5.1. Keep the 5.1
       // dice (4, 3, 9) on the table; clear the placed `+` card and the
@@ -1683,8 +1719,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       tutorialBus.setTutorialPreserveHandOrder(true);
       // Slinda is centred by the bot demo's immediate scrollFanTo(2, durationMs:0)
       // at the start of botDemo — no separate setTimeout needed here.
-      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 0 }), 140);
-      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 1 }), 280);
+      // d1+d2 pre-fill is handled by the self-prefill inside EquationBuilder
+      // (same mechanism as step 5.1). eqPickDice setTimeouts were removed:
+      // they raced the self-prefill and caused dice3 to be incorrectly set.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
@@ -1842,8 +1879,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       engine.stepIndex === 1 &&
       (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
     if (!isL6TapMiniStep) return;
-    const filtered = (gameState?.validTargets ?? []).filter((eq: { result: number }) => eq.result !== 0);
+    const targets = gameState?.validTargets ?? [];
+    const filtered = targets.filter((eq: { result: number }) => eq.result !== 0);
     if (filtered.length === 0) return;
+    // Guard: only dispatch if the filter actually removes items to prevent
+    // an infinite loop (dispatching changes validTargets → effect re-fires).
+    if (filtered.length === targets.length) return;
     gameDispatch({ type: 'TUTORIAL_SET_VALID_TARGETS', targets: filtered });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.validTargets, gameDispatch]);
 
@@ -2782,7 +2823,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => clearTimeout(id);
   }, [engine.phase, engine.lessonIndex, engine.stepIndex]);
 
-  // ── L6.2 (tap-mini): lock mini cards initially, unlock after bubble delay ──
+  // ── L6.2 (tap-mini): clear bot demo's solve-chip selection on entry so
+  //    the learner taps their own mini-card fresh. ──
   useEffect(() => {
     const isL6TapMiniAwait =
       engine.lessonIndex === 5 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
@@ -2791,6 +2833,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       setShowL6TapMiniAck(false);
       return;
     }
+    // Clear the solve chip the bot demo may have left open so the learner's
+    // own tap is the action that reveals it (teaching point of the step).
+    tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
     tutorialBus.setL6MiniLocked(true);
     setShowL6TapMiniAck(false);
     const id = setTimeout(() => tutorialBus.setL6MiniLocked(false), 1500);
@@ -2983,12 +3028,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
 
-  // Fan strip lives at the bottom of the screen, height ≈ 140 (HAND_INNER
-  // _HEIGHT + HAND_STRIP_ABOVE_FAN), bottom edge at HAND_BOTTOM_OFFSET (195).
-  // Cards render with overflow:visible so they extend slightly outside the
-  // strip; we anchor the isolation curtain ABOVE that visible bleed.
-  const FAN_BOTTOM = 195;
-  const FAN_STRIP_H = 140;
+  // Fan strip lives at the bottom of the screen. On native the values are
+  // HAND_BOTTOM_OFFSET (195) and HAND_INNER_HEIGHT (≈140). On web,
+  // getWebGameLayout returns the actual layout values which differ.
+  const FAN_BOTTOM = webTutorialLayout?.handBottom ?? 195;
+  const FAN_STRIP_H = webTutorialLayout?.fanViewportHeight ?? 140;
   const FAN_VISUAL_TOP_FROM_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + 30; // 365 — leaves a clear margin above bleeding cards
   // Uniform bottom offset for every "הבנתי" intro-overlay button across all lessons.
   const GOT_IT_BOTTOM = 28;
@@ -3077,7 +3121,19 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     1,
     1 + tutorialLayersBeforeCurrentLesson + tutorialCurrentStepLayerBase + tutorialCurrentPhaseLayerOffset,
   );
+  const tutorialStepNumber =
+    currentLessonStepCount > 1
+      ? `${lessonOrdinal}.${Math.max(1, Math.min(currentLessonStepCount, engine.stepIndex + 1))}`
+      : `${lessonOrdinal}`;
   const shouldHideTutorialLayer = HIDDEN_TUTORIAL_LAYERS.has(tutorialLayerNumber);
+
+  useEffect(() => {
+    onProgressChange?.({
+      ...tutorialProgress,
+      layerNumber: tutorialLayerNumber,
+      stepNumber: tutorialStepNumber,
+    });
+  }, [onProgressChange, tutorialLayerNumber, tutorialProgress, tutorialStepNumber]);
 
   useEffect(() => {
     if (!shouldHideTutorialLayer) return;
@@ -4749,6 +4805,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 advancedStartedFromWelcomeRef.current = false;
                 dispatchEngine({ type: 'CHOOSE_ADVANCED_FRACTIONS' });
               }}
+              accessibilityLabel={locale === 'he'
+                ? 'המשיכו למתקדמים ותרוויחו 20 מטבעות סלינדה'
+                : 'Continue to advanced and earn 20 Slinda coins'}
               style={{
                 paddingVertical: 15,
                 paddingHorizontal: 28,
@@ -4760,9 +4819,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 alignItems: 'center',
               }}
             >
-              <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
-                {t('tutorial.coreComplete.advancedBtn')}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
+                  {t('tutorial.coreComplete.advancedBtn')}
+                </Text>
+                <SlindaCoin size={20} />
+                <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
+                  20
+                </Text>
+              </View>
             </TouchableOpacity>
             {/* Real game — exits tutorial */}
             <TouchableOpacity
