@@ -35,6 +35,7 @@ export type MimicAction =
   | { type: 'CHOOSE_ADVANCED_FRACTIONS' }
   | { type: 'JUMP_TO_ADVANCED' }
   | { type: 'GO_BACK' }
+  | { type: 'GO_BACK_LAYER' }
   | { type: 'EXIT' };
 
 /** Last core lesson index (0-based) before optional fractions branch.
@@ -71,6 +72,27 @@ export function mimicReducer(
   lessons: LessonShape[],
 ): MimicState {
   if (action.type === 'EXIT') return INITIAL_MIMIC_STATE;
+
+  if (action.type === 'GO_BACK_LAYER') {
+    if (state.phase === 'celebrate') return { ...state, phase: 'await-mimic' };
+    if (state.phase === 'await-mimic') return { ...state, phase: 'bot-demo' };
+    if (state.phase === 'bot-demo') return { ...state, phase: 'intro' };
+    if (state.phase === 'intro') {
+      if (state.stepIndex > 0) {
+        return { ...state, phase: 'intro', stepIndex: state.stepIndex - 1 };
+      }
+      if (state.lessonIndex === MIMIC_FIRST_FRACTION_LESSON_INDEX) {
+        return { phase: 'post-signs-choice', lessonIndex: MIMIC_LAST_CORE_LESSON_INDEX, stepIndex: 0 };
+      }
+      if (state.lessonIndex > 0) {
+        const prev = lessons[state.lessonIndex - 1];
+        const lastStepOfPrev = prev ? Math.max(0, prev.stepCount - 1) : 0;
+        return { phase: 'intro', lessonIndex: state.lessonIndex - 1, stepIndex: lastStepOfPrev };
+      }
+      return state; // lesson 0 step 0 → no-op (disabled)
+    }
+    return state; // lesson-done, all-done etc → no-op
+  }
 
   if (action.type === 'GO_BACK') {
     if (state.phase === 'post-signs-choice' || state.phase === 'core-complete') {

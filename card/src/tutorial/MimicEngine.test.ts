@@ -150,3 +150,44 @@ describe('MimicEngine — empty lessons edge case', () => {
     expect(s.phase).toBe('all-done');
   });
 });
+
+describe('MimicEngine — GO_BACK_LAYER', () => {
+  const at = (phase: MimicState['phase'], lessonIndex = 0, stepIndex = 0): MimicState =>
+    ({ phase, lessonIndex, stepIndex });
+
+  it('celebrate → await-mimic (same lesson/step)', () => {
+    const s = mimicReducer(at('celebrate', 0, 1), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'await-mimic', lessonIndex: 0, stepIndex: 1 });
+  });
+
+  it('await-mimic → bot-demo (same lesson/step)', () => {
+    const s = mimicReducer(at('await-mimic', 1, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'bot-demo', lessonIndex: 1, stepIndex: 0 });
+  });
+
+  it('bot-demo → intro (same lesson/step)', () => {
+    const s = mimicReducer(at('bot-demo', 0, 1), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 1 });
+  });
+
+  it('intro step > 0 → decrements step', () => {
+    const s = mimicReducer(at('intro', 0, 1), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 0 });
+  });
+
+  it('intro step 0 lesson 0 → stays (disabled case)', () => {
+    const s = mimicReducer(at('intro', 0, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 0 });
+  });
+
+  it('intro step 0 lesson > 0 → previous lesson last step', () => {
+    // LESSONS[0] = fan-basics, stepCount: 2 → lastStep = 1
+    const s = mimicReducer(at('intro', 1, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 1 });
+  });
+
+  it('lesson-done and other non-navigable phases → no-op', () => {
+    const s = mimicReducer(at('lesson-done', 0, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual(at('lesson-done', 0, 0));
+  });
+});
