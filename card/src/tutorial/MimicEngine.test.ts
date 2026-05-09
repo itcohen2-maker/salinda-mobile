@@ -162,9 +162,19 @@ describe('MimicEngine — GO_BACK_LAYER', () => {
     expect(s).toEqual({ phase: 'await-mimic', lessonIndex: 0, stepIndex: 1 });
   });
 
-  it('await-mimic → intro (skip bot-demo: it would auto-run and bounce back)', () => {
+  it('await-mimic step > 0 → step back (same as intro)', () => {
+    const s = mimicReducer(at('await-mimic', 0, 1), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 0 });
+  });
+
+  it('await-mimic step 0 lesson > 0 → previous lesson last step', () => {
     const s = mimicReducer(at('await-mimic', 1, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
-    expect(s).toEqual({ phase: 'intro', lessonIndex: 1, stepIndex: 0 });
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 1 });
+  });
+
+  it('await-mimic step 0 lesson 0 → no-op (disabled)', () => {
+    const s = mimicReducer(at('await-mimic', 0, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
+    expect(s).toEqual(at('await-mimic', 0, 0));
   });
 
   it('bot-demo → intro (same lesson/step)', () => {

@@ -74,12 +74,14 @@ export function mimicReducer(
   if (action.type === 'EXIT') return INITIAL_MIMIC_STATE;
 
   if (action.type === 'GO_BACK_LAYER') {
+    // celebrate → await-mimic: "layer back" — lets the learner retry without
+    // losing the current step. All other phases use step-level back logic.
     if (state.phase === 'celebrate') return { ...state, phase: 'await-mimic' };
-    // await-mimic → intro (skip bot-demo: it would auto-run and immediately
-    // fire BOT_DEMO_DONE, bouncing back to await-mimic before user sees anything).
-    if (state.phase === 'await-mimic') return { ...state, phase: 'intro' };
+    // bot-demo → intro: bot-demo auto-runs so we can't stay there; bring the
+    // learner to the intro screen where they can re-read and re-trigger the demo.
     if (state.phase === 'bot-demo') return { ...state, phase: 'intro' };
-    if (state.phase === 'intro') {
+    // await-mimic + intro: step-level back (same logic as GO_BACK).
+    if (state.phase === 'await-mimic' || state.phase === 'intro') {
       if (state.stepIndex > 0) {
         return { ...state, phase: 'intro', stepIndex: state.stepIndex - 1 };
       }
