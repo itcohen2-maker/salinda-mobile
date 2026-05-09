@@ -15,6 +15,7 @@ import { Audio } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
 import { HappyBubble } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
+import { GoldDiceButton } from '../../components/GoldDiceButton';
 import { initializeSfx, isSfxMuted, setSfxMuted } from '../audio/sfx';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { generateTutorialHand } from './generateTutorialHand';
@@ -589,7 +590,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const [showL6TapMiniAck, setShowL6TapMiniAck] = useState(false);
   // L6.3 mismatch feedback: shown 2s when confirmed equation doesn't match the red chip.
   const [l6Mismatch, setL6Mismatch] = useState(false);
-  const [l6WildHintSeen, setL6WildHintSeen] = useState(false);
   // L7 (parens-move) mismatch feedback: shown 2.5s when confirmed equation
   // doesn't match the target (wrong parens position or wrong result).
   const [l7Mismatch, setL7Mismatch] = useState(false);
@@ -627,6 +627,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const [l3TipApproved, setL3TipApproved] = useState(false);
   const [identicalMockupApproved, setIdenticalMockupApproved] = useState(false);
   const [identicalMockupPendingAdvance, setIdenticalMockupPendingAdvance] = useState(false);
+  const [l11MockupApproved, setL11MockupApproved] = useState(false);
+  const [l11MockupPendingAdvance, setL11MockupPendingAdvance] = useState(false);
   const [l11ZeroGiftApproved, setL11ZeroGiftApproved] = useState(false);
   const [l8RolledBeforeIdentical, setL8RolledBeforeIdentical] = useState(false);
   const [l9IntroApproved, setL9IntroApproved] = useState(false);
@@ -841,6 +843,28 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     }
   }, [engine.lessonIndex]);
 
+  useEffect(() => {
+    if (engine.lessonIndex !== MIMIC_MULTI_PLAY_LESSON_INDEX || engine.stepIndex !== 1) {
+      setL11MockupApproved(false);
+      setL11MockupPendingAdvance(false);
+      return;
+    }
+    if (engine.phase === 'intro') {
+      setL11MockupApproved(false);
+      setL11MockupPendingAdvance(false);
+    }
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
+  useEffect(() => {
+    if (engine.lessonIndex !== MIMIC_MULTI_PLAY_LESSON_INDEX || engine.stepIndex !== 1) {
+      setL11ZeroGiftApproved(false);
+      return;
+    }
+    if (engine.phase === 'intro' || engine.phase === 'bot-demo') {
+      setL11ZeroGiftApproved(false);
+    }
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
   // ── Clear card frames + reset all tutorial state whenever a new step
   //    begins (phase=intro). This handles lesson transitions, GO_BACK,
   //    and ensures refs are re-armed so the lesson can boot fresh. ──
@@ -886,7 +910,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // Only regenerate L4 dice when going BACKWARDS (engine.lessonIndex
     // went down). Going forward (lesson 3 → 4) must keep the same dice
     // the user already saw in lesson 3.
-    if (engine.lessonIndex <= 2) {
+    if (engine.lessonIndex <= 3) {
       l4DiceRef.current = rollL4Dice();
     }
     // Re-arm lesson 4 refs so BEGIN_TURN + ROLL_DICE re-fire when needed.
@@ -900,6 +924,18 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       tutorialBus.setL6CopyConfig(null);
     } else if (isFracLesson) {
       gameDispatch(buildFractionTutorialSetup(engine.stepIndex, Date.now()));
+    }
+  }, [engine.phase, engine.lessonIndex, engine.stepIndex, gameState?.phase, gameDispatch]);
+
+  // ── Bot-demo re-entry reset: fires on every bot-demo entry so that
+  //    GO_BACK_LAYER (await-mimic → bot-demo) replays the demo cleanly. ──
+  useEffect(() => {
+    if (engine.phase !== 'bot-demo') return;
+    tutorialBus.setL4bDicePulse(false);
+    setL4Step3Phase('build');
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
+    if (gameState?.phase === 'solved') {
+      gameDispatch({ type: 'REVERT_TO_BUILDING' });
     }
   }, [engine.phase, engine.lessonIndex, engine.stepIndex, gameState?.phase, gameDispatch]);
 
@@ -950,15 +986,23 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
   // ── Lesson 3 (dice) is handled entirely inside the tutorial overlay
   //    (its own button + dice display). We don't advance the underlying
-  //    game phase — that kept leaking real-game UI through the curtain. ──
+  //    game phase — that kept leaking real-game UI through the curtain.
+  //    Phases:
+  //      intro / bot-demo / await-mimic: tutorialDice is null so the
+  //        GoldDiceButton remains visible. In await-mimic it becomes
+  //        interactive — the learner must tap it to roll.
+  //      celebrate onward: the celebrate-phase effect (below) sets
+  //        tutorialDice so the dice faces stay visible during the bubble. ──
   useEffect(() => {
     if (engine.lessonIndex !== 2 || engine.stepIndex !== 0) return;
     const l4 = l4DiceRef.current ?? rollL4Dice();
     l4DiceRef.current = l4;
+    // Keep button visible for intro, bot-demo, and await-mimic (user must tap).
+    if (engine.phase === 'intro' || engine.phase === 'bot-demo' || engine.phase === 'await-mimic') {
+      setTutorialDice(null);
+      return;
+    }
     setTutorialDice({ d1: l4.d1, d2: l4.d2, d3: l4.d3 });
-    if (engine.phase !== 'await-mimic') return;
-    const id = setTimeout(() => tutorialBus.emitUserEvent({ kind: 'diceRolled' }), 1200);
-    return () => clearTimeout(id);
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   // ── Rig the user's hand with sample cards once the game is in pre-roll ──
@@ -1054,6 +1098,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         setIdenticalMockupPendingAdvance(true);
         return;
       }
+      if (
+        engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
+        engine.stepIndex === 1 &&
+        !l11MockupApproved
+      ) {
+        setL11MockupPendingAdvance(true);
+        return;
+      }
       fired = true;
       dispatchEngine({ type: 'BOT_DEMO_DONE' });
     };
@@ -1070,7 +1122,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       cancelled = true;
       clearTimeout(fallback);
     };
-  }, [engine.phase, engine.lessonIndex, engine.stepIndex, parensMockupApproved, identicalMockupApproved]);
+  }, [engine.phase, engine.lessonIndex, engine.stepIndex, parensMockupApproved, identicalMockupApproved, l11MockupApproved]);
 
   // ── Listen for user mimic when phase=await-mimic ──
   useEffect(() => {
@@ -1109,6 +1161,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
   }, [engine.phase, engine.lessonIndex, engine.stepIndex]);
 
+  // ── Lesson 4 step 2 (fill-missing-die): pulse unplaced dice during await-mimic. ──
+  useEffect(() => {
+    const isL4b = engine.lessonIndex === 3 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
+    tutorialBus.setL4bDicePulse(isL4b);
+    return () => tutorialBus.setL4bDicePulse(false);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
   // ── Lesson 4 step 3 (guided full build): enable l4Step3Mode while active
   //    so the EquationBuilder shows its confirm button + skips auto-confirm,
   //    and both buttons report their layout via bus. Also reset the sub-phase
@@ -1118,10 +1177,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (isL4Step3) {
       tutorialBus.emitFanDemo({ kind: 'eqReset' });
       tutorialBus.setL4Step3Mode(true);
+      tutorialBus.setL4GuidedEqValidationMode(true);
       setL4Step3Phase('build');
-      return () => tutorialBus.setL4Step3Mode(false);
+      return () => {
+        tutorialBus.setL4Step3Mode(false);
+        tutorialBus.setL4GuidedEqValidationMode(false);
+      };
     }
     tutorialBus.setL4Step3Mode(false);
+    tutorialBus.setL4GuidedEqValidationMode(false);
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   // Keep botDemoActive in sync so index.tsx can block number-card taps mid-demo.
@@ -1902,19 +1966,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   useEffect(() => {
-    const isL6WildAwait =
-      engine.lessonIndex === 5 &&
-      engine.stepIndex === 2 &&
-      engine.phase === 'await-mimic';
-    if (!isL6WildAwait) {
-      setL6WildHintSeen(false);
-      return;
-    }
-    if (!gameState?.stagedCards?.some((card: Card) => card.type === 'wild')) return;
-    setL6WildHintSeen(true);
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.stagedCards]);
-
-  useEffect(() => {
     if (engine.lessonIndex === 5 && engine.stepIndex === 2) return;
     const isL6CopyAwait = engine.lessonIndex === 5 && engine.stepIndex === 2 && engine.phase === 'await-mimic';
     const isL9CopyAwait = engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX && engine.stepIndex === 0 && engine.phase === 'await-mimic' && l9Stage === 1;
@@ -2247,7 +2298,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const pairTarget = target - wildValue;
     const addA = Math.max(1, Math.floor(pairTarget / 2));
     const addB = pairTarget - addA;
-    tutorialBus.setL11Config({ addA, addB, target, includeZero: true, includeWild: true, wildValue });
+    tutorialBus.setL11Config({ addA, addB, target, includeZero: false, includeWild: true, wildValue });
     l11PreparedRef.current = prepared;
   }, [engine.lessonIndex, engine.phase, engine.stepIndex, gameDispatch]);
 
@@ -2521,20 +2572,16 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   }, [parensMockupPendingAdvance, parensMockupApproved]);
 
   useEffect(() => {
-    if (engine.lessonIndex !== MIMIC_MULTI_PLAY_LESSON_INDEX) {
-      setL11ZeroGiftApproved(false);
-      return;
-    }
-    if (engine.stepIndex !== 1) {
-      setL11ZeroGiftApproved(false);
-    }
-  }, [engine.lessonIndex, engine.stepIndex]);
-
-  useEffect(() => {
     if (!identicalMockupPendingAdvance || !identicalMockupApproved) return;
     setIdenticalMockupPendingAdvance(false);
     dispatchEngine({ type: 'BOT_DEMO_DONE' });
   }, [identicalMockupPendingAdvance, identicalMockupApproved]);
+
+  useEffect(() => {
+    if (!l11MockupPendingAdvance || !l11MockupApproved) return;
+    setL11MockupPendingAdvance(false);
+    dispatchEngine({ type: 'BOT_DEMO_DONE' });
+  }, [l11MockupPendingAdvance, l11MockupApproved]);
 
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_SINGLE_IDENTICAL_LESSON_INDEX) {
@@ -3028,11 +3075,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
 
-  // Fan strip lives at the bottom of the screen. On native the values are
-  // HAND_BOTTOM_OFFSET (195) and HAND_INNER_HEIGHT (≈140). On web,
-  // getWebGameLayout returns the actual layout values which differ.
+  // Fan strip lives at the bottom of the screen. getWebGameLayout now returns
+  // the same mobile constants (handBottom=195, fanViewportHeight=116).
   const FAN_BOTTOM = webTutorialLayout?.handBottom ?? 195;
-  const FAN_STRIP_H = webTutorialLayout?.fanViewportHeight ?? 140;
+  const FAN_STRIP_H = webTutorialLayout?.fanViewportHeight ?? 116;
   const FAN_VISUAL_TOP_FROM_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + 30; // 365 — leaves a clear margin above bleeding cards
   // Uniform bottom offset for every "הבנתי" intro-overlay button across all lessons.
   const GOT_IT_BOTTOM = 28;
@@ -3289,6 +3335,65 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                     <GoldDieFace value={v} size={52} />
                   </View>
                 ))}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Gold dice button — same screen position as in the real game.
+              Driven by `dicePulse` (animation loop runs while bot-demo is
+              active for this step). The bot's pulseDiceBtn call also plays
+              the dice-roll sound during the demo.
+              In await-mimic the button becomes interactive — the learner
+              must tap it to roll; tapping plays the sound, reveals the dice
+              faces, and emits the diceRolled event. */}
+          {!tutorialDice ? (
+            <View
+              pointerEvents={engine.phase === 'await-mimic' ? 'auto' : 'none'}
+              style={{
+                position: 'absolute',
+                top: Math.max(96, Math.min(680, tutorialViewport.height - 140)),
+                left: 0,
+                right: 0,
+                alignItems: 'center',
+                zIndex: 9100,
+              }}
+            >
+              <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: -14,
+                    left: -14,
+                    right: -14,
+                    bottom: -14,
+                    borderRadius: 70,
+                    borderWidth: 4,
+                    borderColor: '#FCD34D',
+                    opacity: dicePulse.interpolate({ inputRange: [0, 1], outputRange: [0, 0.95] }),
+                    transform: [{ scale: dicePulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }],
+                  }}
+                />
+                <GoldDiceButton
+                  onPress={() => {
+                    if (engine.phase !== 'await-mimic') return;
+                    const l4 = l4DiceRef.current ?? rollL4Dice();
+                    if (!isSfxMuted()) {
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const asset = require('../../assets/dice_roll.m4a') as number;
+                      Audio.Sound.createAsync(asset).then(({ sound }) => {
+                        sound.playAsync().catch(() => {});
+                        sound.setOnPlaybackStatusUpdate((s) => {
+                          if ((s as { didJustFinish?: boolean }).didJustFinish) sound.unloadAsync().catch(() => {});
+                        });
+                      }).catch(() => {});
+                    }
+                    setTutorialDice({ d1: l4.d1, d2: l4.d2, d3: l4.d3 });
+                    tutorialBus.emitUserEvent({ kind: 'diceRolled' });
+                  }}
+                  width={160}
+                  size={58}
+                />
               </View>
             </View>
           ) : null}
@@ -3622,10 +3727,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             minWidth: 82,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'rgba(15,118,110,0.92)',
+            backgroundColor: 'rgba(90,95,105,0.88)',
             borderRadius: 14,
             borderWidth: 1.5,
-            borderColor: 'rgba(94,234,212,0.85)',
+            borderColor: 'rgba(180,185,195,0.6)',
           }}
         >
           <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
@@ -3799,6 +3904,88 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* L11 exercise 1 only: floating result chip — hidden on exercise 2 so
           the learner sees a single instruction bubble instead of two. */}
+      {engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
+       engine.stepIndex === 1 &&
+       engine.phase === 'bot-demo' &&
+       !l11MockupApproved ? (
+        <>
+          <View
+            pointerEvents="auto"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(5,10,22,0.88)',
+              zIndex: 9250,
+            }}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 24,
+              zIndex: 9260,
+            }}
+          >
+            <View
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                borderRadius: 24,
+                backgroundColor: 'rgba(15,23,42,0.96)',
+                borderWidth: 2.5,
+                borderColor: '#F59E0B',
+                paddingVertical: 22,
+                paddingHorizontal: 18,
+                alignItems: 'center',
+                gap: 12,
+                ...Platform.select({
+                  ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 16 },
+                  android: { elevation: 14 },
+                }),
+              }}
+            >
+              <Text style={{ color: '#86EFAC', fontSize: 15, fontWeight: '800', textAlign: 'center', letterSpacing: 0.5 }}>
+                {t('tutorial.identicalMulti.didYouKnow')}
+              </Text>
+              <Text style={{ color: '#FCD34D', fontSize: 25, fontWeight: '900', textAlign: 'center', lineHeight: 31 }}>
+                {t('tutorial.identicalMulti.body', { n: String(l11Target ?? gameState?.equationResult ?? '?') })}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setL11MockupApproved(true)}
+            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+          >
+            <View style={{
+              backgroundColor: '#F59E0B',
+              borderRadius: 20,
+              paddingVertical: 15,
+              paddingHorizontal: 32,
+              borderWidth: 2,
+              borderColor: '#FCD34D',
+              ...Platform.select({
+                ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+                android: { elevation: 12 },
+              }),
+            }}>
+              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900' }}>
+                {t('tutorial.identicalMulti.cta')}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
       {false && engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
        (engine.stepIndex === 0 || engine.stepIndex === 1) &&
        engine.phase === 'await-mimic' &&
@@ -3887,7 +4074,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
        !gameState?.hasPlayedCards &&
        l11PositiveNumberCount >= 1 &&
        !l11HasZeroStaged &&
-       !l11ZeroGiftApproved && (
+       !l11ZeroGiftApproved ? (
         <View
           pointerEvents="auto"
           style={{
@@ -3932,7 +4119,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      ) : null}
 
       {false && engine.lessonIndex === 5 &&
        engine.stepIndex === 2 &&
@@ -3973,38 +4160,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         </View>
       )}
 
-      {engine.lessonIndex === 5 &&
-       engine.stepIndex === 2 &&
-       engine.phase === 'await-mimic' &&
-       l6WildHintSeen &&
-       !gameState?.hasPlayedCards && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: FAN_VISUAL_TOP_FROM_BOTTOM + 10,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            zIndex: 9200,
-          }}
-        >
-          <HappyBubble
-            text={locale === 'he'
-              ? `הפרא יכול להיות כל מספר שתבחרו, והפעם הוא ${tutorialBus.getL11Config()?.wildValue ?? gameState?.equationResult ?? '?'}`
-              : `The wild can be any number you choose, and this time it is ${tutorialBus.getL11Config()?.wildValue ?? gameState?.equationResult ?? '?'}`
-            }
-            tone="celebrate"
-            arrowSize="big"
-            size="normal"
-            tailTop={false}
-          />
-        </View>
-      )}
-
-
-
-      {/* קלף זהה — info card (floating box, not full-screen overlay) */}
+      {/* קלף זהה — did-you-know mockup */}
       {isL10Intro && !identicalMockupApproved && (
         <View
           pointerEvents="auto"
@@ -4018,34 +4174,49 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           }}
         >
           <View style={{
-            backgroundColor: 'rgba(15,23,42,0.97)',
-            borderRadius: 20,
-            borderWidth: 2,
-            borderColor: '#f59e0b',
-            paddingVertical: 28,
-            paddingHorizontal: 24,
+            maxWidth: 360,
             width: '100%',
-            maxWidth: 340,
+            borderRadius: 24,
+            backgroundColor: 'rgba(15,23,42,0.96)',
+            borderWidth: 2.5,
+            borderColor: '#F59E0B',
+            paddingVertical: 22,
+            paddingHorizontal: 18,
             alignItems: 'center',
+            gap: 12,
             ...Platform.select({
-              ios: { shadowColor: '#f59e0b', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 20 },
-              android: { elevation: 16 },
+              ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 16 },
+              android: { elevation: 14 },
             }),
           }}>
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fde68a', marginBottom: 4, textAlign: 'center' }}>
-              {t('tutorial.identicalCard.title')}
-            </Text>
-            <Text style={{ fontSize: 13, color: '#9ca3af', marginBottom: 12, textAlign: 'center' }}>
+            <Text style={{ color: '#86EFAC', fontSize: 15, fontWeight: '800', textAlign: 'center', letterSpacing: 0.5 }}>
               {t('tutorial.identicalCard.subtitle')}
             </Text>
-            <Text style={{ fontSize: 15, color: '#e5e7eb', textAlign: 'center', marginBottom: 24, lineHeight: 23 }}>
+            <Text style={{ color: '#FCD34D', fontSize: 25, fontWeight: '900', textAlign: 'center', lineHeight: 31 }}>
+              {t('tutorial.identicalCard.title')}
+            </Text>
+            <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(245,158,11,0.3)' }} />
+            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', lineHeight: 24 }}>
               {t('tutorial.identicalCard.desc')}
             </Text>
             <TouchableOpacity
-              style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 32 }}
+              activeOpacity={0.8}
+              style={{
+                marginTop: 4,
+                backgroundColor: '#F59E0B',
+                borderRadius: 20,
+                paddingVertical: 15,
+                paddingHorizontal: 32,
+                borderWidth: 2,
+                borderColor: '#FCD34D',
+                ...Platform.select({
+                  ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+                  android: { elevation: 12 },
+                }),
+              }}
               onPress={() => setIdenticalMockupApproved(true)}
             >
-              <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 16 }}>
+              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900' }}>
                 {t('tutorial.identicalCard.cta')}
               </Text>
             </TouchableOpacity>
@@ -4709,14 +4880,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 paddingVertical: 15,
                 paddingHorizontal: 28,
                 borderRadius: 18,
-                backgroundColor: '#F59E0B',
+                backgroundColor: '#16A34A',
                 borderWidth: 2,
-                borderColor: '#FCD34D',
+                borderColor: '#4ADE80',
                 width: '100%',
                 alignItems: 'center',
               }}
             >
-              <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
+              <Text style={{ color: '#F0FDF4', fontWeight: '900', fontSize: 17 }}>
                 {t('tutorial.welcome.start')}
               </Text>
             </TouchableOpacity>
