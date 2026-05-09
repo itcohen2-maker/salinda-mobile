@@ -3649,6 +3649,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         <TouchableOpacity
           onPress={() => {
             if (showWelcomeBubble) return;
+            // Advanced module started from welcome → restart.
             if (
               advancedStartedFromWelcomeRef.current &&
               engine.lessonIndex === MIMIC_FIRST_FRACTION_LESSON_INDEX &&
@@ -3660,27 +3661,26 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               setShowWelcomeBubble(true);
               return;
             }
-            // L8 step 1 (identical card): go back to step 0 mockup.
-            // GO_BACK lands on intro phase → DISMISS_INTRO jumps to bot-demo
-            // so isL10Intro becomes true and the "קלף זהה" mockup shows.
-            if (engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX &&
-                engine.stepIndex === 1) {
+            // L8 step 1 (identical card mockup): back to step 0 mockup.
+            // Keeps GO_BACK + DISMISS_INTRO to skip the intro and show mockup directly.
+            if (
+              engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX &&
+              engine.stepIndex === 1
+            ) {
               setIdenticalMockupApproved(false);
               setIdenticalMockupPendingAdvance(false);
               l8Step1RiggedRef.current = false;
-              dispatchEngine({ type: 'GO_BACK' });    // step 1 → step 0 intro
-              dispatchEngine({ type: 'DISMISS_INTRO' }); // intro → bot-demo (mockup shows)
+              dispatchEngine({ type: 'GO_BACK' });
+              dispatchEngine({ type: 'DISMISS_INTRO' });
               return;
             }
-            // L9: go back ONE sub-step at a time (stage 2→1→0→GO_BACK).
+            // L9: go back one sub-stage at a time; at stage 0 fall through to GO_BACK_LAYER.
             if (isL9Lesson && engine.phase === 'await-mimic' && l9Stage > 0) {
               if (l9Stage === 2) {
-                // Solved phase → back to equation-building (stage 1), keep solve chip
                 setL9Stage(1);
                 gameDispatch({ type: 'REVERT_TO_BUILDING' });
                 tutorialBus.emitFanDemo({ kind: 'eqReset' });
               } else {
-                // Stage 1 → back to mini-card selection (stage 0)
                 setL9Stage(0);
                 tutorialBus.setL6CopyConfig(null);
                 tutorialBus.emitFanDemo({ kind: 'eqReset' });
@@ -3689,33 +3689,45 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               }
               return;
             }
+            // L11 step 1: reset rigging refs before phase-level back.
             if (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && engine.stepIndex === 1) {
               l8Step3RiggedRef.current = false;
               l11RiggedRef.current = false;
               l11AwaitRiggedRef.current = false;
-              dispatchEngine({ type: 'GO_BACK' });
-              dispatchEngine({ type: 'DISMISS_INTRO' });
+              dispatchEngine({ type: 'GO_BACK_LAYER' });
               return;
             }
+            // L11 step 0: reset rigging refs before phase-level back.
             if (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && engine.stepIndex === 0) {
               l11RiggedRef.current = false;
               l11AwaitRiggedRef.current = false;
-              dispatchEngine({ type: 'GO_BACK' });
+              dispatchEngine({ type: 'GO_BACK_LAYER' });
               return;
             }
-            dispatchEngine({ type: 'GO_BACK' });
+            // Default: phase-level back.
+            dispatchEngine({ type: 'GO_BACK_LAYER' });
           }}
-          style={{
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            minWidth: 82,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(71,85,105,0.92)',
-            borderRadius: 14,
-            borderWidth: 1.5,
-            borderColor: 'rgba(148,163,184,0.7)',
-          }}
+          disabled={
+            engine.lessonIndex === 0 &&
+            engine.stepIndex === 0 &&
+            engine.phase === 'intro'
+          }
+          style={[
+            {
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              minWidth: 82,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(71,85,105,0.92)',
+              borderRadius: 14,
+              borderWidth: 1.5,
+              borderColor: 'rgba(148,163,184,0.7)',
+            },
+            engine.lessonIndex === 0 &&
+              engine.stepIndex === 0 &&
+              engine.phase === 'intro' && { opacity: 0.35 },
+          ]}
         >
           <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{'‹ חזור'}</Text>
         </TouchableOpacity>
