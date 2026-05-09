@@ -3,6 +3,8 @@ import {
   type LessonShape,
   INITIAL_MIMIC_STATE,
   mimicReducer,
+  MIMIC_FIRST_FRACTION_LESSON_INDEX,
+  MIMIC_LAST_CORE_LESSON_INDEX,
 } from './MimicEngine';
 
 const LESSONS: LessonShape[] = [
@@ -184,6 +186,15 @@ describe('MimicEngine — GO_BACK_LAYER', () => {
     // LESSONS[0] = fan-basics, stepCount: 2 → lastStep = 1
     const s = mimicReducer(at('intro', 1, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
     expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 1 });
+  });
+
+  it('intro step 0 at MIMIC_FIRST_FRACTION_LESSON_INDEX → post-signs-choice', () => {
+    const s = mimicReducer(
+      { phase: 'intro', lessonIndex: MIMIC_FIRST_FRACTION_LESSON_INDEX, stepIndex: 0 },
+      { type: 'GO_BACK_LAYER' },
+      LESSONS,
+    );
+    expect(s).toEqual({ phase: 'post-signs-choice', lessonIndex: MIMIC_LAST_CORE_LESSON_INDEX, stepIndex: 0 });
   });
 
   it('lesson-done and other non-navigable phases → no-op', () => {
