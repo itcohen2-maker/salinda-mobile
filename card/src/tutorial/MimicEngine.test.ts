@@ -162,9 +162,9 @@ describe('MimicEngine — GO_BACK_LAYER', () => {
     expect(s).toEqual({ phase: 'await-mimic', lessonIndex: 0, stepIndex: 1 });
   });
 
-  it('await-mimic → bot-demo (same lesson/step)', () => {
+  it('await-mimic → intro (skip bot-demo: it would auto-run and bounce back)', () => {
     const s = mimicReducer(at('await-mimic', 1, 0), { type: 'GO_BACK_LAYER' }, LESSONS);
-    expect(s).toEqual({ phase: 'bot-demo', lessonIndex: 1, stepIndex: 0 });
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 1, stepIndex: 0 });
   });
 
   it('bot-demo → intro (same lesson/step)', () => {

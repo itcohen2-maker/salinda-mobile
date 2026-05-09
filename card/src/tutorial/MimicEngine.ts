@@ -75,7 +75,9 @@ export function mimicReducer(
 
   if (action.type === 'GO_BACK_LAYER') {
     if (state.phase === 'celebrate') return { ...state, phase: 'await-mimic' };
-    if (state.phase === 'await-mimic') return { ...state, phase: 'bot-demo' };
+    // await-mimic → intro (skip bot-demo: it would auto-run and immediately
+    // fire BOT_DEMO_DONE, bouncing back to await-mimic before user sees anything).
+    if (state.phase === 'await-mimic') return { ...state, phase: 'intro' };
     if (state.phase === 'bot-demo') return { ...state, phase: 'intro' };
     if (state.phase === 'intro') {
       if (state.stepIndex > 0) {
