@@ -6,14 +6,31 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
-import { botStepDelayRange } from './shared/botPlan';
+import type { ClassroomLaunchConfig, OverflowSwapPileChoice, OverflowSwapStage } from './shared/types';
+import {
+  applyOperation as _applyOperation,
+  fractionDenominator,
+  getEffectiveNumber,
+  getStagedPermutations,
+  validateFractionPlay,
+  validateIdenticalPlay,
+  validateStagedCards,
+} from './shared/cardValidation';
+import { botStepDelayRange, getSolvableTargetOptions } from './shared/botPlan';
+import {
+  OVERFLOW_SWAP_THRESHOLD,
+  OVERFLOW_SWAP_TIMER_SECONDS,
+  orderHandForFan,
+  pickBotOverflowSwap,
+  pickOverflowTimeoutHandCardId,
+} from './shared/overflowSwap';
 import { decideBotAction } from './src/bot/botBrain';
 import { translateBotAction } from './src/bot/executor';
 import type { BotAction } from './src/bot/types';
 import {
   I18nManager, View, Text, TextInput, ScrollView, TouchableOpacity, Image, ImageBackground, BackHandler,
   StyleSheet, Animated, Easing, Dimensions, Modal as RNModal, Platform, PanResponder, Alert,
-  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, NativeModules, AppState,
+  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, NativeModules, AppState, Vibration,
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -33,6 +50,7 @@ import { HappyBubble } from './src/components/HappyBubble';
 import { GoldDiceButton } from './components/GoldDiceButton';
 import { LulosButton } from './components/LulosButton';
 import { CasinoButton } from './components/CasinoButton';
+import { SpinningCard } from './src/components/SpinningCard';
 import { WalkingDice } from './components/WalkingDice';
 import FuseTimer from './components/FuseTimer';
 import ExcellenceMeter from './components/ExcellenceMeter';
@@ -80,6 +98,9 @@ console.error = (...args: any[]) => {
 
 const pokerTableImg = require('./assets/table_green_default.png');
 const gameBgImg = require('./assets/bg.jpg');
+const brandedCardBackPreviewImg = require('./assets/card-back-salinda-preview.png');
+const salindaFrontCardImg = require('./assets/salinda.jpg');
+const salindaShopCardImg = require('./assets/salinda-transparent.png');
 const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
@@ -88,7 +109,7 @@ import { ShopScreen } from './src/screens/ShopScreen';
 import { LobbyScreen, LanguageToggle, parseJoinParamsFromUrl } from './src/screens/OnlineTableScreens';
 import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
 import { CelebrationMockupRoom } from './src/screens/CelebrationMockupRoom';
-import { ExtractedMeterCelebrationOverlayCard } from './src/components/ExtractedMeterCelebration';
+import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
 import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } from './shared/gameConstants';
 import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
@@ -133,7 +154,7 @@ const HAND_MINI_RESULTS_BOTTOM = HAND_ZONE_TOP - 10;
  * - EQUATION_BUILDER_FINE_OFFSET_Y / _X: מזיזים רק את תוכן המשוואה בתוך השולחן (לא את תמונת השולחן).
  */
 const EQUATION_TABLE_TOP = 205;
-const EQUATION_TABLE_SHIFT_X = 10;
+const EQUATION_TABLE_SHIFT_X = 0;
 const EQUATION_BUILDER_FINE_OFFSET_Y = -2;
 /** היסט אופקי של המשוואה בלבד; שלילי = שמאלה (LTR), חיובי = ימינה */
 const EQUATION_BUILDER_FINE_OFFSET_X = -15;
@@ -522,6 +543,15 @@ function mergePlayersIntoStoredProfiles(
 
 /** שברי ברירת מחדל למסך ההגדרות המתקדמות. */
 
+interface SoloSessionStats {
+  startedAtMs: number;
+  finishedAtMs: number | null;
+  durationMs: number | null;
+  drawCount: number;
+  swapCount: number;
+  fullEquationCount: number;
+}
+
 interface GameState {
   phase: GamePhase;
   players: Player[];
@@ -570,7 +600,7 @@ interface GameState {
   lastDiscardCount: number;
   lastEquationDisplay: string | null;
   difficulty: 'easy' | 'full';
-  mode: 'pass-and-play' | 'vs-bot';
+  mode: 'pass-and-play' | 'vs-bot' | 'solo';
   diceMode: '2' | '3';
   showFractions: boolean;
   /** מכנים לכלול בחבילה כש־showFractions */
@@ -604,6 +634,12 @@ interface GameState {
   openingDrawId?: string | null;
   /** משחק מקוון — מועד יעד (epoch ms) לפעולת תור; null כשלא במצב המתנה */
   turnDeadlineAt?: number | null;
+  overflowSwapPending: boolean;
+  overflowSwapDeadlineAt: number | null;
+  overflowSwapCanUseUnderTop: boolean;
+  overflowSwapStage: OverflowSwapStage | null;
+  overflowSwapSelectedPileChoice: OverflowSwapPileChoice | null;
+  overflowSwapSelectedHandCardId: string | null;
   /** צלילי משחק — false = השתקה (נשמר ב־AsyncStorage) */
   soundsEnabled: boolean;
   /** טבלת טורניר — למשחק הנוכחי בלבד; מאופסת בתחילת כל START_GAME */
@@ -614,6 +650,8 @@ interface GameState {
   possibleResultsInfoCountedThisTurn: boolean;
   /** סלינדה: ניסיון אחד בלבד בכל מסך מעבר תור, גם אם המשתמש סגר בלי לבחור. */
   slindaAttemptedThisTurn: boolean;
+  /** פרא: ניסיון אחד בלבד בכל מסך מעבר תור, גם אם המשתמש סגר בלי לבחור. */
+  wildAttemptedThisTurn: boolean;
   /** מקוון: המשתמש סגר את בועת קלף זהה לפני ש-callback השני מהשרת הסיר את identicalCelebration */
   suppressIdenticalOverlayOnline: boolean;
   /** Bot configuration for offline vs-bot mode. null = pass-and-play (no bots). See spec §0.4. */
@@ -652,6 +690,8 @@ interface GameState {
   currentTurnPlayedCards: Card[];
   /** Cards played in the previous turn — displayed on TurnTransition screen. */
   lastTurnPlayedCards: Card[];
+  /** Solo-only tracking shown on the victory summary screen. */
+  soloSessionStats: SoloSessionStats | null;
 }
 
 interface Notification {
@@ -870,34 +910,7 @@ function sortHandCards(cards: Card[]): Card[] {
   // push her to the end. Skip the sort so the learner sees Slinda right
   // where the bot is about to pulse her.
   if (tutorialBus.getTutorialPreserveHandOrder()) return cards;
-  const groupOrder: Record<CardType, number> = {
-    number: 0,
-    wild: 0,
-    fraction: 1,
-    operation: 2,
-    joker: 2,
-  };
-
-  return [...cards].sort((a, b) => {
-    const ga = groupOrder[a.type] ?? 99;
-    const gb = groupOrder[b.type] ?? 99;
-    if (ga !== gb) return ga - gb;
-
-    if (a.type === 'number' && b.type === 'number') return (a.value ?? 0) - (b.value ?? 0);
-    if (a.type === 'number' && b.type === 'wild') return -1;
-    if (a.type === 'wild' && b.type === 'number') return 1;
-
-    if (a.type === 'fraction' && b.type === 'fraction') {
-      return (a.fraction ?? '').localeCompare(b.fraction ?? '', 'he');
-    }
-    if (a.type === 'operation' && b.type === 'operation') {
-      return (a.operation ?? '').localeCompare(b.operation ?? '', 'en');
-    }
-    if (a.type === 'operation' && b.type === 'joker') return -1;
-    if (a.type === 'joker' && b.type === 'operation') return 1;
-
-    return 0;
-  });
+  return orderHandForFan(cards);
 }
 
 function normalizeRestoredNotifications(payload: unknown): Notification[] {
@@ -939,7 +952,7 @@ interface MoveHistoryEntry {
 export type EquationCommitPayload = { cardId: string; position: 0 | 1; jokerAs: Operation | null };
 
 type GameAction =
-  | { type: 'START_GAME'; players: { name: string; isBot?: boolean; progress?: StoredPlayerProgressSnapshot | null }[]; difficulty: 'easy' | 'full'; fractions: boolean; fractionKinds?: Fraction[]; showPossibleResults: boolean; showSolveExercise: boolean; timerSetting: '60' | '90' | 'off' | 'custom'; timerCustomSeconds?: number; difficultyStage?: DifficultyStageId | string; enabledOperators?: Operation[]; allowNegativeTargets?: boolean; mathRangeMax?: 12 | 25; abVariant?: AbVariant; mode: 'pass-and-play' | 'vs-bot'; botDifficulty?: BotDifficulty; isTutorial?: boolean }
+  | { type: 'START_GAME'; players: { name: string; isBot?: boolean; progress?: StoredPlayerProgressSnapshot | null }[]; difficulty: 'easy' | 'full'; fractions: boolean; fractionKinds?: Fraction[]; showPossibleResults: boolean; showSolveExercise: boolean; timerSetting: '60' | '90' | 'off' | 'custom'; timerCustomSeconds?: number; difficultyStage?: DifficultyStageId | string; enabledOperators?: Operation[]; allowNegativeTargets?: boolean; mathRangeMax?: 12 | 25; abVariant?: AbVariant; mode: 'pass-and-play' | 'vs-bot' | 'solo'; botDifficulty?: BotDifficulty; isTutorial?: boolean }
   | { type: 'PLAY_AGAIN' }
   | { type: 'NEXT_TURN' }
   | { type: 'BEGIN_TURN' }
@@ -972,6 +985,9 @@ type GameAction =
   | { type: 'ADD_SLINDA_TO_HAND' }
   | { type: 'MARK_SLINDA_ATTEMPT' }
   | { type: 'REPLACE_CARD_WITH_SLINDA'; cardId: string }
+  | { type: 'MARK_WILD_ATTEMPT' }
+  | { type: 'REPLACE_CARD_WITH_WILD'; cardId: string }
+  | { type: 'RESOLVE_OVERFLOW_SWAP'; handCardId?: string; pileChoice?: OverflowSwapPileChoice }
   | { type: 'DISMISS_IDENTICAL_ALERT' }
   | { type: 'SUPPRESS_ONLINE_IDENTICAL_OVERLAY' }
   | { type: 'CLEAR_ONLINE_IDENTICAL_SUPPRESS' }
@@ -1026,15 +1042,7 @@ const fracTapIntercept = { fn: null as ((card: Card) => boolean) | null };
 //  ARITHMETIC — שתי קוביות: L?R. שלוש קוביות: סדר פעולות רגיל (כמו server/equations)
 // ???????????????????????????????????????????????????????????????
 
-function applyOperation(a: number, op: Operation | string, b: number): number | null {
-  switch (op) {
-    case '+': return a + b;
-    case '-': return a - b;
-    case 'x': case '*': case '×': return a * b;
-    case '÷': case '/': return b !== 0 && a % b === 0 ? a / b : null;
-    default: return null;
-  }
-}
+const applyOperation = _applyOperation;
 
 function isHighPrecedence(op: string): boolean {
   return op === 'x' || op === '×' || op === '*' || op === '÷' || op === '/';
@@ -1054,10 +1062,6 @@ function evalThreeTerms(a: number, op1: string, b: number, op2: string, c: numbe
   return applyOperation(left, op2, c);
 }
 
-function fractionDenominator(f: Fraction): number {
-  switch (f) { case '1/2': return 2; case '1/3': return 3; case '1/4': return 4; case '1/5': return 5; }
-}
-
 function isDivisibleByFraction(value: number, f: Fraction): boolean {
   const d = fractionDenominator(f);
   return value % d === 0 && value > 0;
@@ -1073,15 +1077,6 @@ function validWildValuesForFractionDefense(penalty: number, maxWild: number): nu
   return vals;
 }
 
-function validateFractionPlay(card: Card, topDiscard: Card | undefined): boolean {
-  if (!card.fraction || !topDiscard) return false;
-  // Wild (פרא) על הערימה מקבל `resolvedValue` והוא אמור להתנהג כמו מספר לכל חוקי השבר.
-  // בלי זה, למשל פרא=22 עם `1/2` ייחשב בטעות כ"לא מתחלק".
-  if (topDiscard.type !== 'number' && topDiscard.type !== 'wild') return false;
-  const effective = getEffectiveNumber(topDiscard);
-  if (effective === null) return false;
-  return isDivisibleByFraction(effective, card.fraction as Fraction);
-}
 
 function getHandSlotOperation(slot: EquationHandSlot | null): Operation | null {
   if (!slot) return null;
@@ -1320,91 +1315,7 @@ function generateValidTargets(
 //  VALIDATION
 // ???????????????????????????????????????????????????????????????
 
-function validateIdenticalPlay(card: Card, topDiscard: Card | undefined): boolean {
-  if (!topDiscard) return false;
-  // קלף פרא נספר כאותו מספר — מותר להניח פרא כ"זהה" כשראש הערימה קלף מספר (או פרא)
-  if (card.type === 'wild') return topDiscard.type === 'number' || topDiscard.type === 'wild';
-  if (card.type !== topDiscard.type) return false;
-  switch (card.type) {
-    case 'number': return card.value === topDiscard.value;
-    case 'fraction': return card.fraction === topDiscard.fraction;
-    case 'operation': return card.operation === topDiscard.operation;
-    case 'joker': return topDiscard.type === 'joker';
-    default: return false;
-  }
-}
 
-/** ערך מספרי אפקטיבי של קלף: מספר ? value, פרא על הערימה ? resolvedValue. */
-function getEffectiveNumber(card: Card | undefined): number | null {
-  if (!card) return null;
-  if (card.type === 'number') return card.value ?? null;
-  if (card.type === 'wild') return card.resolvedValue ?? null;
-  return null;
-}
-
-function getStagedPermutations(arr: number[]): number[][] {
-  if (arr.length <= 1) return [arr];
-  const result: number[][] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
-    for (const perm of getStagedPermutations(rest)) result.push([arr[i], ...perm]);
-  }
-  return result;
-}
-
-function validateStagedCards(
-  numberCards: Card[],
-  opCard: Card | null,
-  target: number,
-  maxWild: number = 25,
-): boolean {
-  const cap = Math.max(0, Math.min(25, maxWild));
-  const wildCount = numberCards.filter(c => c.type === 'wild').length;
-  const numCards = numberCards.filter(c => c.type === 'number');
-  const values = numCards.map(c => c.value ?? 0);
-  if (wildCount > 1) return false;
-  if (wildCount === 1) {
-    if (!opCard) {
-      const sum = values.reduce((s, v) => s + v, 0);
-      const wildVal = target - sum;
-      return wildVal >= 0 && wildVal <= cap && Number.isInteger(wildVal);
-    }
-    const op = opCard.operation!;
-    // חייבים 0..cap — לא עד target בלבד: למשל 4 ? פרא = 0 דורש פרא=4 כש-target הוא 0
-    for (let wildVal = 0; wildVal <= cap; wildVal++) {
-      const allVals = [...values, wildVal];
-      const perms = getStagedPermutations(allVals);
-      for (const perm of perms) {
-        for (let gapPos = 0; gapPos < perm.length - 1; gapPos++) {
-          let result: number | null = perm[0];
-          for (let i = 1; i < perm.length; i++) {
-            const useOp = i - 1 === gapPos ? op : '+';
-            result = applyOperation(result!, useOp as Operation, perm[i]);
-            if (result === null) break;
-          }
-          if (result !== null && result === target) return true;
-        }
-      }
-    }
-    return false;
-  }
-  if (values.length === 0) return false;
-  if (!opCard) return values.reduce((s, v) => s + v, 0) === target;
-  const op = opCard.operation!;
-  const perms = getStagedPermutations(values);
-  for (const perm of perms) {
-    for (let gapPos = 0; gapPos < perm.length - 1; gapPos++) {
-      let result: number | null = perm[0];
-      for (let i = 1; i < perm.length; i++) {
-        const useOp = i - 1 === gapPos ? op : '+';
-        result = applyOperation(result!, useOp as Operation, perm[i]);
-        if (result === null) break;
-      }
-      if (result !== null && result === target) return true;
-    }
-  }
-  return false;
-}
 
 function computeWildValueInStaged(
   numberCards: Card[],
@@ -1446,11 +1357,9 @@ function getL11MultiPlayTutorialMissingKey(
 ): string | null {
   if (!tutorialBus.getL11StrictMultiPlayMode() || !cfg?.includeWild) return null;
   const positiveNumberCount = stagedCards.filter(c => c.type === 'number' && (c.value ?? 0) > 0).length;
-  const hasZero = stagedCards.some(c => c.type === 'number' && c.value === 0);
   const hasWild = stagedCards.some(c => c.type === 'wild');
 
   if (positiveNumberCount < 1) return 'tutorial.multiPlayExerciseMore.needNumber';
-  if (!hasZero) return 'tutorial.multiPlayExerciseMore.needZero';
   if (positiveNumberCount < 2) return 'tutorial.multiPlayExerciseMore.needSecondNumber';
   if (!hasWild) return 'tutorial.multiPlayExerciseMore.needWild';
   return null;
@@ -1531,11 +1440,18 @@ const initialState: GameState = {
   guidanceEnabled: null,
   hasSeenIntroHint: false,
   hasSeenSolvedHint: false,
+  overflowSwapPending: false,
+  overflowSwapDeadlineAt: null,
+  overflowSwapCanUseUnderTop: false,
+  overflowSwapStage: null,
+  overflowSwapSelectedPileChoice: null,
+  overflowSwapSelectedHandCardId: null,
   soundsEnabled: false,
   tournamentTable: [],
   possibleResultsInfoUses: 0,
   possibleResultsInfoCountedThisTurn: false,
   slindaAttemptedThisTurn: false,
+  wildAttemptedThisTurn: false,
   suppressIdenticalOverlayOnline: false,
   botConfig: null,
   hostBotDifficulty: null,
@@ -1552,7 +1468,63 @@ const initialState: GameState = {
   isTutorial: false,
   currentTurnPlayedCards: [],
   lastTurnPlayedCards: [],
+  soloSessionStats: null,
 };
+
+function createSoloSessionStats(startedAtMs: number = Date.now()): SoloSessionStats {
+  return {
+    startedAtMs,
+    finishedAtMs: null,
+    durationMs: null,
+    drawCount: 0,
+    swapCount: 0,
+    fullEquationCount: 0,
+  };
+}
+
+function shouldShowDrawForfeitButton(
+  st: Pick<
+    GameState,
+    'phase' | 'hasPlayedCards' | 'pendingFractionTarget' | 'isTutorial' | 'hasDrawnCard' | 'overflowSwapPending'
+  >,
+  canRoll: boolean,
+): boolean {
+  const pr = st.phase === 'pre-roll';
+  const bl = st.phase === 'building';
+  const so = st.phase === 'solved';
+  const actionLocked = st.hasDrawnCard || st.overflowSwapPending;
+  const fracMin = pr && st.pendingFractionTarget !== null;
+  const showDraw = (bl || so) && !st.hasPlayedCards && st.pendingFractionTarget === null && !st.isTutorial && !actionLocked;
+  const showFracDraw = fracMin && !st.hasPlayedCards && !actionLocked;
+  const btnCount = (canRoll ? 1 : 0) + (showDraw ? 1 : 0) + (showFracDraw ? 1 : 0);
+  const abEndTurn = (pr || bl || so) && st.hasPlayedCards;
+  const totalBtns = btnCount + (abEndTurn ? 1 : 0);
+  const showFallback = totalBtns === 0 && (pr || bl || so) && !st.isTutorial && !actionLocked;
+  return showDraw || showFracDraw || showFallback;
+}
+
+function incrementSoloSessionCounter(
+  stats: SoloSessionStats | null,
+  key: 'drawCount' | 'swapCount' | 'fullEquationCount',
+): SoloSessionStats | null {
+  if (!stats) return stats;
+  return {
+    ...stats,
+    [key]: stats[key] + 1,
+  };
+}
+
+function finalizeSoloSessionStats(
+  stats: SoloSessionStats | null,
+  finishedAtMs: number = Date.now(),
+): SoloSessionStats | null {
+  if (!stats) return stats;
+  return {
+    ...stats,
+    finishedAtMs,
+    durationMs: Math.max(0, finishedAtMs - stats.startedAtMs),
+  };
+}
 
 function reshuffleDiscard(st: GameState): GameState {
   if (st.drawPile.length > 0 || st.discardPile.length <= 1) return st;
@@ -1563,6 +1535,7 @@ function reshuffleDiscard(st: GameState): GameState {
 function drawFromPile(st: GameState, count: number, pi: number): GameState {
   let s = { ...st, players: st.players.map(p => ({ ...p, hand: [...p.hand] })) };
   for (let i = 0; i < count; i++) {
+    if ((s.players[pi]?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) break;
     s = reshuffleDiscard(s);
     if (s.drawPile.length === 0) break;
     s.players[pi].hand.push(s.drawPile[0]);
@@ -1602,6 +1575,7 @@ function checkWin(st: GameState): GameState {
   // burns two numbers at once) that skips straight from 3 ? 1 still triggers
   // the game-over instead of leaving the player stuck below the threshold.
   if (cp.hand.length <= 2) {
+    const finishedAtMs = Date.now();
     const tournamentTable = st.tournamentTable.map((row) => {
       if (row.playerId === cp.id) return { ...row, wins: row.wins + 1 };
       return { ...row, losses: row.losses + 1 };
@@ -1615,9 +1589,140 @@ function checkWin(st: GameState): GameState {
       winner: cp,
       tournamentTable,
       lastTurnPlayedCards: winningPlayedCards,
+      soloSessionStats: st.mode === 'solo'
+        ? finalizeSoloSessionStats(st.soloSessionStats, finishedAtMs)
+        : st.soloSessionStats,
     };
   }
   return st;
+}
+
+function withOverflowSwapTurnTransition(st: GameState): GameState {
+  if (st.phase !== 'turn-transition' || st.isTutorial) {
+    return {
+      ...st,
+      overflowSwapPending: false,
+      overflowSwapDeadlineAt: null,
+      overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null,
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: null,
+    };
+  }
+  const currentPlayer = st.players[st.currentPlayerIndex];
+  const overflowSwapPending = (currentPlayer?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD;
+  return {
+    ...st,
+    overflowSwapPending,
+    overflowSwapDeadlineAt: overflowSwapPending ? Date.now() + OVERFLOW_SWAP_TIMER_SECONDS * 1000 : null,
+    overflowSwapCanUseUnderTop: overflowSwapPending && st.discardPile.length > 1,
+    overflowSwapStage: overflowSwapPending ? 'hand' : null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
+  };
+}
+
+function resolveOverflowSwapAndBeginTurn(
+  st: GameState,
+  tf: (key: string, params?: MsgParams) => string,
+  handCardId?: string,
+  pileChoice: OverflowSwapPileChoice = 'top',
+): GameState {
+  if (!st.overflowSwapPending) return st;
+  const isMidTurnSwap = st.phase !== 'turn-transition';
+  const cpIdx = st.currentPlayerIndex;
+  const cp = st.players[cpIdx];
+  if (!cp || cp.hand.length === 0 || st.discardPile.length === 0) return st;
+  const activeStage: OverflowSwapStage = st.overflowSwapStage ?? 'hand';
+  if (activeStage === 'hand') {
+    const chosenHandCardId = handCardId ?? pickOverflowTimeoutHandCardId(cp.hand) ?? null;
+    if (chosenHandCardId == null) return st;
+    const chosenHandCard = cp.hand.find((card) => card.id === chosenHandCardId);
+    if (!chosenHandCard) return st;
+    const stagedState: GameState = {
+      ...st,
+      overflowSwapStage: 'pile',
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: chosenHandCardId,
+      overflowSwapDeadlineAt: Date.now() + OVERFLOW_SWAP_TIMER_SECONDS * 1000,
+    };
+    return stagedState;
+  }
+
+  const resolvedPileChoice = pileChoice ?? st.overflowSwapSelectedPileChoice ?? 'top';
+  if (resolvedPileChoice === 'underTop' && (!st.overflowSwapCanUseUnderTop || st.discardPile.length < 2)) return st;
+  const resolvedHandCardId = st.overflowSwapSelectedHandCardId ?? handCardId ?? null;
+  if (resolvedHandCardId == null) return st;
+  const selectedCard =
+    cp.hand.find((card) => card.id === resolvedHandCardId);
+  if (!selectedCard) return st;
+
+  if (resolvedPileChoice === 'random') {
+    let drawPile = st.drawPile;
+    let discardPile = st.discardPile;
+    if (drawPile.length === 0) {
+      const top = discardPile[discardPile.length - 1];
+      drawPile = shuffle(discardPile.slice(0, -1));
+      discardPile = top ? [top] : [];
+    }
+    if (drawPile.length === 0) return st;
+    const incomingCard = drawPile[0];
+    const cleared = {
+      ...st,
+      players: st.players.map((pl, idx) => (idx === cpIdx ? { ...pl, hand: pl.hand.map((c) => (c.id === selectedCard.id ? incomingCard : c)) } : pl)),
+      drawPile: drawPile.slice(1),
+      discardPile: [...discardPile, selectedCard],
+      activeOperation: null, challengeSource: null, selectedCards: [],
+      equationHandSlots: [null, null] as [null, null], equationHandPick: null, message: '',
+      lastMoveMessage: st.lastMoveMessage,
+      overflowSwapPending: false, overflowSwapDeadlineAt: null, overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null, overflowSwapSelectedPileChoice: null, overflowSwapSelectedHandCardId: null,
+    };
+    if (isMidTurnSwap) return cleared;
+    return gameReducer(cleared, { type: 'BEGIN_TURN' }, tf);
+  }
+
+  const useUnderTop = resolvedPileChoice === 'underTop';
+  const incomingIndex = useUnderTop ? st.discardPile.length - 2 : st.discardPile.length - 1;
+  const incomingCard = st.discardPile[incomingIndex];
+  if (!incomingCard) return st;
+
+  const updatedHand = cp.hand.map((card) => (card.id === selectedCard.id ? incomingCard : card));
+  const updatedDiscardPile = useUnderTop
+    ? [
+        ...st.discardPile.slice(0, incomingIndex),
+        selectedCard,
+        ...st.discardPile.slice(incomingIndex + 1),
+      ]
+    : [
+        ...st.discardPile.slice(0, -1),
+        selectedCard,
+      ];
+  const cleared = {
+    ...st,
+    players: st.players.map((player, idx) => (idx === cpIdx ? { ...player, hand: updatedHand } : player)),
+    discardPile: updatedDiscardPile,
+    soloSessionStats: st.mode === 'solo' && handCardId != null
+      ? incrementSoloSessionCounter(st.soloSessionStats, 'swapCount')
+      : st.soloSessionStats,
+    activeOperation: null,
+    challengeSource: null,
+    selectedCards: [],
+    equationHandSlots: [null, null] as [null, null],
+    equationHandPick: null,
+    message: '',
+    lastMoveMessage: handCardId == null && st.overflowSwapSelectedHandCardId == null
+      ? tf('toast.overflowSwapAutoResolved', { name: cp.name })
+      : st.lastMoveMessage,
+    overflowSwapPending: false,
+    overflowSwapDeadlineAt: null,
+    overflowSwapCanUseUnderTop: false,
+    overflowSwapStage: null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
+  };
+  if (isMidTurnSwap) return cleared;
+  return gameReducer(cleared, { type: 'BEGIN_TURN' }, tf);
 }
 
 function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => string): GameState {
@@ -1649,7 +1754,7 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     }
   }
 
-  return {
+  return withOverflowSwapTurnTransition({
     ...s,
     rolledTripleThisTurn: false,
     notifications: nextNotifications,
@@ -1667,6 +1772,7 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     roundsPlayed: s.roundsPlayed + 1,
     possibleResultsInfoCountedThisTurn: false,
     slindaAttemptedThisTurn: false,
+    wildAttemptedThisTurn: false,
     botPendingStagedIds: null,
     botPendingDemoActions: null,
     botNoSolutionTicks: 0,
@@ -1678,7 +1784,7 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     botPostEquationPauseTicks: 0,
     lastTurnPlayedCards: s.currentTurnPlayedCards,
     currentTurnPlayedCards: [],
-  };
+  });
 }
 
 const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
@@ -1688,6 +1794,7 @@ const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
   3: 100,
 };
 const EXCELLENCE_METER_FULL_REWARD_COINS = 1;
+const PRE_VICTORY_METER_CELEBRATION_HOLD_MS = 2800;
 
 function clampCourageStep(step: number): number {
   return Math.max(0, Math.min(3, step));
@@ -1720,6 +1827,16 @@ function applyCourageStepReward(st: GameState, reason: string): GameState {
     lastCourageRewardReason: reason,
     lastCourageCoinsAwarded: isFull,
   };
+}
+
+function shouldDelayVictoryForMeterCelebration(st: GameState): boolean {
+  const currentPlayer = st.players[st.currentPlayerIndex];
+  return (
+    st.phase === 'game-over' &&
+    st.lastCourageCoinsAwarded &&
+    !st.isTutorial &&
+    !(currentPlayer?.isBot ?? false)
+  );
 }
 
 function gameReducer(
@@ -1790,6 +1907,7 @@ function gameReducer(
         }
       }
       if (!firstDiscard) { firstDiscard = drawPile[0]; drawPile = drawPile.slice(1); }
+      const nextMode = action.type === 'PLAY_AGAIN' ? st.mode : action.mode;
       const botConfig: GameState['botConfig'] =
         action.type === 'PLAY_AGAIN'
           ? st.botConfig
@@ -1801,18 +1919,24 @@ function gameReducer(
                   .filter((id) => id >= 0),
               }
             : null;
-      // Randomize the first player every local game (pass-and-play AND vs-bot).
-      // openingDrawId drives the "who starts" celebration bubble in both modes.
-      const firstPlayerIndex = Math.floor(Math.random() * playersSeed.length);
-      const localOpeningDrawId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      return {
+      // Solo starts immediately with the single local player, so there is no
+      // need for an opening draw or a "who starts" celebration.
+      const hasOpeningDraw = nextMode !== 'solo';
+      const firstPlayerIndex = hasOpeningDraw
+        ? Math.floor(Math.random() * playersSeed.length)
+        : 0;
+      const gameStartedAtMs = Date.now();
+      const localOpeningDrawId = hasOpeningDraw
+        ? `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        : null;
+      return withOverflowSwapTurnTransition({
         ...initialState,
         // אל תאפס דגלי הדרכה חד־פעמיים כאשר מתחילים משחק חדש
         hasSeenIntroHint: st.hasSeenIntroHint,
         hasSeenSolvedHint: st.hasSeenSolvedHint,
         soundsEnabled: st.soundsEnabled,
         guidanceEnabled: st.guidanceEnabled,
-        phase: 'turn-transition', difficulty, mode: action.type === 'PLAY_AGAIN' ? st.mode : action.mode, diceMode,
+        phase: 'turn-transition', difficulty, mode: nextMode, diceMode,
         difficultyStage: stage,
         stageTransitions: action.type === 'PLAY_AGAIN' ? st.stageTransitions : STAGE_SEQUENCE.indexOf(stage),
         mathRangeMax,
@@ -1821,7 +1945,7 @@ function gameReducer(
         abVariant,
         equationAttempts: 0,
         equationSuccesses: 0,
-        turnStartedAt: Date.now(),
+        turnStartedAt: gameStartedAtMs,
         totalEquationResponseMs: 0,
         showFractions: fractions,
         fractionKinds,
@@ -1839,7 +1963,8 @@ function gameReducer(
             courageMeterStep: progress.courageMeterStep,
             courageMeterPercent: progress.courageMeterPercent,
             courageRewardPulseId: 0,
-            courageCoins: progress.courageCoins,
+            // Courage-meter coins are per-match only; wallet persistence is handled separately.
+            courageCoins: 0,
             lastCourageCoinsAwarded: false,
             courageDiscardSuccessStreak: 0,
           };
@@ -1867,13 +1992,16 @@ function gameReducer(
         botPostEquationPauseTicks: 0,
         botTickSeq: 0,
         isTutorial: action.type === 'START_GAME' && !!action.isTutorial,
-      };
+        soloSessionStats: (action.type === 'PLAY_AGAIN' ? st.mode : action.mode) === 'solo'
+          ? createSoloSessionStats(gameStartedAtMs)
+          : null,
+      });
     }
     case 'NEXT_TURN': {
       console.log('NEXT_TURN, pendingFractionTarget was:', st.pendingFractionTarget);
       AsyncStorage.removeItem('lulos_guidance_notifications');
       const next = (st.currentPlayerIndex + 1) % st.players.length;
-      return {
+      return withOverflowSwapTurnTransition({
         ...st,
         notifications: [],
         players: st.players.map(p => ({ ...p, calledLolos: false })),
@@ -1899,6 +2027,7 @@ function gameReducer(
         equationHandPick: null,
         possibleResultsInfoCountedThisTurn: false,
         slindaAttemptedThisTurn: false,
+        wildAttemptedThisTurn: false,
         botPendingStagedIds: null,
         botPendingDemoActions: null,
         botNoSolutionTicks: 0,
@@ -1911,9 +2040,10 @@ function gameReducer(
         botConfirmDemoShownThisTurn: false,
         botPostEquationPauseTicks: 0,
         rolledTripleThisTurn: false,
-      };
+      });
     }
     case 'BEGIN_TURN': {
+      if (st.overflowSwapPending) return st;
       console.log('BEGIN_TURN: pendingFractionTarget=', st.pendingFractionTarget, 'fractionAttackResolved=', st.fractionAttackResolved, 'topCard=', st.discardPile[st.discardPile.length-1]?.type, st.discardPile[st.discardPile.length-1]?.fraction);
       // activeOperation is purely informational — challenge card stays on pile, player plays normally
       // Fraction attack: explicit pending attack (from PLAY_FRACTION)
@@ -2001,7 +2131,12 @@ function gameReducer(
     }
     case 'CONFIRM_EQUATION': {
       if (st.phase !== 'building') return st;
-      if (!st.validTargets.some((target) => target.result === action.result)) {
+      const l4GuidedValidSums =
+        st.isTutorial && tutorialBus.getL4GuidedEqValidationMode()
+          ? (tutorialBus.getL4Config()?.validSums ?? [])
+          : [];
+      const isL4GuidedResult = Number.isInteger(action.result) && l4GuidedValidSums.includes(action.result);
+      if (!st.validTargets.some((target) => target.result === action.result) && !isL4GuidedResult) {
         return { ...st, message: tf('equation.invalidResult') };
       }
       if (!equationMatchesDiceAndResult(action.equationDisplay, action.result, st.dice)) {
@@ -2111,7 +2246,11 @@ function gameReducer(
       }
       if (st.equationResult === null) return st;
       if (!validateStagedCards(stNumbers, stOpCard, st.equationResult, st.mathRangeMax ?? 25)) {
-        return { ...st, message: tf('confirm.sumMismatch') };
+        const mismatchKey =
+          st.isTutorial && tutorialBus.getL6WildStepMode()
+            ? 'tutorial.l6c.mismatch'
+            : 'confirm.sumMismatch';
+        return { ...st, message: tf(mismatchKey) };
       }
       // Valid — remove staged cards + equation operator card from hand
       const stIds = new Set(st.stagedCards.map(c => c.id));
@@ -2137,6 +2276,12 @@ function gameReducer(
       // Condition 1: used all 3 dice (equation display has 2+ operators before '=')
       const eqBefore = (st.lastEquationDisplay ?? '').split('=')[0] ?? '';
       const usedAllDice = (eqBefore.match(/[+×÷-]/g) ?? []).length >= 2;
+      if (usedAllDice && st.mode === 'solo') {
+        stNs = {
+          ...stNs,
+          soloSessionStats: incrementSoloSessionCounter(stNs.soloSessionStats, 'fullEquationCount'),
+        };
+      }
       if (usedAllDice) {
         stNs = applyCourageStepReward(stNs, tf('courage.reason.fullEquation'));
       }
@@ -2313,7 +2458,7 @@ function gameReducer(
         const next = (ns.currentPlayerIndex + 1) % ns.players.length;
         const blockFracUni = getFractionDisplay(action.card.fraction);
         const blockMsg = tf('local.fractionBlockToast', { name: cp.name, fraction: String(blockFracUni ?? action.card.fraction ?? '?') });
-        return {
+        return withOverflowSwapTurnTransition({
           ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
           currentPlayerIndex: next, phase: 'turn-transition', dice: null,
           selectedCards: [], stagedCards: [], equationResult: null, validTargets: [],
@@ -2323,12 +2468,13 @@ function gameReducer(
           pendingFractionTarget: newTarget, fractionPenalty: denom,
           fractionAttackResolved: false,
           slindaAttemptedThisTurn: false,
+          wildAttemptedThisTurn: false,
           lastMoveMessage: blockMsg,
           message: tf('local.fractionBlockMsg', { name: cp.name }),
           moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 1, description: blockMsg }],
           lastTurnPlayedCards: [...st.currentTurnPlayedCards, cardToDiscard],
           currentTurnPlayedCards: [],
-        };
+        });
       }
 
       // ?? ATTACK MODE: fraction played offensively ??
@@ -2350,7 +2496,7 @@ function gameReducer(
       const next = (ns.currentPlayerIndex + 1) % ns.players.length;
       const fracUni = getFractionDisplay(action.card.fraction);
       const atkMsg = tf('local.fractionAttackToast', { name: cp.name, fraction: String(fracUni ?? action.card.fraction ?? '?') });
-      return {
+      return withOverflowSwapTurnTransition({
         ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
         currentPlayerIndex: next, phase: 'turn-transition', dice: null,
         selectedCards: [], stagedCards: [], equationResult: null, validTargets: [],
@@ -2360,12 +2506,13 @@ function gameReducer(
         pendingFractionTarget: newTarget, fractionPenalty: denom,
         fractionAttackResolved: false,
         slindaAttemptedThisTurn: false,
+        wildAttemptedThisTurn: false,
         lastMoveMessage: atkMsg,
         message: tf('local.fractionAttackMsg', { name: cp.name }),
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 1, description: atkMsg }],
         lastTurnPlayedCards: [...st.currentTurnPlayedCards, cardToDiscard],
         currentTurnPlayedCards: [],
-      };
+      });
     }
     case 'DEFEND_FRACTION_SOLVE': {
       if (st.pendingFractionTarget === null) return st;
@@ -2431,6 +2578,8 @@ function gameReducer(
     case 'CLOSE_JOKER_MODAL': return { ...st, jokerModalOpen: false, selectedCards: [] };
     case 'ADD_SLINDA_TO_HAND': {
       const cpIdx = st.currentPlayerIndex;
+      const cp = st.players[cpIdx];
+      if ((cp?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) return st;
       const newCard: Card = { id: makeId(), type: 'joker' };
       const updatedPlayers = st.players.map((p, i) =>
         i === cpIdx ? { ...p, hand: [...p.hand, newCard] } : p,
@@ -2440,6 +2589,10 @@ function gameReducer(
     case 'MARK_SLINDA_ATTEMPT': {
       if (st.phase !== 'turn-transition' || st.slindaAttemptedThisTurn) return st;
       return { ...st, slindaAttemptedThisTurn: true };
+    }
+    case 'MARK_WILD_ATTEMPT': {
+      if (st.phase !== 'turn-transition' || st.wildAttemptedThisTurn) return st;
+      return { ...st, wildAttemptedThisTurn: true };
     }
     case 'REPLACE_CARD_WITH_SLINDA': {
       const cpIdx = st.currentPlayerIndex;
@@ -2461,6 +2614,29 @@ function gameReducer(
         slindaAttemptedThisTurn: true,
       };
     }
+    case 'REPLACE_CARD_WITH_WILD': {
+      const cpIdx = st.currentPlayerIndex;
+      const cp = st.players[cpIdx];
+      if (!cp) return st;
+      const replacedCard = cp.hand.find((card) => card.id === action.cardId);
+      if (!replacedCard) return st;
+      const newCard: Card = { id: makeId(), type: 'wild' };
+      const updatedHand = cp.hand.map((card) => (card.id === action.cardId ? newCard : card));
+      return {
+        ...st,
+        players: st.players.map((player, idx) => (idx === cpIdx ? { ...player, hand: updatedHand } : player)),
+        discardPile: [...st.discardPile, replacedCard],
+        activeOperation: null,
+        challengeSource: null,
+        selectedCards: [],
+        equationHandSlots: [null, null],
+        equationHandPick: null,
+        wildAttemptedThisTurn: true,
+      };
+    }
+    case 'RESOLVE_OVERFLOW_SWAP': {
+      return resolveOverflowSwapAndBeginTurn(st, tf, action.handCardId, action.pileChoice ?? 'top');
+    }
     case 'PLAY_JOKER': {
       return { ...st, jokerModalOpen: false, selectedCards: [], message: tf('joker.onlyInEquation') };
     }
@@ -2468,12 +2644,28 @@ function gameReducer(
       if (st.hasPlayedCards || st.hasDrawnCard) return st;
       const drawCp = st.players[st.currentPlayerIndex];
       const isTimeoutDraw = action.reason === 'turn-timeout';
+      if (!isTimeoutDraw && (drawCp?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) {
+        return {
+          ...st,
+          hasDrawnCard: true,
+          overflowSwapPending: true,
+          overflowSwapDeadlineAt: Date.now() + OVERFLOW_SWAP_TIMER_SECONDS * 1000,
+          overflowSwapCanUseUnderTop: st.discardPile.length > 1,
+          overflowSwapStage: 'hand',
+          overflowSwapSelectedPileChoice: null,
+          overflowSwapSelectedHandCardId: null,
+        };
+      }
       let s = reshuffleDiscard(st);
       if (s.drawPile.length === 0) return { ...s, hasDrawnCard: true, message: '' };
       const drawnCard = s.drawPile[0];
       s = drawFromPile(s, 1, s.currentPlayerIndex);
       const drawMsg = isTimeoutDraw
-        ? tf('toast.endTurnNoMove', { name: drawCp.name })
+        ? (
+            s.mode === 'solo'
+              ? tf('toast.endTurnNoMoveSolo')
+              : tf('toast.endTurnNoMove', { name: drawCp.name })
+          )
         : tf('toast.drawOne', { name: drawCp.name });
       s = {
         ...s,
@@ -2487,6 +2679,9 @@ function gameReducer(
         lastEquationDisplay: null,
         lastTurnPlayedCards: [],
         currentTurnPlayedCards: [],
+        soloSessionStats: s.mode === 'solo' && !isTimeoutDraw
+          ? incrementSoloSessionCounter(s.soloSessionStats, 'drawCount')
+          : s.soloSessionStats,
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: drawMsg }],
       };
       return endTurnLogic(s, tf);
@@ -2620,8 +2815,20 @@ function gameReducer(
       // of the human pressing "I'm ready"). Without this the game would freeze
       // because the lockUiForBotTurn overlay blocks all touches and the button is
       // hidden.
-      if (stWithTick.phase === 'turn-transition') {
+      if (stWithTick.phase === 'turn-transition' && !stWithTick.overflowSwapPending) {
         return gameReducer(stWithTick, { type: 'BEGIN_TURN' }, tf);
+      }
+
+      if (stWithTick.overflowSwapPending) {
+        const botCp = stWithTick.players[stWithTick.currentPlayerIndex];
+        const pileTop = stWithTick.discardPile[stWithTick.discardPile.length - 1] ?? null;
+        const underTop = stWithTick.discardPile[stWithTick.discardPile.length - 2] ?? null;
+        const botChoice = pickBotOverflowSwap(botCp?.hand ?? [], pileTop, underTop);
+        const botActiveStage = stWithTick.overflowSwapStage ?? 'hand';
+        if (botActiveStage === 'hand') {
+          return gameReducer(stWithTick, { type: 'RESOLVE_OVERFLOW_SWAP', handCardId: botChoice?.handCardId }, tf);
+        }
+        return gameReducer(stWithTick, { type: 'RESOLVE_OVERFLOW_SWAP', pileChoice: botChoice?.pileChoice ?? 'top' }, tf);
       }
 
       const pendingIds = stWithTick.botPendingStagedIds;
@@ -2845,6 +3052,7 @@ function gameReducer(
           case 'playFractionAttack':
           case 'playFractionBlock':
           case 'defendFractionSolve':
+          case 'resolveOverflowSwap':
           case 'stageCard':
           case 'unstageCard':
             return a.cardId;
@@ -3427,6 +3635,7 @@ function AppModal({
   boxStyle,
   topAligned = false,
   customHeader,
+  closeButtonSide = 'right',
   testID,
 }: {
   visible: boolean;
@@ -3438,8 +3647,19 @@ function AppModal({
   topAligned?: boolean;
   /** כותרת מותאמת (למשך רצף ויזואלי); אם מוגדר — לא משתמשים ב־title+? ברירת המחדל */
   customHeader?: React.ReactNode;
+  closeButtonSide?: 'left' | 'right';
   testID?: string;
 }) {
+  const renderCloseButton = () => (
+    <TouchableOpacity
+      onPress={onClose}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      style={mS.closeHit}
+    >
+      <Text style={mS.close}>{CLOSE_GLYPH}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <RNModal
       visible={visible}
@@ -3454,10 +3674,9 @@ function AppModal({
           customHeader
         ) : (
           <View style={mS.header}>
+            {closeButtonSide === 'left' ? renderCloseButton() : <View style={mS.closeSpacer} />}
             <Text style={mS.title}>{title ?? ''}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={mS.close}>{CLOSE_GLYPH}</Text>
-            </TouchableOpacity>
+            {closeButtonSide === 'right' ? renderCloseButton() : <View style={mS.closeSpacer} />}
           </View>
         )}
         <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
@@ -3471,6 +3690,8 @@ const mS = StyleSheet.create({
   overlayTop: { justifyContent:'flex-start', paddingTop: 10 },
   box: { backgroundColor:'#1F2937', borderRadius:16, padding:20, width:'100%', maxHeight:'80%', zIndex: 20001, elevation: 40 },
   header: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
+  closeHit: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  closeSpacer: { width: 28 },
   title: { color:'#FFF', fontSize:18, fontWeight:'700', flex:1, textAlign:'center' },
   close: { color:'#9CA3AF', fontSize:22 },
 });
@@ -3652,9 +3873,6 @@ function RulesContent({ state, pregame }: { state: GameState | null; pregame?: R
   const difficultyStage = state?.difficultyStage ?? pregame?.difficultyStage ?? 'H';
   const enabledOperators = state?.enabledOperators ?? pregame?.enabledOperators ?? (['+', '-'] as Operation[]);
   const showPossibleResults = state?.showPossibleResults ?? pregame?.showPossibleResults ?? true;
-  const kindsForDeckCounts =
-    !showFractions ? null : (fractionKinds.length > 0 ? fractionKinds : [...ALL_FRACTION_KINDS]);
-  const counts = getDeckCounts(range, showFractions, enabledOperators, kindsForDeckCounts);
   const hasFractionCardsInDeck =
     showFractions && fractionKinds.length > 0 && fractionCardCountFromKinds(true, fractionKinds) > 0;
   const rangeLabel = range === 'easy' ? '0–12' : '0–25';
@@ -3664,12 +3882,12 @@ function RulesContent({ state, pregame }: { state: GameState | null; pregame?: R
     frac: hasFractionCardsInDeck ? t('rules.sessionWithFractions') : t('rules.sessionNoFractions'),
     ops: formatOpsForRulesDisplay(enabledOperators),
   });
-  const cardTypeLines: { text: string; count: number; detail?: string }[] = [
-    { text: t('rulesLine.numCard'), count: counts.numCount },
-    { text: t('rulesLine.fracCard'), count: counts.fracCount, detail: '½×6, ⅓×4, ¼×3, ⅕×2' },
-    { text: t('rulesLine.opCard'), count: counts.opCount },
-    { text: t('rulesLine.jokerCard'), count: counts.jokerCount },
-    { text: t('rulesLine.wildCard'), count: counts.wildCount },
+  const cardTypeLines: { text: string }[] = [
+    { text: t('rulesLine.numCard') },
+    { text: t('rulesLine.fracCard') },
+    { text: t('rulesLine.opCard') },
+    { text: t('rulesLine.jokerCard') },
+    { text: t('rulesLine.wildCard') },
   ];
   const cardTypesToShow = showFractions ? cardTypeLines : cardTypeLines.filter((_, i) => i !== 1);
   return (
@@ -3718,11 +3936,7 @@ function RulesContent({ state, pregame }: { state: GameState | null; pregame?: R
         <Text style={{ fontSize: 14, fontWeight: '800', color: rulesAccentText, marginBottom: 8, textAlign: ta }}>{t('rules.cardTypesFooter')}</Text>
         {cardTypesToShow.map((item, i) => (
           <View key={`cards${i}`} style={{ marginBottom: 8 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: rulesAccentText, marginLeft: 8 }}>{t('rules.cardsCount', { count: item.count })}</Text>
-              <Text style={{ color: '#CBD5E1', fontSize: 13, lineHeight: 21, textAlign: ta, flex: 1 }}>{item.text}</Text>
-            </View>
-            {item.detail != null && <Text style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'right', marginTop: 2 }}>{item.detail}</Text>}
+            <Text style={{ color: '#CBD5E1', fontSize: 13, lineHeight: 21, textAlign: ta }}>{item.text}</Text>
           </View>
         ))}
       </View>
@@ -3850,15 +4064,19 @@ function BaseCard({ children, borderColor = '#9CA3AF', selected = false, active 
 }) {
   const w = small ? 100 : 110;
   const h = small ? 140 : 158;
-  // Face-down card (draw pile) — fixed indigo style, not themed
+  // Face-down card (draw pile) — branded Salinda card back
   if (faceDown) return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} testID={testID}>
-      <View style={[{ width: w, borderRadius: 12, borderBottomWidth: 6, borderBottomColor: '#1E1B4B' }, shadow3D('#000')]}>
-        <LinearGradient colors={['#4338CA', '#312E81']} style={{ width: w, height: h, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(129,140,248,0.3)' }}>
-          <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: 'rgba(165,180,252,0.5)' }} />
-          <View style={{ position: 'absolute', top: 8, left: 8, width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(165,180,252,0.15)' }} />
-          <View style={{ position: 'absolute', bottom: 8, right: 8, width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(165,180,252,0.15)' }} />
-        </LinearGradient>
+      <View style={[{
+        width: w,
+        height: h,
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderBottomWidth: small ? 4 : 6,
+        borderBottomColor: '#8B6116',
+        backgroundColor: '#071C13',
+      }, shadow3D('#000')]}>
+        <Image source={brandedCardBackPreviewImg} style={{ width: w, height: h }} resizeMode="cover" />
       </View>
     </TouchableOpacity>
   );
@@ -4488,8 +4706,21 @@ function GameCard({ card, selected, active, onPress, small, testID }: { card: Ca
 }
 
 const slindaPreviewCard: Card = { id: 'slinda-preview', type: 'joker' };
+const wildPreviewCard: Card = { id: 'wild-preview', type: 'wild' };
 
-function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: () => void; disabled?: boolean; testID?: string }) {
+function SpecialMiniCardButton({
+  card,
+  onPress,
+  disabled = false,
+  testID,
+  shadowColor,
+}: {
+  card: Card;
+  onPress: () => void;
+  disabled?: boolean;
+  testID?: string;
+  shadowColor: string;
+}) {
   const pulse = useRef(new Animated.Value(0)).current;
   const frameRadius = 11;
   const cardWidth = 74;
@@ -4530,7 +4761,7 @@ function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: 
         testID={testID}
         style={{
           borderRadius: frameRadius,
-          shadowColor: '#F59E0B',
+          shadowColor,
           shadowOpacity: 0.18,
           shadowRadius: 6,
           shadowOffset: { width: 0, height: 6 },
@@ -4550,7 +4781,7 @@ function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: 
           }}
         >
           <View style={{ transform: [{ scale: 0.66 }] }}>
-            <GameCard card={slindaPreviewCard} small />
+            <GameCard card={card} small />
           </View>
         </View>
       </TouchableOpacity>
@@ -4558,110 +4789,76 @@ function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: 
   );
 }
 
+function SlindaMiniCardButton({ onPress, disabled = false, testID }: { onPress: () => void; disabled?: boolean; testID?: string }) {
+  return (
+    <SpecialMiniCardButton
+      card={slindaPreviewCard}
+      onPress={onPress}
+      disabled={disabled}
+      testID={testID}
+      shadowColor="#F59E0B"
+    />
+  );
+}
+
+function WildMiniCardButton({ onPress, disabled = false, testID }: { onPress: () => void; disabled?: boolean; testID?: string }) {
+  return (
+    <SpecialMiniCardButton
+      card={wildPreviewCard}
+      onPress={onPress}
+      disabled={disabled}
+      testID={testID}
+      shadowColor="#7C3AED"
+    />
+  );
+}
+
+const PICK_CARDS_ACTION_BTN_W = 80;
+const PICK_CARDS_ACTION_BTN_H = 84;
+const PICK_CARDS_PROMPT_BTN_W = 176;
+const PICK_CARDS_PROMPT_BTN_H = 48;
+
 function PickCardsActionButton({
   color,
   onPress,
+  width = PICK_CARDS_ACTION_BTN_W,
 }: {
   color: 'blue' | 'orange';
   onPress: () => void;
+  width?: number;
 }) {
   const { t } = useLocale();
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 680,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 680,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(180),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      pulseAnim.setValue(0);
-    };
-  }, [pulseAnim]);
-
-  const btnScale = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.04],
-  });
-  const haloScale = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.98, 1.12],
-  });
-  const haloOpacity = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.5, 0.95],
-  });
-  const haloOpacitySoft = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.24, 0.5],
-  });
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', overflow: 'visible' }}>
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: -16,
-          left: -18,
-          right: -18,
-          bottom: -20,
-          borderRadius: 42,
-          backgroundColor: 'rgba(250,204,21,0.18)',
-          borderWidth: 3,
-          borderColor: 'rgba(253,224,71,0.98)',
-          opacity: haloOpacity,
-          transform: [{ scale: haloScale }],
-          ...Platform.select({
-            ios: {
-              shadowColor: '#FACC15',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.98,
-              shadowRadius: 28,
-            },
-            android: { elevation: 22 },
-          }),
-        }}
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <LulosButton
+        text={t('game.back')}
+        color={color}
+        textColor="#FFFFFF"
+        width={width}
+        height={PICK_CARDS_ACTION_BTN_H}
+        fontSize={16}
+        onPress={onPress}
       />
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: -24,
-          left: -28,
-          right: -28,
-          bottom: -28,
-          borderRadius: 52,
-          backgroundColor: 'rgba(251,191,36,0.16)',
-          opacity: haloOpacitySoft,
-          transform: [{ scale: haloScale }],
-        }}
+    </View>
+  );
+}
+
+function ChooseCardsPromptButton() {
+  const { t } = useLocale();
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <LulosButton
+        text={t('game.pickCards')}
+        color="green"
+        textColor="#FFFFFF"
+        width={PICK_CARDS_PROMPT_BTN_W}
+        height={PICK_CARDS_PROMPT_BTN_H}
+        fontSize={17}
+        testID="pick-cards-prompt"
+        onPress={() => {}}
       />
-      <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-        <LulosButton
-          text={t('game.pickCards')}
-          color={color}
-          textColor="#FFFFFF"
-          width={200}
-          height={84}
-          fontSize={20}
-          onPress={onPress}
-        />
-      </Animated.View>
     </View>
   );
 }
@@ -5054,7 +5251,7 @@ function ResultsChip({ onPress, matchCount, boostedPulse = false, noPulse = fals
 
   return (
     <View style={{ width: CHIP_W, height: CHIP_H + 6 }}>
-      <TouchableOpacity activeOpacity={0.8} onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+      <TouchableOpacity testID="possible-results-chip" activeOpacity={0.8} onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
         <Animated.View style={{ width: CHIP_W, height: CHIP_H + 4, transform: [{ scale: combinedScale }, { translateY }] }}>
           {boostedPulse ? (
             <Animated.View
@@ -5633,7 +5830,7 @@ function timerProgressColor(progress: number): string {
 export type EquationBuilderRef = { resetAll: () => void } | null;
 // ??? Exports for src/bot/ (single-player vs bot feature) ??????????????????
 // See docs/superpowers/plans/2026-04-11-single-player-vs-bot.md
-export { gameReducer, initialState, validateFractionPlay, validateIdenticalPlay, validateStagedCards, fractionDenominator };
+export { gameReducer, initialState, validateFractionPlay, validateIdenticalPlay, validateStagedCards, fractionDenominator, shouldShowDrawForfeitButton };
 export { GameProvider, useGame };
 export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType, GamePhase, DiceResult, EquationOption };
 // EquationCommitPayload is exported above, near the GameAction union definition.
@@ -5696,6 +5893,22 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   /** Bumps when tutorialBus L5 flags change (module-level). */
   const [l5UiTick, setL5UiTick] = useState(0);
   useEffect(() => tutorialBus.subscribeL5Ui(() => setL5UiTick((n) => n + 1)), []);
+
+  // L4b (fill-missing-die) dice pulse: highlights unplaced dice during await-mimic.
+  const [l4bDicePulseOn, setL4bDicePulseOn] = useState(tutorialBus.getL4bDicePulse());
+  const l4bPulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => tutorialBus.subscribeL4bDicePulse(setL4bDicePulseOn), []);
+  useEffect(() => {
+    if (!l4bDicePulseOn) { l4bPulseAnim.setValue(0); return; }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(l4bPulseAnim, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+        Animated.timing(l4bPulseAnim, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [l4bDicePulseOn, l4bPulseAnim]);
 
   // Tutorial op-button pulse: driven by tutorialBus so InteractiveTutorialScreen
   // can animate the empty operator slot without prop-drilling.
@@ -6288,13 +6501,23 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     (!state.equationHandSlots[0] || state.equationHandSlots[0].card.type !== 'joker' || state.equationHandSlots[0].jokerAs != null) &&
     (!state.equationHandSlots[1] || state.equationHandSlots[1].card.type !== 'joker' || state.equationHandSlots[1].jokerAs != null) &&
     (!state.equationHandPick || state.equationHandPick.card.type !== 'joker' || state.equationHandPick.jokerAs != null);
+  const l4GuidedValidSums =
+    state.isTutorial && tutorialBus.getL4GuidedEqValidationMode()
+      ? (tutorialBus.getL4Config()?.validSums ?? [])
+      : [];
+  const matchesValidTarget =
+    finalResult !== null &&
+    (
+      state.validTargets.some(t => t.result === finalResult) ||
+      l4GuidedValidSums.includes(finalResult)
+    );
   const ok =
     finalResult !== null &&
     Number.isFinite(finalResult) &&
     finalResult >= 0 &&
     Number.isInteger(finalResult) &&
     filledCount >= 2 &&
-    state.validTargets.some(t => t.result === finalResult) &&
+    matchesValidTarget &&
     eqOpReady &&
     jokerCommitReady;
 
@@ -6418,18 +6641,13 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // Notify parent about confirm readiness
   const stableConfirm = useCallback(() => confirmRef.current(), []);
   const lastConfirmReadyRef = useRef<boolean | null>(null);
-  const hasEnoughDice = filledCount >= 2;
   useEffect(() => {
     if (!onConfirmChange) return;
-    const ready = showBuilder && !isSolved && interactive && (
-      state.isTutorial
-        ? ok
-        : hasEnoughDice
-    );
+    const ready = showBuilder && !isSolved && interactive && ok;
     if (lastConfirmReadyRef.current === ready) return;
     lastConfirmReadyRef.current = ready;
     onConfirmChange(ready ? { onConfirm: stableConfirm } : null);
-  }, [showBuilder, state.isTutorial, ok, hasEnoughDice, isSolved, interactive, onConfirmChange, stableConfirm]);
+  }, [showBuilder, ok, isSolved, interactive, onConfirmChange, stableConfirm]);
   useEffect(() => () => {
     lastConfirmReadyRef.current = null;
     onConfirmChange?.(null);
@@ -6789,18 +7007,40 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                     isUsed && eqS.diceBtnUsed,
                     // Tutorial hint: unused dice glow when the equation is
                     // partially filled, nudging the learner to tap one.
-                    state.isTutorial && !isUsed && !isFace && usedDice.size > 0 && {
+                    state.isTutorial && !isUsed && !isFace && usedDice.size > 0 && !l4bDicePulseOn && {
                       borderColor: '#FCD34D',
                       borderWidth: 3,
                       backgroundColor: 'rgba(252,211,77,0.15)',
+                    },
+                    // L4b pulse: stronger border when pulsing.
+                    l4bDicePulseOn && !isUsed && !isFace && {
+                      borderColor: '#FCD34D',
+                      borderWidth: 3,
                     },
                   ]}
                   disabled={isFace}>
                   {isFace ? (
                     <GoldDieFace value={dv} size={52} />
-                  ) : (
-                    <Text style={[eqS.diceBtnT, isUsed && eqS.diceBtnUsedT]}>{dv}</Text>
-                  )}
+                  ) : (() => {
+                    const isPulseTarget = l4bDicePulseOn && !isUsed;
+                    return isPulseTarget ? (
+                      <Animated.View style={[eqS.diceBtnTextWrap, {
+                        backgroundColor: l4bPulseAnim.interpolate({ inputRange: [0, 1], outputRange: ['#FFD700', '#FFF0A0'] }),
+                      }]}>
+                        <Animated.Text style={[eqS.diceBtnOutlineT, {
+                          color: l4bPulseAnim.interpolate({ inputRange: [0, 1], outputRange: ['rgba(46,28,0,0.95)', 'rgba(109,40,217,0.95)'] }),
+                        }]}>{dv}</Animated.Text>
+                        <Animated.Text style={[eqS.diceBtnT, {
+                          color: l4bPulseAnim.interpolate({ inputRange: [0, 1], outputRange: ['#1a1a1a', '#6D28D9'] }),
+                        }]}>{dv}</Animated.Text>
+                      </Animated.View>
+                    ) : (
+                      <View style={eqS.diceBtnTextWrap}>
+                        <Text style={[eqS.diceBtnOutlineT, isUsed && eqS.diceBtnUsedOutlineT]}>{dv}</Text>
+                        <Text style={[eqS.diceBtnT, isUsed && eqS.diceBtnUsedT]}>{dv}</Text>
+                      </View>
+                    );
+                  })()}
                 </TouchableOpacity>
               </Animated.View>
             );
@@ -6990,10 +7230,35 @@ const eqS = StyleSheet.create({
   wrap: { backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center', alignSelf: 'center' as any, width: '100%', maxWidth: '100%', gap: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', overflow: 'visible' as const },
   title: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '700', textAlign: 'center' },
   diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
-  diceBtn: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,200,60,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,200,60,0.2)', overflow: 'hidden' },
-  diceBtnFace: { backgroundColor: 'transparent', borderColor: 'rgba(232,184,48,0.4)', borderWidth: 2, padding: 0 },
+  diceBtn: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', borderWidth: 0, borderColor: 'transparent', overflow: 'hidden' },
+  diceBtnFace: { backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0, padding: 0 },
   diceBtnUsed: { opacity: 0.25 },
-  diceBtnT: { fontSize: 26, fontWeight: '800', color: '#e8d84a' },
+  diceBtnTextWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#FFD700',
+  },
+  diceBtnOutlineT: {
+    position: 'absolute',
+    fontSize: 28,
+    fontWeight: '900',
+    color: 'rgba(46,28,0,0.95)',
+    textShadowColor: 'rgba(18,10,0,0.65)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 2,
+  },
+  diceBtnUsedOutlineT: { color: 'rgba(46,28,0,0.55)' },
+  diceBtnT: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    textShadowColor: 'rgba(255,255,255,0.35)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 2,
+  },
   diceBtnUsedT: { color: 'rgba(255,200,60,0.3)' },
   /** שורת משוואה אחת — כל הסלוטים והסוגריים באותה שורה; ללא wrap */
   eqRow: {
@@ -7138,7 +7403,7 @@ const FAN_DEFAULT_SPACING = 1.0;
 const PINCH_CARD_THRESHOLD = 8;
 const FAN_DRAG_START_DX = 6;
 
-function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium' }: {
+function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium', interactionLocked = false, centerCardId = null }: {
   cards: Card[];
   stagedCardIds: Set<string>;
   equationHandPlacedIds: Set<string>;
@@ -7152,6 +7417,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   botTeachingActive?: boolean;
   botCandidateCardId?: string | null;
   botTeachingDifficulty?: BotDifficulty;
+  interactionLocked?: boolean;
+  centerCardId?: string | null;
 }) {
   const count = cards.length;
   const viewport = useWebViewportSize();
@@ -7417,6 +7684,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   const pinchStartSpacing = useRef(FAN_DEFAULT_SPACING);
 
   const [centerIdx, setCenterIdx] = useState(0);
+  const interactionLockedRef = useRef(interactionLocked);
+  interactionLockedRef.current = interactionLocked;
   const cardIdsSignature = useMemo(() => cards.map((c) => c.id).join('|'), [cards]);
   const lastCenterIdx = useRef(-1);
   const lastPanDecisionLogAt = useRef(0);
@@ -7484,6 +7753,27 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     onCenterCard?.(cards[0] ?? null);
   }, [count]);
 
+  useEffect(() => {
+    if (!centerCardId) return;
+    const targetIdx = cards.findIndex((card) => card.id === centerCardId);
+    if (targetIdx < 0) return;
+    // L5.2 swaps in a new 5-card hand, then the count-change effect above
+    // briefly resets the fan to index 0. Snap Slinda back to the centred
+    // rigged slot immediately so she is already in the middle before the
+    // learner sees/taps the card.
+    if (tutorialBus.getL5GuidedMode() && tutorialBus.getTutorialPreserveHandOrder()) {
+      scrollX.stopAnimation();
+      scrollX.setValue(targetIdx);
+      return;
+    }
+    Animated.spring(scrollX, {
+      toValue: targetIdx,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 56,
+    }).start();
+  }, [cards, centerCardId, scrollX]);
+
   // Use refs for functions so PanResponder always sees latest
   const snapRef = useRef(() => {});
   const momentumRef = useRef(() => {});
@@ -7513,6 +7803,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gs) => {
+        if (interactionLockedRef.current) return false;
         if (evt.nativeEvent.touches.length >= 2) {
           return true;
         }
@@ -7528,10 +7819,12 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       },
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponderCapture: (evt, gs) => {
+        if (interactionLockedRef.current) return false;
         if (evt.nativeEvent.touches.length >= 2) return true;
         return Math.abs(gs.dx) > FAN_DRAG_START_DX && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
       },
       onPanResponderGrant: () => {
+        if (interactionLockedRef.current) return;
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
         scrollX.stopAnimation();
         dragStartVal.current = scrollRef.current;
@@ -7547,6 +7840,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         }
       },
       onPanResponderMove: (evt, gs) => {
+        if (interactionLockedRef.current) return;
         const touches = evt.nativeEvent.touches;
 
         // ?? Pinch mode (2 fingers, 8+ cards) ??
@@ -7581,6 +7875,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         scrollX.setValue(next);
       },
       onPanResponderRelease: (_, gs) => {
+        if (interactionLockedRef.current) return;
         if (isPinching.current) { isPinching.current = false; snapRef.current(); return; }
         velocityRef.current = gs.vx * 0.25;
         if (Math.abs(velocityRef.current) > 0.02) momentumRef.current();
@@ -7594,6 +7889,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         }, 800);
       },
       onPanResponderTerminate: () => {
+        if (interactionLockedRef.current) return;
         isPinching.current = false;
         snapRef.current();
         if (userScrollGestureClearTimerRef.current) clearTimeout(userScrollGestureClearTimerRef.current);
@@ -7906,10 +8202,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
             <TouchableOpacity
               activeOpacity={0.8}
               hitSlop={edgeHitSlop}
-              onPressIn={() => { if (!isDefenseInvalid && !waitingMode) setPressedCardId(card.id); }}
+              onPressIn={() => { if (!isDefenseInvalid && !waitingMode && !interactionLocked) setPressedCardId(card.id); }}
               onPressOut={() => setPressedCardId(null)}
-              onPress={() => { setPressedCardId(null); tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: card.id }); onTap(card); }}
-              disabled={isDefenseInvalid || waitingMode}
+              onPress={() => { if (interactionLocked) return; setPressedCardId(null); tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: card.id }); onTap(card); }}
+              disabled={isDefenseInvalid || waitingMode || interactionLocked}
             >
               <View style={[
                 isStaged && { borderWidth: 3, borderColor: '#FF6B00', borderRadius: 12 },
@@ -7983,9 +8279,11 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
   const handPlayerIndex = useOnlineMyHand ? myIdx! : state.currentPlayerIndex;
   const isOnlineWaiting = useOnlineMyHand && state.currentPlayerIndex !== myIdx;
   const cp = state.players[handPlayerIndex];
-  if (!cp) return null;
+  const currentPlayerId = cp?.id ?? -1;
+  const currentHand = cp?.hand ?? [];
+  const currentHandLength = currentHand.length;
   useEffect(() => {
-  }, [state.phase, state.currentPlayerIndex, handPlayerIndex, isOnlineWaiting, cp.hand.length, state.hasPlayedCards]);
+  }, [state.phase, state.currentPlayerIndex, handPlayerIndex, isOnlineWaiting, currentHandLength, state.hasPlayedCards]);
   const pr=state.phase==='pre-roll', bl=state.phase==='building', so=state.phase==='solved';
   const td = state.discardPile[state.discardPile.length-1];
   const hasFracDefense = state.pendingFractionTarget !== null;
@@ -7993,7 +8291,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
   const isLocalBotTurn =
     !useOnlineMyHand &&
     !!state.botConfig &&
-    state.botConfig.playerIds.includes(cp.id) &&
+    state.botConfig.playerIds.includes(currentPlayerId) &&
     botTeachingPhase !== 'done';
   const predictedBotAction = useMemo(() => {
     if (!isLocalBotTurn || !state.botConfig) return null;
@@ -8027,7 +8325,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
   );
   const emptySet = useMemo(() => new Set<string>(), []);
   const [wildFracDefenseCard, setWildFracDefenseCard] = useState<Card | null>(null);
-  const sorted = sortHandCards(cp.hand);
+  const sorted = sortHandCards(currentHand);
   const cardSoundRef = useRef<Audio.Sound | null>(null);
   const cardSoundLoadingRef = useRef(false);
   const fractionDefenseHintKeyRef = useRef('');
@@ -8316,6 +8614,12 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       : tutorialMultiPlayHighlightIds && tutorialMultiPlayHighlightIds.size > 0
         ? tutorialMultiPlayHighlightIds
         : tutorialPairHighlightIds;
+  const tutorialCenteredCardId =
+    state.isTutorial &&
+    tutorialBus.getL5GuidedMode() &&
+    tutorialBus.getTutorialPreserveHandOrder()
+      ? (sorted.find((card) => card.type === 'joker')?.id ?? null)
+      : null;
 
   const forwardCardId = null;
   const equationHandPlacedIds = new Set(
@@ -8374,6 +8678,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
           botTeachingActive={isLocalBotTurn}
           botCandidateCardId={botCandidateCardId}
           botTeachingDifficulty={state.botConfig?.difficulty ?? 'medium'}
+          centerCardId={tutorialCenteredCardId}
         />
       </View>
     </>
@@ -8746,12 +9051,26 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room';
+type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game';
+
+type WebBackdropTone = 'black' | 'white';
+
+type WebPresentationContextValue = {
+  focusMode: boolean;
+  setFocusMode: React.Dispatch<React.SetStateAction<boolean>>;
+  backdropTone: WebBackdropTone;
+  setBackdropTone: React.Dispatch<React.SetStateAction<WebBackdropTone>>;
+  fullscreenActive: boolean;
+  setFullscreenActive: React.Dispatch<React.SetStateAction<boolean>>;
+  setBackAction: React.Dispatch<React.SetStateAction<(() => void) | null>>;
+};
+
+const WebPresentationContext = createContext<WebPresentationContextValue | null>(null);
 
 function shouldShowAmbientBackground(playMode: ShellPlayMode, phase: GameState['phase']) {
   if (playMode === 'tutorial') return false;
-  if (playMode === 'online' || playMode === 'mockup-room') return true;
-  return playMode === 'local' && (phase === 'turn-transition' || phase === 'game-over');
+  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom') return true;
+  return (playMode === 'local' || playMode === 'classroom-game') && (phase === 'turn-transition' || phase === 'game-over');
 }
 
 function AmbientBackground({
@@ -8807,7 +9126,7 @@ const FUTURE_LAB_SPECS: { id: FutureLabId; detailCount: number }[] = [
   { id: 'steal', detailCount: 3 },
 ];
 
-type LocalGameMode = 'pass-and-play' | 'vs-bot';
+type LocalGameMode = 'pass-and-play' | 'vs-bot' | 'solo';
 
 function StartScreen({
   onBackToChoice,
@@ -8827,6 +9146,7 @@ function StartScreen({
   const { t, isRTL } = useLocale();
   const { dispatch, state: gameState } = useGame();
   const safe = useGameSafeArea();
+  const viewport = useWebViewportSize();
   const [playerCount, setPlayerCount] = useState(2);
   const [numberRange, setNumberRange] = useState<'easy' | 'full'>('full');
   const [gameMode, setGameMode] = useState<LocalGameMode>(forcedGameMode ?? 'vs-bot');
@@ -8919,6 +9239,9 @@ function StartScreen({
   const showModeRow = !lockGameMode;
   const showPlayerCountRow = gameMode === 'pass-and-play';
   const showBotSettings = gameMode === 'vs-bot';
+  const advancedSetupModalWidth = Platform.OS === 'web'
+    ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, viewport.width - 40))
+    : undefined;
   let nextWheelIndex = 0;
   const modeWheelIndex = showModeRow ? nextWheelIndex++ : null;
   const playerCountWheelIndex = showPlayerCountRow ? nextWheelIndex++ : null;
@@ -9013,6 +9336,17 @@ function StartScreen({
     );
   }, [scrollY]);
 
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, { toValue: -6, duration: 2000, useNativeDriver: true }),
+        Animated.timing(bounceAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [bounceAnim]);
+
   const playPlayerCountSound = useCallback((count: number) => {
     if (gameState.soundsEnabled === false) return;
     const src = PLAYER_COUNT_SOUNDS[count];
@@ -9044,9 +9378,8 @@ function StartScreen({
           setGuidanceOn(enabled);
           dispatch({ type: 'SET_GUIDANCE_ENABLED', enabled });
         }
-        setGuidancePromptOpen(true);
       } catch (_) {
-        if (!cancelled) setGuidancePromptOpen(true);
+        // keep the local default if persisted guidance cannot be read
       }
     })();
     return () => {
@@ -9059,6 +9392,7 @@ function StartScreen({
     }
     setGuidance(on);
     setGuidancePromptOpen(false);
+    startGame();
   }, [setGuidance]);
   useEffect(() => {
     void initializeSfx();
@@ -9069,16 +9403,6 @@ function StartScreen({
   useEffect(() => {
     setSfxMuted(gameState.soundsEnabled === false);
   }, [gameState.soundsEnabled]);
-
-  useEffect(() => {
-    // Joker gentle bounce (4s loop, 6px)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bounceAnim, { toValue: -6, duration: 2000, useNativeDriver: true }),
-        Animated.timing(bounceAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
 
   const startGame = () => {
     // השם מגיע קודם כל מתוך ה-prop (ChoiceScreen), ואז מ-AsyncStorage (PlayerNameModal קודם),
@@ -9102,15 +9426,23 @@ function StartScreen({
               isBot: true,
             },
           ]
-        : Array.from({ length: playerCount }, (_, i) => {
-            const typedName = playerNames[i]?.trim() || '';
-            const name = typedName || (i === 0 ? effectiveSavedName : '') || t('start.playerPlaceholder', { n: String(i + 1) });
-            return {
-              name,
-              isBot: false,
-              progress: getStoredProgressForName(storedProfiles, name),
-            };
-          });
+        : gameMode === 'solo'
+          ? [
+              {
+                name: humanName,
+                isBot: false,
+                progress: getStoredProgressForName(storedProfiles, humanName),
+              },
+            ]
+          : Array.from({ length: playerCount }, (_, i) => {
+              const typedName = playerNames[i]?.trim() || '';
+              const name = typedName || (i === 0 ? effectiveSavedName : '') || t('start.playerPlaceholder', { n: String(i + 1) });
+              return {
+                name,
+                isBot: false,
+                progress: getStoredProgressForName(storedProfiles, name),
+              };
+            });
     if (gameState.soundsEnabled !== false) {
       void playSfx('start', { cooldownMs: 250, volumeOverride: 0.4 });
     }
@@ -9133,6 +9465,12 @@ function StartScreen({
       abVariant,
     });
   };
+
+  const requestStartGame = useCallback(() => {
+    Keyboard.dismiss();
+    setAdvancedSetupOpen(false);
+    setGuidancePromptOpen(true);
+  }, []);
 
   const bottomPad = safe.SAFE_BOTTOM_PAD || 12;
   const TOP_ACTIONS_TOP = safe.insets.top || 12;
@@ -9160,9 +9498,10 @@ function StartScreen({
   const topActionGuideSideGap = Math.max(0, (topActionsInnerWidth - topActionsPrimaryWidth) / 2);
   const topActionHeroSlotWidth = Math.max(34, topActionGuideSideGap - 10);
   const topActionHeroSlotHeight = Math.max(34, topActionsBackVisualHeight + topActionsRowGap - 4);
-  const TOP_ACTION_HERO_SIZE = Math.min(topActionHeroSlotWidth, topActionHeroSlotHeight, compactStartScreen ? 58 : 64);
+  const TOP_ACTION_HERO_SIZE = Math.min(topActionHeroSlotWidth, topActionHeroSlotHeight, compactStartScreen ? 66 : 74);
+  const TOP_ACTION_HERO_CARD_H = Math.round(TOP_ACTION_HERO_SIZE * (3.5 / 2.5));
   const topActionHeroInset = Math.max(4, (topActionGuideSideGap - TOP_ACTION_HERO_SIZE) / 2);
-  const topActionHeroTop = Math.max(0, topActionsBackVisualHeight + topActionsRowGap - TOP_ACTION_HERO_SIZE - 4);
+  const topActionHeroTop = Math.max(0, topActionsBackVisualHeight + topActionsRowGap - TOP_ACTION_HERO_SIZE - 12);
   const START_MENU_TOP = TOP_ACTIONS_TOP + TOP_ACTIONS_H + (compactStartScreen ? 4 : 6);
   const backButtonLabel = isRTL
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
@@ -9649,9 +9988,15 @@ function StartScreen({
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+    <View style={{ flex: 1, backgroundColor: '#050d18' }}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={['#050d18', '#081529', '#0a1c34']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <AmbientBackground playMode="local" forceVisible />
-      {/* כפתורי עזרה וחנות — header קבוע מעל סלינדה */}
       <View
         testID="start-top-actions"
         style={{
@@ -9694,7 +10039,7 @@ function StartScreen({
             ...(isRTL ? { right: topActionHeroInset } : { left: topActionHeroInset }),
             transform: [{ translateY: bounceAnim }],
             width: TOP_ACTION_HERO_SIZE,
-            height: TOP_ACTION_HERO_SIZE,
+            height: TOP_ACTION_HERO_CARD_H,
             zIndex: 1,
             ...Platform.select({
               ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 16 },
@@ -9702,13 +10047,15 @@ function StartScreen({
             }),
           }}
         >
-          <Image
-            source={require('./assets/joker.jpg')}
-            style={{ width: TOP_ACTION_HERO_SIZE, height: TOP_ACTION_HERO_SIZE }}
-            resizeMode="contain"
+          <SpinningCard
+            frontSource={salindaShopCardImg}
+            width={TOP_ACTION_HERO_SIZE}
+            speed={30}
+            backLabel="Salinda"
+            active
           />
         </Animated.View>
-        <View style={{ alignItems: 'center', gap: topActionsRowGap }}>
+        <View style={{ alignItems: 'center', gap: topActionsRowGap, zIndex: 4, elevation: 4 }}>
           {onHowToPlay ? (
             <LulosButton
               text={t('mode.howToPlay')}
@@ -9875,6 +10222,7 @@ function StartScreen({
         )}
         boxStyle={{
           width: '100%',
+          maxWidth: advancedSetupModalWidth,
           maxHeight: SCREEN_H - 56,
           /* גובה מפורש — אחרת flex:1 על ה־ScrollView עלול לקבל 0 (במיוחד Web) והמודאל נראה «שבור» */
           height: Math.max(
@@ -9891,7 +10239,7 @@ function StartScreen({
           paddingBottom: 12,
           overflow: 'hidden',
         }}
-      >
+        >
         <View style={{ flex: 1, minHeight: 0 }}>
         <ScrollView
           style={{ flex: 1 }}
@@ -9940,7 +10288,7 @@ function StartScreen({
               </Text>
             </View>
             {showPlayerCountRow && (
-              <LinearGradient colors={['#188038','#34A853']} start={{x:0,y:0}} end={{x:1,y:1}} style={hsS.rowGradientOuter}>
+              <LinearGradient testID="start-player-count-row" colors={['#188038','#34A853']} start={{x:0,y:0}} end={{x:1,y:1}} style={hsS.rowGradientOuter}>
                 <View style={[hsS.row, hsS.rowPlayers, { flexDirection: 'row' }]}>
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.playerCount')}</Text>
                   <View style={hsS.stepper}>
@@ -10295,15 +10643,13 @@ function StartScreen({
             fontSize={19}
             testID="start-lets-play"
             onPress={() => {
-              Keyboard.dismiss();
-              startGame();
-              setAdvancedSetupOpen(false);
+              requestStartGame();
             }}
           />
         </View>
         </View>
       </AppModal>
-      {/* Bottom menu — הקלף עבר ל-header, ולכן הגלילה מתחילה מיד מתחתיו ותופסת יותר גובה שימושי */}
+      {/* Bottom menu — starts below the fixed top hero */}
       <View style={{ position: 'absolute', top: START_MENU_TOP, bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: bottomPad, backgroundColor: 'transparent', zIndex: 10 }}>
         <Animated.ScrollView
           style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -10331,6 +10677,7 @@ function StartScreen({
           {showPlayerCountRow && playerCountWheelIndex != null ? (
           <WheelRow index={playerCountWheelIndex}>
           <LinearGradient
+            testID="start-player-count-row"
             colors={['#188038', '#34A853']}
             start={{x:0,y:0}}
             end={{x:1,y:1}}
@@ -10406,8 +10753,10 @@ function StartScreen({
           {/* 3. טווח מספרים */}
           <WheelRow index={numberRangeWheelIndex}>
           <LinearGradient colors={['#188038', '#34A853']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowRange]}>
-            <Text style={hsS.rowLabel}>{t('start.wheel.numberRange')}</Text>
+          <View style={[hsS.row, hsS.startRowRange, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+              {t('start.wheel.numberRange')}
+            </Text>
             <View style={hsS.toggleGroup}>
               {([['full', '0-25'], ['easy', '0-12']] as const).map(([key, label]) => (
                 <TouchableOpacity key={key} onPress={() => setNumberRange(key)} activeOpacity={0.7}
@@ -10422,8 +10771,10 @@ function StartScreen({
 
           <WheelRow index={guidanceWheelIndex}>
           <LinearGradient colors={['#1A73E8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowGuidance]}>
-            <Text style={hsS.rowLabel}>{t('start.wheel.guidanceRow')}</Text>
+          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+              {t('start.wheel.guidanceRow')}
+            </Text>
             <View style={hsS.toggleGroup}>
               {([
                 [true, t('lobby.on')],
@@ -10461,7 +10812,7 @@ function StartScreen({
             style={hsS.advancedEntryInner}
           >
             {/* שורה אחת: תמיד [תוכן | כפתור] בציר LTR הפיזי — אותו סדר כמו כותרת המודל (המשכיות כיוון) */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={[hsS.advancedEntryTitle, { textAlign: isRTL ? 'right' : 'left', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
@@ -10491,7 +10842,7 @@ function StartScreen({
             height={48}
             fontSize={19}
             testID="start-lets-play"
-            onPress={startGame}
+            onPress={requestStartGame}
             style={letsPlayGlowStyle}
           />
         </View>
@@ -10508,28 +10859,93 @@ function StartScreen({
           <Text style={{ color: 'rgba(255,255,255,0.15)', fontSize: 9, textAlign: 'center', marginTop: 6 }}>v1.0.0</Text>
         </TouchableOpacity>
       </View>
-      <RNModal visible={guidancePromptOpen} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
-          <LinearGradient colors={['#0F766E', '#14B8A6', '#99F6E4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ width: '100%', maxWidth: 360, borderRadius: 28, padding: 3 }}>
-            <View style={[alertBubbleStyle.box, { maxWidth: '100%', backgroundColor: 'rgba(15,23,42,0.96)', borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 20, paddingHorizontal: 18 }]}>
-              <Text style={[alertBubbleStyle.title, { color: '#FDE68A', fontSize: 22 }]}>{t('guidance.welcomeTitle')}</Text>
-              <Text style={[alertBubbleStyle.body, { marginTop: 10, fontSize: 14, lineHeight: 22, color: '#E0F2FE' }]}>
+      <RNModal
+        visible={guidancePromptOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setGuidancePromptOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(3,7,18,0.78)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 20,
+          }}
+        >
+          <LinearGradient
+            colors={['#34d3c8', '#6ee7df', '#34d3c8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ width: '100%', maxWidth: 360, borderRadius: 30, padding: 3 }}
+          >
+            <View
+              style={{
+                borderRadius: 27,
+                backgroundColor: 'rgba(15,23,42,0.98)',
+                paddingVertical: 24,
+                paddingHorizontal: 20,
+              }}
+            >
+              <Text
+                style={{
+                  color: '#FDE68A',
+                  fontSize: 28,
+                  fontWeight: '900',
+                  textAlign: 'center',
+                }}
+              >
+                {t('guidance.welcomeTitle')}
+              </Text>
+              <Text
+                style={{
+                  marginTop: 18,
+                  color: '#F8FAFC',
+                  fontSize: 15,
+                  lineHeight: 26,
+                  fontWeight: '800',
+                  textAlign: 'center',
+                  writingDirection: isRTL ? 'rtl' : 'ltr',
+                }}
+              >
                 {t('guidance.welcomeBody')}
               </Text>
-              <View style={{ alignSelf: 'stretch', gap: 10, marginTop: 18 }}>
+              <View style={{ alignSelf: 'stretch', gap: 12, marginTop: 22 }}>
                 <TouchableOpacity
-                  activeOpacity={0.9}
+                  activeOpacity={0.92}
                   onPress={() => chooseGuidanceMode(false)}
-                  style={{ backgroundColor: '#F59E0B', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' }}
+                  testID="start-guidance-skip"
+                  style={{
+                    backgroundColor: '#F59E0B',
+                    borderRadius: 18,
+                    paddingVertical: 16,
+                    paddingHorizontal: 18,
+                    alignItems: 'center',
+                  }}
                 >
-                  <Text style={{ color: '#111827', fontSize: 15, fontWeight: '900' }}>{t('guidance.skip')}</Text>
+                  <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', textAlign: 'center' }}>
+                    {t('guidance.skip')}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  activeOpacity={0.9}
+                  activeOpacity={0.92}
                   onPress={() => chooseGuidanceMode(true)}
-                  style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' }}
+                  testID="start-guidance-need"
+                  style={{
+                    backgroundColor: 'rgba(51,65,85,0.9)',
+                    borderRadius: 18,
+                    borderWidth: 1.5,
+                    borderColor: 'rgba(148,163,184,0.42)',
+                    paddingVertical: 16,
+                    paddingHorizontal: 18,
+                    alignItems: 'center',
+                  }}
                 >
-                  <Text style={{ color: '#E5E7EB', fontSize: 15, fontWeight: '800' }}>{t('guidance.need')}</Text>
+                  <Text style={{ color: '#E5E7EB', fontSize: 18, fontWeight: '800', textAlign: 'center' }}>
+                    {t('guidance.need')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -10797,8 +11213,8 @@ function GameModeToggleBlock({
   gameMode,
   setGameMode,
 }: {
-  gameMode: 'pass-and-play' | 'vs-bot';
-  setGameMode: (m: 'pass-and-play' | 'vs-bot') => void;
+  gameMode: LocalGameMode;
+  setGameMode: (m: LocalGameMode) => void;
 }) {
   const { t } = useLocale();
   return (
@@ -10811,7 +11227,11 @@ function GameModeToggleBlock({
       <View style={[hsS.row, hsS.rowRange, hsS.modeRowRange]}>
         <Text style={hsS.rowLabel}>{t('start.mode')}</Text>
         <View style={hsS.toggleGroup}>
-          {([['pass-and-play', t('start.modePassAndPlay')], ['vs-bot', t('start.modeVsBot')]] as const).map(([key, label]) => (
+          {([
+            ['solo', t('start.modeSolo')],
+            ['pass-and-play', t('start.modePassAndPlay')],
+            ['vs-bot', t('start.modeVsBot')],
+          ] as const).map(([key, label]) => (
             <TouchableOpacity
               key={key}
               onPress={() => {
@@ -10853,7 +11273,7 @@ function BotDifficultySettingsBlock({
 }) {
   const { t } = useLocale();
   return (
-    <LinearGradient colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
+    <LinearGradient testID="start-bot-settings" colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
       <View style={{ paddingVertical: 10, paddingHorizontal: 4, gap: 10 }}>
         <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0 }]}>
           <Text style={hsS.rowLabel}>{t('start.botDifficulty')}</Text>
@@ -11078,7 +11498,7 @@ function PlayerNameModal({
   );
 }
 
-/** פעם ראשונה במסך השחקן (TurnTransition) — בועת ברוכים */
+/** דגל התמדה: מסתיר את בועת ה"ברוכים הבאים" במסך השחקן אחרי שנכנסו לתפריט המשחק. */
 const WELCOME_PLAYER_SCREEN_KEY = 'lulos_welcome_player_screen_seen';
 
 /** מצב מקוצר: עד 3 כפתורים (המשחק תומך עד 6 משתתפים). תמיד כולל את השחקן בתור, ואז משלימים עד maxCollapsed */
@@ -11103,6 +11523,11 @@ const playerTurnChipActiveRing = {
 
 const START_TURN_TIMER_SECONDS = 15;
 const SLINDA_SELECTION_TIMER_SECONDS = 10;
+type SpecialBankKind = 'slinda' | 'wild';
+
+function specialBankPrefix(kind: SpecialBankKind): 'slindaBank' | 'wildBank' {
+  return kind === 'wild' ? 'wildBank' : 'slindaBank';
+}
 
 function StartTurnCountdownCircle({
   deadlineAt,
@@ -11113,6 +11538,7 @@ function StartTurnCountdownCircle({
   showLabel = true,
   totalSeconds = START_TURN_TIMER_SECONDS,
   labelText,
+  variant = 'classic',
 }: {
   deadlineAt: number | null;
   size?: number;
@@ -11122,6 +11548,7 @@ function StartTurnCountdownCircle({
   showLabel?: boolean;
   totalSeconds?: number;
   labelText?: string;
+  variant?: 'classic' | 'bubble';
 }) {
   const { t } = useLocale();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -11154,6 +11581,25 @@ function StartTurnCountdownCircle({
     void playSfx(key, { cooldownMs: 0, volumeOverride: 0.55 });
   }, [sec, soundEnabled]);
 
+  const bubblePulse = useRef(new Animated.Value(0)).current;
+  const isWarn = sec > 0 && sec <= 5;
+
+  // Bubble breathing: always runs (1600ms normal, 550ms warn) — matches BubbleTimer design
+  useEffect(() => {
+    if (variant !== 'bubble') {
+      bubblePulse.setValue(0);
+      return;
+    }
+    bubblePulse.setValue(0);
+    const halfDur = isWarn ? 275 : 800;
+    const anim = Animated.loop(Animated.sequence([
+      Animated.timing(bubblePulse, { toValue: 1, duration: halfDur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(bubblePulse, { toValue: 0, duration: halfDur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    anim.start();
+    return () => { bubblePulse.stopAnimation(); };
+  }, [bubblePulse, isWarn, variant]);
+
   if (deadlineAt == null) return null;
 
   const stroke = Math.max(2, Math.min(7, Math.round(size * 0.14)));
@@ -11161,6 +11607,63 @@ function StartTurnCountdownCircle({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - progress);
   const digitFontSize = Math.max(10, Math.round(size * 0.36));
+
+  if (variant === 'bubble') {
+    // Red semi-transparent dome + gold rim, matching BubbleTimer zip design
+    const rimColor = '#f3c33a';
+    const rimTrack = 'rgba(243,195,58,0.28)';
+    const domeBg = isWarn ? 'rgba(180,20,20,0.82)' : 'rgba(200,38,38,0.74)';
+    return (
+      <View style={[{ alignItems: 'center', justifyContent: 'center' }, containerStyle]}>
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            width: size,
+            height: size,
+            alignItems: 'center',
+            justifyContent: 'center',
+            transform: [{ scale: bubblePulse.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.06] }) }],
+          }}
+        >
+          {/* Outer halo glow */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: size * 1.36,
+              height: size * 1.36,
+              borderRadius: 999,
+              backgroundColor: 'rgba(255,60,60,0.18)',
+              opacity: bubblePulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.0] }),
+            }}
+          />
+          {/* Red dome */}
+          <View style={{ position: 'absolute', width: size, height: size, borderRadius: 999, backgroundColor: domeBg, borderWidth: 2, borderColor: rimColor,
+            ...Platform.select({ ios: { shadowColor: rimColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 6 }, android: { elevation: 6 } }) }}
+          />
+          {/* Glint — top-left specular highlight */}
+          <View style={{ position: 'absolute', top: size * 0.14, left: size * 0.2, width: size * 0.24, height: size * 0.16, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.55)', transform: [{ rotate: '-16deg' }] }} />
+          {/* Glint small */}
+          <View style={{ position: 'absolute', top: size * 0.19, right: size * 0.24, width: size * 0.13, height: size * 0.09, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.32)' }} />
+          {/* Caustic — bottom-right subtle warm */}
+          <View style={{ position: 'absolute', bottom: size * 0.18, right: size * 0.18, width: size * 0.16, height: size * 0.1, borderRadius: 999, backgroundColor: 'rgba(255,200,200,0.38)' }} />
+          {/* Progress arc */}
+          <Svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0 }}>
+            <SvgCircle cx={size / 2} cy={size / 2} r={radius} stroke={rimTrack} strokeWidth={stroke} fill="transparent" />
+            <SvgCircle cx={size / 2} cy={size / 2} r={radius} stroke={rimColor} strokeWidth={stroke} fill="transparent"
+              strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={dashOffset}
+              rotation={-90} originX={size / 2} originY={size / 2} />
+          </Svg>
+          {/* Number */}
+          <Text style={{ color: '#fff', fontSize: digitFontSize, fontWeight: '900', zIndex: 2,
+            textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{sec}</Text>
+        </Animated.View>
+        {showLabel && (
+          <Text style={[{ color: '#FDE68A', fontSize: 11, fontWeight: '700', marginTop: 4 }, labelStyle]}>{labelText ?? t('ui.turnTimerLabel')}</Text>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={[{ alignItems: 'center', justifyContent: 'center', marginBottom: 10 }, containerStyle]}>
@@ -11197,6 +11700,269 @@ function StartTurnCountdownCircle({
         <Text style={[{ color: '#FDE68A', fontSize: 11, fontWeight: '700', marginTop: 4 }, labelStyle]}>{labelText ?? t('ui.turnTimerLabel')}</Text>
       )}
     </View>
+  );
+}
+
+function DeadlineProgressBar({
+  deadlineAt,
+  totalSeconds,
+  compact,
+}: {
+  deadlineAt: number | null;
+  totalSeconds: number;
+  compact?: boolean;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (deadlineAt == null) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 120);
+    return () => clearInterval(id);
+  }, [deadlineAt]);
+
+  if (deadlineAt == null) return null;
+
+  const remainingMs = Math.max(0, deadlineAt - nowMs);
+  const progress = Math.max(0, Math.min(1, remainingMs / Math.max(1, totalSeconds * 1000)));
+
+  return (
+    <View
+      style={{
+        width: '100%',
+        height: compact ? 8 : 10,
+        borderRadius: 999,
+        overflow: 'hidden',
+        backgroundColor: 'rgba(15,23,42,0.38)',
+        borderWidth: 1,
+        borderColor: 'rgba(250,204,21,0.26)',
+      }}
+    >
+      <View
+        style={{
+          width: `${Math.max(0, Math.min(100, progress * 100))}%`,
+          height: '100%',
+          borderRadius: 999,
+          backgroundColor: '#FACC15',
+        }}
+      />
+    </View>
+  );
+}
+
+function OverflowSwapOverlay({
+  availableHeight,
+  compact,
+  deadlineAt,
+  stage,
+  canUseUnderTop,
+  topCard,
+  previewDrawCard,
+  selectedHandCardId,
+  selectedPileChoice,
+  resolveInFlight,
+  autoResolving,
+  targetWidth,
+  mysteryCardHeight,
+  animatedStyle,
+  onSelectPileChoice,
+}: {
+  availableHeight: number;
+  compact: boolean;
+  deadlineAt: number | null;
+  stage: OverflowSwapStage;
+  canUseUnderTop: boolean;
+  topCard: Card | null;
+  previewDrawCard: Card | null;
+  selectedHandCardId: string | null;
+  selectedPileChoice: OverflowSwapPileChoice | null;
+  resolveInFlight: boolean;
+  autoResolving: boolean;
+  targetWidth: number;
+  mysteryCardHeight: number;
+  animatedStyle?: any;
+  onSelectPileChoice: (choice: OverflowSwapPileChoice) => void;
+}) {
+  const { t } = useLocale();
+  const locked = resolveInFlight || autoResolving;
+  const handStageActive = stage === 'hand';
+  const statusText = autoResolving
+    ? t('overflowSwap.autoResolving')
+    : resolveInFlight
+      ? t('overflowSwap.resolving')
+      : handStageActive
+        ? (selectedHandCardId == null ? t('overflowSwap.pickCardSecond') : t('overflowSwap.resolving'))
+        : (selectedPileChoice == null ? t('overflowSwap.pickPileFirst') : t('overflowSwap.resolving'));
+  const topSelected = selectedPileChoice === 'top';
+  const underTopSelected = selectedPileChoice === 'underTop';
+
+  // Flip animation for the surprise card
+  const flipAnim = useRef(new Animated.Value(0)).current;
+  const [isFlipping, setIsFlipping] = useState(false);
+
+  const handleRandomTap = useCallback(() => {
+    if (locked || isFlipping) return;
+    setIsFlipping(true);
+    flipAnim.setValue(0);
+    Animated.timing(flipAnim, {
+      toValue: 1,
+      duration: 360,
+      useNativeDriver: true,
+      easing: Easing.inOut(Easing.cubic),
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setTimeout(() => onSelectPileChoice('random'), 1000);
+    });
+  }, [flipAnim, isFlipping, locked, onSelectPileChoice]);
+
+  const backRotateY = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '90deg', '90deg'] });
+  const frontRotateY = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['-90deg', '-90deg', '0deg'] });
+
+  // Full-size card dimensions (Card.tsx non-small: w=72, h=104)
+  const CARD_W = 72;
+  const CARD_H = 104;
+
+  return (
+    <Animated.View style={[{ width: '100%', maxWidth: 560 }, animatedStyle]}>
+      <LinearGradient
+        colors={['rgba(76,29,149,0.98)', 'rgba(91,33,182,0.95)', 'rgba(49,46,129,0.94)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          width: '100%',
+          borderRadius: 28,
+          borderWidth: 2,
+          borderColor: 'rgba(250,204,21,0.92)',
+          shadowColor: '#0B1220',
+          shadowOpacity: 0.3,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 10 },
+          overflow: 'hidden',
+        }}
+        testID="overflow-swap-panel"
+      >
+        {/* ── FIXED HEADER: progress bar → title (1 line) → timer ── */}
+        <View style={{ paddingHorizontal: 18, paddingTop: 14, paddingBottom: 8, alignItems: 'center' }}>
+          <DeadlineProgressBar
+            deadlineAt={deadlineAt}
+            totalSeconds={OVERFLOW_SWAP_TIMER_SECONDS}
+            compact={compact}
+          />
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit={true}
+            minimumFontScale={0.6}
+            style={{ color: '#FDE68A', fontSize: compact ? 13 : 15, fontWeight: '900', marginTop: 10, textAlign: 'center' }}
+          >
+            ★ {handStageActive ? t('overflowSwap.title') : t('overflowSwap.titlePile')} ★
+          </Text>
+          <View style={{ marginTop: 8 }}>
+            <StartTurnCountdownCircle
+              deadlineAt={deadlineAt}
+              size={compact ? 54 : 62}
+              soundEnabled={!autoResolving}
+              totalSeconds={OVERFLOW_SWAP_TIMER_SECONDS}
+              showLabel={false}
+              variant="bubble"
+              containerStyle={{ marginBottom: 0 }}
+            />
+          </View>
+        </View>
+
+        {/* ── SCROLLABLE BODY ── */}
+        <ScrollView
+          style={{ maxHeight: availableHeight - 110 }}
+          contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: 16 }}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {handStageActive ? (
+            !locked ? (
+              <Text style={{ color: 'rgba(255,255,255,0.97)', fontSize: compact ? 13 : 14, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                {t('overflowSwap.pickCardSecond')}
+              </Text>
+            ) : (
+              <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: compact ? 12 : 13, fontWeight: '600', textAlign: 'center' }}>{statusText}</Text>
+            )
+          ) : (
+            /* ── PILE STAGE ── surprise card with flip + top card (face-up) ── */
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 4, marginBottom: 4 }}>
+              {/* Surprise card — Slinda back, flips to reveal draw card */}
+              <TouchableOpacity
+                activeOpacity={locked || isFlipping ? 1 : 0.85}
+                disabled={locked || isFlipping}
+                onPress={handleRandomTap}
+                testID="overflow-swap-target-random"
+                style={{ alignItems: 'center', gap: 4, opacity: locked ? 0.82 : 1 }}
+              >
+                <Text style={{ color: '#FDE68A', fontSize: 11, fontWeight: '800' }}>{t('overflowSwap.randomLabel')}</Text>
+                {/* Back face sets container size (in-flow); front face overlaps absolute */}
+                <View>
+                  {/* Back face — in normal flow, determines container size */}
+                  <Animated.View style={{
+                    backfaceVisibility: 'hidden' as const,
+                    transform: [{ perspective: 900 }, { rotateY: backRotateY }],
+                  }}>
+                    <View style={{ borderRadius: 12, overflow: 'hidden' }}>
+                      <Image source={brandedCardBackPreviewImg} style={{ width: CARD_W, height: CARD_H }} resizeMode="cover" />
+                      <View pointerEvents="none" style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 12,
+                        borderWidth: isFlipping || selectedPileChoice === 'random' ? 2.5 : 2,
+                        borderColor: isFlipping || selectedPileChoice === 'random' ? 'rgba(250,204,21,0.96)' : '#9CA3AF',
+                      }} />
+                    </View>
+                  </Animated.View>
+                  {/* Front face — absolute, same origin, overlaps back */}
+                  <Animated.View style={{
+                    position: 'absolute', top: 0, left: 0,
+                    backfaceVisibility: 'hidden' as const,
+                    transform: [{ perspective: 900 }, { rotateY: frontRotateY }],
+                  }}>
+                    <View style={{ borderRadius: 12, overflow: 'hidden' }}>
+                      {previewDrawCard
+                        ? <View pointerEvents="none"><GameCard card={previewDrawCard} /></View>
+                        : <View style={{ width: CARD_W, height: CARD_H, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.3)' }}>
+                            <Text style={{ color: '#FDE68A', fontSize: 22 }}>✦</Text>
+                          </View>
+                      }
+                      <View pointerEvents="none" style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 12,
+                        borderWidth: 2.5, borderColor: 'rgba(250,204,21,0.96)',
+                      }} />
+                    </View>
+                  </Animated.View>
+                </View>
+              </TouchableOpacity>
+              {/* Top card — face-up, actual discard top */}
+              <TouchableOpacity
+                activeOpacity={locked || isFlipping ? 1 : 0.85}
+                disabled={locked || isFlipping}
+                onPress={() => onSelectPileChoice('top')}
+                testID="overflow-swap-target-top"
+                style={{ alignItems: 'center', gap: 4, opacity: locked ? 0.82 : 1 }}
+              >
+                <Text style={{ color: '#FDE68A', fontSize: 11, fontWeight: '800' }}>{t('overflowSwap.topLabel')}</Text>
+                <View style={{ borderRadius: 12, overflow: 'hidden' }}>
+                  {topCard
+                    ? <View pointerEvents="none"><GameCard card={topCard} selected={topSelected} /></View>
+                    : <View style={{ width: CARD_W, height: CARD_H, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.3)' }}>
+                        <Text style={{ color: '#FDE68A', fontSize: 22, fontWeight: '900' }}>?</Text>
+                      </View>
+                  }
+                  {/* Border overlay */}
+                  <View pointerEvents="none" style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    borderRadius: 12,
+                    borderWidth: topSelected ? 2.5 : 2,
+                    borderColor: topSelected ? 'rgba(250,204,21,0.96)' : '#9CA3AF',
+                  }} />
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </LinearGradient>
+    </Animated.View>
   );
 }
 
@@ -11260,7 +12026,9 @@ function TurnTransition() {
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const turnScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
-  const turnScreenHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
+  const turnScreenHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldFrameHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const turnHeaderLift = Platform.OS === 'web' ? 0 : -65;
   const handBottomOffset = webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
@@ -11293,10 +12061,14 @@ function TurnTransition() {
       : ['#0a1628', '#10213a']) as [string, string, ...string[]];
   const soundOn = state.soundsEnabled !== false;
   const mp = useMultiplayerOptional();
-  const { profile, consumeSlinda } = useAuth();
+  const { profile, consumeSlinda, consumeWild } = useAuth();
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
   const [storedPlayerProfiles, setStoredPlayerProfiles] = useState<StoredPlayerProfilesState>(EMPTY_STORED_PLAYER_PROFILES);
   const cp = state.players[state.currentPlayerIndex];
+  const currentPlayerId = cp?.id ?? -1;
+  const currentPlayerName = cp?.name ?? t('labels.player');
+  const currentPlayerHand = cp?.hand ?? [];
+  const currentPlayerIsBot = cp?.isBot ?? false;
   const myPlayerIndex = (state as { myPlayerIndex?: number }).myPlayerIndex;
   const myPlayerState =
     typeof myPlayerIndex === 'number' ? (state.players[myPlayerIndex] as any) : null;
@@ -11310,7 +12082,7 @@ function TurnTransition() {
     !!(
       state.botConfig &&
       cp &&
-      state.botConfig.playerIds.includes(cp.id) &&
+      state.botConfig.playerIds.includes(currentPlayerId) &&
       state.phase !== 'game-over'
     );
   const lockUiForBotTurn = isLocalBotTurn && !state.isTutorial;
@@ -11322,25 +12094,46 @@ function TurnTransition() {
   const lastPlayerBubbleColor = PLAYER_BUBBLE_COLORS[lastPlayerIndex % PLAYER_BUBBLE_COLORS.length];
   const lastPlayerBorderColor = PLAYER_BUBBLE_BORDER_COLORS[lastPlayerIndex % PLAYER_BUBBLE_BORDER_COLORS.length];
   const [tooltipCard, setTooltipCard] = useState<Card | null>(null);
-  const [slindaModalOpen, setSlindaModalOpen] = useState(false);
-  const [slindaSelectedCardId, setSlindaSelectedCardId] = useState<string | null>(null);
-  const [slindaBusy, setSlindaBusy] = useState(false);
-  const [slindaError, setSlindaError] = useState<string | null>(null);
-  const [slindaDeadlineAt, setSlindaDeadlineAt] = useState<number | null>(null);
+  const [activeSpecialKind, setActiveSpecialKind] = useState<SpecialBankKind | null>(null);
+  const [selectedSpecialCardId, setSelectedSpecialCardId] = useState<string | null>(null);
+  const [specialBusy, setSpecialBusy] = useState(false);
+  const [specialError, setSpecialError] = useState<string | null>(null);
+  const [specialDeadlineAt, setSpecialDeadlineAt] = useState<number | null>(null);
   const [pausedStartTurnRemainingMs, setPausedStartTurnRemainingMs] = useState<number | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [onlineBotDiffOpen, setOnlineBotDiffOpen] = useState(false);
   const [cardsCatalogOpen, setCardsCatalogOpen] = useState(false);
-  const [handHintDismissed, setHandHintDismissed] = useState(false);
   /** כפתור "אני מוכן" חייב להיות זמין תמיד במסך מעבר תור */
   const beginTurnEnabled = true;
+  const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
+  const [selectedPileChoice, setSelectedPileChoice] = useState<OverflowSwapPileChoice | null>(null);
+  const [resolveInFlight, setResolveInFlight] = useState(false);
+  const [autoResolving, setAutoResolving] = useState(false);
+  const [warnedAtThreeSeconds, setWarnedAtThreeSeconds] = useState(false);
   const [localStartTurnDeadlineAt, setLocalStartTurnDeadlineAt] = useState<number | null>(null);
   const startTurnTimeoutFiredRef = useRef(false);
+  const overflowSwapTimeoutFiredRef = useRef(false);
+  const overflowAutoResolveAnim = useRef(new Animated.Value(0)).current;
   const [startTurnNowMs, setStartTurnNowMs] = useState(() => Date.now());
   const turnPhaseRef = useRef(state.phase);
   const turnPlayerIdxRef = useRef(state.currentPlayerIndex);
   const beginReadyBlinkOpacity = useRef(new Animated.Value(1)).current;
   const beginReadyBlinkLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const overflowSwapActive =
+    (state.phase === 'turn-transition' ||
+      state.phase === 'pre-roll' ||
+      state.phase === 'building' ||
+      state.phase === 'solved') &&
+    state.overflowSwapPending &&
+    !state.isTutorial;
+  const overflowSwapStage: OverflowSwapStage | null = overflowSwapActive ? (state.overflowSwapStage ?? 'hand') : null;
+  const overflowSwapPileStageActive = overflowSwapStage === 'pile';
+  const overflowSwapHandStageActive = overflowSwapStage === 'hand';
+  const overflowSwapHandLocked = overflowSwapHandStageActive && selectedHandCardId != null;
+  const overflowFanInteractionLocked = overflowSwapPileStageActive || overflowSwapHandLocked;
+  const showOverflowHandFan = true;
+  const overflowSwapDeadlineAt = overflowSwapActive ? (state.overflowSwapDeadlineAt ?? null) : null;
+  const overflowSwapCanUseUnderTop = overflowSwapActive && state.overflowSwapCanUseUnderTop;
   useEffect(() => {
     let cancelled = false;
     loadStoredPlayerProfiles()
@@ -11443,14 +12236,15 @@ function TurnTransition() {
       state.phase === 'turn-transition' &&
       !isOnlineSpectator &&
       !isLocalBotTurn &&
-      !mp?.gameOverride;
+      !mp?.gameOverride &&
+      !overflowSwapActive;
     if (!canRunLocalStartTurnTimer) {
       setLocalStartTurnDeadlineAt(null);
       setPausedStartTurnRemainingMs(null);
       startTurnTimeoutFiredRef.current = false;
       return;
     }
-    if (slindaModalOpen) {
+    if (activeSpecialKind != null) {
       return;
     }
     if (localStartTurnDeadlineAt == null) {
@@ -11467,8 +12261,10 @@ function TurnTransition() {
       setLocalStartTurnDeadlineAt(null);
     }, 180);
     return () => clearInterval(id);
-  }, [state.phase, state.currentPlayerIndex, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride, slindaModalOpen, localStartTurnDeadlineAt, dispatch]);
-  const startTurnDeadlineAt = state.isTutorial ? null : (isLocalBotTurn ? null : (isMyTurnOnline ? (state.turnDeadlineAt ?? null) : localStartTurnDeadlineAt));
+  }, [state.phase, state.currentPlayerIndex, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride, overflowSwapActive, activeSpecialKind, localStartTurnDeadlineAt, dispatch]);
+  const startTurnDeadlineAt = overflowSwapActive
+    ? null
+    : (state.isTutorial ? null : (isLocalBotTurn ? null : (isMyTurnOnline ? (state.turnDeadlineAt ?? null) : localStartTurnDeadlineAt)));
   const showSmallTurnTimerHint = !state.isTutorial && state.roundsPlayed < TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED;
   useEffect(() => {
     if (startTurnDeadlineAt == null) return;
@@ -11607,14 +12403,230 @@ function TurnTransition() {
           : null;
   const compactPlayerScreen = state.roundsPlayed > 0;
   const slindaOwned = profile?.slinda_owned === true;
-  const slindaEligible = slindaOwned && !state.isTutorial && !isOnlineSpectator && !isLocalBotTurn && !mp?.gameOverride;
-  const showSlindaSlot = slindaEligible && !state.slindaAttemptedThisTurn;
-  const sorted = useMemo(() => (cp ? sortHandCards(cp.hand) : []), [cp]);
-  const slindaModalLocked = slindaModalOpen || slindaBusy;
-  const slindaSelectedCard = slindaSelectedCardId
-    ? sorted.find((card) => card.id === slindaSelectedCardId) ?? null
+  const wildOwned = profile?.wild_owned === true;
+  const specialProductsEligible = !state.isTutorial && !isOnlineSpectator && !isLocalBotTurn && !mp?.gameOverride;
+  const slindaEligible = slindaOwned && specialProductsEligible;
+  const wildEligible = wildOwned && specialProductsEligible;
+  const showSlindaSlot = slindaEligible && !state.slindaAttemptedThisTurn && !overflowSwapActive;
+  const showWildSlot = wildEligible && !state.wildAttemptedThisTurn && !overflowSwapActive;
+  const specialModalOpen = activeSpecialKind != null;
+  const sorted = useMemo(() => sortHandCards(currentPlayerHand), [currentPlayerHand]);
+  const overflowDefaultCenterCardId = useMemo(() => {
+    if (!overflowSwapActive || sorted.length === 0) return null;
+    const middleIdx = Math.floor((sorted.length - 1) / 2);
+    return sorted[middleIdx]?.id ?? null;
+  }, [overflowSwapActive, sorted]);
+  const overflowSelectedCardIds = useMemo(
+    () => (overflowSwapHandStageActive && selectedHandCardId ? new Set<string>([selectedHandCardId]) : emptySet),
+    [emptySet, overflowSwapHandStageActive, selectedHandCardId],
+  );
+  const overflowAutoHandCardId = useMemo(() => pickOverflowTimeoutHandCardId(sorted), [sorted]);
+  useEffect(() => {
+    if (overflowSwapActive) {
+      overflowSwapTimeoutFiredRef.current = false;
+      if (tooltipCard != null) setTooltipCard(null);
+      if (selectedHandCardId != null) {
+        const stillExists = sorted.some((card) => card.id === selectedHandCardId);
+        if (!stillExists) setSelectedHandCardId(null);
+      }
+      if (overflowSwapHandStageActive) {
+        if (selectedPileChoice != null) setSelectedPileChoice(null);
+      }
+      if (overflowSwapPileStageActive) {
+        const lockedHandCardId = state.overflowSwapSelectedHandCardId;
+        if (lockedHandCardId != null && selectedHandCardId !== lockedHandCardId) setSelectedHandCardId(lockedHandCardId);
+        if (selectedPileChoice === 'underTop' && !overflowSwapCanUseUnderTop) setSelectedPileChoice(null);
+      }
+      return;
+    }
+    overflowSwapTimeoutFiredRef.current = false;
+    if (selectedHandCardId != null) setSelectedHandCardId(null);
+    if (selectedPileChoice != null) setSelectedPileChoice(null);
+    if (resolveInFlight) setResolveInFlight(false);
+    if (autoResolving) setAutoResolving(false);
+    if (warnedAtThreeSeconds) setWarnedAtThreeSeconds(false);
+  }, [
+    autoResolving,
+    overflowSwapActive,
+    overflowSwapCanUseUnderTop,
+    overflowSwapHandStageActive,
+    overflowSwapPileStageActive,
+    resolveInFlight,
+    selectedHandCardId,
+    selectedPileChoice,
+    sorted,
+    state.overflowSwapSelectedHandCardId,
+    tooltipCard,
+    warnedAtThreeSeconds,
+  ]);
+  const specialModalLocked = specialModalOpen || specialBusy;
+  const selectedSpecialCard = selectedSpecialCardId
+    ? sorted.find((card) => card.id === selectedSpecialCardId) ?? null
     : null;
-  const slindaModalBoxHeight = Math.min(turnScreenHeight - 28, Platform.OS === 'web' ? 760 : 700);
+  const specialModalBoxHeight = Math.min(turnScreenHeight - 28, Platform.OS === 'web' ? 760 : 700);
+  const activeSpecialBankKey = activeSpecialKind ? specialBankPrefix(activeSpecialKind) : 'slindaBank';
+  const handleOverflowHandSelect = useCallback((card: Card) => {
+    if (!overflowSwapActive || resolveInFlight || autoResolving) return;
+    if (!overflowSwapHandStageActive) return;
+    if (soundOn) void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.24 });
+    setTooltipCard(null);
+    setSelectedHandCardId((prev) => (prev === card.id ? null : card.id));
+  }, [autoResolving, overflowSwapActive, overflowSwapHandStageActive, resolveInFlight, soundOn]);
+  const handleOverflowPileSelect = useCallback((pileChoice: OverflowSwapPileChoice) => {
+    if (!overflowSwapActive || resolveInFlight || autoResolving) return;
+    if (!overflowSwapPileStageActive) return;
+    if (pileChoice === 'underTop' && !overflowSwapCanUseUnderTop) return;
+    if (soundOn) void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.24 });
+    setSelectedPileChoice((prev) => (prev === pileChoice ? null : pileChoice));
+  }, [autoResolving, overflowSwapActive, overflowSwapCanUseUnderTop, overflowSwapPileStageActive, resolveInFlight, soundOn]);
+  const startOverflowAutoResolve = useCallback(() => {
+    if (!overflowSwapActive || resolveInFlight || autoResolving) return;
+    if (overflowSwapHandStageActive) {
+      if (overflowAutoHandCardId == null) return;
+      setTooltipCard(null);
+      setSelectedHandCardId(overflowAutoHandCardId);
+      setResolveInFlight(true);
+      setAutoResolving(true);
+      return;
+    }
+    setSelectedPileChoice('top');
+    setResolveInFlight(true);
+    setAutoResolving(true);
+  }, [autoResolving, overflowAutoHandCardId, overflowSwapActive, overflowSwapHandStageActive, resolveInFlight]);
+  useEffect(() => {
+    if (!overflowSwapActive || overflowSwapDeadlineAt == null) return;
+    setWarnedAtThreeSeconds(false);
+  }, [overflowSwapActive, overflowSwapDeadlineAt]);
+  useEffect(() => {
+    if (!overflowSwapActive || overflowSwapDeadlineAt == null || warnedAtThreeSeconds) return;
+    const triggerWarning = () => {
+      setWarnedAtThreeSeconds(true);
+      if (Platform.OS !== 'web') {
+        try {
+          Vibration.vibrate(28);
+        } catch {}
+      }
+    };
+    const warnMs = overflowSwapDeadlineAt - Date.now() - 3000;
+    if (warnMs <= 0) {
+      triggerWarning();
+      return;
+    }
+    const id = setTimeout(triggerWarning, warnMs);
+    return () => clearTimeout(id);
+  }, [overflowSwapActive, overflowSwapDeadlineAt, warnedAtThreeSeconds]);
+  useEffect(() => {
+    if (isOnlineSpectator || isLocalBotTurn || !overflowSwapActive) {
+      overflowSwapTimeoutFiredRef.current = false;
+      return;
+    }
+    const deadline = overflowSwapDeadlineAt;
+    if (deadline == null) return;
+    if (overflowSwapHandStageActive && overflowAutoHandCardId == null) return;
+    const id = setInterval(() => {
+      if (overflowSwapTimeoutFiredRef.current || resolveInFlight) return;
+      if (Date.now() < deadline) return;
+      overflowSwapTimeoutFiredRef.current = true;
+      startOverflowAutoResolve();
+    }, 180);
+    return () => clearInterval(id);
+  }, [
+    isLocalBotTurn,
+    isOnlineSpectator,
+    overflowAutoHandCardId,
+    overflowSwapActive,
+    overflowSwapDeadlineAt,
+    overflowSwapHandStageActive,
+    resolveInFlight,
+    startOverflowAutoResolve,
+  ]);
+  useEffect(() => {
+    if (!overflowSwapActive || !autoResolving || mp?.gameOverride) return;
+    const id = setTimeout(() => {
+      if (soundOn) void playSfx('success', { cooldownMs: 0, volumeOverride: 0.34 });
+      dispatch({
+        type: 'RESOLVE_OVERFLOW_SWAP',
+        ...(overflowSwapPileStageActive ? { pileChoice: 'top' as OverflowSwapPileChoice } : {}),
+      });
+    }, 260);
+    return () => clearTimeout(id);
+  }, [autoResolving, dispatch, mp?.gameOverride, overflowSwapActive, overflowSwapPileStageActive, soundOn]);
+  useEffect(() => {
+    if (!overflowSwapActive || autoResolving || resolveInFlight) return;
+    if (overflowSwapHandStageActive) {
+      if (selectedHandCardId == null) return;
+    } else {
+      if (selectedPileChoice == null) return;
+      if (selectedPileChoice === 'underTop' && !overflowSwapCanUseUnderTop) return;
+    }
+    setResolveInFlight(true);
+    if (soundOn) {
+      void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.24 });
+      void playSfx('success', { cooldownMs: 0, volumeOverride: 0.34 });
+    }
+    dispatch({
+      type: 'RESOLVE_OVERFLOW_SWAP',
+      ...(overflowSwapHandStageActive
+        ? { handCardId: selectedHandCardId! }
+        : { pileChoice: selectedPileChoice! }),
+    });
+  }, [
+    autoResolving,
+    dispatch,
+    overflowSwapActive,
+    overflowSwapCanUseUnderTop,
+    overflowSwapHandStageActive,
+    overflowSwapPileStageActive,
+    resolveInFlight,
+    selectedHandCardId,
+    selectedPileChoice,
+    soundOn,
+  ]);
+  useEffect(() => {
+    if (!overflowSwapActive || !resolveInFlight || autoResolving) return;
+    const id = setTimeout(() => {
+      setResolveInFlight(false);
+    }, 1800);
+    return () => clearTimeout(id);
+  }, [autoResolving, overflowSwapActive, resolveInFlight]);
+  useEffect(() => {
+    overflowAutoResolveAnim.stopAnimation();
+    if (!overflowSwapActive || !autoResolving) {
+      overflowAutoResolveAnim.setValue(0);
+      return;
+    }
+    overflowAutoResolveAnim.setValue(0);
+    const animation = Animated.timing(overflowAutoResolveAnim, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => {
+      overflowAutoResolveAnim.stopAnimation();
+    };
+  }, [autoResolving, overflowAutoResolveAnim, overflowSwapActive]);
+  const overflowPanelAnimatedStyle = {
+    opacity: overflowAutoResolveAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0.9],
+    }),
+    transform: [
+      {
+        scale: overflowAutoResolveAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 0.9],
+        }),
+      },
+      {
+        translateY: overflowAutoResolveAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 42],
+        }),
+      },
+    ],
+  };
 
   const resumePausedStartTurnTimer = useCallback(() => {
     if (pausedStartTurnRemainingMs == null) return;
@@ -11625,100 +12637,113 @@ function TurnTransition() {
       !isOnlineSpectator &&
       !isLocalBotTurn &&
       !mp?.gameOverride &&
+      !overflowSwapActive &&
       remainingMs > 0
     ) {
       startTurnTimeoutFiredRef.current = false;
       setStartTurnNowMs(Date.now());
       setLocalStartTurnDeadlineAt(Date.now() + remainingMs);
     }
-  }, [pausedStartTurnRemainingMs, state.phase, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride]);
+  }, [overflowSwapActive, pausedStartTurnRemainingMs, state.phase, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride]);
 
-  const openSlindaModal = useCallback(() => {
-    if (!showSlindaSlot || slindaBusy || state.slindaAttemptedThisTurn) return;
-    dispatch({ type: 'MARK_SLINDA_ATTEMPT' });
+  const resetSpecialModalState = useCallback(() => {
+    setActiveSpecialKind(null);
+    setSelectedSpecialCardId(null);
+    setSpecialError(null);
+    setSpecialDeadlineAt(null);
+  }, []);
+
+  const openSpecialModal = useCallback((kind: SpecialBankKind) => {
+    if (specialBusy) return;
+    if (kind === 'slinda' && !showSlindaSlot) return;
+    if (kind === 'wild' && !showWildSlot) return;
+    const markAction: GameAction = kind === 'slinda'
+      ? { type: 'MARK_SLINDA_ATTEMPT' }
+      : { type: 'MARK_WILD_ATTEMPT' };
+    dispatch(markAction);
     if (localStartTurnDeadlineAt != null) {
       setPausedStartTurnRemainingMs(Math.max(0, localStartTurnDeadlineAt - Date.now()));
       setLocalStartTurnDeadlineAt(null);
     }
     setTooltipCard(null);
-    setSlindaSelectedCardId(null);
-    setSlindaError(null);
-    setSlindaDeadlineAt(Date.now() + SLINDA_SELECTION_TIMER_SECONDS * 1000);
-    setSlindaModalOpen(true);
-  }, [dispatch, localStartTurnDeadlineAt, showSlindaSlot, slindaBusy, state.slindaAttemptedThisTurn]);
+    setSelectedSpecialCardId(null);
+    setSpecialError(null);
+    setSpecialDeadlineAt(Date.now() + SLINDA_SELECTION_TIMER_SECONDS * 1000);
+    setActiveSpecialKind(kind);
+  }, [dispatch, localStartTurnDeadlineAt, showSlindaSlot, showWildSlot, specialBusy]);
 
-  const closeSlindaModal = useCallback(() => {
-    if (slindaBusy) return;
-    setSlindaModalOpen(false);
-    setSlindaSelectedCardId(null);
-    setSlindaError(null);
-    setSlindaDeadlineAt(null);
+  const openSlindaModal = useCallback(() => {
+    openSpecialModal('slinda');
+  }, [openSpecialModal]);
+
+  const openWildModal = useCallback(() => {
+    openSpecialModal('wild');
+  }, [openSpecialModal]);
+
+  const closeSpecialModal = useCallback(() => {
+    if (specialBusy) return;
+    resetSpecialModalState();
     resumePausedStartTurnTimer();
-  }, [resumePausedStartTurnTimer, slindaBusy]);
+  }, [resetSpecialModalState, resumePausedStartTurnTimer, specialBusy]);
 
-  const handleConfirmSlinda = useCallback(async () => {
-    if (!slindaSelectedCardId || slindaBusy) return;
-    const selectedCardId = slindaSelectedCardId;
-    setSlindaBusy(true);
-    setSlindaError(null);
+  const handleConfirmSpecial = useCallback(async () => {
+    if (!activeSpecialKind || !selectedSpecialCardId || specialBusy) return;
+    const selectedCardId = selectedSpecialCardId;
+    const bankPrefix = specialBankPrefix(activeSpecialKind);
+    const consume = activeSpecialKind === 'slinda' ? consumeSlinda : consumeWild;
+    const replaceAction: GameAction = activeSpecialKind === 'slinda'
+      ? { type: 'REPLACE_CARD_WITH_SLINDA', cardId: selectedCardId }
+      : { type: 'REPLACE_CARD_WITH_WILD', cardId: selectedCardId };
+    const cardTitle = activeSpecialKind === 'slinda' ? t('shop.slindaCard.name') : t('shop.wildCard.name');
+    setSpecialBusy(true);
+    setSpecialError(null);
     try {
-      const consumeResult = await consumeSlinda();
+      const consumeResult = await consume();
       if (consumeResult !== 'ok') {
         dispatch({
           type: 'PUSH_NOTIFICATION',
           payload: {
-            id: `slinda-use-${Date.now()}`,
-            title: 'סלינדה',
+            id: `${activeSpecialKind}-use-${Date.now()}`,
+            title: cardTitle,
             message: '',
             body: consumeResult === 'not_owned'
-              ? 'הסלינדה כבר נוצלה. כדי להשתמש שוב צריך לרכוש אותה מחדש.'
-              : 'לא הצלחנו להפעיל את סלינדה. התור ממשיך בלי שימוש.',
+              ? t(`${bankPrefix}.notOwned`)
+              : t(`${bankPrefix}.consumeError`),
             style: 'warning',
             autoDismissMs: 6500,
           },
         });
-        setSlindaModalOpen(false);
-        setSlindaSelectedCardId(null);
-        setSlindaDeadlineAt(null);
+        resetSpecialModalState();
         resumePausedStartTurnTimer();
         return;
       }
       if (tooltipCard?.id === selectedCardId) setTooltipCard(null);
-      dispatch({ type: 'REPLACE_CARD_WITH_SLINDA', cardId: selectedCardId });
-      setSlindaModalOpen(false);
-      setSlindaSelectedCardId(null);
-      setSlindaDeadlineAt(null);
+      dispatch(replaceAction);
+      resetSpecialModalState();
       resumePausedStartTurnTimer();
     } finally {
-      setSlindaBusy(false);
+      setSpecialBusy(false);
     }
-  }, [consumeSlinda, dispatch, resumePausedStartTurnTimer, slindaBusy, slindaSelectedCardId, tooltipCard]);
+  }, [activeSpecialKind, consumeSlinda, consumeWild, dispatch, resetSpecialModalState, resumePausedStartTurnTimer, selectedSpecialCardId, specialBusy, t, tooltipCard]);
 
   useEffect(() => {
-    if (!slindaModalOpen) return;
-    if (slindaBusy) return;
-    if (state.phase === 'turn-transition' && slindaEligible) return;
-    setSlindaModalOpen(false);
-    setSlindaSelectedCardId(null);
-    setSlindaError(null);
-    setSlindaDeadlineAt(null);
+    if (!specialModalOpen) return;
+    if (specialBusy) return;
+    const activeEligible = activeSpecialKind === 'wild' ? wildEligible : slindaEligible;
+    if (state.phase === 'turn-transition' && activeEligible) return;
+    resetSpecialModalState();
     setPausedStartTurnRemainingMs(null);
-  }, [slindaBusy, slindaEligible, slindaModalOpen, state.phase]);
+  }, [activeSpecialKind, resetSpecialModalState, slindaEligible, specialBusy, specialModalOpen, state.phase, wildEligible]);
 
   useEffect(() => {
-    if (!slindaModalOpen || slindaDeadlineAt == null || slindaBusy) return;
+    if (!specialModalOpen || specialDeadlineAt == null || specialBusy) return;
     const id = setInterval(() => {
-      if (Date.now() < slindaDeadlineAt) return;
-      setSlindaModalOpen(false);
-      setSlindaSelectedCardId(null);
-      setSlindaError(null);
-      setSlindaDeadlineAt(null);
+      if (Date.now() < specialDeadlineAt) return;
+      resetSpecialModalState();
       resumePausedStartTurnTimer();
     }, 180);
     return () => clearInterval(id);
-  }, [resumePausedStartTurnTimer, slindaBusy, slindaDeadlineAt, slindaModalOpen]);
-
-  if (!cp) return null;
+  }, [resetSpecialModalState, resumePausedStartTurnTimer, specialBusy, specialDeadlineAt, specialModalOpen]);
 
   const getCardTooltip = (card: Card): string => {
     switch (card.type) {
@@ -11749,8 +12774,22 @@ function TurnTransition() {
   devCheckHandLayout();
   const HEADER_PAD = 0;
   const BTN_STRIP_H = handBottomOffset;
+  const overflowPanelBottomInset = handBottomOffset + handStripHeight + 6;
+  const overflowPanelTopInset = Math.max(safe.top + 16, 24);
+  const overflowPanelAvailableHeight = Math.max(
+    260,
+    turnScreenHeight - overflowPanelTopInset - overflowPanelBottomInset,
+  );
+  const overflowPanelCompact = overflowPanelAvailableHeight < 430 || turnScreenWidth < 390;
+  const overflowPanelTargetWidth = overflowPanelCompact ? 120 : 132;
+  const overflowPanelMysteryCardHeight = overflowPanelCompact ? 120 : 132;
   return (
-    <WebGameScreenFrame width={turnScreenWidth} testID="turn-transition-playfield">
+    <WebGameScreenFrame
+      width={turnScreenWidth}
+      frameHeight={playfieldFrameHeight}
+      contentScale={playfieldContentScale}
+      testID="turn-transition-playfield"
+    >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }} collapsable={false}>
       {/* רקע נפרד ממסך המשחק — מסך המשחק משתמש ב־bg.jpg; כאן מעבר כחול כדי שלא ייראה כמו אותו מסך.
           בטוטוריאל אנחנו מחליפים לכהה אטום כדי שלא יציץ כחול שקוף סביב המניפה. */}
@@ -11771,7 +12810,7 @@ function TurnTransition() {
         />
       ) : null}
       <View
-        pointerEvents={slindaModalLocked ? 'none' : 'auto'}
+        pointerEvents={specialModalLocked ? 'none' : 'auto'}
         style={{ flex: 1, paddingTop: HEADER_PAD, paddingBottom: Math.max(safeBottom, 20), overflow: 'visible' }}
       >
       {/* ?? Header — מצב נקי אחרי תור ראשון: רק יציאה/טורניר/מד ושחקנים ?? */}
@@ -11807,7 +12846,7 @@ function TurnTransition() {
           />
           {!state.isTutorial && (() => {
             const meterPlayer =
-              (cp && !cp.isBot ? cp : null) ??
+              (cp && !currentPlayerIsBot ? cp : null) ??
               state.players.find(p => !p.isBot) ??
               (state.players.length === 1 ? state.players[0] : null);
             return meterPlayer ? (
@@ -11867,9 +12906,14 @@ function TurnTransition() {
               </TouchableOpacity>
             )}
           </View>
-          {showSlindaSlot ? (
-            <View style={{ alignSelf: 'flex-end', marginTop: 9, marginRight: 4 }}>
-              <SlindaMiniCardButton onPress={openSlindaModal} disabled={slindaModalLocked} testID="turn-slinda-open" />
+          {showSlindaSlot || showWildSlot ? (
+            <View style={{ alignSelf: 'flex-end', marginTop: 9, marginRight: 4, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              {showSlindaSlot ? (
+                <SlindaMiniCardButton onPress={openSlindaModal} disabled={specialModalLocked} testID="turn-slinda-open" />
+              ) : null}
+              {showWildSlot ? (
+                <WildMiniCardButton onPress={openWildModal} disabled={specialModalLocked} testID="turn-wild-open" />
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -11889,7 +12933,12 @@ function TurnTransition() {
         onClose={() => setTournamentInfoOpen(false)}
         rows={getTournamentRowsForModal(state)}
         gameInfo={{
-          modeLabel: state.mode === 'vs-bot' ? 'נגד בוט' : 'מסירה בין שחקנים',
+          modeLabel:
+            state.mode === 'solo'
+              ? t('mode.solo')
+              : state.mode === 'vs-bot'
+                ? t('start.modeVsBot')
+                : t('start.modePassAndPlay'),
           difficultyLabel: state.difficulty === 'easy' ? 'קל' : 'מלא',
           playersCount: state.players.length,
           diceModeLabel: state.diceMode === '2' ? '2 קוביות' : '3 קוביות',
@@ -11974,10 +13023,10 @@ function TurnTransition() {
             </View>
           </View>
         )}
-        {/* Excellence-meter reward explanation — shown once, after a turn in
-            which the meter advanced (triple roll or equation played). The
-            reason is cleared in BEGIN_TURN, so it's naturally one-shot. */}
-        {!!state.lastCourageRewardReason && !state.players[lastPlayerIndex]?.isBot && !state.isTutorial && (
+        {/* Excellence-meter reward explanation — shown once after a turn in
+            which the meter advanced, except when the meter actually fills and
+            the celebration stays inline on the game screen. */}
+        {!!state.lastCourageRewardReason && !state.lastCourageCoinsAwarded && !state.players[lastPlayerIndex]?.isBot && !state.isTutorial && (
           <View style={{ alignSelf: 'center', marginBottom: 8, maxWidth: 360, width: '100%', alignItems: 'center' }}>
             <View
               style={[
@@ -12183,34 +13232,66 @@ function TurnTransition() {
       {/* מניפה: AppShell ללא paddingBottom — התחתית היא כבר פיזית; בלי bottom שלילי (הוא היה מיועד לשילוב עם AppShell מרופד) */}
       <View
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: handBottomOffset + handStripHeight, zIndex: 5 }}
-        pointerEvents={slindaModalLocked ? 'none' : 'box-none'}
+        pointerEvents={specialModalLocked ? 'none' : 'box-none'}
       >
         <View style={{ position: 'absolute', bottom: handBottomOffset, left: 0, right: 0, height: handStripHeight, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 12 }}>
           {isOnlineSpectator ? (
             <Text style={{ color: '#93C5FD', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 24, paddingHorizontal: 16 }}>
-              תור של {cp?.name ?? 'שחקן'} — בהמשך המשחק הקלפים מוצגים רק אצל השחקן בתור. מעבר לשלב הבא יתבצע אחרי שהשחקן יאשר.
+              {overflowSwapActive
+                ? `תור של ${cp?.name ?? 'שחקן'} — ממתינים להחלפת חובה מהיד עם הערימה.`
+                : `תור של ${cp?.name ?? 'שחקן'} — בהמשך המשחק הקלפים מוצגים רק אצל השחקן בתור. מעבר לשלב הבא יתבצע אחרי שהשחקן יאשר.`}
             </Text>
           ) : (
             <>
-              {!handHintDismissed && !state.isTutorial && (
-                <Text style={{fontSize:28,textAlign:'center',marginBottom:4}}>
-                  ??
-                </Text>
-              )}
               <View style={{ height: handInnerHeight, width: '100%', alignItems: 'center', justifyContent: 'flex-end', overflow: 'visible' }}>
-                <SimpleHand
-                  cards={sorted}
-                  stagedCardIds={emptySet}
-                  equationHandPlacedIds={EMPTY_ID_SET}
-                  equationHandPendingId={null}
-                  defenseValidCardIds={null}
-                  forwardCardId={null}
-                  onTap={(card) => {
-                    if (!handHintDismissed) setHandHintDismissed(true);
-                    if (soundOn) playCardSelectSound();
-                    setTooltipCard(prev => prev?.id === card.id ? null : card);
-                  }}
-                />
+                {showOverflowHandFan ? (
+                  <View style={{ width: '100%', height: '100%' }}>
+                    {/* Fan — dimmed to 0.15 opacity in pile stage */}
+                    <View style={{ width: '100%', height: '100%', opacity: overflowSwapPileStageActive ? 0.15 : 1 }}>
+                      <SimpleHand
+                        cards={sorted}
+                        stagedCardIds={overflowSwapActive ? overflowSelectedCardIds : emptySet}
+                        equationHandPlacedIds={EMPTY_ID_SET}
+                        equationHandPendingId={null}
+                        defenseValidCardIds={null}
+                        forwardCardId={null}
+                        interactionLocked={overflowFanInteractionLocked}
+                        centerCardId={overflowSwapHandLocked ? selectedHandCardId : overflowDefaultCenterCardId}
+                        onTap={(card) => {
+                          if (overflowSwapActive) {
+                            handleOverflowHandSelect(card);
+                            return;
+                          }
+                          if (soundOn) playCardSelectSound();
+                          setTooltipCard(prev => prev?.id === card.id ? null : card);
+                        }}
+                      />
+                    </View>
+                    {/* Pile stage: show only the selected card, full opacity + glow */}
+                    {overflowSwapPileStageActive && selectedHandCardId && (() => {
+                      const card = sorted.find(c => c.id === selectedHandCardId);
+                      if (!card) return null;
+                      return (
+                        <View
+                          pointerEvents="none"
+                          style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 8 }}
+                        >
+                          <View style={{
+                            borderRadius: 12,
+                            borderWidth: 2.5,
+                            borderColor: 'rgba(250,204,21,0.95)',
+                            ...Platform.select({
+                              ios: { shadowColor: '#FDE68A', shadowOpacity: 0.9, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
+                              android: { elevation: 16 },
+                            }),
+                          }}>
+                            <GameCard card={card} selected />
+                          </View>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                ) : null}
               </View>
             </>
           )}
@@ -12222,11 +13303,49 @@ function TurnTransition() {
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, minHeight: BTN_STRIP_H, paddingBottom: safe.bottom, alignItems: 'center', justifyContent: 'center', zIndex: 10, overflow: 'visible' as const }}
       >
         {isOnlineSpectator ? (
-          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>ממתין לאישור השחקן…</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
+            {overflowSwapActive ? 'ממתין להחלפת חובה…' : 'ממתין לאישור השחקן…'}
+          </Text>
         ) : null}
       </View>
 
-      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && (
+      {overflowSwapActive && !isOnlineSpectator && !isLocalBotTurn && (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: overflowPanelTopInset,
+            bottom: overflowPanelBottomInset,
+            left: 0,
+            right: 0,
+            zIndex: 10001,
+            ...(Platform.OS === 'android' ? { elevation: 24 } : {}),
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            paddingHorizontal: 12,
+          }}
+        >
+          <OverflowSwapOverlay
+            availableHeight={overflowPanelAvailableHeight}
+            compact={overflowPanelCompact}
+            deadlineAt={overflowSwapDeadlineAt}
+            stage={overflowSwapStage ?? 'hand'}
+            canUseUnderTop={overflowSwapCanUseUnderTop}
+            topCard={topDiscardCard}
+            previewDrawCard={state.drawPile[0] ?? null}
+            selectedHandCardId={selectedHandCardId}
+            selectedPileChoice={selectedPileChoice}
+            resolveInFlight={resolveInFlight}
+            autoResolving={autoResolving}
+            targetWidth={overflowPanelTargetWidth}
+            mysteryCardHeight={overflowPanelMysteryCardHeight}
+            animatedStyle={overflowPanelAnimatedStyle}
+            onSelectPileChoice={handleOverflowPileSelect}
+          />
+        </View>
+      )}
+
+      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && !overflowSwapActive && (
         <View
           pointerEvents="box-none"
           style={{
@@ -12248,7 +13367,7 @@ function TurnTransition() {
                 width={220}
                 height={48}
                 fontSize={17}
-                disabled={slindaModalLocked}
+                disabled={specialModalLocked}
                 testID="turn-im-ready"
                 leadingContent={
                   startTurnDeadlineAt != null && !state.isTutorial ? (
@@ -12285,15 +13404,16 @@ function TurnTransition() {
       )}
 
       <AppModal
-        visible={slindaModalOpen}
-        onClose={closeSlindaModal}
-        title={t('slindaBank.modalTitle')}
-        testID="slinda-modal"
+        visible={specialModalOpen}
+        onClose={closeSpecialModal}
+        title={t(`${activeSpecialBankKey}.modalTitle`)}
+        closeButtonSide="left"
+        testID={activeSpecialKind === 'wild' ? 'wild-modal' : 'slinda-modal'}
         boxStyle={{
           width: '100%',
           maxWidth: 560,
-          height: slindaModalBoxHeight,
-          maxHeight: slindaModalBoxHeight,
+          height: specialModalBoxHeight,
+          maxHeight: specialModalBoxHeight,
           paddingBottom: 16,
         }}
       >
@@ -12301,8 +13421,8 @@ function TurnTransition() {
           <View style={{ alignItems: 'center', marginBottom: 12 }}>
             <HappyBubble
               tone="welcome"
-              title={t('slindaBank.bubbleTitle')}
-              text={t('slindaBank.bubbleBody')}
+              title={t(`${activeSpecialBankKey}.bubbleTitle`)}
+              text={t(`${activeSpecialBankKey}.bubbleBody`)}
               withTail={false}
               maxWidth={340}
               size={Platform.OS === 'web' ? 'normal' : 'compact'}
@@ -12310,16 +13430,16 @@ function TurnTransition() {
           </View>
           <View style={{ alignItems: 'center', marginBottom: 6 }}>
             <StartTurnCountdownCircle
-              deadlineAt={slindaDeadlineAt}
+              deadlineAt={specialDeadlineAt}
               size={64}
               soundEnabled={soundOn}
               totalSeconds={SLINDA_SELECTION_TIMER_SECONDS}
-              labelText={t('slindaBank.timerLabel')}
+              labelText={t(`${activeSpecialBankKey}.timerLabel`)}
               containerStyle={{ marginBottom: 0 }}
             />
           </View>
           <Text style={{ color: '#FDE68A', fontSize: 12, fontWeight: '800', textAlign: 'center', marginBottom: 14 }}>
-            {slindaSelectedCard ? t('slindaBank.confirm') : t('slindaBank.pickCard')}
+            {selectedSpecialCard ? t(`${activeSpecialBankKey}.confirm`) : t(`${activeSpecialBankKey}.pickCard`)}
           </Text>
           <ScrollView
             style={{ flex: 1, minHeight: 0 }}
@@ -12327,18 +13447,18 @@ function TurnTransition() {
             contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', gap: 12, paddingHorizontal: 4, paddingBottom: 8 }}
           >
             {sorted.map((card) => {
-              const selected = slindaSelectedCardId === card.id;
+              const selected = selectedSpecialCardId === card.id;
               return (
                 <TouchableOpacity
                   key={card.id}
                   activeOpacity={0.92}
                   accessibilityRole="button"
-                  accessibilityState={{ selected, disabled: slindaBusy }}
-                  disabled={slindaBusy}
-                  testID={`slinda-option-${card.id}`}
+                  accessibilityState={{ selected, disabled: specialBusy }}
+                  disabled={specialBusy}
+                  testID={`${activeSpecialKind === 'wild' ? 'wild' : 'slinda'}-option-${card.id}`}
                   onPress={() => {
-                    setSlindaSelectedCardId((prev) => (prev === card.id ? null : card.id));
-                    setSlindaError(null);
+                    setSelectedSpecialCardId((prev) => (prev === card.id ? null : card.id));
+                    setSpecialError(null);
                   }}
                   style={{ width: 112, alignItems: 'center', marginBottom: 10 }}
                 >
@@ -12353,9 +13473,9 @@ function TurnTransition() {
               );
             })}
           </ScrollView>
-          {slindaError ? (
+          {specialError ? (
             <View style={{ marginTop: 8, marginBottom: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(248,113,113,0.6)', backgroundColor: 'rgba(127,29,29,0.32)' }}>
-              <Text style={{ color: '#FECACA', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>{slindaError}</Text>
+              <Text style={{ color: '#FECACA', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>{specialError}</Text>
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 14 }}>
@@ -12365,19 +13485,19 @@ function TurnTransition() {
               width={112}
               height={38}
               fontSize={12}
-              disabled={slindaBusy}
-              testID="slinda-cancel"
-              onPress={closeSlindaModal}
+              disabled={specialBusy}
+              testID={activeSpecialKind === 'wild' ? 'wild-cancel' : 'slinda-cancel'}
+              onPress={closeSpecialModal}
             />
             <LulosButton
-              text={slindaBusy ? '...' : t('slindaBank.confirm')}
+              text={specialBusy ? '...' : t(`${activeSpecialBankKey}.confirm`)}
               color="yellow"
               width={162}
               height={38}
               fontSize={12}
-              disabled={!slindaSelectedCardId || slindaBusy}
-              testID="slinda-confirm"
-              onPress={() => { void handleConfirmSlinda(); }}
+              disabled={!selectedSpecialCardId || specialBusy}
+              testID={activeSpecialKind === 'wild' ? 'wild-confirm' : 'slinda-confirm'}
+              onPress={() => { void handleConfirmSpecial(); }}
             />
           </View>
         </View>
@@ -12426,7 +13546,7 @@ function TurnTransition() {
       {/* Name modal opens only from an explicit UI action, not during turn transitions. */}
       {cp && !state.isTutorial && nameModalOpen && (
         <PlayerNameModal
-          initialName={(editingPlayerIndex != null ? state.players[editingPlayerIndex]?.name : cp.name) ?? cp.name}
+          initialName={(editingPlayerIndex != null ? state.players[editingPlayerIndex]?.name : currentPlayerName) ?? currentPlayerName}
           playerSlot={(editingPlayerIndex ?? currentIdx) + 1}
           onConfirm={handlePlayerNameConfirm}
           onClose={() => {
@@ -12476,7 +13596,7 @@ function TurnTransition() {
 // ??? הודעות במסך המשחק (הצגה ב־NotificationZone) ???
 // מקור 1 — GameScreen showOnb (ONB): הדרכה לפי הקשר (נשמר ב־AsyncStorage לפי מפתח מ־ONB_KEYS)
 // מקור 2 — GameScreen showGuidance (GUIDANCE): שלישיית קוביות וכו׳
-// ברוכים הבאים — רק בבועה במסך מעבר התור (TurnTransition), לא כאן
+// ברוכים הבאים — נשמרים רק כגיבוי למסלולים ישירים שבהם הדגל עדיין לא סומן.
 // שליטה: "הדרכה והסברים" בהגדרות — כיבוי מונע הודעות onb + guidance (משתמש חוזר)
 const ONB_KEYS = ['onb_game_start', 'onb_results', 'onb_first_discard', 'onb_welcome_screen', 'onb_choose_cards', 'onb_choose_cards_after_confirm', 'onb_build_equation'] as const;
 type OnbKey = typeof ONB_KEYS[number];
@@ -12523,13 +13643,21 @@ async function clearAllLulosOnboardingKeys(): Promise<void> {
 
 function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { state, dispatch } = useGame();
+  const overflowSwapActive =
+    (state.phase === 'turn-transition' ||
+      state.phase === 'pre-roll' ||
+      state.phase === 'building' ||
+      state.phase === 'solved') &&
+    state.overflowSwapPending &&
+    !state.isTutorial;
   const { t, isRTL } = useLocale();
   const { awardCoins } = useAuth();
   const { table, background, activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const gameScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
-  const gameScreenHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
+  const playfieldFrameHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const handBottomOffset = webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
@@ -12551,15 +13679,18 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const hudTimerFontSize = compactWebHud ? 12 : 13;
   const hudSoundButtonWidth = compactWebHud ? 52 : 56;
   const hudSoundFontSize = compactWebHud ? 13 : 14;
+  const defaultGameTableSurface = resolveGameTableSurface(null, pokerTableImg, {
+    fallbackPresentation: tableThemeId === 'classic' ? 'framed' : 'fill',
+    platform: Platform.OS,
+  });
   const gameTableSurface = activeTableSkin
     ? resolveGameTableSurface(activeTableSkin, pokerTableImg, { platform: Platform.OS })
-    : null;
+    : defaultGameTableSurface;
   const gameFramedTableSurface = gameTableSurface?.presentation === 'framed' ? gameTableSurface : null;
-  const fallbackTableSurface = resolveGameTableSurface(null, pokerTableImg, { platform: Platform.OS });
   const gameTableBaseGradient = tableThemeId !== 'classic' ? table.gradient : null;
   const tableShellStyle = {
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: tableWidth,
     height: tableHeight,
     overflow: 'visible' as const,
     justifyContent: 'center' as const,
@@ -12567,7 +13698,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   };
   const tableStageStyle = {
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: tableWidth,
     height: tableHeight,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
@@ -12580,8 +13711,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     position: 'absolute' as const,
     top: 0,
     left: 0,
-    width: '100%' as const,
-    height: '100%' as const,
+    width: tableWidth,
+    height: tableHeight,
   };
   const safe = useGameSafeArea();
   const isAndroid = Platform.OS === 'android';
@@ -12618,13 +13749,22 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [state.diceRollSeq, state.phase]);
   // Sync parensRight to tutorialBus so InteractiveTutorialScreen can read it.
   useEffect(() => { tutorialBus.setParensRightValue(parensRight); }, [parensRight]);
+  // L7 tutorial still drives the orange parens button pulse through tutorialBus.
+  // Keep the local "needs attention" path for mini-card flows, but also honor
+  // the tutorial pulse flag so the button resumes pulsing right after the
+  // learner picks an operator in the parens lesson.
+  const tutorialParensButtonPulseOn =
+    state.isTutorial &&
+    tutorialBus.getParensButtonPulse();
+  const parensToggleAttentionActive =
+    (parensToggleNeedsAttention || tutorialParensButtonPulseOn) &&
+    !parensToggleTouched;
   // Pulse the entire parens button until the player interacts with it or the turn ends.
   const parensTogglePulseAnim = useRef(new Animated.Value(1)).current;
   const parensColorCycleAnim = useRef(new Animated.Value(0)).current;
   const parensButtonPulseActive =
     showParensToggle &&
-    parensToggleNeedsAttention &&
-    !parensToggleTouched;
+    parensToggleAttentionActive;
   useEffect(() => {
     if (!parensButtonPulseActive) {
       parensTogglePulseAnim.stopAnimation();
@@ -12676,34 +13816,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     lastAwardSyncedPulseRef.current = pulseId;
     void awardCoins(EXCELLENCE_METER_FULL_REWARD_COINS, 'excellence_meter_full');
   }, [awardCoins, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
-  const [showMeterCelebrationOverlay, setShowMeterCelebrationOverlay] = useState(false);
-  const [meterCelebrationRewardCoins, setMeterCelebrationRewardCoins] = useState(EXCELLENCE_METER_FULL_REWARD_COINS);
-  const lastOverlayPulseRef = useRef<number>(0);
-  const meterCelebrateSoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (state.isTutorial || !state.lastCourageCoinsAwarded) return;
-    const pulseId = state.courageRewardPulseId ?? 0;
-    if (pulseId <= 0 || lastOverlayPulseRef.current === pulseId) return;
-    lastOverlayPulseRef.current = pulseId;
-    setMeterCelebrationRewardCoins(EXCELLENCE_METER_FULL_REWARD_COINS);
-    setShowMeterCelebrationOverlay(true);
-    if (state.soundsEnabled !== false) {
-      if (meterCelebrateSoundTimeoutRef.current) {
-        clearTimeout(meterCelebrateSoundTimeoutRef.current);
-      }
-      meterCelebrateSoundTimeoutRef.current = setTimeout(() => {
-        meterCelebrateSoundTimeoutRef.current = null;
-        void playSfx('meterCelebrate', { cooldownMs: 0, volumeOverride: 0.8 });
-      }, 140);
-    }
-    return () => {
-      if (meterCelebrateSoundTimeoutRef.current) {
-        clearTimeout(meterCelebrateSoundTimeoutRef.current);
-        meterCelebrateSoundTimeoutRef.current = null;
-      }
-    };
-  }, [state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial, state.soundsEnabled]);
   const cp = state.players[state.currentPlayerIndex];
+  const currentPlayerId = cp?.id ?? -1;
+  const currentPlayerName = cp?.name ?? t('labels.player');
+  const currentPlayerIsBot = cp?.isBot ?? false;
   useEffect(() => {
     let cancelled = false;
     loadStoredPlayerProfiles()
@@ -12717,7 +13833,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, []);
   useEffect(() => {
     if (state.isTutorial) return;
-    const activeHumanName = cp && !cp.isBot ? cp.name : null;
+    const activeHumanName = cp && !currentPlayerIsBot ? currentPlayerName : null;
     setStoredPlayerProfiles((prev) => {
       const next = mergePlayersIntoStoredProfiles(prev, state.players, activeHumanName);
       void saveStoredPlayerProfiles(next);
@@ -12733,7 +13849,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     !!(
       state.botConfig &&
       cp &&
-      state.botConfig.playerIds.includes(cp.id) &&
+      state.botConfig.playerIds.includes(currentPlayerId) &&
       state.phase !== 'game-over'
     );
   const lockUiForBotTurn = isLocalBotTurn && !state.isTutorial;
@@ -13129,6 +14245,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // Roll button logic
   const canRoll = state.phase === 'pre-roll' && !state.hasPlayedCards && state.pendingFractionTarget === null;
   const rollArrowAnim = useRef(new Animated.Value(0)).current;
+  const soloActionPulse = useRef(new Animated.Value(0)).current;
   // Tutorial-only halo around the gold dice button. Driven by tutorialBus
   // pulseDiceBtn commands during a lesson; otherwise no-op.
   const [diceBtnPulseUntil, setDiceBtnPulseUntil] = useState<number>(0);
@@ -13150,35 +14267,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     });
   }, [dicePulseAnim]);
 
-  // Lesson 6 helpers: handle bus commands to force-open the green chip and
-  // to programmatically tap a mini-card by index. These keep the chip state
-  // predictable when the learner skips/back-navigates into the lesson —
-  // without these handlers the `resultsOpen` flag stays whatever it was in
-  // the previous lesson, which breaks the step 6.2 mini-tap demo.
-  useEffect(() => {
-    return tutorialBus.subscribeFanDemo((cmd) => {
-      if (cmd.kind === 'openResultsChip') {
-        setResultsOpenState(true);
-      } else if (cmd.kind === 'closeResultsChip') {
-        setResultsOpenState(false);
-        // Re-arm the strong pulse so the tutorial's L6 step 0 always gets
-        // the pulsing chip, even on back-nav after the learner already
-        // opened it once (which would have turned boostedPulse off).
-        setResultsChipBoostedPulse(true);
-      } else if (cmd.kind === 'disarmResultsChipPulse') {
-        setResultsChipBoostedPulse(false);
-      } else if (cmd.kind === 'clearSolveExerciseChip') {
-        setSelectedEquationForDisplay(null);
-        setParensToggleNeedsAttention(false);
-        setSolveExerciseHidden(false);
-      } else if (cmd.kind === 'setSolveChip') {
-        setSelectedEquationForDisplay({ equation: cmd.equation, result: cmd.result });
-        setParensToggleNeedsAttention(false);
-        setSolveExerciseHidden(false);
-        setSolveChipPulseKey((prev) => prev + 1);
-      }
-    });
-  }, []);
   const showDicePulse = diceBtnPulseUntil > 0 && Date.now() < diceBtnPulseUntil;
   // Tutorial-only pulsing ? arrow above the confirm-equation button in
   // building phase. Loops continuously; the arrow is only rendered when
@@ -13433,13 +14521,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // Possible results toggle (moved before first reference to avoid TDZ)
   const [resultsOpen, setResultsOpenState] = useState(false);
   const [resultsChipHiddenThisTurn, setResultsChipHiddenThisTurn] = useState(false);
-  const resultsChipTurnKey = `${state.roundsPlayed}:${state.currentPlayerIndex}`;
-  const resultsChipTurnKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (resultsChipTurnKeyRef.current === resultsChipTurnKey) return;
-    resultsChipTurnKeyRef.current = resultsChipTurnKey;
-    setResultsChipHiddenThisTurn(false);
-  }, [resultsChipTurnKey]);
   // Auto-open "possible results" during every bot turn so the player can
   // follow along with what the bot can build.
   useEffect(() => {
@@ -13544,6 +14625,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       ),
     [cp?.hand],
   );
+  const botVisibleResults = useMemo(() => {
+    if (!cp?.isBot) return [] as EquationOption[];
+    return getSolvableTargetOptions(
+      state.validTargets,
+      cp.hand,
+      state.mathRangeMax ?? 25,
+      validateStagedCards,
+    );
+  }, [cp?.isBot, cp?.hand, state.validTargets, state.mathRangeMax]);
   const filteredResultsForHand = useMemo(() => {
     if (state.isTutorial && tutorialBus.getL7GuidedMode()) {
       if (tutorialBus.getL7Step1Mode()) {
@@ -13570,11 +14660,61 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const botDemoKind = state.botPresentation?.action?.kind ?? null;
   const isBotDemoBeat =
     botDemoKind === 'checkPossibleResults' || botDemoKind === 'useMiniCards';
-  // During a bot demo beat, surface ALL valid targets (unfiltered) so the
-  // player sees the same "possible results" strip the teaching narration is
-  // pointing at — `cp` during the bot's turn is the bot, so the hand-filtered
-  // list is usually empty and would render nothing.
-  const resultsStripFeed = (isBotTurnAny || isBotDemoBeat) ? state.validTargets : filteredResultsForHand;
+  // During the bot's turn, surface only targets the bot can actually complete
+  // from its hand. This keeps the teaching strip aligned with the planned play
+  // instead of advertising unrelated validTargets from the dice alone.
+  const resultsStripFeed = (isBotTurnAny || isBotDemoBeat) ? botVisibleResults : filteredResultsForHand;
+  const hasDisplayableResults = (isBotTurnAny || isBotDemoBeat)
+    ? botVisibleResults.length > 0
+    : state.validTargets.length > 0;
+  // Lesson 6 helpers: handle bus commands to force-open the green chip and
+  // to programmatically tap a mini-card by index. These keep the chip state
+  // predictable when the learner skips/back-navigates into the lesson —
+  // without these handlers the `resultsOpen` flag stays whatever it was in
+  // the previous lesson, which breaks the step 6.2 mini-tap demo.
+  // Ref keeps the subscribe callback from capturing a stale resultsStripFeed.
+  const resultsStripFeedRef = React.useRef(resultsStripFeed);
+  useEffect(() => { resultsStripFeedRef.current = resultsStripFeed; }, [resultsStripFeed]);
+  useEffect(() => {
+    return tutorialBus.subscribeFanDemo((cmd) => {
+      if (cmd.kind === 'openResultsChip') {
+        setResultsChipHiddenThisTurn(false);
+        setResultsOpenState(true);
+      } else if (cmd.kind === 'closeResultsChip') {
+        setResultsChipHiddenThisTurn(false);
+        setResultsOpenState(false);
+        // Re-arm the strong pulse so the tutorial's L6 step 0 always gets
+        // the pulsing chip, even on back-nav after the learner already
+        // opened it once (which would have turned boostedPulse off).
+        setResultsChipBoostedPulse(true);
+      } else if (cmd.kind === 'disarmResultsChipPulse') {
+        setResultsChipBoostedPulse(false);
+      } else if (cmd.kind === 'clearSolveExerciseChip') {
+        setSelectedEquationForDisplay(null);
+        setParensToggleNeedsAttention(false);
+        setSolveExerciseHidden(false);
+      } else if (cmd.kind === 'setSolveChip') {
+        setSelectedEquationForDisplay({ equation: cmd.equation, result: cmd.result });
+        setParensToggleNeedsAttention(false);
+        setSolveExerciseHidden(false);
+        setSolveChipPulseKey((prev) => prev + 1);
+      } else if (cmd.kind === 'tapMiniResult') {
+        // Bot demo visual-only tap: select the mini-card at idx (sorted by
+        // result ascending) and show the solve chip WITHOUT emitting the
+        // miniCardTapped user event — that event is reserved for the learner's
+        // own tap in await-mimic. Using setSolveChip-equivalent state here so
+        // the outcome predicate cannot fire during the bot-demo phase.
+        const sorted = [...resultsStripFeedRef.current].sort((a, b) => a.result - b.result);
+        const target = sorted[cmd.idx];
+        if (target) {
+          setSelectedEquationForDisplay({ equation: target.equation, result: target.result });
+          setParensToggleNeedsAttention(false);
+          setSolveExerciseHidden(false);
+          setSolveChipPulseKey((prev) => prev + 1);
+        }
+      }
+    });
+  }, []);
   // Fraction cards in hand that can be played on the current top of the
   // discard pile (e.g. 1/3 when the top is a number divisible by 3).
   const playableFractionCardsForResults = useMemo(() => {
@@ -13584,12 +14724,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     return cp.hand.filter(c => c.type === 'fraction' && validateFractionPlay(c, topDiscard));
   }, [cp?.hand, state.discardPile]);
 
-  // Possible results toggle: לחיצה ראשונה — הצגת מיני קלפים + ONB; לחיצה שנייה — הסתרה
+  // Possible results toggle: reveal the strip once, then hide the chip until
+  // the turn changes so it cannot be toggled repeatedly in the same turn.
   const toggleResultsBadges = useCallback(() => {
     playMiniResultTapSound();
+    setResultsChipBoostedPulse(false);
+    setResultsChipHiddenThisTurn(true);
     if (resultsOpen) {
-      setResultsChipBoostedPulse(false);
-      setResultsOpenState(false);
       if (state.isTutorial) tutorialBus.emitUserEvent({ kind: 'resultsChipTapped' });
       return;
     }
@@ -13614,11 +14755,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         });
       }
     }
-    setResultsChipBoostedPulse(false);
     setResultsOpenState(true);
-    if (!state.isTutorial && !isBotTurnAny) {
-      setResultsChipHiddenThisTurn(true);
-    }
     const shouldShowWildResultsGuidance =
       midGameHintsUnlocked &&
       tutLoaded &&
@@ -13716,7 +14853,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const botBuildingSolved = isBotTurnAny &&
     (state.phase === 'building' || state.phase === 'solved') &&
     !state.hasPlayedCards &&
-    state.validTargets.length > 0;
+    botVisibleResults.length > 0;
   useEffect(() => {
     if (isBotDemoBeat || botBuildingSolved) {
       if (!resultsOpen) {
@@ -13739,7 +14876,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         // and show the red solve-exercise chip with the equation.
         const nextPending = state.botPendingDemoActions?.[0];
         if (nextPending && nextPending.kind === 'confirmEquation') {
-            const targetEq = state.validTargets.find((t) => t.result === nextPending.target);
+            const targetEq =
+              botVisibleResults.find(
+                (t) => t.result === nextPending.target && t.equation === nextPending.equationDisplay,
+              ) ??
+              botVisibleResults.find((t) => t.result === nextPending.target) ??
+              state.validTargets.find(
+                (t) => t.result === nextPending.target && t.equation === nextPending.equationDisplay,
+              ) ??
+              state.validTargets.find((t) => t.result === nextPending.target);
             if (targetEq) {
               const tapDelay = setTimeout(() => {
                 playMiniResultTapSound();
@@ -13763,13 +14908,42 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       resultsStripArrowAnim.setValue(0);
       setResultsMiniArrowPulse(false);
     }
-  }, [isBotDemoBeat, botBuildingSolved, botDemoKind, resultsOpen, resultsStripArrowAnim, state.botPendingDemoActions, state.validTargets, state.isTutorial, playMiniResultTapSound]);
+  }, [isBotDemoBeat, botBuildingSolved, botDemoKind, resultsOpen, resultsStripArrowAnim, state.botPendingDemoActions, state.validTargets, state.isTutorial, playMiniResultTapSound, botVisibleResults]);
 
   // תרגיל נבחר להצגה באזור האפור (רק כש־showSolveExercise מופעל)
   const [selectedEquationForDisplay, setSelectedEquationForDisplay] = useState<EquationOption | null>(null);
   const [solveExerciseHidden, setSolveExerciseHidden] = useState(false);
   const [solveChipPulseKey, setSolveChipPulseKey] = useState(0);
-  const parensToggleShouldAnimateColor = parensToggleNeedsAttention && !parensToggleTouched;
+  const hideSolvedResultsUi =
+    !state.isTutorial &&
+    !isBotTurnAny &&
+    state.phase === 'solved' &&
+    !state.hasPlayedCards;
+  const showSolvedPickCardsPrompt =
+    hideSolvedResultsUi &&
+    state.stagedCards.length === 0;
+  const resultsUiTurnKey = `${state.roundsPlayed}:${state.currentPlayerIndex}`;
+  const resultsUiTurnKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (resultsUiTurnKeyRef.current === resultsUiTurnKey) return;
+    resultsUiTurnKeyRef.current = resultsUiTurnKey;
+    setResultsChipHiddenThisTurn(false);
+    setResultsOpenState(false);
+    setSelectedEquationForDisplay(null);
+    setSolveExerciseHidden(false);
+    setParensToggleNeedsAttention(false);
+    setParensToggleTouched(false);
+  }, [resultsUiTurnKey]);
+  useEffect(() => {
+    if (!hideSolvedResultsUi) return;
+    if (resultsOpen) setResultsOpenState(false);
+    setResultsChipBoostedPulse(false);
+    resultsStripArrowLoopRef.current?.stop();
+    resultsStripArrowLoopRef.current = null;
+    resultsStripArrowAnim.setValue(0);
+    setResultsMiniArrowPulse(false);
+  }, [hideSolvedResultsUi, resultsOpen, resultsStripArrowAnim]);
+  const parensToggleShouldAnimateColor = parensToggleAttentionActive;
   const parensToggleBackgroundColor = parensToggleShouldAnimateColor ? parensToggleBg : '#F97316';
 
   // ?? Bot: always open the red "solve exercise" chip with the bot's
@@ -14141,9 +15315,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     const fracCount = new Set(playableFractionCardsForResults.map(c => c.fraction)).size;
     return numCount + fracCount;
   }, [state.validTargets, handNumberValuesForResults, playableFractionCardsForResults]);
-  // During bot's turn the strip shows ALL validTargets (unfiltered), so the
-  // badge count must match that — not the hand-filtered count.
-  const matchCountForHand = isBotTurnAny ? state.validTargets.length : matchCountForHandRaw;
+  // During the bot's turn, the badge count must match the narrowed strip.
+  const matchCountForHand = isBotTurnAny ? botVisibleResults.length : matchCountForHandRaw;
   const wildResultsGuidanceCountRef = useRef(0);
   useEffect(() => {
     wildResultsGuidanceCountRef.current = 0;
@@ -14159,6 +15332,46 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     ? getL11MultiPlayTutorialMissingKey(state.stagedCards, tutorialBus.getL11Config())
     : null;
   const placeCardsDisabled = l11PlaceMissingKey != null;
+  const showSoloBuildConfirmHint =
+    !state.isTutorial &&
+    state.mode === 'solo' &&
+    state.phase === 'building' &&
+    !state.hasPlayedCards &&
+    equationBuildStarted &&
+    !!eqConfirm;
+  const showSoloPlaceCardsHint =
+    !state.isTutorial &&
+    state.mode === 'solo' &&
+    state.phase === 'solved' &&
+    !state.hasPlayedCards &&
+    state.stagedCards.length > 0 &&
+    !placeCardsDisabled;
+  const showSoloOrangeButtonHint = showSoloBuildConfirmHint || showSoloPlaceCardsHint;
+  useEffect(() => {
+    if (!showSoloOrangeButtonHint) {
+      soloActionPulse.stopAnimation();
+      soloActionPulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(soloActionPulse, {
+          toValue: 1,
+          duration: 650,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(soloActionPulse, {
+          toValue: 0,
+          duration: 650,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showSoloOrangeButtonHint, soloActionPulse]);
   const PLACE_NOW_BTN_W = 220;
   /** רוחב מינימלי סביב הכפתור — מונע anchor שלילי וחפיפה עם צ'יפים במסכים צרים */
   const PLACE_NOW_ORBIT_W = Math.max(PLACE_NOW_BTN_W + 32, Math.min(SCREEN_W - 16, 420));
@@ -14198,7 +15411,12 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   useEffect(() => {
   }, [bottomPad, state.phase, state.players.length]);
   return (
-    <WebGameScreenFrame width={gameScreenWidth} testID="game-screen-playfield">
+    <WebGameScreenFrame
+      width={gameScreenWidth}
+      frameHeight={playfieldFrameHeight}
+      contentScale={playfieldContentScale}
+      testID="game-screen-playfield"
+    >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }}>
       {/* שכבות הרקע נפרסות מתחת ל-safe area; ה-UI עצמו נשאר ממוקם לפי ה-insets. */}
       <View pointerEvents="none" style={fullBleedBackgroundFrame}>
@@ -14362,12 +15580,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       </View>
       )}
       {/* כפתור תוצאות אפשריות + כפתור אדום — צמודים זה לזה ליד הערימה */}
-      {((state.showPossibleResults && state.validTargets.length > 0) ||
+      {!hideSolvedResultsUi &&
+        ((((state.showPossibleResults && hasDisplayableResults && !resultsChipHiddenThisTurn)) ||
         (selectedEquationForDisplay !== null && !solveExerciseHidden)) &&
         (state.phase === 'building' || state.phase === 'solved') &&
         !state.hasPlayedCards &&
         (!state.isTutorial || state.showPossibleResults) &&
-        (isBotTurnAny || isBotDemoBeat || state.showSolveExercise || state.showPossibleResults) && (
+        (isBotTurnAny || isBotDemoBeat || state.showSolveExercise || state.showPossibleResults)) && (
         <View
           style={{
             position: 'absolute',
@@ -14380,7 +15599,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           }}
           pointerEvents="box-none"
         >
-          {state.showPossibleResults && state.validTargets.length > 0 && !resultsChipHiddenThisTurn ? (
+          {state.showPossibleResults && hasDisplayableResults && !resultsChipHiddenThisTurn ? (
             <ResultsSlot
               onToggle={toggleResultsBadges}
               filteredResults={filteredResultsForHand}
@@ -14482,8 +15701,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   />
                 ) : (
                   <Image
-                    source={fallbackTableSurface.source as any}
-                    resizeMode={fallbackTableSurface.resizeMode}
+                    source={defaultGameTableSurface.source as any}
+                    resizeMode={defaultGameTableSurface.resizeMode}
                     style={tableStageImageStyle}
                   />
                 )}
@@ -14562,7 +15781,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           During the bot's teaching beat we force-render the strip even if the
           player hasn't enabled "possible results" — the demo is the whole
           point: it's how the player discovers the feature. */}
-      {((isBotTurnAny || isBotDemoBeat || state.showPossibleResults) && (!state.isTutorial || state.showPossibleResults) && state.validTargets.length > 0 && (state.phase === 'building' || state.phase === 'solved') && !state.hasPlayedCards) ? (
+      {showSolvedPickCardsPrompt ? (
+        <View style={{ position: 'absolute', top: 455, left: 0, right: 0, minHeight: 50, zIndex: 30, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }} pointerEvents="box-none">
+          <ChooseCardsPromptButton />
+        </View>
+      ) : ((isBotTurnAny || isBotDemoBeat || state.showPossibleResults) && (!state.isTutorial || state.showPossibleResults) && hasDisplayableResults && (state.phase === 'building' || state.phase === 'solved') && !state.hasPlayedCards) ? (
         <View style={{ position: 'absolute', top: 455, left: 0, right: 0, minHeight: 50, zIndex: 30, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }} pointerEvents="box-none">
           {resultsMiniArrowPulse ? (
             <Animated.View
@@ -14624,10 +15847,18 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         >
           {(() => {
             const showTutorialConfirm = state.isTutorial && (tutorialBus.getL4Step3Mode() || tutorialBus.getManualEqConfirm());
-            const showBuildPlaceholder = !state.isTutorial && !equationBuildStarted;
+            const showBuildPlaceholder =
+              !state.isTutorial &&
+              state.mode === 'solo' &&
+              (!equationBuildStarted || !eqConfirm);
             const confirmLabel = showBuildPlaceholder ? t('equation.buildTitle') : t('game.buildingEquationNext');
-            const confirmDisabled = showBuildPlaceholder || !eqConfirm;
+            const confirmDisabled = !eqConfirm;
             const showTutorialPulse = state.isTutorial && tutorialBus.getL4Step3Mode();
+            const showTutorialConfirmArrow = showTutorialPulse && !tutorialBus.getL7Step1Mode();
+            const showConfirmAttentionPulse = showTutorialPulse || showSoloBuildConfirmHint;
+            const showConfirmAttentionArrow = showTutorialConfirmArrow;
+            const confirmPulseAnim = showTutorialPulse ? tutorialResultPulse : soloActionPulse;
+            const confirmShadowColor = showBuildPlaceholder ? '#16A34A' : '#FF6B00';
             return (
               <Animated.View
                 ref={confirmBtnWrapperRef}
@@ -14640,7 +15871,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 style={[
                   Platform.select({
                     ios: {
-                      shadowColor: '#FF6B00',
+                      shadowColor: confirmShadowColor,
                       shadowOffset: { width: 0, height: 0 },
                       shadowOpacity: 0.75,
                       shadowRadius: 16,
@@ -14651,11 +15882,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   // the eye without hiding the button text. Driven by the shared
                   // `tutorialResultPulse` so it stays in step with any sibling
                   // tutorial animations.
-                  showTutorialPulse
+                  showConfirmAttentionPulse
                     ? {
                         transform: [
                           {
-                            scale: tutorialResultPulse.interpolate({
+                            scale: confirmPulseAnim.interpolate({
                               inputRange: [0, 1],
                               outputRange: [1, 1.06],
                             }),
@@ -14666,17 +15897,17 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 ]}
               >
                 {/* L4 step 3: pulsing ? arrow next to the confirm button */}
-                {showTutorialPulse && !!eqConfirm && (
+                {showConfirmAttentionArrow && (
                   <Animated.View
                     pointerEvents="none"
                     style={{
                       position: 'absolute',
                       right: -44,
                       top: -136,
-                      opacity: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+                      opacity: confirmPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
                       transform: [
-                        { translateX: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }) },
-                        { scale: tutorialResultPulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.9, 1.2, 0.9] }) },
+                        { translateX: confirmPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }) },
+                        { scale: confirmPulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.9, 1.2, 0.9] }) },
                       ],
                     }}
                   >
@@ -14685,11 +15916,12 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 )}
                 <LulosButton
                   text={confirmLabel}
-                  color="orange"
+                  color={showBuildPlaceholder ? 'green' : 'orange'}
                   width={220}
                   height={48}
                   fontSize={17}
                   textColor="#FFFFFF"
+                  testID="confirm-equation"
                   disabled={confirmDisabled}
                   onPress={() => {
                     if (confirmDisabled || !eqConfirm) return;
@@ -14763,12 +15995,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                     },
                     android: { elevation: 18 },
                   }),
-                  // Tutorial "breathing" pulse — subtle scale loop.
-                  state.isTutorial && tutorialBus.getL4Step3Mode()
+                  // Tutorial and solo "ready" pulse — keep the place CTA obvious
+                  // once the player picked cards and needs to confirm.
+                  (state.isTutorial && tutorialBus.getL4Step3Mode()) || showSoloPlaceCardsHint
                     ? {
                         transform: [
                           {
-                            scale: tutorialResultPulse.interpolate({
+                            scale: (state.isTutorial ? tutorialResultPulse : soloActionPulse).interpolate({
                               inputRange: [0, 1],
                               outputRange: [1, 1.06],
                             }),
@@ -14804,15 +16037,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       {(() => {
         const pr=state.phase==='pre-roll', bl=state.phase==='building', so=state.phase==='solved';
         const fracMin = pr && state.pendingFractionTarget !== null;
-        const showDraw = (bl||so)&&!state.hasPlayedCards&&state.pendingFractionTarget===null&&!state.isTutorial;
-        const showFracDraw = fracMin && !state.hasPlayedCards;
+        const actionButtonsLocked = overflowSwapActive || state.hasDrawnCard;
+        const showDraw = (bl||so)&&!state.hasPlayedCards&&state.pendingFractionTarget===null&&!state.isTutorial&&!actionButtonsLocked;
+        const showFracDraw = fracMin && !state.hasPlayedCards && !actionButtonsLocked;
         const btnCount = (canRoll?1:0)+(showDraw?1:0)+(showFracDraw?1:0);
         const abEndTurn = (pr||bl||so)&&state.hasPlayedCards;
         const totalBtns = btnCount + (abEndTurn?1:0);
-        const showFallback = totalBtns === 0 && (pr||bl||so) && !state.isTutorial;
+        const showFallback = totalBtns === 0 && (pr||bl||so) && !state.isTutorial && !actionButtonsLocked;
         const barPaddingBottom = Math.max(24, safe.insets.bottom + 20);
         const BOTTOM_BAR_HEIGHT = 180;
-        const drawVisible = showDraw || showFracDraw || showFallback;
+        const drawVisible = shouldShowDrawForfeitButton(state, canRoll);
         const showSolvedRow = so && !state.hasPlayedCards;
         const hasStaged = showSolvedRow && state.stagedCards.length > 0;
         const showBackToEquation =
@@ -14821,7 +16055,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           !state.hasPlayedCards &&
           state.pendingFractionTarget === null &&
           selectedEquationForDisplay !== null &&
-          solveExerciseHidden;
+          solveExerciseHidden &&
+          !overflowSwapActive;
         return (
           <View pointerEvents="box-none" style={{ position: 'absolute', bottom: 30, left: 0, right: 0, minHeight: BOTTOM_BAR_HEIGHT + safe.insets.bottom, zIndex: 20, overflow: 'visible', backgroundColor: 'transparent', paddingHorizontal: 20, paddingTop: 12, paddingBottom: barPaddingBottom }}>
             <View pointerEvents="box-none" style={{flex:1,justifyContent:'flex-end'}}>
@@ -14829,13 +16064,29 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 <ActionBar />
               </ScrollView>
               {/* איפוס התרגיל — שורה קבועה מתחת ל-ScrollView */}
-              <View style={{flexShrink:0,minHeight:52,alignItems:'center',justifyContent:'center',gap:8,paddingTop:6,flexDirection:'row',flexWrap:'wrap',transform:[{translateY:40}]}}>
+              <View style={{flexShrink:0,minHeight:52,alignItems:'center',justifyContent:'center',gap:8,paddingTop:6,marginTop:0,transform:[{ translateY: 40 }],flexDirection:'row',flexWrap:'wrap'}}>
                 {/* איפוס התרגיל — רק ב-building */}
-                {bl && !state.hasPlayedCards && state.dice && state.pendingFractionTarget === null && !state.isTutorial && (
-                  <LulosButton text={t('game.resetEquation')} color="blue" width={120} height={38} fontSize={14} disabled={!equationBuildStarted} onPress={handleResetEquation} />
+                {bl && !state.hasPlayedCards && state.dice && state.pendingFractionTarget === null && !state.isTutorial && !overflowSwapActive && (
+                  <LulosButton
+                    text={t('game.resetEquation')}
+                    color="blue"
+                    width={160}
+                    height={38}
+                    fontSize={14}
+                    testID="reset-equation"
+                    onPress={handleResetEquation}
+                  />
                 )}
                 {showBackToEquation && (
-                  <LulosButton text={t('game.backToEquation')} color="blue" width={132} height={38} fontSize={14} onPress={() => setSolveExerciseHidden(false)} />
+                  <LulosButton
+                    text={t('game.backToEquation')}
+                    color="blue"
+                    width={168}
+                    height={38}
+                    fontSize={14}
+                    testID="back-to-equation"
+                    onPress={() => setSolveExerciseHidden(false)}
+                  />
                 )}
               </View>
               {/* שורה שנייה — שלוף קלף, מופרדת כדי למנוע חפיפה */}
@@ -14846,6 +16097,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                     color="red"
                     height={40}
                     fontSize={15}
+                    testID="draw-card-forfeit"
                     onPress={()=>{
                       playDrawForfeitSound();
                       dispatch(showFracDraw ? {type:'DEFEND_FRACTION_PENALTY'} : {type:'DRAW_CARD'});
@@ -14967,36 +16219,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
       {showCel && <CelebrationFlash onDone={()=>setShowCel(false)} />}
 
-      {showMeterCelebrationOverlay && !cp?.isBot && !state.isTutorial && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 85,
-            backgroundColor: 'rgba(6,12,17,0.76)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 18,
-          }}
-        >
-          <ExtractedMeterCelebrationOverlayCard
-            rewardCoins={meterCelebrationRewardCoins}
-            onContinue={() => setShowMeterCelebrationOverlay(false)}
-            badge="מד ההצטיינות התמלא"
-            title={t('courage.coinAward.title')}
-            body="זו האנימציה המקורית מהקובץ שהבאת, ועכשיו היא מוצגת גם בתוך חלון החגיגה של המשחק."
-          />
-        </View>
-      )}
-
-      
-
-      
-
-
       {/* ?? נגמר הזמן: חסימת מסך + הודעה בתחתית 2.5 שניות, אחר כך שלוף קלף ומעבר לתור הבא ?? */}
       {timerExpiredOverlay && (
         <View
@@ -15102,19 +16324,47 @@ function Confetti({ width, height }: { width: number; height: number }) {
   return <View style={StyleSheet.absoluteFill} pointerEvents="none">{an.map((a,i)=><Animated.View key={i} style={{position:'absolute',width:10,height:10,borderRadius:2,backgroundColor:a.c,transform:[{translateX:a.x as any},{translateY:a.y as any},{rotateZ:a.r.interpolate({inputRange:[-360,360],outputRange:['-360deg','360deg']}) as any}]}} />)}</View>;
 }
 
+function formatSoloDuration(durationMs: number | null | undefined): string {
+  const totalSeconds = Math.max(0, Math.round((durationMs ?? 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function GameOver() {
-  const { t } = useLocale();
+  const { t, isRTL } = useLocale();
   const { state, dispatch } = useGame();
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const gameOverWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
-  const gameOverHeight = webGameLayout?.viewportHeight ?? SCREEN_H;
+  const gameOverHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldFrameHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const sorted = [...state.players].sort((a,b)=>a.hand.length-b.hand.length);
+  const isSoloWin = state.mode === 'solo' && state.players.length === 1;
+  const soloStats = state.soloSessionStats;
   const winningPlayedCards = (state.lastTurnPlayedCards?.length ?? 0) > 0
     ? state.lastTurnPlayedCards
     : state.currentTurnPlayedCards;
+  const soloSummaryRows = isSoloWin
+    ? [
+        { label: t('soloSummary.duration'), value: formatSoloDuration(soloStats?.durationMs) },
+        { label: t('soloSummary.draws'), value: String(soloStats?.drawCount ?? 0) },
+        { label: t('soloSummary.swaps'), value: String(soloStats?.swapCount ?? 0) },
+        { label: t('soloSummary.fullEquations'), value: String(soloStats?.fullEquationCount ?? 0) },
+      ]
+    : [];
   return (
-    <WebGameScreenFrame width={gameOverWidth} testID="game-over-playfield">
+    <WebGameScreenFrame
+      width={gameOverWidth}
+      frameHeight={playfieldFrameHeight}
+      contentScale={playfieldContentScale}
+      testID="game-over-playfield"
+    >
     <View style={{flex:1,width:'100%',justifyContent:'center',alignItems:'center',padding:24}}>
       <Confetti width={gameOverWidth} height={gameOverHeight} />
       <Text style={{fontSize:56,marginBottom:8}}>{TROPHY_EMOJI}</Text>
@@ -15194,10 +16444,33 @@ function GameOver() {
             ) : null}
           </View>
         ) : null}
-        <View style={{backgroundColor:'rgba(55,65,81,0.5)',borderRadius:12,padding:16,width:'100%'}}>
-          <Text style={{color:'#9CA3AF',fontSize:11,fontWeight:'700',letterSpacing:1,marginBottom:10,textAlign:'center'}}>תוצאות סופיות</Text>
-          {sorted.map((p,i)=><View key={p.id} style={{flexDirection:'row',justifyContent:'space-between',paddingVertical:3}}><Text style={{color:'#D1D5DB',fontSize:14}} numberOfLines={1}>{i+1}. {p.name}{p.hand.length===2?' ?':''}</Text><Text style={{color:'#9CA3AF',fontSize:14}}>{p.hand.length} קלפים נותרו</Text></View>)}
-        </View>
+        {isSoloWin ? (
+          <View testID="solo-summary-card" style={{ backgroundColor:'rgba(30,41,59,0.72)', borderRadius:14, padding:16, width:'100%', borderWidth:1, borderColor:'rgba(129,140,248,0.32)' }}>
+            <Text style={{color:'#C7D2FE',fontSize:11,fontWeight:'700',letterSpacing:1,marginBottom:10,textAlign:'center'}}>{t('soloSummary.title')}</Text>
+            {soloSummaryRows.map((row, index) => (
+              <View
+                key={row.label}
+                style={{
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingVertical: 8,
+                  borderTopWidth: index === 0 ? 0 : 1,
+                  borderTopColor: 'rgba(148,163,184,0.18)',
+                }}
+              >
+                <Text style={{ color:'#CBD5E1', fontSize:13, fontWeight:'700', flex:1, textAlign: isRTL ? 'right' : 'left' }}>{row.label}</Text>
+                <Text style={{ color:'#F8FAFC', fontSize:16, fontWeight:'900', textAlign: isRTL ? 'left' : 'right' }}>{row.value}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={{backgroundColor:'rgba(55,65,81,0.5)',borderRadius:12,padding:16,width:'100%'}}>
+            <Text style={{color:'#9CA3AF',fontSize:11,fontWeight:'700',letterSpacing:1,marginBottom:10,textAlign:'center'}}>תוצאות סופיות</Text>
+            {sorted.map((p,i)=><View key={p.id} style={{flexDirection:'row',justifyContent:'space-between',paddingVertical:3}}><Text style={{color:'#D1D5DB',fontSize:14}} numberOfLines={1}>{i+1}. {p.name}{p.hand.length===2?' ?':''}</Text><Text style={{color:'#9CA3AF',fontSize:14}}>{p.hand.length} קלפים נותרו</Text></View>)}
+          </View>
+        )}
       </ScrollView>
       <LulosButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
       <LulosButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
@@ -15898,9 +17171,12 @@ function NotificationZone() {
   const needsAck = notif ? isWelcomeNotification(notif) || !!notif.requireAck : false;
   /** AppShell כבר מוסיף paddingBottom: insets.bottom — לא מחסרים שוב; ack מרימים מעט כדי שלא ייחתך כפתור "הבנתי!". */
   const ACK_BOTTOM_EXTRA = 36;
+  const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const baseAboveHand =
-    (webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET) +
-    (webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT) +
+    (
+      (webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET) +
+      (webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT)
+    ) * playfieldContentScale +
     12;
   const notifBottom = Math.max(20, baseAboveHand + (needsAck ? ACK_BOTTOM_EXTRA : 0));
   const fadeOpacity = useRef(new Animated.Value(1)).current;
@@ -16170,13 +17446,20 @@ function PlayerWaitingScreen({
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
   const waitingScreenWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
+  const playfieldFrameHeight = webGameLayout?.frameHeight ?? SCREEN_H;
+  const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const safe = useGameSafeArea();
   const bottomPad = handBottomOffset + handStripHeight + safe.insets.bottom;
   const sorted = useMemo(() => sortHandCards(myHand), [myHand]);
   const emptySet = useMemo(() => new Set<string>(), []);
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
   return (
-    <WebGameScreenFrame width={waitingScreenWidth} testID="player-waiting-playfield">
+    <WebGameScreenFrame
+      width={waitingScreenWidth}
+      frameHeight={playfieldFrameHeight}
+      contentScale={playfieldContentScale}
+      testID="player-waiting-playfield"
+    >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
       <LinearGradient colors={[...playerScreensGradientColors]} start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, paddingTop: 8, paddingBottom: bottomPad }}>
@@ -16238,14 +17521,7 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const mp = useMultiplayerOptional();
   const { t } = useLocale();
   const safe = useGameSafeArea();
-  const viewport = useWebViewportSize();
-  const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
-  const viewportWidth = webGameLayout?.viewportWidth ?? SCREEN_W;
-  const playfieldWidth = webGameLayout?.playfieldWidth ?? SCREEN_W;
-  const waitingViewButtonLeft =
-    Platform.OS === 'web'
-      ? Math.max(16, Math.round((viewportWidth - playfieldWidth) / 2) + 16)
-      : 16;
+  const waitingViewButtonLeft = 16;
   const myPlayerIndex = (state as any).myPlayerIndex ?? 0;
   const myPlayerState = state.players[myPlayerIndex] as any;
   const isEliminatedSpectator = !!myPlayerState?.isEliminated || !!myPlayerState?.isSpectator;
@@ -16502,7 +17778,7 @@ function MenuCoinButton({
 }) {
   const { t, locale } = useLocale();
   const safeCoins = Math.max(0, Math.floor(Number(coins) || 0));
-  const shopButtonLabel = locale === 'he' ? 'החנות' : t('shop.openShop');
+  const shopButtonLabel = locale === 'he' ? 'חנות' : t('shop.openShop');
   const accessibilityLabel = locale === 'he'
     ? `${shopButtonLabel}. ${safeCoins} מטבעות`
     : `Shop. You earned ${safeCoins} coins`;
@@ -16785,11 +18061,13 @@ function PlayModeChoiceScreen({
 
 function GameEntryChoiceScreen({
   onBack,
+  onSolo,
   onVsBot,
   onPassAndPlay,
   onOnline,
 }: {
   onBack: () => void;
+  onSolo: () => void;
   onVsBot: () => void;
   onPassAndPlay: () => void;
   onOnline: () => void;
@@ -16798,7 +18076,8 @@ function GameEntryChoiceScreen({
   const insets = useSafeAreaInsets();
   const compactMainMenu = SCREEN_H < 760;
   const buttonGap = 28;
-  const entryBlockTopGap = compactMainMenu ? 88 : 104;
+  const entryBlockTopGap = compactMainMenu ? 102 : 120;
+  const entryHeroSize = compactMainMenu ? 58 : 64;
   const menuTopPadding = Math.max(insets.top, compactMainMenu ? 18 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
   const backButtonLabel = locale === 'he'
@@ -16823,7 +18102,7 @@ function GameEntryChoiceScreen({
         contentInsetAdjustmentBehavior="always"
       >
         <View style={{ width: '100%', maxWidth: 360, alignItems: 'center', position: 'relative' }}>
-        <View style={{ position: 'absolute', top: 0, left: 0, zIndex: 2 }}>
+        <View style={{ position: 'absolute', top: 0, left: 0, zIndex: 5 }}>
           <LulosButton
             text={backButtonLabel}
             color="blue"
@@ -16834,13 +18113,34 @@ function GameEntryChoiceScreen({
             onPress={onBack}
           />
         </View>
-        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap }}>
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -8,
+            right: 4,
+            zIndex: 1,
+          }}
+        >
+          <SpinningCard
+            frontSource={salindaShopCardImg}
+            width={entryHeroSize}
+            speed={28}
+            backLabel="Salinda"
+            active
+          />
+        </View>
+        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
           <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
             {t('gameEntry.title')}
           </Text>
-          <Text style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', marginBottom: buttonGap }}>
-            {t('gameEntry.subtitle')}
-          </Text>
+          <MenuCapsuleButton
+            text={t('gameEntry.solo')}
+            color="purple"
+            testID="lobby-play-solo"
+            onPress={onSolo}
+            style={{ marginBottom: buttonGap }}
+          />
           <MenuCapsuleButton
             text={t('gameEntry.vsBot')}
             color="green"
@@ -16878,10 +18178,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const { state, dispatch } = useGame();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
+  const webPresentation = useContext(WebPresentationContext);
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
+  const [classroomLaunchConfig, setClassroomLaunchConfig] = useState<ClassroomLaunchConfig | null>(null);
   // showTutorial removed — replaced by playMode === 'tutorial'
   const welcomeMusicRef = useRef<Audio.Sound | null>(null);
   const soundOn = state.soundsEnabled !== false;
@@ -16891,6 +18193,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const [showSalindaPanel, setShowSalindaPanel] = useState(false);
   const [preferredName, setPreferredName] = useState('');
   const [tutorialMeter, setTutorialMeter] = useState(INITIAL_TUTORIAL_METER_STATE);
+  const classroomPracticeStartedAtRef = useRef<number | null>(null);
+  const classroomPracticeReportedRef = useRef(false);
+  const [showPreVictoryMeterCelebration, setShowPreVictoryMeterCelebration] = useState(false);
+  const preVictoryMeterCelebrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const preVictoryMeterCelebrationHandledRef = useRef<string | null>(null);
   const salindaTrackRef = useRef<View | null>(null);
   const trackWindowRef = useRef<{ y: number; h: number }>({ y: 0, h: 140 });
   const SALINDA_PANEL_H = 160;
@@ -16904,15 +18211,55 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     void initializeSfx();
   }, []);
 
-// ?? Game win sound — phase transition to game-over
-  const prevPhaseRef = useRef(state.phase);
+  const preVictoryMeterCelebrationSignature = shouldDelayVictoryForMeterCelebration(state)
+    ? `${playMode}:${state.courageRewardPulseId}:${state.roundsPlayed}:${state.currentPlayerIndex}:${state.winner?.name ?? ''}`
+    : null;
+  const shouldHoldOnGameScreenForMeterCelebration =
+    state.phase === 'game-over' && (
+      showPreVictoryMeterCelebration ||
+      (
+        preVictoryMeterCelebrationSignature != null &&
+        preVictoryMeterCelebrationHandledRef.current !== preVictoryMeterCelebrationSignature
+      )
+    );
   useEffect(() => {
-    if (state.phase === 'game-over' && prevPhaseRef.current !== 'game-over' && soundOn) {
+    if (!preVictoryMeterCelebrationSignature) {
+      if (preVictoryMeterCelebrationTimerRef.current) {
+        clearTimeout(preVictoryMeterCelebrationTimerRef.current);
+        preVictoryMeterCelebrationTimerRef.current = null;
+      }
+      preVictoryMeterCelebrationHandledRef.current = null;
+      setShowPreVictoryMeterCelebration(false);
+      return;
+    }
+    if (preVictoryMeterCelebrationHandledRef.current === preVictoryMeterCelebrationSignature) return;
+    preVictoryMeterCelebrationHandledRef.current = preVictoryMeterCelebrationSignature;
+    setShowPreVictoryMeterCelebration(true);
+    if (preVictoryMeterCelebrationTimerRef.current) {
+      clearTimeout(preVictoryMeterCelebrationTimerRef.current);
+    }
+    preVictoryMeterCelebrationTimerRef.current = setTimeout(() => {
+      preVictoryMeterCelebrationTimerRef.current = null;
+      setShowPreVictoryMeterCelebration(false);
+    }, PRE_VICTORY_METER_CELEBRATION_HOLD_MS);
+    return () => {
+      if (preVictoryMeterCelebrationTimerRef.current) {
+        clearTimeout(preVictoryMeterCelebrationTimerRef.current);
+        preVictoryMeterCelebrationTimerRef.current = null;
+      }
+    };
+  }, [preVictoryMeterCelebrationSignature]);
+
+  // ?? Game win sound — play when the victory screen actually becomes visible.
+  const victoryScreenVisible = state.phase === 'game-over' && !shouldHoldOnGameScreenForMeterCelebration;
+  const prevVictoryScreenVisibleRef = useRef(victoryScreenVisible);
+  useEffect(() => {
+    if (victoryScreenVisible && !prevVictoryScreenVisibleRef.current && soundOn) {
       setSfxMuted(false);
       void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 1.0 });
     }
-    prevPhaseRef.current = state.phase;
-  }, [state.phase, soundOn]);
+    prevVictoryScreenVisibleRef.current = victoryScreenVisible;
+  }, [victoryScreenVisible, soundOn]);
 
   useEffect(() => {
     sendDebugLog('H4', 'index.tsx:GameRouter.useEffect', 'GameRouter state snapshot', {
@@ -16931,6 +18278,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     setMockupReturnMode(playMode === 'online' ? 'online' : 'choose');
     setPlayMode('mockup-room');
   }, [playMode]);
+
+  const openGameEntry = useCallback(() => {
+    setPlayMode('game-entry');
+    AsyncStorage.setItem(WELCOME_PLAYER_SCREEN_KEY, 'true').catch(() => {});
+  }, []);
 
   const closeCelebrationMockupRoom = useCallback(() => {
     setPlayMode(mockupReturnMode);
@@ -16952,6 +18304,69 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   useEffect(() => {
     AsyncStorage.setItem(PREFERRED_NAME_KEY, preferredName).catch(() => {});
   }, [preferredName]);
+
+  const launchClassroomPractice = useCallback((config: ClassroomLaunchConfig) => {
+    classroomPracticeStartedAtRef.current = Date.now();
+    classroomPracticeReportedRef.current = false;
+    setClassroomLaunchConfig(config);
+    dispatch({ type: 'RESET_GAME' });
+    setSelectedLocalGameMode('vs-bot');
+    setPlayMode('classroom-game');
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (playMode !== 'classroom-game' || classroomLaunchConfig == null) return;
+    if (state.phase !== 'setup') return;
+    const teamName = preferredName.trim() || (locale === 'he' ? 'קבוצת סלינדה' : 'Salinda Team');
+    dispatch({
+      type: 'START_GAME',
+      mode: 'vs-bot',
+      botDifficulty: classroomLaunchConfig.botDifficulty,
+      players: [
+        { name: teamName, isBot: false },
+        { name: locale === 'he' ? 'בוט' : 'Bot', isBot: true },
+      ],
+      difficulty: classroomLaunchConfig.difficulty,
+      fractions: classroomLaunchConfig.showFractions,
+      fractionKinds: classroomLaunchConfig.fractionKinds as Fraction[],
+      showPossibleResults: true,
+      showSolveExercise: true,
+      timerSetting: 'off',
+      timerCustomSeconds: 60,
+      difficultyStage: classroomLaunchConfig.difficultyStage,
+      enabledOperators: classroomLaunchConfig.enabledOperators.map((operator) => (
+        operator === '+' || operator === '-' || operator === 'x' ? operator : '÷'
+      )) as Operation[],
+      allowNegativeTargets: false,
+      mathRangeMax: classroomLaunchConfig.mathRangeMax,
+      abVariant: classroomLaunchConfig.difficulty === 'easy' ? 'control_0_12_plus' : 'variant_0_15_plus',
+    });
+  }, [classroomLaunchConfig, dispatch, locale, playMode, preferredName, state.phase]);
+
+  useEffect(() => {
+    if (playMode !== 'classroom-game' || classroomLaunchConfig == null) return;
+    if (state.phase !== 'game-over' || classroomPracticeReportedRef.current) return;
+    classroomPracticeReportedRef.current = true;
+    const durationSeconds = classroomPracticeStartedAtRef.current
+      ? Math.max(30, Math.round((Date.now() - classroomPracticeStartedAtRef.current) / 1000))
+      : Math.max(30, state.roundsPlayed * 15);
+    mp?.recordClassroomGroupResult({
+      status: 'finished',
+      durationSeconds,
+      attempts: Math.max(1, state.equationAttempts),
+      equationSuccesses: Math.max(1, state.equationSuccesses),
+      roundsCompleted: Math.max(1, state.roundsPlayed),
+      completionPercent: 100,
+    });
+  }, [
+    classroomLaunchConfig,
+    mp,
+    playMode,
+    state.equationAttempts,
+    state.equationSuccesses,
+    state.phase,
+    state.roundsPlayed,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -17128,6 +18543,69 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   }, [soundOn, setSalindaVolumeClamped]);
 
   const showTutorialHeader = playMode === 'tutorial';
+  const webFocusMode = webPresentation?.focusMode ?? false;
+
+  const handleWebBack = useCallback(() => {
+    if (showShop) {
+      setShowShop(false);
+      return;
+    }
+    if (showSalindaPanel) {
+      setShowSalindaPanel(false);
+      return;
+    }
+    if (playMode === 'tutorial') {
+      tutorialExit();
+      return;
+    }
+    if (playMode === 'mockup-room') {
+      closeCelebrationMockupRoom();
+      return;
+    }
+    if (playMode === 'game-entry') {
+      setPlayMode('choose');
+      return;
+    }
+    if (playMode === 'classroom') {
+      if (mp?.classroomState) mp.leaveClassSession();
+      setPlayMode('choose');
+      return;
+    }
+    if (playMode === 'classroom-game') {
+      dispatch({ type: 'RESET_GAME' });
+      setClassroomLaunchConfig(null);
+      setPlayMode('classroom');
+      return;
+    }
+    if (playMode === 'local') {
+      dispatch({ type: 'RESET_GAME' });
+      setPlayMode('game-entry');
+      return;
+    }
+    if (playMode === 'online') {
+      mp?.leaveRoom?.();
+      setPlayMode('game-entry');
+      return;
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    }
+  }, [
+    closeCelebrationMockupRoom,
+    dispatch,
+    mp,
+    playMode,
+    setClassroomLaunchConfig,
+    showSalindaPanel,
+    showShop,
+    tutorialExit,
+  ]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !webPresentation) return;
+    webPresentation.setBackAction(() => handleWebBack);
+    return () => webPresentation.setBackAction(null);
+  }, [handleWebBack, webPresentation]);
 
   let screen: React.ReactNode;
   if (playMode === 'mockup-room') {
@@ -17135,7 +18613,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   } else if (playMode === 'choose') {
     screen = (
         <PlayModeChoiceScreen
-          onPlay={() => setPlayMode('game-entry')}
+          onPlay={openGameEntry}
           onHowToPlay={() => setPlayMode('tutorial')}
           onShop={() => setShowShop(true)}
           preferredName={preferredName}
@@ -17146,6 +18624,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     screen = (
       <GameEntryChoiceScreen
         onBack={() => setPlayMode('choose')}
+        onSolo={() => {
+          setSelectedLocalGameMode('solo');
+          setPlayMode('local');
+        }}
         onVsBot={() => {
           setSelectedLocalGameMode('vs-bot');
           setPlayMode('local');
@@ -17157,7 +18639,19 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         onOnline={() => setPlayMode('online')}
       />
     );
-    } else if (playMode === 'local') {
+  } else if (playMode === 'classroom') {
+    screen = (
+      <ClassroomModeScreen
+        onBack={() => {
+          if (mp?.classroomState) mp.leaveClassSession();
+          setPlayMode('choose');
+        }}
+        preferredName={preferredName}
+        onPreferredNameChange={setPreferredName}
+        onLaunchPractice={launchClassroomPractice}
+      />
+    );
+  } else if (playMode === 'local') {
     if (state.phase === 'setup') screen = <StartScreen onBackToChoice={() => setPlayMode('game-entry')} onHowToPlay={() => setPlayMode('tutorial')} onShop={() => setShowShop(true)} preferredName={preferredName} forcedGameMode={selectedLocalGameMode} lockGameMode />;
     else {
       switch (state.phase) {
@@ -17169,10 +18663,41 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           screen = <GameScreen onOpenShop={() => setShowShop(true)} />;
           break;
         case 'game-over':
-          screen = <GameOver />;
+          screen = shouldHoldOnGameScreenForMeterCelebration
+            ? <GameScreen onOpenShop={() => setShowShop(true)} />
+            : <GameOver />;
           break;
         default:
           screen = <StartScreen onBackToChoice={() => setPlayMode('game-entry')} onHowToPlay={() => setPlayMode('tutorial')} onShop={() => setShowShop(true)} preferredName={preferredName} forcedGameMode={selectedLocalGameMode} lockGameMode />;
+      }
+    }
+  } else if (playMode === 'classroom-game') {
+    if (state.phase === 'setup') {
+      screen = (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a1628' }}>
+          <Text style={{ color: '#F8FAFC', fontSize: 18, fontWeight: '800' }}>
+            {locale === 'he' ? 'טוענים פעילות כיתתית…' : 'Launching classroom practice…'}
+          </Text>
+        </View>
+      );
+    } else {
+      switch (state.phase) {
+        case 'turn-transition':
+          screen = <TurnTransition />;
+          break;
+        case 'pre-roll':
+        case 'roll-dice':
+        case 'building':
+        case 'solved':
+          screen = <GameScreen onOpenShop={() => setShowShop(true)} />;
+          break;
+        case 'game-over':
+          screen = shouldHoldOnGameScreenForMeterCelebration
+            ? <GameScreen onOpenShop={() => setShowShop(true)} />
+            : <GameOver />;
+          break;
+        default:
+          screen = null;
       }
     }
   } else if (playMode === 'tutorial') {
@@ -17202,7 +18727,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         case 'solved':
           gameScreen = <GameScreen onOpenShop={() => setShowShop(true)} />;
           break;
-        case 'game-over': gameScreen = <GameOver />; break;
+        case 'game-over':
+          gameScreen = shouldHoldOnGameScreenForMeterCelebration
+            ? <GameScreen onOpenShop={() => setShowShop(true)} />
+            : <GameOver />;
+          break;
         default: gameScreen = null;
       }
       screen = (
@@ -17232,7 +18761,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           screen = state.players.some((p) => !!p.isBot) ? <GameScreen onOpenShop={() => setShowShop(true)} /> : <OnlineGameWrapper onOpenShop={() => setShowShop(true)} />;
           break;
         case 'game-over':
-          screen = <GameOver />;
+          screen = shouldHoldOnGameScreenForMeterCelebration
+            ? <GameScreen onOpenShop={() => setShowShop(true)} />
+            : <GameOver />;
           break;
         default:
           screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />;
@@ -17241,8 +18772,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   }
 
   const showGlobalMute =
+    !webFocusMode &&
     playMode !== 'tutorial' &&
-    !(playMode === 'local' && (state.phase === 'pre-roll' || state.phase === 'roll-dice' || state.phase === 'building' || state.phase === 'solved'));
+    !(
+      (playMode === 'local' || playMode === 'classroom-game') &&
+      (state.phase === 'pre-roll' || state.phase === 'roll-dice' || state.phase === 'building' || state.phase === 'solved')
+    );
   const salindaRatio = Math.max(0, Math.min(1, salindaVolume / 0.4));
   const salindaFillPx = Math.round(SALINDA_TRACK_H * salindaRatio);
   const salindaThumbBottom = Math.round(Math.max(0, Math.min(SALINDA_TRACK_H - 9, SALINDA_TRACK_H * salindaRatio - 9)));
@@ -17261,6 +18796,21 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     <View style={{ flex: 1, backgroundColor: '#0a1628' }}>
       {screen}
       <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+      {playMode === 'classroom-game' && state.phase === 'game-over' && (
+        <View style={{ position: 'absolute', top: 18, left: 18, zIndex: 20001 }}>
+          <LulosButton
+            text={locale === 'he' ? 'חזרה לכיתה' : 'Back to class'}
+            color="blue"
+            width={124}
+            height={38}
+            fontSize={13}
+            onPress={() => {
+              setClassroomLaunchConfig(null);
+              setPlayMode('classroom');
+            }}
+          />
+        </View>
+      )}
 
       {showGlobalMute && !showTutorialHeader && (
         <>
@@ -17548,8 +19098,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
 // ============================================================
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
-  const jokerScale = useRef(new Animated.Value(0)).current;
-  const jokerBounce = useRef(new Animated.Value(0)).current;
+  const splashCardScale = useRef(new Animated.Value(0.76)).current;
+  const splashCardLift = useRef(new Animated.Value(30)).current;
+  const splashCardFlip = useRef(new Animated.Value(0)).current;
   const splashOpacity = useRef(new Animated.Value(1)).current;
   const splashScale = useRef(new Animated.Value(1)).current;
   const loadingWidth = useRef(new Animated.Value(0)).current;
@@ -17559,56 +19110,66 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const opFloats = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
 
   useEffect(() => {
-    // Joker spring entry
-    Animated.spring(jokerScale, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }).start();
-
-    // Continuous bounce (4s loop, 8px)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(jokerBounce, { toValue: -8, duration: 2000, useNativeDriver: true }),
-        Animated.timing(jokerBounce, { toValue: 0, duration: 2000, useNativeDriver: true }),
-      ])
-    ).start();
+    // Card entry followed by a one-shot shop-style flip:
+    // front = Salinda jester, back = branded card back.
+    Animated.parallel([
+      Animated.spring(splashCardScale, { toValue: 1, friction: 9, tension: 34, useNativeDriver: true }),
+      Animated.timing(splashCardLift, { toValue: 0, duration: 760, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
 
     // Operator pop-ins with staggered delays
-    const delays = [800, 1000, 1200, 1400];
+    const delays = [1000, 1240, 1480, 1720];
     const timers: ReturnType<typeof setTimeout>[] = [];
     delays.forEach((delay, i) => {
       timers.push(setTimeout(() => {
-        Animated.spring(opScales[i], { toValue: 1, friction: 5, tension: 50, useNativeDriver: true }).start();
+        Animated.spring(opScales[i], { toValue: 1, friction: 9, tension: 36, useNativeDriver: true }).start();
         Animated.loop(
           Animated.sequence([
-            Animated.timing(opFloats[i], { toValue: -6, duration: 1800 + i * 200, useNativeDriver: true }),
-            Animated.timing(opFloats[i], { toValue: 6, duration: 1800 + i * 200, useNativeDriver: true }),
+            Animated.timing(opFloats[i], { toValue: -4, duration: 2200 + i * 260, useNativeDriver: true }),
+            Animated.timing(opFloats[i], { toValue: 4, duration: 2200 + i * 260, useNativeDriver: true }),
           ])
         ).start();
       }, delay));
     });
 
-    // Subtitle fade in
-    Animated.timing(subtitleOpacity, { toValue: 1, duration: 800, delay: 500, useNativeDriver: true }).start();
+    timers.push(setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(splashCardFlip, {
+          toValue: 1,
+          duration: 1450,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(subtitleOpacity, {
+          toValue: 1,
+          duration: 560,
+          delay: 560,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 1200));
 
-    // Loading bar (0 to 100% over 3s)
-    Animated.timing(loadingWidth, { toValue: 1, duration: 3000, useNativeDriver: false }).start();
+    // Loading bar progresses through the splash until the flip completes.
+    Animated.timing(loadingWidth, { toValue: 1, duration: 3300, useNativeDriver: false }).start();
 
     // Loading text pulse
     Animated.loop(
       Animated.sequence([
-        Animated.timing(loadingTextOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(loadingTextOpacity, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(loadingTextOpacity, { toValue: 0.95, duration: 900, useNativeDriver: true }),
+        Animated.timing(loadingTextOpacity, { toValue: 0.28, duration: 900, useNativeDriver: true }),
       ])
     ).start();
 
-    // After 3 seconds: fade out + slight scale up
+    // Leave the splash only after the back face is fully visible.
     const exitTimer = setTimeout(() => {
       Animated.parallel([
-        Animated.timing(splashOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
-        Animated.timing(splashScale, { toValue: 1.05, duration: 500, useNativeDriver: true }),
+        Animated.timing(splashOpacity, { toValue: 0, duration: 540, useNativeDriver: true }),
+        Animated.timing(splashScale, { toValue: 1.01, duration: 540, useNativeDriver: true }),
       ]).start(() => onFinish());
-    }, 3000);
+    }, 3550);
 
-    // Safety fallback: if animation callback never fires, force dismiss after 4.5s
-    const fallback = setTimeout(() => onFinish(), 4500);
+    // Safety fallback: if animation callback never fires, force dismiss shortly after.
+    const fallback = setTimeout(() => onFinish(), 5600);
 
     return () => { timers.forEach(clearTimeout); clearTimeout(exitTimer); clearTimeout(fallback); };
   }, []);
@@ -17620,6 +19181,26 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
     { sym: MINUS_GLYPH, color: '#FFA000', style: { bottom: '35%', right: '12%' } as any },
   ];
   const splashHebrewWordmarkColor = Platform.OS === 'ios' && !Platform.isPad ? '#000000' : '#F59E0B';
+  const splashCardWidth = 188;
+  const splashCardHeight = 264;
+  const splashFaceInset = 2;
+  const splashCardPerspective = splashCardWidth * 18;
+  const frontOpacity = splashCardFlip.interpolate({
+    inputRange: [0, 0.48, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = splashCardFlip.interpolate({
+    inputRange: [0, 0.5, 0.52, 1],
+    outputRange: [0, 0, 1, 1],
+  });
+  const frontRotate = splashCardFlip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const backRotate = splashCardFlip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
 
   return (
     <Animated.View style={{
@@ -17662,20 +19243,70 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
               writingDirection: 'rtl',
             }}
           >
-            משחק מחשבה
+            חושבים מחוץ למשוואה
           </Text>
 
-          {/* Joker image with golden glow — מסך טעינה (גודל מלא) */}
+          {/* Shop-style one-shot flip: jester front -> branded card back */}
           <Animated.View style={{
-            width: 220, height: 220, alignItems: 'center', justifyContent: 'center',
-            borderRadius: 24, overflow: 'hidden',
-            transform: [{ scale: jokerScale }, { translateY: jokerBounce }],
+            width: 236, height: 286, alignItems: 'center', justifyContent: 'center',
+            borderRadius: 28,
+            transform: [{ scale: splashCardScale }, { translateY: splashCardLift }],
             ...Platform.select({
               ios: { shadowColor: '#FFB300', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 24 },
               android: { elevation: 16 },
             }),
           }}>
-            <Image source={require('./assets/joker.jpg')} style={{ width: 220, height: 220 }} resizeMode="contain" />
+            <View style={{ width: splashCardWidth, height: splashCardHeight, alignItems: 'center', justifyContent: 'center' }}>
+              <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  {
+                    opacity: backOpacity,
+                    backfaceVisibility: 'hidden',
+                    transform: [{ perspective: splashCardPerspective }, { rotateY: backRotate }],
+                  },
+                ]}
+              >
+                <View style={{ width: splashCardWidth - splashFaceInset * 2, height: splashCardHeight - splashFaceInset * 2, borderRadius: 18, backgroundColor: '#FFFFFF' }}>
+                  <Image
+                    source={brandedCardBackPreviewImg}
+                    style={{ width: '100%', height: '100%', borderRadius: 18 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              </Animated.View>
+              <Animated.View
+                renderToHardwareTextureAndroid
+                shouldRasterizeIOS
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  {
+                    opacity: frontOpacity,
+                    backfaceVisibility: 'hidden',
+                    transform: [{ perspective: splashCardPerspective }, { rotateY: frontRotate }],
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    width: splashCardWidth - splashFaceInset * 2,
+                    height: splashCardHeight - splashFaceInset * 2,
+                    borderRadius: 18,
+                    backgroundColor: '#FFFFFF',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.9)',
+                  }}
+                >
+                  <Image
+                    source={salindaShopCardImg}
+                    style={{ width: '100%', height: '100%', borderRadius: 18 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              </Animated.View>
+            </View>
           </Animated.View>
 
           {/* Brand wordmark */}
@@ -17719,11 +19350,72 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   );
 }
 
+function WebChromeActionButton({
+  label,
+  onPress,
+  selected = false,
+  disabled = false,
+  lightBackdrop = false,
+  fullWidth = false,
+}: {
+  label: string;
+  onPress: () => void;
+  selected?: boolean;
+  disabled?: boolean;
+  lightBackdrop?: boolean;
+  fullWidth?: boolean;
+}) {
+  const borderColor = lightBackdrop ? 'rgba(15,23,42,0.24)' : 'rgba(255,255,255,0.18)';
+  const backgroundColor = disabled
+    ? (lightBackdrop ? 'rgba(148,163,184,0.14)' : 'rgba(255,255,255,0.08)')
+    : selected
+      ? (lightBackdrop ? '#0f172a' : '#f8fafc')
+      : (lightBackdrop ? 'rgba(255,255,255,0.88)' : 'rgba(15,23,42,0.82)');
+  const textColor = disabled
+    ? (lightBackdrop ? 'rgba(15,23,42,0.38)' : 'rgba(255,255,255,0.45)')
+    : selected
+      ? (lightBackdrop ? '#f8fafc' : '#0f172a')
+      : (lightBackdrop ? '#0f172a' : '#f8fafc');
+
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.9}
+      style={{
+        minWidth: fullWidth ? 0 : 88,
+        width: fullWidth ? '100%' : undefined,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor,
+        borderWidth: 1,
+        borderColor,
+        shadowColor: lightBackdrop ? '#94A3B8' : '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: disabled ? 0 : 0.14,
+        shadowRadius: 12,
+      }}
+    >
+      <Text style={{ color: textColor, fontSize: 13, fontWeight: '900', textAlign: 'center' }}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowSplash: (v: boolean) => void }) {
   const insets = useSafeAreaInsets();
+  const { locale } = useLocale();
   const [activePlayMode, setActivePlayMode] = useState<ShellPlayMode>('choose');
   const viewport = useWebViewportSize();
-  const showAds = Platform.OS === 'web' && viewport.width >= 768;
+  const [webFocusMode, setWebFocusMode] = useState(false);
+  const [webBackdropTone, setWebBackdropTone] = useState<WebBackdropTone>('black');
+  const [webFullscreenActive, setWebFullscreenActive] = useState(false);
+  const [webBackAction, setWebBackAction] = useState<(() => void) | null>(null);
+  const webBackdropColor = webBackdropTone === 'white' ? '#FFFFFF' : '#000000';
+  const showAds = Platform.OS === 'web' && !webFocusMode && viewport.width >= 900;
   useEffect(() => {
     sendDebugLog('H3', 'index.tsx:AppShell.useEffect', 'AppShell mounted', {
       insetTop: insets.top,
@@ -17754,6 +19446,94 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     };
   }, []);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const syncFullscreen = () => {
+      setWebFullscreenActive(!!document.fullscreenElement);
+    };
+    syncFullscreen();
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+    const prevHtmlBg = html.style.backgroundColor;
+    const prevBodyBg = body.style.backgroundColor;
+    const prevRootBg = root?.style.backgroundColor ?? '';
+    const prevColorScheme = html.style.colorScheme;
+    const prevBodyMargin = body.style.margin;
+    html.style.backgroundColor = webBackdropColor;
+    body.style.backgroundColor = webBackdropColor;
+    body.style.margin = '0';
+    if (root) root.style.backgroundColor = webBackdropColor;
+    html.style.colorScheme = webBackdropTone === 'white' ? 'light' : 'dark';
+    return () => {
+      html.style.backgroundColor = prevHtmlBg;
+      body.style.backgroundColor = prevBodyBg;
+      body.style.margin = prevBodyMargin;
+      if (root) root.style.backgroundColor = prevRootBg;
+      html.style.colorScheme = prevColorScheme;
+    };
+  }, [webBackdropColor, webBackdropTone]);
+
+  const toggleWebBackdropTone = useCallback(() => {
+    setWebBackdropTone((prev) => (prev === 'black' ? 'white' : 'black'));
+  }, []);
+
+  const toggleWebFocusMode = useCallback(() => {
+    setWebFocusMode((prev) => !prev);
+  }, []);
+
+  const toggleWebFullscreen = useCallback(async () => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        setWebFullscreenActive(false);
+        setWebFocusMode(false);
+        return;
+      }
+      const root = document.documentElement as HTMLElement & {
+        requestFullscreen?: () => Promise<void>;
+      };
+      setWebFocusMode(true);
+      if (root.requestFullscreen) {
+        await root.requestFullscreen();
+      }
+    } catch {
+      setWebFocusMode((prev) => !prev);
+    }
+  }, []);
+
+  const handleWebBackPress = useCallback(() => {
+    if (webBackAction) {
+      webBackAction();
+      return;
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    if (Platform.OS === 'web' && typeof document !== 'undefined' && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    setWebFocusMode(false);
+  }, [webBackAction]);
+
+  const webPresentationValue = useMemo<WebPresentationContextValue>(() => ({
+    focusMode: webFocusMode,
+    setFocusMode: setWebFocusMode,
+    backdropTone: webBackdropTone,
+    setBackdropTone: setWebBackdropTone,
+    fullscreenActive: webFullscreenActive,
+    setFullscreenActive: setWebFullscreenActive,
+    setBackAction: setWebBackAction,
+  }), [webBackdropTone, webFocusMode, webFullscreenActive]);
+
   const gameContent = (
     <>
       <StatusBar style="light" />
@@ -17782,15 +19562,112 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     );
   }
 
+  const webShellMaxWidth = WEB_GAME_PLAYFIELD_MAX_WIDTH;
+  const webShellWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewport.width);
+  const webSideGutter = Math.max(0, (viewport.width - webShellWidth) / 2);
+  const dockedControls = webSideGutter >= 176;
+  const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
+  const webControlsAnchorStyle = dockedControls
+    ? {
+        position: 'absolute' as const,
+        top: Math.max(16, (insets.top || 0) + 12),
+        zIndex: 31000,
+        ...(showAds ? { left: 24 } : { right: 24 }),
+      }
+    : {
+        position: 'absolute' as const,
+        top: Math.max(16, (insets.top || 0) + 12),
+        left: 16,
+        right: 16,
+        zIndex: 31000,
+        alignItems: 'center' as const,
+      };
+  const webControlsPanelStyle = {
+    flexDirection: dockedControls ? 'column' as const : 'row' as const,
+    flexWrap: dockedControls ? 'nowrap' as const : 'wrap' as const,
+    justifyContent: 'center' as const,
+    alignItems: dockedControls ? 'stretch' as const : 'center' as const,
+    gap: 10,
+    width: dockedControls ? 136 : undefined,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: webBackdropTone === 'white' ? 'rgba(255,255,255,0.64)' : 'rgba(2,6,23,0.5)',
+    borderWidth: 1,
+    borderColor: webBackdropTone === 'white' ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.08)',
+  };
+  const backLabel = locale === 'he' ? 'חזרה' : 'Back';
+  const focusLabel = locale === 'he'
+    ? (webFocusMode ? 'בטל מיקוד' : 'מיקוד')
+    : (webFocusMode ? 'Exit Focus' : 'Focus');
+  const fullscreenLabel = locale === 'he'
+    ? (webFullscreenActive ? 'צא ממסך מלא' : 'מסך מלא')
+    : (webFullscreenActive ? 'Exit Fullscreen' : 'Fullscreen');
+  const backdropLabel = locale === 'he'
+    ? (webBackdropTone === 'black' ? 'רקע לבן' : 'רקע שחור')
+    : (webBackdropTone === 'black' ? 'White Backdrop' : 'Black Backdrop');
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#0a1628', flexDirection: 'column' }}>
-      <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center' }}>
-        <View style={{ flex: 1, maxWidth: WEB_GAME_PLAYFIELD_MAX_WIDTH, backgroundColor: '#0a1628' }}>
-          {gameContent}
+    <WebPresentationContext.Provider value={webPresentationValue}>
+      <View style={{ flex: 1, backgroundColor: webBackdropColor }}>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View
+            testID="app-web-shell"
+            style={{ flex: 1, width: '100%', maxWidth: webShellMaxWidth, backgroundColor: '#0a1628' }}
+          >
+            {gameContent}
+          </View>
         </View>
-        <AdSlot slot="skyscraper" visible={showAds} />
+        <View
+          pointerEvents="box-none"
+          style={webControlsAnchorStyle}
+        >
+          <View style={webControlsPanelStyle}>
+            <WebChromeActionButton
+              label={backLabel}
+              onPress={handleWebBackPress}
+              lightBackdrop={webBackdropTone === 'white'}
+              fullWidth={dockedControls}
+              disabled={!webBackAction && !webFocusMode && !webFullscreenActive && !canUseBrowserHistoryBack}
+            />
+            <WebChromeActionButton
+              label={focusLabel}
+              onPress={toggleWebFocusMode}
+              selected={webFocusMode}
+              lightBackdrop={webBackdropTone === 'white'}
+              fullWidth={dockedControls}
+            />
+            <WebChromeActionButton
+              label={fullscreenLabel}
+              onPress={() => { void toggleWebFullscreen(); }}
+              selected={webFullscreenActive}
+              lightBackdrop={webBackdropTone === 'white'}
+              fullWidth={dockedControls}
+            />
+            <WebChromeActionButton
+              label={backdropLabel}
+              onPress={toggleWebBackdropTone}
+              lightBackdrop={webBackdropTone === 'white'}
+              fullWidth={dockedControls}
+            />
+          </View>
+        </View>
+        {showAds ? (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              top: Math.max(74, (insets.top || 0) + 92),
+              right: 24,
+              bottom: 24,
+              justifyContent: 'center',
+            }}
+          >
+            <AdSlot slot="skyscraper" visible />
+          </View>
+        ) : null}
       </View>
-    </View>
+    </WebPresentationContext.Provider>
   );
 }
 
@@ -17835,5 +19712,3 @@ registerRootComponent(function Root() {
     </SafeAreaProvider>
   );
 });
-
-
