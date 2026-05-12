@@ -1,5 +1,7 @@
 import { Audio } from 'expo-av';
 
+import { getAudioLoadStatus, getAudioReplayStatus } from './playbackStatus';
+
 export type SfxKey =
   | 'tap'
   | 'success'
@@ -79,10 +81,7 @@ async function ensureLoaded(key: SfxKey): Promise<Audio.Sound | null> {
   }
   slot.loading = true;
   try {
-    const { sound } = await Audio.Sound.createAsync(SOURCES[key], {
-      volume,
-      shouldPlay: false,
-    });
+    const { sound } = await Audio.Sound.createAsync(SOURCES[key], getAudioLoadStatus(volume));
     slot.sound = sound;
     return sound;
   } catch (error) {
@@ -130,13 +129,7 @@ export async function playSfx(
       return;
     }
     const nextVolume = options?.volumeOverride ?? volume;
-    await sound.setVolumeAsync(nextVolume);
-    const status = await sound.getStatusAsync();
-    if (status.isLoaded && status.isPlaying) {
-      await sound.stopAsync().catch(() => {});
-    }
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    await sound.replayAsync(getAudioReplayStatus(nextVolume));
   } catch (error) {
     if (__DEV__) console.warn('[sfx] play failed', key, error);
   }
@@ -186,12 +179,7 @@ export async function playMeterCelebrateSequence(options?: { cooldownMs?: number
         continue;
       }
       await sound.setVolumeAsync(nextVolume);
-      const status = await sound.getStatusAsync();
-      if (status.isLoaded && status.isPlaying) {
-        await sound.stopAsync().catch(() => {});
-      }
-      await sound.setPositionAsync(0);
-      await sound.playAsync();
+      await sound.replayAsync(getAudioReplayStatus(nextVolume));
       await playLoadedSoundUntilFinish(sound);
     }
   } catch (error) {

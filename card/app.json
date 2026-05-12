@@ -8,25 +8,22 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-brand.png",
+      "image": "./assets/splash-launch-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#111827"
+      "backgroundColor": "#121118"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cardgame.app",
       "userInterfaceStyle": "light",
       "splash": {
-        "image": "./assets/splash-brand.png",
+        "image": "./assets/splash-launch-logo.png",
         "resizeMode": "contain",
-        "backgroundColor": "#111827"
+        "backgroundColor": "#121118"
       }
     },
-    "androidNavigationBar": {
-      "backgroundColor": "#111827",
-      "barStyle": "light-content"
-    },
     "android": {
+      "package": "com.cardgame.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111827"
@@ -44,14 +41,33 @@
       "themeColor": "#111827",
       "barStyle": "default",
       "splash": {
-        "image": "./assets/splash-brand.png",
+        "image": "./assets/splash-launch-logo.png",
         "resizeMode": "contain",
-        "backgroundColor": "#111827"
+        "backgroundColor": "#121118"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f6cd3cc8-5684-43de-bf3b-98b137c8d1a9"
       }
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#121118",
+          "image": "./assets/splash-launch-logo.png",
+          "imageWidth": 320
+        }
+      ],
       "expo-system-ui",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }
