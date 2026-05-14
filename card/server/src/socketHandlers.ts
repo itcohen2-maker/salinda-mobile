@@ -305,7 +305,6 @@ async function handleActiveGameExit(
   io: IOServer,
   room: Room,
   leavingPlayerId: string,
-  mode: 'leave' | 'disconnect',
 ): Promise<void> {
   if (!room.state || room.state.phase === 'game-over') return;
 
@@ -1135,7 +1134,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       socket.emit('room_closed', { roomCode: activeInfo.room.code });
       socket.leave(activeInfo.room.code);
       leaveRoom(socket.id);
-      await handleActiveGameExit(io, activeInfo.room, activeInfo.playerId, 'leave');
+      await handleActiveGameExit(io, activeInfo.room, activeInfo.playerId);
       return;
     }
     const result = leaveRoom(socket.id);
@@ -1143,7 +1142,6 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const { room, playerId, playerName } = result;
     socket.leave(room.code);
     io.to(room.code).emit('player_left', { playerId, playerName });
-    // wins immediately (technical victory — no grace period, no bot offer).
     if (room.players.length > 0) {
       clearRoomDisconnectGrace(room);
       emitRoomPlayers(io, room);
@@ -1757,7 +1755,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const activeInfo = getRoomBySocket(socket.id);
     if (activeInfo?.room.state && activeInfo.room.state.phase !== 'game-over') {
       leaveRoom(socket.id);
-      void handleActiveGameExit(io, activeInfo.room, activeInfo.playerId, 'disconnect');
+      void handleActiveGameExit(io, activeInfo.room, activeInfo.playerId);
       return;
     }
     const result = leaveRoom(socket.id);
