@@ -867,6 +867,38 @@ interface Notification {
   bigNumber?: number;
 }
 
+const TOAST_VISIBLE_GAME_PHASES = new Set<GamePhase>(['pre-roll', 'building', 'solved', 'roll-dice']);
+const FRACTION_CHALLENGE_TOAST_PHASE: GamePhase = 'turn-transition';
+
+function getVisibleGameplayNotifications(state: GameState): Notification[] {
+  const hasBlockingSheet = !!state.identicalAlert;
+  const rawList = state.notifications ?? [];
+  return rawList.filter((notification) => {
+    if (hasBlockingSheet) return false;
+    if (notification.id.startsWith('discard-')) return false;
+    if (notification.id.startsWith('card-hint-')) return TOAST_VISIBLE_GAME_PHASES.has(state.phase);
+    if (notification.id.startsWith('opening-draw-')) return state.phase === 'turn-transition';
+    if (notification.id.startsWith('frac-challenge-')) {
+      return state.phase === FRACTION_CHALLENGE_TOAST_PHASE;
+    }
+    return TOAST_VISIBLE_GAME_PHASES.has(state.phase);
+  });
+}
+
+function getHighestPriorityGameplayNotification(state: GameState): Notification | null {
+  const visible = getVisibleGameplayNotifications(state);
+  const fractionChallenge = state.phase === FRACTION_CHALLENGE_TOAST_PHASE && state.pendingFractionTarget !== null
+    ? [...visible].reverse().find((notification) => notification.id.startsWith('frac-challenge-')) ?? null
+    : null;
+  const blocking = visible.find((notification) => notification.requireAck === true) ?? null;
+  const latest = [...visible].reverse().find((notification) => notification.requireAck !== true) ?? null;
+  return fractionChallenge ?? blocking ?? latest;
+}
+
+function isBlockingGameplayNotification(notification: Notification | null | undefined): boolean {
+  return notification?.requireAck === true;
+}
+
 type BotPresentationState = {
   action: BotAction | null;
   candidateCardId: string | null;
@@ -9351,6 +9383,10 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
 function BottomControlsBar() {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
+  const viewport = useWebViewportSize();
+  const responsive = useResponsiveLayout();
+  const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
+  const bottomControlsWidth = webGameLayout?.playfieldWidth ?? responsive.width;
   const soundOn = state.soundsEnabled !== false;
   const so = state.phase === 'solved';
   const showSolved = so && !state.hasPlayedCards;
@@ -9427,7 +9463,7 @@ function BottomControlsBar() {
   const BOTTOM_PLACE_BTN_W = 160;
   const bottomRowW = BOTTOM_PLACE_BTN_W;
   /** לפחות רוחב שורת הכפתורים + מרווח — אחרת anchor שלילי והכפתורים חופפים */
-  const bottomOrbitW = Math.max(bottomRowW + 24, Math.min(SCREEN_W - 24, 400));
+  const bottomOrbitW = Math.max(bottomRowW + 24, Math.min(bottomControlsWidth - 24, 400));
   const bottomAnchorLeft = (bottomOrbitW - bottomRowW) / 2;
   const barChipsDisplay = useMemo(
     () =>
@@ -12882,7 +12918,7 @@ function TurnTransition() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [onlineBotDiffOpen, setOnlineBotDiffOpen] = useState(false);
   const [cardsCatalogOpen, setCardsCatalogOpen] = useState(false);
-  /** כפתור "אני מוכן" חייב להיות זמין תמיד במסך מעבר תור */
+  /** כפתור "אני מוכן" זמין במסך מעבר תור, חוץ מהתראה חוסמת שדורשת אישור. */
   const beginTurnEnabled = true;
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [selectedPileChoice, setSelectedPileChoice] = useState<OverflowSwapPileChoice | null>(null);
@@ -13498,6 +13534,8 @@ function TurnTransition() {
   };
 
   const safe = useSafeAreaInsets();
+  const activeTurnNotification = getHighestPriorityGameplayNotification(state);
+  const holdReadyButtonForNotification = isBlockingGameplayNotification(activeTurnNotification);
   // קפיאת safe area למיקום המניפה — קופא רק אחרי שיש insets אמיתיים (מונע 0 בריענון)
   const safeFrozen = useRef<{ top: number; bottom: number } | null>(null);
   if (safeFrozen.current === null && (safe.top > 0 || safe.bottom > 0)) safeFrozen.current = { top: safe.top, bottom: safe.bottom };
@@ -14150,7 +14188,7 @@ function TurnTransition() {
         </View>
       )}
 
-      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && !overflowSwapActive && (
+      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && !overflowSwapActive && !holdReadyButtonForNotification && (
         <View
           pointerEvents="box-none"
           style={{
@@ -16247,7 +16285,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [showSoloOrangeButtonHint, soloActionPulse]);
   const PLACE_NOW_BTN_W = 220;
   /** רוחב מינימלי סביב הכפתור — מונע anchor שלילי וחפיפה עם צ'יפים במסכים צרים */
-  const PLACE_NOW_ORBIT_W = Math.max(PLACE_NOW_BTN_W + 32, Math.min(SCREEN_W - 16, 420));
+  const PLACE_NOW_ORBIT_W = Math.max(PLACE_NOW_BTN_W + 32, Math.min(gameScreenWidth - 16, 420));
   const placeNowAnchorLeft = (PLACE_NOW_ORBIT_W - PLACE_NOW_BTN_W) / 2;
   const placeOrbitH = Math.max(
     72,
@@ -18198,44 +18236,17 @@ const alertBubbleStyle = StyleSheet.create({
 //  NOTIFICATION ZONE — always mounted at App level (אימוץ צורה ושפה של ההתראה)
 // ???????????????????????????????????????????????????????????????
 
-/** ברוכים הבאים מוצגים רק בבועת מסך מעבר התור — לא בהתראה צפה. */
-function isWelcomeNotification(_n: Notification): boolean {
-  return false;
-}
-
 function NotificationZone() {
   const { state, dispatch } = useGame();
   const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
-  const gamePhasesForToasts = new Set<GamePhase>(['pre-roll', 'building', 'solved', 'roll-dice']);
-  const fracChallengeVisiblePhase: GamePhase = 'turn-transition';
-  const hasBlockingSheet = !!state.identicalAlert;
   // In tutorial mode, suppress every regular game toast — the lesson
   // controls what the learner sees. Anything not currently being taught
   // is noise that distracts from the active step.
   const suppressForTutorial = state.isTutorial;
-  // Queue: welcome first if present; else oldest requireAck; else newest non-ack.
-  const rawList = state.notifications ?? [];
-  const list = rawList.filter((n) => {
-    if (hasBlockingSheet) return false;
-    if (n.id.startsWith('discard-')) return false;
-    if (n.id.startsWith('card-hint-')) return gamePhasesForToasts.has(state.phase);
-    if (n.id.startsWith('opening-draw-')) return state.phase === 'turn-transition';
-    if (n.id.startsWith('frac-challenge-')) {
-      return state.phase === fracChallengeVisiblePhase;
-    }
-    return gamePhasesForToasts.has(state.phase);
-  });
-  const eligible = list;
-  const welcomeInQueue = eligible.find(isWelcomeNotification);
-  const fracChallengeInQueue = state.phase === fracChallengeVisiblePhase && state.pendingFractionTarget !== null
-    ? [...eligible].reverse().find((n) => n.id.startsWith('frac-challenge-')) ?? null
-    : null;
-  const ackInQueue = eligible.find((n) => !!n.requireAck);
-  const newestNonAck = [...eligible].reverse().find((n) => !n.requireAck) ?? null;
-  const notif = fracChallengeInQueue ?? welcomeInQueue ?? ackInQueue ?? newestNonAck;
-  const needsAck = notif ? isWelcomeNotification(notif) || !!notif.requireAck : false;
+  const notif = getHighestPriorityGameplayNotification(state);
+  const needsAck = isBlockingGameplayNotification(notif);
   /** AppShell כבר מוסיף paddingBottom: insets.bottom — לא מחסרים שוב; ack מרימים מעט כדי שלא ייחתך כפתור "הבנתי!". */
   const ACK_BOTTOM_EXTRA = 36;
   const playfieldContentScale = webGameLayout?.contentScale ?? 1;
@@ -18292,17 +18303,21 @@ function NotificationZone() {
   const isWildResultsPurple = notif.id.includes('wild_results');
   const isFractionChallengeNotif = notif.id.startsWith('frac-challenge-');
   const isOpeningDrawNotif = notif.id.startsWith('opening-draw-');
-  const isNewUserNotif =
-    notif.id.startsWith('onb-') ||
-    notif.id.startsWith('guidance-') ||
-    (notif.title != null && WELCOME_NOTIFICATION_TITLES.has(String(notif.title)));
-  const shouldDimScreen = needsAck && isNewUserNotif;
+  const shouldDimScreen = needsAck;
 
   const dismiss = () => dispatch({ type: 'DISMISS_NOTIFICATION', id: notif.id });
-  const winH = Dimensions.get('window').height;
-  const notifBodyMaxH = notif.id.startsWith('frac-challenge-')
-    ? Math.min(320, Math.round(winH * 0.48))
-    : Math.min(200, Math.round(winH * 0.38));
+  const viewportHeight = Platform.OS === 'web'
+    ? viewport.height
+    : Dimensions.get('window').height;
+  const notifTop = isOpeningDrawNotif
+    ? Math.round(viewportHeight * 0.36)
+    : Math.max(16, (insets.top || 0) + 12);
+  const notifViewportReserve = needsAck ? 150 : 108;
+  const availableNotifHeight = Math.max(156, viewportHeight - bottomPos - notifTop - 12);
+  const baseNotifBodyMaxH = notif.id.startsWith('frac-challenge-')
+    ? Math.min(320, Math.round(viewportHeight * 0.48))
+    : Math.min(200, Math.round(viewportHeight * 0.38));
+  const notifBodyMaxH = Math.max(72, Math.min(baseNotifBodyMaxH, availableNotifHeight - notifViewportReserve));
   return (
     <>
       {shouldDimScreen && (
@@ -18318,20 +18333,23 @@ function NotificationZone() {
       )}
       <Animated.View style={{
         position:'absolute',
-        bottom: isOpeningDrawNotif ? undefined : bottomPos,
         left:16,
         right:16,
-        top: isOpeningDrawNotif ? '36%' : undefined,
+        top: notifTop,
+        bottom: isOpeningDrawNotif ? undefined : bottomPos,
         zIndex:9999,
         elevation:9999,
         opacity: fadeOpacity,
         transform:[{translateY: entryTranslateY}],
+        justifyContent: isOpeningDrawNotif ? undefined : 'flex-end',
       }} pointerEvents="box-none">
         <View style={[alertBubbleStyle.box, {
           flexDirection: 'column',
           alignItems: 'center',
           gap: 12,
-          maxWidth: '100%',
+          width: '100%',
+          maxWidth: isFractionChallengeNotif || isOpeningDrawNotif ? 360 : 320,
+          maxHeight: isOpeningDrawNotif ? undefined : availableNotifHeight,
           backgroundColor: isWildResultsPurple
             ? 'rgba(109,40,217,0.94)'
             : isOpeningDrawNotif
@@ -18713,8 +18731,13 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         customHeader={<View />}
       >
         <View style={{ gap: 14 }}>
-          <Text style={{ color: '#E5E7EB', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 }}>
-            {`${disconnectChoice.playerName} ${locale === 'he' ? 'התנתק/ה מהמשחק' : 'disconnected'}`}
+          <Text style={{ color: '#F9FAFB', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 24 }}>
+            {locale === 'he' ? 'היריב עזב את המשחק' : 'Your opponent left'}
+          </Text>
+          <Text style={{ color: '#D1D5DB', fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 20 }}>
+            {locale === 'he'
+              ? `${disconnectChoice.playerName} יצא. בחרו כיצד להמשיך:`
+              : `${disconnectChoice.playerName} left the game. Choose how to continue:`}
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
             <LulosButton
@@ -19245,6 +19268,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const { state, dispatch } = useGame();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
+  const viewport = useWebViewportSize();
+  const responsive = useResponsiveLayout();
+  const routerWebLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
+  const routerScreenWidth = routerWebLayout?.playfieldWidth ?? responsive.width;
   const webPresentation = useContext(WebPresentationContext);
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
@@ -19862,7 +19889,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     SALINDA_TRACK_H - SALINDA_THUMB_RADIUS,
     SALINDA_TRACK_H * salindaRatio - SALINDA_THUMB_RADIUS,
   )));
-  const globalCtrlBtnH = SCREEN_W < 380 ? 36 : 40;
+  const compactGlobalControls = routerScreenWidth < 380;
+  const globalCtrlBtnH = compactGlobalControls ? 36 : 40;
   const globalCtrlRight = 14;
   const soundExtrasBottom = Math.max(14, (insets.bottom || 0) + 12);
   const globalMuteBottom = soundExtrasBottom;
@@ -19985,7 +20013,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
               zIndex: 9999,
             }}
           >
-            <SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={SCREEN_W < 380 ? 20 : 22} />
+            <SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={compactGlobalControls ? 20 : 22} />
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityRole="button"
@@ -20007,7 +20035,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
               opacity: salindaVolume > 0 ? 1 : 0.48,
             }}
           >
-            <SalindaAudioIcon variant="music" size={SCREEN_W < 380 ? 18 : 20} />
+            <SalindaAudioIcon variant="music" size={compactGlobalControls ? 18 : 20} />
           </TouchableOpacity>
         </>
       )}
@@ -20231,7 +20259,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
               elevation: 24,
             }}
           >
-            <SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={SCREEN_W < 380 ? 18 : 20} />
+            <SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={compactGlobalControls ? 18 : 20} />
           </TouchableOpacity>
         </>
       ) : null}
