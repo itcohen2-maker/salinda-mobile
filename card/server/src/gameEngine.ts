@@ -298,9 +298,21 @@ export function eliminatePlayer(
   }
 
   // If eliminated player held the turn, advance to next active player
+  // and clear all mid-turn state so the next player starts fresh
   if (s.currentPlayerIndex === playerIdx) {
     const nextIdx = getNextActivePlayerIndex(s.players, playerIdx);
-    s = { ...s, currentPlayerIndex: nextIdx, phase: 'turn-transition' };
+    s = {
+      ...s,
+      currentPlayerIndex: nextIdx,
+      phase: 'turn-transition',
+      dice: null,
+      stagedCards: [],
+      validTargets: [],
+      equationResult: null,
+      pendingFractionTarget: null,
+      fractionPenalty: 0,
+      hasPlayedCards: false,
+    };
   }
 
   return s;

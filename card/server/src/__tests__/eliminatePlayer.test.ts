@@ -142,4 +142,21 @@ describe('eliminatePlayer', () => {
     const result = eliminatePlayer(st, 'p3');
     expect(result!.players[2].calledLolos).toBe(false);
   });
+
+  it('clears mid-turn state when eliminated player was current', () => {
+    const st = {
+      ...makeState3P(),
+      currentPlayerIndex: 1, // p2 is current
+      dice: { d1: 3, d2: 4, d3: 5 } as any,
+      stagedCards: [makeNumber('s1', 7)],
+      validTargets: [12],
+      equationResult: 12,
+      pendingFractionTarget: null,
+    };
+    const result = eliminatePlayer(st, 'p2');
+    expect(result!.dice).toBeNull();
+    expect(result!.stagedCards).toHaveLength(0);
+    expect(result!.validTargets).toHaveLength(0);
+    expect(result!.equationResult).toBeNull();
+  });
 });
