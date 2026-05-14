@@ -11,11 +11,18 @@ import { io, type Socket } from 'socket.io-client';
 import { supabase } from '../lib/supabase';
 import type {
   BotDifficulty,
+  ClassroomAdvanceRoundPayload,
+  ClassroomGroupStatusUpdatePayload,
+  ClassroomRecordGroupResultPayload,
+  ClassroomSendInterventionPayload,
+  ClassroomSocketState,
+  CreateClassSessionPayload,
   ContinueVsBotAck,
   Fraction,
   LobbyStatus,
   LobbyTableSummary,
   LobbyTableVisibility,
+  JoinClassSessionPayload,
   Operation,
   PlayerView,
   HostGameSettings,
@@ -30,6 +37,12 @@ import { playSfx } from '../audio/sfx';
 const DEFAULT_SOCKET_PORT = 3001;
 
 const DEFAULT_FRACTION_KINDS: Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
+const ONLINE_LAST_MOVE_SUMMARY_SUPPRESS_KEYS = new Set([
+  'toast.turnTimeoutEnded',
+  'toast.afkWarnPenalty',
+  'toast.playerEliminatedAfk',
+  'toast.eliminatedTurnTo',
+]);
 
 /** hostUri של Expo במצב Tunnel — לא מעביר TCP לפורט 3001 על המחשב; חיבור ל-socket ייתקע ב-timeout */
 function isLikelyExpoTunnelRelayHost(host: string): boolean {
@@ -179,7 +192,7 @@ export interface LobbyStatusState {
 export interface DisconnectChoiceState {
   playerId: string;
   playerName: string;
-  deadlineAt: number;
+  deadlineAt?: number; // optional — only set by legacy grace-timer path
 }
 
 export interface MultiplayerContextValue {
@@ -232,6 +245,16 @@ export interface MultiplayerContextValue {
   disconnectChoice: DisconnectChoiceState | null;
   clearDisconnectChoice: () => void;
   continueVsBot: () => Promise<boolean>;
+  acceptTechnicalVictory: () => void;
+  classroomState: ClassroomSocketState | null;
+  createClassSession: (payload: CreateClassSessionPayload) => void;
+  joinClassSession: (payload: JoinClassSessionPayload) => void;
+  leaveClassSession: () => void;
+  updateClassroomGroupStatus: (payload: ClassroomGroupStatusUpdatePayload) => void;
+  advanceClassroomRound: (payload: ClassroomAdvanceRoundPayload) => void;
+  sendClassroomIntervention: (payload: ClassroomSendInterventionPayload) => void;
+  recordClassroomGroupResult: (payload: ClassroomRecordGroupResultPayload) => void;
+  closeClassroomSession: () => void;
   // Override for GameProvider: when serverState is set, provide { state, dispatch } so game UI uses server
   gameOverride: { state: any; dispatch: (action: any) => void } | null;
 }
@@ -250,8 +273,13 @@ export function useMultiplayerOptional(): MultiplayerContextValue | null {
 
 /** Adapt server PlayerView to client GameState shape (index.tsx) so existing GameScreen works */
 function playerViewToGameState(view: PlayerView): any {
+  const playerCount = view.players.length;
   const myPlayerIndex = view.players.findIndex((p) => p.id === view.myPlayerId);
-  const safeMyIndex = myPlayerIndex >= 0 ? myPlayerIndex : 0;
+  const safeCurrentPlayerIndex =
+    playerCount > 0
+      ? Math.min(Math.max(view.currentPlayerIndex ?? 0, 0), playerCount - 1)
+      : 0;
+  const safeMyIndex = myPlayerIndex >= 0 ? myPlayerIndex : safeCurrentPlayerIndex;
   const normalizeCardOperation = <T extends { type: string; operation?: unknown }>(card: T): T => {
     if (card.type !== 'operation') return card;
     const normalized = normalizeOperationToken(typeof card.operation === 'string' ? card.operation : null);
@@ -314,6 +342,10 @@ function playerViewToGameState(view: PlayerView): any {
   const normalizedEnabledOperators = (gs.enabledOperators ?? [])
     .map((op) => normalizeOperationToken(op))
     .filter((op): op is Operation => op != null);
+  const suppressLastMoveSummary =
+    (view.lastDiscardCount ?? 0) === 0 &&
+    typeof view.lastMoveMessageKey === 'string' &&
+    ONLINE_LAST_MOVE_SUMMARY_SUPPRESS_KEYS.has(view.lastMoveMessageKey);
   const wireTournament = view.tournamentTable;
   const tournamentTable =
     Array.isArray(wireTournament) && wireTournament.length > 0
@@ -333,7 +365,7 @@ function playerViewToGameState(view: PlayerView): any {
     phase: view.phase,
     players,
     myPlayerIndex: safeMyIndex,
-    currentPlayerIndex: view.currentPlayerIndex,
+    currentPlayerIndex: safeCurrentPlayerIndex,
     drawPile: drawPileFake,
     discardPile: view.pileTop ? [view.pileTop] : [],
     dice: view.dice,
@@ -359,12 +391,14 @@ function playerViewToGameState(view: PlayerView): any {
     courageDiscardSuccessStreak: view.courageDiscardSuccessStreak ?? 0,
     courageRewardPulseId: view.courageRewardPulseId ?? 0,
     courageCoins: view.courageCoins ?? 0,
+    turnCoinsEarned: view.turnCoinsEarned ?? 0,
     lastCourageRewardReason: view.lastCourageRewardReason ?? null,
+    lastCourageCoinsAwarded: view.lastCourageCoinsAwarded ?? false,
     identicalAlert: view.identicalCelebration ?? null,
     jokerModalOpen: false,
     equationHandSlots,
     equationHandPick: null,
-    lastMoveMessage: view.lastMoveMessage,
+    lastMoveMessage: suppressLastMoveSummary ? null : view.lastMoveMessage,
     lastDiscardCount: view.lastDiscardCount ?? 0,
     difficulty: view.difficulty,
     diceMode: gs.diceMode,
@@ -383,6 +417,12 @@ function playerViewToGameState(view: PlayerView): any {
     message: view.message,
     openingDrawId: view.openingDrawId,
     turnDeadlineAt: view.turnDeadlineAt,
+    overflowSwapPending: view.overflowSwapPending ?? false,
+    overflowSwapDeadlineAt: view.overflowSwapDeadlineAt ?? null,
+    overflowSwapCanUseUnderTop: view.overflowSwapCanUseUnderTop ?? false,
+    overflowSwapStage: view.overflowSwapStage ?? null,
+    overflowSwapSelectedPileChoice: view.overflowSwapSelectedPileChoice ?? null,
+    overflowSwapSelectedHandCardId: view.overflowSwapSelectedHandCardId ?? null,
     roundsPlayed: view.roundsPlayed ?? 0,
     notifications: [],
     moveHistory: [],
@@ -404,20 +444,31 @@ function playerViewToGameState(view: PlayerView): any {
   };
 }
 
+export {
+  playerViewToGameState as __playerViewToGameState,
+  actionToSocketEvent as __actionToSocketEvent,
+};
+
 /** Map client dispatch actions to socket events (for online mode) */
 function actionToSocketEvent(action: any): { event: string; data?: any } | null {
   switch (action.type) {
     case 'BEGIN_TURN': return { event: 'begin_turn' };
     case 'ROLL_DICE': return { event: 'roll_dice' };
-    case 'CONFIRM_EQUATION':
+    case 'CONFIRM_EQUATION': {
+      const commits =
+        action.equationCommits ?? (action.equationCommit != null ? [action.equationCommit] : []);
+      const legacyCommit =
+        action.equationCommit ?? (commits.length === 1 ? commits[0] : undefined);
       return {
         event: 'confirm_equation',
         data: {
           result: action.result,
           equationDisplay: action.equationDisplay || '',
-          equationCommits: action.equationCommits ?? [],
+          equationCommits: commits,
+          equationCommit: legacyCommit,
         },
       };
+    }
     case 'STAGE_CARD': return { event: 'stage_card', data: { cardId: action.card?.id } };
     case 'UNSTAGE_CARD': return { event: 'unstage_card', data: { cardId: action.card?.id } };
     case 'CONFIRM_STAGED': return { event: 'confirm_staged' };
@@ -433,6 +484,18 @@ function actionToSocketEvent(action: any): { event: string; data?: any } | null 
     case 'DRAW_CARD': return { event: 'draw_card' };
     case 'CALL_LOLOS': return null;
     case 'END_TURN': return { event: 'end_turn' };
+    case 'RESOLVE_OVERFLOW_SWAP':
+      return {
+        event: 'resolve_overflow_swap',
+        data: {
+          handCardId: action.handCardId,
+          pileChoice: action.pileChoice ?? 'top',
+        },
+      };
+    case 'REPLACE_CARD_WITH_WILD':
+      return { event: 'replace_card_with_wild', data: { cardId: action.cardId } };
+    case 'REPLACE_CARD_WITH_SLINDA':
+      return { event: 'replace_card_with_slinda', data: { cardId: action.cardId } };
     default: return null;
   }
 }
@@ -467,6 +530,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [lobbyStatus, setLobbyStatus] = useState<LobbyStatusState | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [serverState, setServerState] = useState<PlayerView | null>(null);
+  const [classroomState, setClassroomState] = useState<ClassroomSocketState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState<string | null>(null);
@@ -482,6 +546,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const startBotGameReqRef = useRef(0);
   /** עוקב אחרי מספר השחקנים הקודם כדי לזהות הצטרפות חדשה ולהשמיע צליל + התראה */
   const prevPlayerCountRef = useRef(0);
+  const prevHumanPlayerIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     // Keep sessionTokenRef up-to-date so connect() can pass it to the socket
@@ -506,7 +571,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     setServerUrlState(url);
   }, []);
 
-  const clearSessionAfterDisconnect = useCallback(() => {
+  const clearRoomSession = useCallback(() => {
     awaitingReconnectSyncRef.current = false;
     setReconnectNotice(null);
     setRoomCode(null);
@@ -516,13 +581,19 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     playerIdRef.current = null;
     roomCodeSessionRef.current = null;
     setPlayers([]);
-    setTables([]);
     setLobbyStatus(null);
     setServerState(null);
     setDisconnectChoice(null);
     setIsHost(false);
     prevPlayerCountRef.current = 0;
+    prevHumanPlayerIdsRef.current = [];
   }, []);
+
+  const clearSessionAfterDisconnect = useCallback(() => {
+    clearRoomSession();
+    setTables([]);
+    setClassroomState(null);
+  }, [clearRoomSession]);
 
   const disconnect = useCallback(() => {
     awaitingReconnectSyncRef.current = false;
@@ -536,6 +607,13 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     setConnected(false);
     clearSessionAfterDisconnect();
   }, [clearSessionAfterDisconnect]);
+
+  const beginRoomFlow = useCallback((nextIsHost: boolean) => {
+    clearRoomSession();
+    setIsHost(nextIsHost);
+    setError(null);
+    setToast(null);
+  }, [clearRoomSession]);
 
   const connect = useCallback(() => {
     const want = normalizeServerUrl(serverUrl.trim() || getServerUrl());
@@ -563,7 +641,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       if (awaitingReconnectSyncRef.current) {
         const rc = roomCodeSessionRef.current;
         const pid = playerIdRef.current;
-        if (rc && pid && serverStateRef.current) {
+        if (rc && pid) {
           socket.emit('reconnect', { roomCode: rc, playerId: pid, locale: localeRef.current });
         } else {
           awaitingReconnectSyncRef.current = false;
@@ -573,8 +651,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     });
     socket.on('disconnect', (reason: string) => {
       setConnected(false);
-      const inGame = serverStateRef.current != null;
-      const recoverable = inGame && isTransportDisconnect(reason);
+      const hasRoomSession = !!(roomCodeSessionRef.current && playerIdRef.current);
+      const recoverable = hasRoomSession && isTransportDisconnect(reason);
       if (recoverable) {
         awaitingReconnectSyncRef.current = true;
         setReconnectNotice(t(localeRef.current, 'mp.reconnecting'));
@@ -610,8 +688,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
             table.roomCode === code
               ? { ...table, status, countdownEndsAt }
               : table,
-          )
-          .filter((table) => table.status !== 'in_game'),
+          ),
       );
     });
     socket.on('player_joined', ({ players: p }) => {
@@ -626,21 +703,28 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       const pid = playerIdRef.current;
       const me = pid ? p.find((x: { id: string }) => x.id === pid) : null;
       if (me) setIsHost(!!me.isHost);
-      const prev = prevPlayerCountRef.current;
-      const curr = mapped.length;
+      const currentHumanPlayers = mapped.filter((player) => !player.isBot);
+      const previousHumanIds = prevHumanPlayerIdsRef.current;
+      const prev = previousHumanIds.length;
+      const curr = currentHumanPlayers.length;
+      const newcomers = currentHumanPlayers.filter((player) => !previousHumanIds.includes(player.id));
       // הצטרפות שחקן חדש (לא הבוט, לא אנחנו): מנגן צליל ומציג התראה למארח וליתר השחקנים הקיימים.
       if (curr > prev && prev >= 1) {
-        const newcomer = pid
-          ? mapped.find((x: typeof mapped[number]) => x.id !== pid && !x.isBot)
-          : mapped.find((x: typeof mapped[number]) => !x.isBot);
+        const newcomer = newcomers.find((player) => player.id !== pid)
+          ?? currentHumanPlayers.find((player) => player.id !== pid)
+          ?? newcomers[0]
+          ?? currentHumanPlayers[0];
         const display = newcomer?.name ?? (localeRef.current === 'he' ? 'שחקן חדש' : 'A new player');
         setToast(
           localeRef.current === 'he'
             ? `🎉 ${display} הצטרף/ה לחדר!`
             : `🎉 ${display} joined the room!`,
         );
-        void playSfx('complete', { cooldownMs: 400, volumeOverride: 0.55 });
+        if (me?.isHost) {
+          void playSfx('success', { cooldownMs: 400, volumeOverride: 0.26 });
+        }
       }
+      prevHumanPlayerIdsRef.current = currentHumanPlayers.map((player) => player.id);
       prevPlayerCountRef.current = curr;
     });
     socket.on('lobby_status', (data: LobbyStatusState) => {
@@ -648,6 +732,27 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     });
     socket.on('player_left', () => {
       // List will be updated by next player_joined or we could request state
+    });
+    socket.on('room_closed', ({ reason }: { roomCode: string; reason?: 'eliminated' }) => {
+      if (reason === 'eliminated') {
+        setToast(
+          localeRef.current === 'he'
+            ? 'אין אפשרות חזרה — נסה שולחן אחר'
+            : 'No way back — try another table',
+        );
+      }
+      clearRoomSession();
+      socket.emit('list_tables');
+    });
+    socket.on('opponent_disconnect_choice', ({ playerId: disconnectedId, playerName }) => {
+      setDisconnectChoice({ playerId: disconnectedId, playerName });
+    });
+    socket.on('player_eliminated', ({ playerName }) => {
+      setToast(
+        localeRef.current === 'he'
+          ? `${playerName} עזב/ה — המשחק ממשיך`
+          : `${playerName} left — game continues`,
+      );
     });
     socket.on('opponent_disconnect_grace', ({ playerId: disconnectedId, playerName, deadlineAt }) => {
       setDisconnectChoice({ playerId: disconnectedId, playerName, deadlineAt });
@@ -681,6 +786,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       setReconnectNotice(null);
       setLobbyStatus({ status: 'bot_game_started', botOfferAt: null });
       setDisconnectChoice(null);
+      void playSfx('start', { cooldownMs: 900, volumeOverride: 0.4 });
       setServerState(view);
     });
     socket.on('state_update', (view: PlayerView) => {
@@ -697,6 +803,36 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       });
       setServerState(view);
     });
+    socket.on('classroom_state', (view: ClassroomSocketState) => {
+      setClassroomState(view);
+    });
+    socket.on('classroom_closed', ({ report }) => {
+      setClassroomState((current) => {
+        if (!current) return current;
+        return current.teacherView
+          ? {
+              ...current,
+              teacherView: current.teacherView
+                ? {
+                    ...current.teacherView,
+                    lifecycle: 'completed',
+                    generatedReport: report,
+                    recommendedNextStep: report.recommendedNextStep,
+                  }
+                : null,
+            }
+          : current.studentView
+            ? {
+                ...current,
+                studentView: {
+                  ...current.studentView,
+                  lifecycle: 'completed',
+                },
+              }
+            : current;
+      });
+      setToast(localeRef.current === 'he' ? 'הסשן הכיתתי הסתיים והדוח מוכן.' : 'Class session finished and the report is ready.');
+    });
     socket.on('toast', ({ message }: { message: string }) => setToast(message));
     socket.on('error', ({ message }: { message: string }) => {
       setError(message);
@@ -710,7 +846,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       console.warn('[MP] connect_error:', err.message, '→', want);
       setError(`${t(localeRef.current, 'mp.connectError')}\n(${want})`);
     });
-  }, [serverUrl, clearSessionAfterDisconnect]);
+  }, [serverUrl, clearRoomSession, clearSessionAfterDisconnect]);
 
   // Cleanup socket on unmount to prevent memory leaks
   useEffect(() => {
@@ -726,14 +862,14 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const createRoom = useCallback(
     (playerName: string) => {
       console.log('[MP][debug] createRoom called, name=', playerName);
+      beginRoomFlow(true);
       connect();
       console.log('[MP][debug] after connect(), url=', lastSocketUrlRef.current, 'socket?', !!socketRef.current);
-      setIsHost(true);
       // Socket.io תור אירועים לפני connect — לא תלויים ב-once('connect')
       socketRef.current?.emit('create_room', { playerName, locale });
       console.log('[MP][debug] emitted create_room');
     },
-    [connect, locale],
+    [beginRoomFlow, connect, locale],
   );
 
   const refreshTables = useCallback(() => {
@@ -742,10 +878,10 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   }, [connect]);
 
   const createTable = useCallback((playerName: string) => {
+    beginRoomFlow(true);
     connect();
-    setIsHost(true);
     socketRef.current?.emit('create_table', { playerName, locale });
-  }, [connect, locale]);
+  }, [beginRoomFlow, connect, locale]);
 
   const configureTable = useCallback((config: {
     visibility: LobbyTableVisibility;
@@ -757,11 +893,13 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const joinTable = useCallback((code: string, playerName: string) => {
+    beginRoomFlow(false);
     connect();
     socketRef.current?.emit('join_table', { roomCode: code.trim(), playerName, locale });
-  }, [connect, locale]);
+  }, [beginRoomFlow, connect, locale]);
 
   const joinPrivateTable = useCallback((code: string, inviteCode: string, playerName: string) => {
+    beginRoomFlow(false);
     connect();
     socketRef.current?.emit('join_private_table_with_code', {
       roomCode: code.trim(),
@@ -769,7 +907,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       playerName,
       locale,
     });
-  }, [connect, locale]);
+  }, [beginRoomFlow, connect, locale]);
 
   const startTableCountdown = useCallback(() => {
     socketRef.current?.emit('start_table_countdown');
@@ -777,28 +915,17 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
 
   const joinRoom = useCallback(
     (code: string, playerName: string) => {
+      beginRoomFlow(false);
       connect();
       socketRef.current?.emit('join_room', { roomCode: code.trim(), playerName, locale });
     },
-    [connect, locale],
+    [beginRoomFlow, connect, locale],
   );
 
   const leaveRoom = useCallback(() => {
-    awaitingReconnectSyncRef.current = false;
-    setReconnectNotice(null);
     socketRef.current?.emit('leave_room');
-    setRoomCode(null);
-    setPlayerId(null);
-    setCurrentInviteCode(null);
-    setCurrentTableVisibility(null);
-    playerIdRef.current = null;
-    roomCodeSessionRef.current = null;
-    setPlayers([]);
-    setLobbyStatus(null);
-    setServerState(null);
-    setDisconnectChoice(null);
-    setIsHost(false);
-  }, []);
+    clearRoomSession();
+  }, [clearRoomSession]);
 
   const startGame = useCallback((difficulty: 'easy' | 'full', gameSettings?: Partial<HostGameSettings>) => {
     if (gameSettings && Object.keys(gameSettings).length > 0) {
@@ -889,6 +1016,52 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     });
   }, [locale]);
 
+  const acceptTechnicalVictory = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !socket.connected) return;
+    socket.emit('accept_technical_victory');
+    setDisconnectChoice(null);
+  }, []);
+
+  const createClassSession = useCallback((payload: CreateClassSessionPayload) => {
+    connect();
+    socketRef.current?.emit('create_class_session', payload);
+  }, [connect]);
+
+  const joinClassSession = useCallback((payload: JoinClassSessionPayload) => {
+    connect();
+    socketRef.current?.emit('join_class_session', {
+      sessionCode: payload.sessionCode.trim(),
+      groupCode: payload.groupCode.trim().toUpperCase(),
+      nickname: payload.nickname,
+    });
+  }, [connect]);
+
+  const leaveClassSessionFn = useCallback(() => {
+    socketRef.current?.emit('leave_class_session');
+    setClassroomState(null);
+  }, []);
+
+  const updateClassroomGroupStatus = useCallback((payload: ClassroomGroupStatusUpdatePayload) => {
+    socketRef.current?.emit('classroom_update_group_status', payload);
+  }, []);
+
+  const advanceClassroomRoundFn = useCallback((payload: ClassroomAdvanceRoundPayload) => {
+    socketRef.current?.emit('classroom_advance_round', payload);
+  }, []);
+
+  const sendClassroomInterventionFn = useCallback((payload: ClassroomSendInterventionPayload) => {
+    socketRef.current?.emit('classroom_send_intervention', payload);
+  }, []);
+
+  const recordClassroomGroupResult = useCallback((payload: ClassroomRecordGroupResultPayload) => {
+    socketRef.current?.emit('classroom_record_group_result', payload);
+  }, []);
+
+  const closeClassroomSession = useCallback(() => {
+    socketRef.current?.emit('classroom_close_session');
+  }, []);
+
   const emit = useCallback((event: string, data?: any) => {
     if (data !== undefined) socketRef.current?.emit(event as any, data);
     else socketRef.current?.emit(event as any);
@@ -969,6 +1142,16 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     disconnectChoice,
     clearDisconnectChoice: () => setDisconnectChoice(null),
     continueVsBot,
+    acceptTechnicalVictory,
+    classroomState,
+    createClassSession,
+    joinClassSession,
+    leaveClassSession: leaveClassSessionFn,
+    updateClassroomGroupStatus,
+    advanceClassroomRound: advanceClassroomRoundFn,
+    sendClassroomIntervention: sendClassroomInterventionFn,
+    recordClassroomGroupResult,
+    closeClassroomSession,
     gameOverride,
   };
 
