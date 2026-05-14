@@ -13910,10 +13910,9 @@ function TurnTransition() {
                   );
                 }
                 if (card.type === 'joker') {
-                  // Rainbow border feel — matches JokerCard multicolor
                   return (
-                    <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#EA4335', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ color: '#EA4335', fontSize: 16, fontWeight: '900' }}>{STAR_GLYPH}</Text>
+                    <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#FDE68A', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#FFFBEB', fontSize: 16, fontWeight: '900' }}>S</Text>
                     </View>
                   );
                 }
@@ -17459,7 +17458,7 @@ function GameOver() {
                     }
                     return (
                       <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#FDE68A', alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ color: '#FFFBEB', fontSize: 13, fontWeight: '900' }}>J</Text>
+                        <Text style={{ color: '#FFFBEB', fontSize: 13, fontWeight: '900' }}>S</Text>
                       </View>
                     );
                   })}
@@ -18588,7 +18587,7 @@ function PlayerWaitingScreen({
 function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { state } = useGame();
   const mp = useMultiplayerOptional();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const safe = useGameSafeArea();
   const waitingViewButtonLeft = 16;
   const myPlayerIndex = (state as any).myPlayerIndex ?? 0;
@@ -18617,13 +18616,6 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     return () => clearTimeout(t);
   }, [mpToast]);
 
-  const mpDisconnectChoice = mp?.disconnectChoice ?? null;
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    if (!mpDisconnectChoice) return;
-    const timer = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [mpDisconnectChoice]);
 
   const myHand = state.players[myPlayerIndex]?.hand ?? [];
   const currentTurnLobbyPlayer = mp?.players?.find((p) => p.name === currentTurnName);
@@ -18713,40 +18705,36 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   ) : null;
 
   const disconnectChoice = mp?.disconnectChoice ?? null;
-  const remainingMs = disconnectChoice?.deadlineAt != null ? disconnectChoice.deadlineAt - nowMs : 0;
-  const waitingReconnect = disconnectChoice != null && remainingMs > 0;
-  const countdownSec = waitingReconnect ? Math.ceil(remainingMs / 1000) : 0;
   const disconnectChoiceModal =
     disconnectChoice ? (
       <AppModal
         visible
         onClose={() => {
-          if (!waitingReconnect) mp?.clearDisconnectChoice?.();
+          // non-dismissible — user must pick an option
         }}
-        title={waitingReconnect ? 'שחקן התנתק' : 'שחקן עזב'}
       >
         <View style={{ gap: 14 }}>
           <Text style={{ color: '#E5E7EB', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 }}>
-            {waitingReconnect
-              ? `${disconnectChoice.playerName} מנותק כרגע. ממתינים לחזרה (${countdownSec} שניות).`
-              : `${disconnectChoice.playerName} לא חזר בזמן. רוצים להמשיך מול בוט?`}
+            {`${disconnectChoice.playerName} ${locale === 'he' ? 'התנתק/ה מהמשחק' : 'disconnected'}`}
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
             <LulosButton
-              text={t('lobby.startBotGame')}
+              text={locale === 'he' ? 'קבל ניצחון טכני' : 'Accept technical victory'}
               color="green"
+              width={160}
+              height={44}
+              onPress={() => {
+                mp?.acceptTechnicalVictory?.();
+              }}
+            />
+            <LulosButton
+              text={t('lobby.startBotGame')}
+              color="blue"
               width={160}
               height={44}
               onPress={() => {
                 void mp?.continueVsBot?.();
               }}
-            />
-            <LulosButton
-              text={t('lobby.leaveRoom')}
-              color="yellow"
-              width={160}
-              height={44}
-              onPress={() => mp?.leaveRoom?.()}
             />
           </View>
         </View>
