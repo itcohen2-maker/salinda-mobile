@@ -1347,12 +1347,13 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
     clearRoomTurnTimer(room);
     clearBotActionTimer(room);
+    clearRoomDisconnectGrace(room);
+    room.lastActivity = Date.now();
 
     const tvResult = technicalVictory(room.state, disconnectedOpponent.id);
     if (!tvResult) return;
 
     room.state = tvResult;
-    room.lastActivity = Date.now();
     broadcastState(io, room);
     emitRoomToasts(io, room);
     maybeRecordMatch(room);
