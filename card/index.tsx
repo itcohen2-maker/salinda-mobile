@@ -18709,9 +18709,8 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     disconnectChoice ? (
       <AppModal
         visible
-        onClose={() => {
-          // non-dismissible — user must pick an option
-        }}
+        onClose={() => {}}
+        customHeader={<View />}
       >
         <View style={{ gap: 14 }}>
           <Text style={{ color: '#E5E7EB', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 }}>
