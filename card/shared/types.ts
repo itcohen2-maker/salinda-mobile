@@ -4,15 +4,50 @@
 // ============================================================
 
 import type { AppLocale, GameStatusMessage, LastMovePayload, LocalizedMessage } from './i18n';
+import type { ClassroomBandConfig, ClassroomDashboardKpis, ClassroomGroupMetrics, ClassroomGroupReport, ClassroomGroupSnapshot, ClassroomIntervention, ClassroomLaunchConfig, ClassroomParticipantInfo, ClassroomRoleAssignment, ClassroomSessionReport, ClassroomSocketState, ClassroomStudentView, ClassroomTeacherView, ClassroomAdvanceRoundPayload, ClassroomGroupStatusUpdatePayload, ClassroomRecordGroupResultPayload, ClassroomSendInterventionPayload, ClassroomLiveSettings, ConceptFocus, CreateClassSessionPayload, DifficultyBand, GradeBand, JoinClassSessionPayload, SessionMode, UserRole, ClassroomGroupStatus, ClassroomInterventionKind, ClassroomMemberRole, ClassroomSessionLifecycle, ClassroomTaskTemplate } from './classroomTypes';
 
 // Re-export for consumers that share only types
 export type { AppLocale, LocalizedMessage, LastMovePayload, GameStatusMessage };
+export type {
+  ClassroomAdvanceRoundPayload,
+  ClassroomBandConfig,
+  ClassroomDashboardKpis,
+  ClassroomGroupMetrics,
+  ClassroomGroupReport,
+  ClassroomGroupSnapshot,
+  ClassroomGroupStatus,
+  ClassroomGroupStatusUpdatePayload,
+  ClassroomIntervention,
+  ClassroomInterventionKind,
+  ClassroomLaunchConfig,
+  ClassroomLiveSettings,
+  ClassroomMemberRole,
+  ClassroomParticipantInfo,
+  ClassroomRecordGroupResultPayload,
+  ClassroomRoleAssignment,
+  ClassroomSendInterventionPayload,
+  ClassroomSessionLifecycle,
+  ClassroomSessionReport,
+  ClassroomSocketState,
+  ClassroomStudentView,
+  ClassroomTaskTemplate,
+  ClassroomTeacherView,
+  ConceptFocus,
+  CreateClassSessionPayload,
+  DifficultyBand,
+  GradeBand,
+  JoinClassSessionPayload,
+  SessionMode,
+  UserRole,
+} from './classroomTypes';
 
 // ── Card Types ──
 
 export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
 export type Operation = '+' | '-' | 'x' | '÷';
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
+export type OverflowSwapPileChoice = 'top' | 'underTop' | 'random';
+export type OverflowSwapStage = 'pile' | 'hand';
 
 export interface Card {
   id: string;
@@ -39,6 +74,7 @@ export interface Player {
   isSpectator: boolean;
   /** UI + server message language */
   locale: AppLocale;
+  role?: UserRole;
   /** Supabase auth UUID — set at join time for authenticated players; undefined for guests */
   supabaseUserId?: string;
 }
@@ -73,6 +109,10 @@ export interface LobbyTableSummary {
   hasRandomJoiner: boolean;
   tableTheme: LobbyTableTheme;
   configuredDifficulty: 'easy' | 'full' | null;
+  showFractions?: boolean | null;
+  fractionKinds?: Fraction[] | null;
+  showPossibleResults?: boolean | null;
+  showSolveExercise?: boolean | null;
   timerSetting: HostGameSettings['timerSetting'] | null;
   timerCustomSeconds: number | null;
 }
@@ -183,8 +223,12 @@ export interface ServerGameState {
   courageRewardPulseId: number;
   /** מטבעות לרקורד המשחק הנוכחי */
   courageCoins: number;
+  /** Coins earned during the just-finished turn; cleared when the next turn begins. */
+  turnCoinsEarned?: number;
   /** סיבה מילולית לתוספת האחרונה במד ההצטיינות; מוצגת פעם אחת במסך מעבר התור. */
   lastCourageRewardReason: string | null;
+  /** true exactly when the excellence meter just filled and awarded coins. */
+  lastCourageCoinsAwarded?: boolean;
   /** לרוב null; מוגדר רק ב־state_update מיד אחרי playIdentical (מקוון) */
   identicalCelebration?: { playerName: string; cardDisplay: string; consecutive: number } | null;
   lastMoveMessage: LastMovePayload;
@@ -199,6 +243,12 @@ export interface ServerGameState {
   openingDrawId: string;
   /** מועד יעד (epoch ms) לפעולת התור הנוכחית — מקוון בלבד; null כשלא במצב המתנה */
   turnDeadlineAt: number | null;
+  overflowSwapPending: boolean;
+  overflowSwapDeadlineAt: number | null;
+  overflowSwapCanUseUnderTop: boolean;
+  overflowSwapStage: OverflowSwapStage | null;
+  overflowSwapSelectedPileChoice: OverflowSwapPileChoice | null;
+  overflowSwapSelectedHandCardId: string | null;
   /** מונה סיומי תור (מעבר לשחקן הבא דרך endTurnLogic) */
   roundsPlayed: number;
   /** אחרי אישור תרגיל קוביות: עד 2 קלפי פעולה/סלינדה במשבצות 0 ו־1; יוסרו עם קלפי ההנחה */
@@ -242,11 +292,16 @@ export interface PlayerView {
   courageDiscardSuccessStreak: number;
   courageRewardPulseId: number;
   courageCoins: number;
+  /** Coins earned during the just-finished turn; cleared when the next turn begins. */
+  turnCoinsEarned?: number;
   /** סיבה מילולית לתוספת האחרונה במד ההצטיינות; מוצגת פעם אחת במסך מעבר התור. */
   lastCourageRewardReason: string | null;
+  /** true exactly when the excellence meter just filled and awarded coins. */
+  lastCourageCoinsAwarded?: boolean;
   /** מגיע מהשרת רק בפריים אחרי קלף זהה מקוון — ממופה ל־identicalAlert בלקוח */
   identicalCelebration: { playerName: string; cardDisplay: string; consecutive: number } | null;
   lastMoveMessage: string | null;
+  lastMoveMessageKey?: string | null;
   /** סיכום השלכה אחרונה ל־UI (למשל "פחות קלף אחד") */
   lastDiscardCount?: number;
   difficulty: 'easy' | 'full';
@@ -255,6 +310,12 @@ export interface PlayerView {
   message: string;
   openingDrawId: string;
   turnDeadlineAt: number | null;
+  overflowSwapPending: boolean;
+  overflowSwapDeadlineAt: number | null;
+  overflowSwapCanUseUnderTop: boolean;
+  overflowSwapStage: OverflowSwapStage | null;
+  overflowSwapSelectedPileChoice: OverflowSwapPileChoice | null;
+  overflowSwapSelectedHandCardId: string | null;
   /** סיומי תור ל־UI (רמז טיימר); לקוח ישן בלי שדה — מתייחסים כ־0 */
   roundsPlayed?: number;
   /** נתון רק אחרי אישור תרגיל עם קלף/י פעולה או סלינדה מהיד */
@@ -314,10 +375,22 @@ export interface ClientToServerEvents {
   call_lulos: () => void;
   end_turn: () => void;
   begin_turn: () => void;
+  resolve_overflow_swap: (data: { handCardId?: string; pileChoice?: OverflowSwapPileChoice }) => void;
+  replace_card_with_wild: (data: { cardId: string }) => void;
+  replace_card_with_slinda: (data: { cardId: string }) => void;
+  create_class_session: (data: CreateClassSessionPayload) => void;
+  join_class_session: (data: JoinClassSessionPayload) => void;
+  leave_class_session: () => void;
+  classroom_update_group_status: (data: ClassroomGroupStatusUpdatePayload) => void;
+  classroom_advance_round: (data: ClassroomAdvanceRoundPayload) => void;
+  classroom_send_intervention: (data: ClassroomSendInterventionPayload) => void;
+  classroom_close_session: () => void;
+  classroom_record_group_result: (data: ClassroomRecordGroupResultPayload) => void;
   /** מארח בלבד — חדר עם בוט; מעדכן hostGameSettings.botDifficulty */
   set_bot_difficulty: (data: { difficulty: BotDifficulty }) => void;
   reconnect: (data: { roomCode: string; playerId: string; locale?: AppLocale }) => void;
   continue_vs_bot: (ack?: (result: ContinueVsBotAck) => void) => void;
+  accept_technical_victory: () => void;
 }
 
 // ── Socket Events: Server → Client ──
@@ -331,6 +404,7 @@ export interface ServerToClientEvents {
   }) => void;
   player_joined: (data: { players: { id: string; name: string; isHost: boolean; isConnected: boolean; isBot: boolean }[] }) => void;
   player_left: (data: { playerId: string; playerName: string }) => void;
+  room_closed: (data: { roomCode: string; reason?: 'eliminated' }) => void;
   lobby_status: (data: { status: LobbyStatus; botOfferAt: number | null }) => void;
   tables_updated: (data: { tables: LobbyTableSummary[] }) => void;
   table_countdown_started: (data: { roomCode: string; countdownEndsAt: number }) => void;
@@ -341,5 +415,9 @@ export interface ServerToClientEvents {
   opponent_disconnect_grace: (data: { playerId: string; playerName: string; deadlineAt: number }) => void;
   opponent_reconnected: (data: { playerId: string; playerName: string }) => void;
   opponent_disconnect_expired: (data: { playerId: string; playerName: string }) => void;
+  player_eliminated: (data: { playerId: string; playerName: string }) => void;
+  opponent_disconnect_choice: (data: { playerId: string; playerName: string }) => void;
+  classroom_state: (data: ClassroomSocketState) => void;
+  classroom_closed: (data: { sessionCode: string; report: ClassroomSessionReport }) => void;
   error: (data: { message: string }) => void;
 }
