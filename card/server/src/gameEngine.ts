@@ -5,11 +5,21 @@
 
 import type {
   Card, Player, ServerGameState, PlayerView, Operation, Fraction,
-  DiceResult, HostGameSettings, EquationCommitPayload, AppLocale, TournamentStanding,
+  DiceResult, HostGameSettings, EquationCommitPayload, AppLocale, TournamentStanding, OverflowSwapPileChoice, OverflowSwapStage,
 } from '../../shared/types';
 import type { GameStatusMessage, LastMovePayload, LocalizedMessage } from '../../shared/i18n';
 import { formatGameMessage, formatLastMove } from '../../shared/i18n';
+import {
+  OVERFLOW_SWAP_THRESHOLD,
+  OVERFLOW_SWAP_TIMER_SECONDS,
+  pickOverflowTimeoutHandCardId,
+} from '../../shared/overflowSwap';
 import { CARDS_PER_PLAYER } from '../../shared/gameConstants';
+import {
+  equationMatchesDiceAndResult,
+  extractEquationOperators,
+  validateEquationCommitsForDisplay,
+} from '../../shared/validation';
 
 const DEFAULT_HOST_GAME_SETTINGS: HostGameSettings = {
   diceMode: '3',
@@ -58,6 +68,7 @@ function identicalCardLabel(
 
 /** זמן המתנה לפעולת שחקן במשחק מקוון (אני מוכן) */
 export const ONLINE_TURN_ACTION_MS = 15_000;
+const OVERFLOW_SWAP_ACTION_MS = OVERFLOW_SWAP_TIMER_SECONDS * 1000;
 
 function resolveConfiguredTurnTimerSeconds(st: ServerGameState): number | null {
   const cfg = st.hostGameSettings?.timerSetting ?? 'off';
@@ -72,7 +83,24 @@ function resolveConfiguredTurnTimerSeconds(st: ServerGameState): number | null {
 
 export function withOnlineTurnDeadline(st: ServerGameState): ServerGameState {
   if (st.phase === 'turn-transition') {
-    return { ...st, turnDeadlineAt: Date.now() + ONLINE_TURN_ACTION_MS };
+    if (st.overflowSwapPending) {
+      return {
+        ...st,
+        turnDeadlineAt: null,
+        overflowSwapDeadlineAt: st.overflowSwapDeadlineAt ?? (Date.now() + OVERFLOW_SWAP_ACTION_MS),
+        overflowSwapCanUseUnderTop: st.discardPile.length > 1,
+        overflowSwapStage: st.overflowSwapStage ?? 'hand',
+      };
+    }
+    return {
+      ...st,
+      turnDeadlineAt: Date.now() + ONLINE_TURN_ACTION_MS,
+      overflowSwapDeadlineAt: null,
+      overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null,
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: null,
+    };
   }
   const configuredSeconds = resolveConfiguredTurnTimerSeconds(st);
   // Pre-roll idle safety: the player pressed "אני מוכן" but hasn't rolled the
@@ -100,7 +128,40 @@ export function withOnlineTurnDeadline(st: ServerGameState): ServerGameState {
   if (configuredSeconds === null && isPostRollWindow) {
     return { ...st, turnDeadlineAt: Date.now() + 60_000 };
   }
-  return { ...st, turnDeadlineAt: null };
+  return {
+    ...st,
+    turnDeadlineAt: null,
+    overflowSwapDeadlineAt: null,
+    overflowSwapCanUseUnderTop: false,
+    overflowSwapStage: null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
+  };
+}
+
+function withOverflowSwapTurnTransition(st: ServerGameState): ServerGameState {
+  if (st.phase !== 'turn-transition') {
+    return {
+      ...st,
+      overflowSwapPending: false,
+      overflowSwapDeadlineAt: null,
+      overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null,
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: null,
+    };
+  }
+  const currentPlayer = st.players[st.currentPlayerIndex];
+  const overflowSwapPending = (currentPlayer?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD;
+  return {
+    ...st,
+    overflowSwapPending,
+    overflowSwapDeadlineAt: overflowSwapPending ? Date.now() + OVERFLOW_SWAP_ACTION_MS : null,
+    overflowSwapCanUseUnderTop: overflowSwapPending && st.discardPile.length > 1,
+    overflowSwapStage: overflowSwapPending ? 'hand' : null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
+  };
 }
 
 function isActivePlayer(player: Player): boolean {
@@ -136,12 +197,15 @@ function applyCourageStepReward(st: ServerGameState): ServerGameState {
   if (nextStep === (st.courageMeterStep ?? 0)) return st;
   const nextPercent = COURAGE_STEP_TO_PERCENT[nextStep];
   const isFull = nextPercent >= 100;
+  const rewardCoins = isFull ? 5 : 0;
   return {
     ...st,
     courageMeterStep: isFull ? 0 : nextStep,
     courageMeterPercent: isFull ? 0 : nextPercent,
     courageRewardPulseId: (st.courageRewardPulseId ?? 0) + 1,
-    courageCoins: (st.courageCoins ?? 0) + (isFull ? 5 : 0),
+    courageCoins: (st.courageCoins ?? 0) + rewardCoins,
+    turnCoinsEarned: (st.turnCoinsEarned ?? 0) + rewardCoins,
+    lastCourageCoinsAwarded: isFull,
   };
 }
 
@@ -156,6 +220,7 @@ function reshuffleDiscard(st: ServerGameState): ServerGameState {
 function drawFromPile(st: ServerGameState, count: number, pi: number): ServerGameState {
   let s = { ...st, players: st.players.map(p => ({ ...p, hand: [...p.hand] })) };
   for (let i = 0; i < count; i++) {
+    if ((s.players[pi]?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) break;
     s = reshuffleDiscard(s);
     if (s.drawPile.length === 0) break;
     s.players[pi].hand.push(s.drawPile[0]);
@@ -193,6 +258,52 @@ export function technicalVictory(
     tournamentTable: bumpTournamentOnWin(st, wi),
     lastMoveMessage: { key: 'toast.technicalVictory', params: { left: st.players.find((p) => p.id === leavingPlayerId)?.name ?? 'Player' } },
   };
+}
+
+/**
+ * Eliminate a player mid-game (disconnect / leave in 3P+).
+ * Returns updated state, or null if playerId not found or already eliminated.
+ */
+export function eliminatePlayer(
+  st: ServerGameState,
+  playerId: string,
+): ServerGameState | null {
+  const playerIdx = st.players.findIndex((p) => p.id === playerId);
+  if (playerIdx === -1) return null;
+  const player = st.players[playerIdx];
+  if (player.isEliminated) return null;
+
+  // Return hand to draw pile (shuffled in)
+  const newDrawPile = shuffle([...st.drawPile, ...player.hand]);
+  const newPlayers = st.players.map((p, i) =>
+    i === playerIdx
+      ? { ...p, isEliminated: true, isSpectator: true, hand: [], calledLolos: false }
+      : p,
+  );
+
+  let s: ServerGameState = { ...st, players: newPlayers, drawPile: newDrawPile };
+
+  // Check if only one active player remains → game over
+  const activePlayers = getActivePlayers(s.players);
+  if (activePlayers.length <= 1) {
+    const winner = activePlayers[0] ?? null;
+    if (!winner) return { ...s, phase: 'game-over', winner: null };
+    const wi = s.players.indexOf(winner);
+    return {
+      ...s,
+      phase: 'game-over',
+      winner,
+      tournamentTable: bumpTournamentOnWin(s, wi),
+    };
+  }
+
+  // If eliminated player held the turn, advance to next active player
+  if (s.currentPlayerIndex === playerIdx) {
+    const nextIdx = getNextActivePlayerIndex(s.players, playerIdx);
+    s = { ...s, currentPlayerIndex: nextIdx, phase: 'turn-transition' };
+  }
+
+  return s;
 }
 
 function checkWin(st: ServerGameState): ServerGameState {
@@ -237,7 +348,7 @@ function endTurnLogic(st: ServerGameState): ServerGameState {
     }
   }
 
-  return {
+  return withOverflowSwapTurnTransition({
     ...s,
     players: s.players.map(p => ({ ...p, calledLolos: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
@@ -247,7 +358,7 @@ function endTurnLogic(st: ServerGameState): ServerGameState {
     equationCommits: [],
     botPendingStagedIds: null,
     roundsPlayed: prevRounds + 1,
-  };
+  });
 }
 
 // ── Find a card in current player's hand ──
@@ -342,7 +453,9 @@ export function startGame(
     courageDiscardSuccessStreak: 0,
     courageRewardPulseId: 0,
     courageCoins: 0,
+    turnCoinsEarned: 0,
     lastCourageRewardReason: null,
+    lastCourageCoinsAwarded: false,
     identicalCelebration: null,
     lastMoveMessage: null,
     lastDiscardCount: 0,
@@ -353,6 +466,12 @@ export function startGame(
     message: '' as GameStatusMessage,
     openingDrawId,
     turnDeadlineAt: null,
+    overflowSwapPending: false,
+    overflowSwapDeadlineAt: null,
+    overflowSwapCanUseUnderTop: false,
+    overflowSwapStage: null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
     roundsPlayed: 0,
     equationCommits: [],
     botPendingStagedIds: null,
@@ -363,15 +482,18 @@ export function startGame(
       losses: 0,
     })),
   };
-  return withOnlineTurnDeadline(initial);
+  return withOnlineTurnDeadline(withOverflowSwapTurnTransition(initial));
 }
 
 export function beginTurn(st: ServerGameState): ServerGameState {
+  if (st.overflowSwapPending) return st;
   if (st.pendingFractionTarget !== null && !st.fractionAttackResolved) {
     return {
       ...st,
       phase: 'pre-roll',
       lastDiscardCount: 0,
+      turnCoinsEarned: 0,
+      lastCourageCoinsAwarded: false,
       message: locMsg('toast.fractionDefenseRequired', {
         target: st.pendingFractionTarget,
         penalty: st.fractionPenalty,
@@ -385,8 +507,113 @@ export function beginTurn(st: ServerGameState): ServerGameState {
     pendingFractionTarget: null,
     fractionPenalty: 0,
     lastDiscardCount: 0,
+    turnCoinsEarned: 0,
+    lastCourageCoinsAwarded: false,
     message: '',
   };
+}
+
+export function resolveOverflowSwap(
+  st: ServerGameState,
+  handCardId: string | null,
+  pileChoice: OverflowSwapPileChoice = 'top',
+  allowAuto = false,
+): ServerGameState | { error: LocalizedMessage } {
+  if (!st.overflowSwapPending) {
+    return locErr('overflowSwap.notPending');
+  }
+  const isMidTurnSwap = st.phase !== 'turn-transition';
+  const cp = st.players[st.currentPlayerIndex];
+  if (!cp || cp.hand.length === 0 || st.discardPile.length === 0) {
+    return locErr('overflowSwap.invalidSelection');
+  }
+  const activeStage: OverflowSwapStage = st.overflowSwapStage ?? 'hand';
+  if (activeStage === 'hand') {
+    const chosenHandCardId = handCardId ?? (allowAuto ? pickOverflowTimeoutHandCardId(cp.hand) : null);
+    if (!chosenHandCardId) return locErr('overflowSwap.invalidSelection');
+    const chosenHandCard = cp.hand.find((card) => card.id === chosenHandCardId);
+    if (!chosenHandCard) return locErr('overflowSwap.invalidSelection');
+    const stagedState: ServerGameState = {
+      ...st,
+      overflowSwapStage: 'pile',
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: chosenHandCardId,
+      overflowSwapDeadlineAt: Date.now() + OVERFLOW_SWAP_ACTION_MS,
+    };
+    return stagedState;
+  }
+
+  const resolvedPileChoice = pileChoice ?? st.overflowSwapSelectedPileChoice ?? 'top';
+  const resolvedHandCardId = st.overflowSwapSelectedHandCardId ?? handCardId ?? null;
+  const selectedCard = resolvedHandCardId != null
+    ? cp.hand.find((card) => card.id === resolvedHandCardId)
+    : null;
+  if (!selectedCard) return locErr('overflowSwap.invalidSelection');
+
+  if (resolvedPileChoice === 'random') {
+    let drawPile = st.drawPile;
+    let discardPile = st.discardPile;
+    if (drawPile.length === 0) {
+      const top = discardPile[discardPile.length - 1];
+      drawPile = shuffle(discardPile.slice(0, -1));
+      discardPile = top ? [top] : [];
+    }
+    if (drawPile.length === 0) return locErr('overflowSwap.invalidSelection');
+    const rawRandom = drawPile[0];
+    const incomingCard = rawRandom.type === 'wild' && rawRandom.resolvedValue != null
+      ? { ...rawRandom, resolvedValue: undefined }
+      : rawRandom;
+    const cleared: ServerGameState = {
+      ...st,
+      players: st.players.map((pl, idx) => (idx === st.currentPlayerIndex ? { ...pl, hand: pl.hand.map((c) => (c.id === selectedCard.id ? incomingCard : c)) } : pl)),
+      drawPile: drawPile.slice(1),
+      discardPile: [...discardPile, selectedCard],
+      lastMoveMessage: st.lastMoveMessage,
+      overflowSwapPending: false, overflowSwapDeadlineAt: null, overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null, overflowSwapSelectedPileChoice: null, overflowSwapSelectedHandCardId: null,
+    };
+    if (isMidTurnSwap) return cleared;
+    return beginTurn(cleared);
+  }
+
+  const useUnderTop = resolvedPileChoice === 'underTop';
+  if (useUnderTop && (!st.overflowSwapCanUseUnderTop || st.discardPile.length < 2)) {
+    return locErr('overflowSwap.invalidSelection');
+  }
+  const incomingIndex = useUnderTop ? st.discardPile.length - 2 : st.discardPile.length - 1;
+  const rawIncoming = st.discardPile[incomingIndex];
+  if (!rawIncoming) return locErr('overflowSwap.invalidSelection');
+  const incomingCard = rawIncoming.type === 'wild' && rawIncoming.resolvedValue != null
+    ? { ...rawIncoming, resolvedValue: undefined }
+    : rawIncoming;
+
+  const updatedHand = cp.hand.map((card) => (card.id === selectedCard.id ? incomingCard : card));
+  const updatedDiscardPile = useUnderTop
+    ? [
+        ...st.discardPile.slice(0, incomingIndex),
+        selectedCard,
+        ...st.discardPile.slice(incomingIndex + 1),
+      ]
+    : [
+        ...st.discardPile.slice(0, -1),
+        selectedCard,
+      ];
+  const cleared: ServerGameState = {
+    ...st,
+    players: st.players.map((player, idx) => (idx === st.currentPlayerIndex ? { ...player, hand: updatedHand } : player)),
+    discardPile: updatedDiscardPile,
+    lastMoveMessage: handCardId == null && allowAuto
+      ? locMsg('toast.overflowSwapAutoResolved', { name: cp.name })
+      : st.lastMoveMessage,
+    overflowSwapPending: false,
+    overflowSwapDeadlineAt: null,
+    overflowSwapCanUseUnderTop: false,
+    overflowSwapStage: null,
+    overflowSwapSelectedPileChoice: null,
+    overflowSwapSelectedHandCardId: null,
+  };
+  if (isMidTurnSwap) return cleared;
+  return beginTurn(cleared);
 }
 
 export function doRollDice(st: ServerGameState): ServerGameState | { error: LocalizedMessage } {
@@ -435,6 +662,14 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
     return locErr('timer.notActivePhase');
   }
 
+  if (isTurnTransitionTimeout && st.overflowSwapPending) {
+    const currentPlayer = st.players[st.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.hand.length === 0 || st.discardPile.length === 0) {
+      return locErr('overflowSwap.invalidSelection');
+    }
+    return resolveOverflowSwap(st, null, 'top', true);
+  }
+
   // During active turn (after roll): end turn by existing rules.
   // doEndTurn already applies penalties/rules for "no move".
   if (isInTurnTimeout) {
@@ -472,6 +707,7 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
       return {
         ...st,
         players: playersAfterElimination,
+        currentPlayerIndex: wi >= 0 ? wi : skippedIdx,
         phase: 'game-over',
         winner,
         tournamentTable,
@@ -485,7 +721,7 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
 
     const nextAfterKick = getNextActivePlayerIndex(playersAfterElimination, skippedIdx);
     const nextNameAfterKick = playersAfterElimination[nextAfterKick]?.name ?? '…';
-    return {
+    return withOverflowSwapTurnTransition({
       ...st,
       players: playersAfterElimination.map((p) => ({ ...p, calledLolos: false })),
       currentPlayerIndex: nextAfterKick,
@@ -505,7 +741,7 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
       fractionAttackResolved: true,
       roundsPlayed: (st.roundsPlayed ?? 0) + 1,
       lastMoveMessage: locMsg('toast.eliminatedTurnTo', { name: skippedName, next: nextNameAfterKick }),
-    };
+    });
   }
 
   const next = getNextActivePlayerIndex(playersAfterWarning, skippedIdx);
@@ -515,7 +751,6 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
   const base = endTurnLogic(penalized);
   const tMsg = locMsg('toast.afkWarnPenalty', {
     name: skippedName,
-    warn: nextWarnings,
     next: nextName,
   });
   return { ...base, lastMoveMessage: tMsg, message: '' };
@@ -523,6 +758,7 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
 
 function validateEquationCommitsPayload(
   st: ServerGameState,
+  equationDisplay: string,
   payloads: EquationCommitPayload[] | null | undefined,
 ): { error: LocalizedMessage } | { ok: true; commits: EquationCommitPayload[] } {
   if (payloads == null || payloads.length === 0) return { ok: true, commits: [] };
@@ -546,6 +782,12 @@ function validateEquationCommitsPayload(
     }
     out.push({ cardId: payload.cardId, position: payload.position, jokerAs: payload.jokerAs });
   }
+  const displayValidation = validateEquationCommitsForDisplay(
+    st.players[st.currentPlayerIndex]?.hand ?? [],
+    equationDisplay,
+    out,
+  );
+  if ('errorKey' in displayValidation) return locErr(displayValidation.errorKey);
   return { ok: true, commits: out };
 }
 
@@ -559,13 +801,24 @@ export function confirmEquation(
 ): ServerGameState | { error: LocalizedMessage } {
   if (st.phase !== 'building') return locErr('equation.notBuildingPhase');
   if (!st.validTargets.some(t => t.result === result)) return locErr('equation.invalidResult');
+  if (!equationMatchesDiceAndResult(equationDisplay, result, st.dice)) {
+    return locErr('equation.displayMismatch');
+  }
+  const equationOps = extractEquationOperators(equationDisplay);
+  const enabledOperators =
+    st.hostGameSettings.enabledOperators && st.hostGameSettings.enabledOperators.length > 0
+      ? st.hostGameSettings.enabledOperators
+      : ['+', '-', 'x', '÷'];
+  if (equationOps.some((op) => !enabledOperators.includes(op))) {
+    return locErr('equation.operatorNotInStage');
+  }
   const raw =
     equationCommits != null && equationCommits.length > 0
       ? equationCommits
       : equationCommit != null
         ? [equationCommit]
         : [];
-  const validated = validateEquationCommitsPayload(st, raw);
+  const validated = validateEquationCommitsPayload(st, equationDisplay, raw);
   if ('error' in validated) return validated;
   return {
     ...st,
@@ -702,7 +955,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
     ns = checkWin(ns);
     if (ns.phase === 'game-over') return ns;
     const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
-    return {
+    return withOverflowSwapTurnTransition({
       ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
       currentPlayerIndex: next, phase: 'turn-transition', dice: null,
       stagedCards: [], equationResult: null, validTargets: [],
@@ -714,7 +967,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
       lastDiscardCount: 1,
       lastMoveMessage: locMsg('toast.fractionBlock', { name: cp.name, fraction: String(card.fraction) }),
       message: locMsg('toast.msg.fractionBlocked', { name: cp.name, fraction: String(card.fraction) }),
-    };
+    });
   }
 
   // ── ATTACK MODE: fraction on a number card ──
@@ -731,7 +984,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
   ns = checkWin(ns);
   if (ns.phase === 'game-over') return ns;
   const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
-  return {
+  return withOverflowSwapTurnTransition({
     ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     stagedCards: [], equationResult: null, validTargets: [],
@@ -743,7 +996,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
     lastDiscardCount: 1,
     lastMoveMessage: locMsg('toast.fractionAttack', { name: cp.name, fraction: String(card.fraction) }),
     message: locMsg('toast.msg.fractionPlayed', { name: cp.name, fraction: String(card.fraction) }),
-  };
+  });
 }
 
 export function defendFractionSolve(st: ServerGameState, cardId: string, wildResolve?: number): ServerGameState | { error: LocalizedMessage } {
@@ -812,6 +1065,18 @@ export function playJoker(st: ServerGameState, cardId: string, chosenOperation: 
 export function drawCard(st: ServerGameState): ServerGameState | { error: LocalizedMessage } {
   if (st.hasPlayedCards || st.hasDrawnCard) return locErr('draw.cannotDrawNow');
   const drawCp = st.players[st.currentPlayerIndex];
+  if ((drawCp?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) {
+    return {
+      ...st,
+      hasDrawnCard: true,
+      overflowSwapPending: true,
+      overflowSwapDeadlineAt: Date.now() + OVERFLOW_SWAP_ACTION_MS,
+      overflowSwapCanUseUnderTop: st.discardPile.length > 1,
+      overflowSwapStage: 'hand',
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: null,
+    };
+  }
   let s = reshuffleDiscard(st);
   if (s.drawPile.length === 0) return { ...s, hasDrawnCard: true, message: '' };
   s = drawFromPile(s, 1, s.currentPlayerIndex);
@@ -899,9 +1164,14 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
     courageDiscardSuccessStreak: state.courageDiscardSuccessStreak,
     courageRewardPulseId: state.courageRewardPulseId,
     courageCoins: state.courageCoins ?? 0,
+    turnCoinsEarned: state.turnCoinsEarned ?? 0,
     lastCourageRewardReason: state.lastCourageRewardReason ?? null,
+    lastCourageCoinsAwarded: state.lastCourageCoinsAwarded ?? false,
     identicalCelebration: state.identicalCelebration ?? null,
     lastMoveMessage: formatLastMove(locale, state.lastMoveMessage),
+    lastMoveMessageKey: Array.isArray(state.lastMoveMessage)
+      ? null
+      : state.lastMoveMessage?.key ?? null,
     lastDiscardCount: state.lastDiscardCount ?? 0,
     difficulty: state.difficulty,
     gameSettings: state.hostGameSettings,
@@ -909,6 +1179,12 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
     message: formatGameMessage(locale, state.message),
     openingDrawId: state.openingDrawId,
     turnDeadlineAt: state.turnDeadlineAt,
+    overflowSwapPending: state.overflowSwapPending,
+    overflowSwapDeadlineAt: state.overflowSwapDeadlineAt,
+    overflowSwapCanUseUnderTop: state.overflowSwapCanUseUnderTop,
+    overflowSwapStage: state.overflowSwapStage ?? null,
+    overflowSwapSelectedPileChoice: state.overflowSwapSelectedPileChoice ?? null,
+    overflowSwapSelectedHandCardId: state.overflowSwapSelectedHandCardId ?? null,
     roundsPlayed: state.roundsPlayed ?? 0,
     equationCommits: state.equationCommits,
     tournamentTable: state.tournamentTable,
