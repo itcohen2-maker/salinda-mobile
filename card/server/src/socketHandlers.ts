@@ -4,14 +4,14 @@
 // ============================================================
 
 import type { Server, Socket } from 'socket.io';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import type {
   AppLocale,
   BotDifficulty,
   Card,
+  ClassroomSessionReport,
   ClientToServerEvents,
   ContinueVsBotAck,
-  EquationCommitPayload,
   HostGameSettings,
   LobbyTableVisibility,
   Operation,
@@ -39,6 +39,7 @@ import {
   joinRoom,
   joinPrivateRoom,
   leaveRoom,
+  destroyRoom,
   reconnectPlayer,
   getRoomBySocket,
   isHost,
@@ -49,12 +50,22 @@ import {
   shouldStartDisconnectGrace,
   configureRoomTable,
   markRandomJoiner,
-  startRoomCountdown,
   clearRoomCountdown,
-  setRoomCountdownTimer,
   syncRoomTableStatus,
   getRoomTables,
 } from './roomManager';
+import {
+  closeClassSession,
+  createClassSession,
+  getClassroomBindingBySocket,
+  getClassroomStatesForSession,
+  joinClassSession,
+  leaveClassSession,
+  recordClassroomGroupResult,
+  sendClassroomIntervention,
+  updateClassroomGroupStatus,
+  advanceClassroomRound,
+} from './classroomManager';
 import {
   startGame,
   beginTurn,
@@ -73,21 +84,23 @@ import {
   doEndTurn,
   getPlayerView,
   forceTurnTimeout,
+  resolveOverflowSwap,
   withOnlineTurnDeadline,
   technicalVictory,
+  eliminatePlayer,
 } from './gameEngine';
 import { validateFractionPlay, validateIdenticalPlay, validateStagedCards } from './equations';
 import type { Room } from './roomManager';
 import { migrateDifficultyStage } from '../../shared/difficultyStages';
 import { normalizeOperationToken } from '../../shared/equationOpCycle';
+import { pickBotOverflowSwap } from '../../shared/overflowSwap';
 import { botNarrationToastText, renderBotNarration, type BotNarrationInput } from '../../shared/botNarration';
-import { fetchPlayerActiveTableTheme, recordMatch, RATING_WIN, RATING_LOSS, RATING_ABANDON_PENALTY } from './supabaseAdmin';
+import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_WIN, RATING_LOSS, RATING_ABANDON_PENALTY } from './supabaseAdmin';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const BOT_OFFER_DELAY_MS = 0;
-const TABLE_START_COUNTDOWN_MS = 10_000;
 const BOT_DIFF_LEVELS: BotDifficulty[] = ['easy', 'medium', 'hard'];
 
 /** לקוחות ישנים שעדיין שולחים beginner */
@@ -249,6 +262,34 @@ function emitToPlayer(
   return false;
 }
 
+function classroomSocketRoom(sessionCode: string): string {
+  return `classroom:${sessionCode}`;
+}
+
+function emitClassroomState(io: IOServer, sessionCode: string): void {
+  const states = getClassroomStatesForSession(sessionCode);
+  if (states.length === 0) return;
+  const roomName = classroomSocketRoom(sessionCode);
+  for (const state of states) {
+    for (const [, sock] of io.sockets.sockets) {
+      if (!sock.rooms.has(roomName)) continue;
+      const binding = getClassroomBindingBySocket(sock.id);
+      if (!binding) continue;
+      if (binding.sessionCode !== sessionCode || binding.participantId !== state.participantId) continue;
+      sock.emit('classroom_state', state);
+      break;
+    }
+  }
+}
+
+function emitClassroomClosed(
+  io: IOServer,
+  sessionCode: string,
+  report: ClassroomSessionReport,
+): void {
+  io.to(classroomSocketRoom(sessionCode)).emit('classroom_closed', { sessionCode, report });
+}
+
 function clearRoomTurnTimer(room: Room): void {
   if (room.turnTimer) {
     clearTimeout(room.turnTimer);
@@ -258,6 +299,63 @@ function clearRoomTurnTimer(room: Room): void {
 
 function clearRoomDisconnectGrace(room: Room): void {
   clearDisconnectGraceTimer(room);
+}
+
+async function handleActiveGameExit(
+  io: IOServer,
+  room: Room,
+  leavingPlayerId: string,
+  mode: 'leave' | 'disconnect',
+): Promise<void> {
+  if (!room.state || room.state.phase === 'game-over') return;
+
+  const leavingPlayer = room.players.find((p) => p.id === leavingPlayerId);
+  const leavingName = leavingPlayer?.name ?? 'Player';
+
+  clearRoomTurnTimer(room);
+  clearBotActionTimer(room);
+
+  const remainingHumans = room.players.filter(
+    (p) => !p.isBot && p.isConnected && p.id !== leavingPlayerId,
+  );
+
+  if (remainingHumans.length >= 2) {
+    // 3-player+ game: eliminate the exiting player and continue
+    const newState = eliminatePlayer(room.state, leavingPlayerId);
+    if (!newState) return;
+    room.state = newState;
+    room.lastActivity = Date.now();
+
+    for (const p of room.players) {
+      if (p.id === leavingPlayerId || p.isBot || !p.isConnected) continue;
+      emitToPlayer(io, room, p.id, (s) => {
+        s.emit('player_eliminated', { playerId: leavingPlayerId, playerName: leavingName });
+      });
+    }
+
+    broadcastState(io, room);
+
+    if (newState.phase === 'game-over') {
+      emitRoomToasts(io, room);
+      maybeRecordMatch(room);
+    } else {
+      scheduleRoomTurnTimer(io, room);
+      scheduleBotAction(io, room);
+    }
+  } else if (remainingHumans.length === 1) {
+    // 2-player game: let survivor choose
+    const survivor = remainingHumans[0];
+    emitToPlayer(io, room, survivor.id, (s) => {
+      s.emit('opponent_disconnect_choice', {
+        playerId: leavingPlayerId,
+        playerName: leavingName,
+      });
+    });
+  } else {
+    // Nobody left: tear down the room
+    destroyRoom(room.code);
+    emitTablesUpdated(io);
+  }
 }
 
 function sendGameStarted(io: IOServer, room: Room): void {
@@ -292,18 +390,22 @@ function broadcastState(io: IOServer, room: Room): void {
 
 function scheduleRoomTurnTimer(io: IOServer, room: Room): void {
   clearRoomTurnTimer(room);
-  if (!room.state?.turnDeadlineAt) return;
-  const ms = Math.max(0, room.state.turnDeadlineAt - Date.now());
+  const deadlineAt = room.state?.overflowSwapDeadlineAt ?? room.state?.turnDeadlineAt ?? null;
+  if (!deadlineAt) return;
+  const ms = Math.max(0, deadlineAt - Date.now());
   room.turnTimer = setTimeout(() => {
     room.turnTimer = undefined;
-    if (!room.state?.turnDeadlineAt) return;
-    if (Date.now() < room.state.turnDeadlineAt - 150) {
+    const liveDeadlineAt = room.state?.overflowSwapDeadlineAt ?? room.state?.turnDeadlineAt ?? null;
+    if (!liveDeadlineAt) return;
+    if (Date.now() < liveDeadlineAt - 150) {
       scheduleRoomTurnTimer(io, room);
       return;
     }
-    const result = forceTurnTimeout(room.state);
+    const liveState = room.state;
+    if (!liveState) return;
+    const result = forceTurnTimeout(liveState);
     if ('error' in result) return;
-    const prevSig = lastMoveSignature(room.state.lastMoveMessage);
+    const prevSig = lastMoveSignature(liveState.lastMoveMessage);
     room.state = withOnlineTurnDeadline(result);
     room.lastActivity = Date.now();
     if (lastMoveSignature(room.state.lastMoveMessage) !== prevSig && room.state.lastMoveMessage) {
@@ -448,7 +550,11 @@ function isMyTurn(room: Room, playerId: string): boolean {
   return player.id === playerId;
 }
 
-function canPlayerAct(room: Room, playerId: string): { ok: true } | { ok: false; reason: LocalizedMessage } {
+function canPlayerAct(
+  room: Room,
+  playerId: string,
+  options?: { allowOverflowPending?: boolean },
+): { ok: true } | { ok: false; reason: LocalizedMessage } {
   if (!room.state) return { ok: false, reason: { key: 'game.notStarted' } };
   const player = room.state.players.find((candidate) => candidate.id === playerId);
   if (!player) return { ok: false, reason: { key: 'game.playerNotFound' } };
@@ -456,29 +562,13 @@ function canPlayerAct(room: Room, playerId: string): { ok: true } | { ok: false;
     return { ok: false, reason: { key: 'game.eliminatedSpectator' } };
   }
   if (!isMyTurn(room, playerId)) return { ok: false, reason: { key: 'game.notYourTurn' } };
+  if (room.state.overflowSwapPending && !options?.allowOverflowPending) {
+    return { ok: false, reason: { key: 'overflowSwap.required' } };
+  }
   return { ok: true };
 }
 
 /** בוט משתמש לכל היותר בקלף פעולה/סלינדה אחד במשבצת 0 */
-function buildBotCommits(state: ServerGameState): EquationCommitPayload[] {
-  const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
-  const operationCard = hand.find((card) => card.type === 'operation');
-  if (operationCard) {
-    return [{ cardId: operationCard.id, position: 0, jokerAs: null }];
-  }
-  const jokerCard = hand.find((card) => card.type === 'joker');
-  if (jokerCard) {
-    return [
-      {
-        cardId: jokerCard.id,
-        position: 0,
-        jokerAs: state.hostGameSettings.enabledOperators?.[0] ?? '+',
-      },
-    ];
-  }
-  return [];
-}
-
 function handleBotDefense(io: IOServer, room: Room, state: ServerGameState): void {
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const divisibleCard = hand.find((card) => card.type === 'number' && (card.value ?? 0) > 0 && (card.value ?? 0) % state.fractionPenalty === 0);
@@ -604,17 +694,9 @@ function handleBotBuilding(io: IOServer, room: Room, state: ServerGameState): vo
 
   const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
-  const equationCommits = buildBotCommits(state);
-  const commitIds = new Set(equationCommits.map((c) => c.cardId));
-  const candidates = hand.filter(
-    (card) =>
-      (card.type === 'number' || card.type === 'wild' || card.type === 'operation') &&
-      !commitIds.has(card.id),
-  );
   const picked = pickBotStagedPlan(
     state.validTargets,
-    candidates,
-    equationCommits,
+    hand,
     state.hostGameSettings.mathRangeMax ?? 25,
     validateStagedCards,
     diff,
@@ -672,6 +754,19 @@ function runBotStep(io: IOServer, room: Room): void {
 
   switch (room.state.phase) {
     case 'turn-transition':
+      if (room.state.overflowSwapPending) {
+        const hand = room.state.players[room.state.currentPlayerIndex]?.hand ?? [];
+        const discardPile = room.state.discardPile ?? [];
+        const topCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
+        const underTopCard = discardPile.length > 1 ? discardPile[discardPile.length - 2] : null;
+        const choice = pickBotOverflowSwap(hand, topCard, underTopCard);
+        if (choice) {
+          applyBotState(io, room, (state) =>
+            resolveOverflowSwap(state, choice.handCardId, choice.pileChoice),
+          );
+          break;
+        }
+      }
       emitBotStepToast(io, room, (locale, name) =>
         botNarrationText(locale, { kind: 'beginTurn', name }),
       );
@@ -802,33 +897,7 @@ function handleWaitingRoomRosterChange(io: IOServer, room: Room): void {
 function startTableCountdown(io: IOServer, room: Room): void {
   const difficulty = room.configuredDifficulty;
   if (!difficulty) return;
-  const countdownEndsAt = startRoomCountdown(room, TABLE_START_COUNTDOWN_MS);
-  io.to(room.code).emit('table_countdown_started', { roomCode: room.code, countdownEndsAt });
-  io.to(room.code).emit('table_status_changed', {
-    roomCode: room.code,
-    status: room.tableStatus,
-    countdownEndsAt,
-  });
-  emitTablesUpdated(io);
-  setRoomCountdownTimer(
-    room,
-    setTimeout(() => {
-      setRoomCountdownTimer(room, null);
-      if (room.state) return;
-      if (room.players.filter((player) => !player.isBot).length < 2) {
-        clearRoomCountdown(room);
-        syncRoomTableStatus(room);
-        io.to(room.code).emit('table_status_changed', {
-          roomCode: room.code,
-          status: room.tableStatus,
-          countdownEndsAt: null,
-        });
-        emitTablesUpdated(io);
-        return;
-      }
-      startRoomGame(io, room, difficulty, room.configuredGameSettings ?? undefined);
-    }, TABLE_START_COUNTDOWN_MS),
-  );
+  startRoomGame(io, room, difficulty, room.configuredGameSettings ?? undefined);
 }
 
 export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
@@ -1058,27 +1127,23 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     handleWaitingRoomRosterChange(io, room);
   });
 
-  socket.on('leave_room', () => {
+  socket.on('leave_room', async () => {
     if (rateLimited()) return;
+    const activeInfo = getRoomBySocket(socket.id);
+    if (activeInfo?.room.state && activeInfo.room.state.phase !== 'game-over') {
+      // Notify leaving player immediately before removing their socket
+      socket.emit('room_closed', { roomCode: activeInfo.room.code });
+      socket.leave(activeInfo.room.code);
+      leaveRoom(socket.id);
+      await handleActiveGameExit(io, activeInfo.room, activeInfo.playerId, 'leave');
+      return;
+    }
     const result = leaveRoom(socket.id);
     if (!result) return;
     const { room, playerId, playerName } = result;
     socket.leave(room.code);
     io.to(room.code).emit('player_left', { playerId, playerName });
-    // If a game is in progress and a human left, the remaining player
     // wins immediately (technical victory — no grace period, no bot offer).
-    if (room.state && room.state.phase !== 'game-over') {
-      const tvResult = technicalVictory(room.state, playerId);
-      if (tvResult) {
-        room.state = tvResult;
-        clearRoomDisconnectGrace(room);
-        clearRoomTurnTimer(room);
-        clearBotActionTimer(room);
-        broadcastState(io, room);
-        emitRoomToasts(io, room);
-        maybeRecordMatch(room);
-      }
-    }
     if (room.players.length > 0) {
       clearRoomDisconnectGrace(room);
       emitRoomPlayers(io, room);
@@ -1117,7 +1182,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
         });
       }
     }
-    if (room.state) {
+    if (room.state && room.state.phase !== 'game-over') {
       room.state = withOnlineTurnDeadline(room.state);
       socket.emit('state_update', getPlayerView(room.state, playerId, player.locale));
       scheduleRoomTurnTimer(io, room);
@@ -1263,6 +1328,91 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     reply({ ok: true, playerView });
   });
 
+  socket.on('create_class_session', (payload) => {
+    if (rateLimited()) return;
+    const result = createClassSession(payload, socket.id);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    socket.join(classroomSocketRoom(result.sessionCode));
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('join_class_session', (payload) => {
+    if (rateLimited()) return;
+    const result = joinClassSession(payload, socket.id);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    socket.join(classroomSocketRoom(result.sessionCode));
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('leave_class_session', () => {
+    const binding = getClassroomBindingBySocket(socket.id);
+    const result = leaveClassSession(socket.id);
+    if (!binding || !result) return;
+    socket.leave(classroomSocketRoom(binding.sessionCode));
+    if (result.report) {
+      emitClassroomClosed(io, result.sessionCode, result.report);
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('classroom_update_group_status', (payload) => {
+    if (rateLimited()) return;
+    const result = updateClassroomGroupStatus(socket.id, payload);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('classroom_advance_round', (payload) => {
+    if (rateLimited()) return;
+    const result = advanceClassroomRound(socket.id, payload);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('classroom_send_intervention', (payload) => {
+    if (rateLimited()) return;
+    const result = sendClassroomIntervention(socket.id, payload);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('classroom_record_group_result', (payload) => {
+    if (rateLimited()) return;
+    const result = recordClassroomGroupResult(socket.id, payload);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+  });
+
+  socket.on('classroom_close_session', () => {
+    if (rateLimited()) return;
+    const result = closeClassSession(socket.id);
+    if ('error' in result) {
+      socket.emit('error', { message: result.error });
+      return;
+    }
+    emitClassroomState(io, result.sessionCode);
+    emitClassroomClosed(io, result.sessionCode, result.report);
+  });
+
   socket.on('begin_turn', () => {
     if (rateLimited()) return;
     const info = getRoomBySocket(socket.id);
@@ -1274,6 +1424,75 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
     applyAction(io, socket, room, playerId, (state) => beginTurn(state));
+  });
+
+  socket.on('resolve_overflow_swap', ({ handCardId, pileChoice }) => {
+    if (rateLimited()) return;
+    const info = getRoomBySocket(socket.id);
+    if (!info) return;
+    const { room, playerId } = info;
+    const canAct = canPlayerAct(room, playerId, { allowOverflowPending: true });
+    if (!canAct.ok) {
+      socket.emit('error', { message: t(playerLocale(room, playerId), canAct.reason.key, canAct.reason.params) });
+      return;
+    }
+    applyAction(io, socket, room, playerId, (state) =>
+      resolveOverflowSwap(state, handCardId ?? null, pileChoice ?? 'top'),
+    );
+  });
+
+  socket.on('replace_card_with_wild', ({ cardId }) => {
+    if (rateLimited()) return;
+    const info = getRoomBySocket(socket.id);
+    if (!info) return;
+    const { room, playerId } = info;
+    const canAct = canPlayerAct(room, playerId);
+    if (!canAct.ok) return;
+    applyAction(io, socket, room, playerId, (state) => {
+      if (state.phase !== 'turn-transition') return { error: { key: 'game.invalidPhase' } };
+      const cp = state.players[state.currentPlayerIndex];
+      if (!cp) return { error: { key: 'game.invalidAction' } };
+      const replacedCard = cp.hand.find((c) => c.id === cardId);
+      if (!replacedCard) return { error: { key: 'game.invalidAction' } };
+      const newCard = { id: randomUUID(), type: 'wild' as const };
+      return {
+        ...state,
+        players: state.players.map((pl, idx) =>
+          idx === state.currentPlayerIndex
+            ? { ...pl, hand: pl.hand.map((c) => (c.id === cardId ? newCard : c)) }
+            : pl,
+        ),
+        discardPile: [...state.discardPile, replacedCard],
+        wildAttemptedThisTurn: true,
+      };
+    });
+  });
+
+  socket.on('replace_card_with_slinda', ({ cardId }) => {
+    if (rateLimited()) return;
+    const info = getRoomBySocket(socket.id);
+    if (!info) return;
+    const { room, playerId } = info;
+    const canAct = canPlayerAct(room, playerId);
+    if (!canAct.ok) return;
+    applyAction(io, socket, room, playerId, (state) => {
+      if (state.phase !== 'turn-transition') return { error: { key: 'game.invalidPhase' } };
+      const cp = state.players[state.currentPlayerIndex];
+      if (!cp) return { error: { key: 'game.invalidAction' } };
+      const replacedCard = cp.hand.find((c) => c.id === cardId);
+      if (!replacedCard) return { error: { key: 'game.invalidAction' } };
+      const newCard = { id: randomUUID(), type: 'joker' as const };
+      return {
+        ...state,
+        players: state.players.map((pl, idx) =>
+          idx === state.currentPlayerIndex
+            ? { ...pl, hand: pl.hand.map((c) => (c.id === cardId ? newCard : c)) }
+            : pl,
+        ),
+        discardPile: [...state.discardPile, replacedCard],
+        slindaAttemptedThisTurn: true,
+      };
+    });
   });
 
   socket.on('set_bot_difficulty', ({ difficulty }) => {
@@ -1529,6 +1748,18 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
   socket.on('disconnect', () => {
     console.log(`[DISCONNECT] ${socket.id}`);
     cleanupRateLimit(socket.id);
+    const classroomResult = leaveClassSession(socket.id);
+    if (classroomResult?.report) {
+      emitClassroomClosed(io, classroomResult.sessionCode, classroomResult.report);
+    } else if (classroomResult) {
+      emitClassroomState(io, classroomResult.sessionCode);
+    }
+    const activeInfo = getRoomBySocket(socket.id);
+    if (activeInfo?.room.state && activeInfo.room.state.phase !== 'game-over') {
+      leaveRoom(socket.id);
+      void handleActiveGameExit(io, activeInfo.room, activeInfo.playerId, 'disconnect');
+      return;
+    }
     const result = leaveRoom(socket.id);
     if (!result) return;
     const { room, playerId, playerName } = result;
