@@ -1170,6 +1170,12 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const { room, player } = result;
     if (socket.data.userId) player.supabaseUserId = socket.data.userId;
     socket.join(room.code);
+    // Player was eliminated mid-game — send them home
+    if (player.isEliminated) {
+      socket.emit('room_closed', { roomCode: room.code, reason: 'eliminated' });
+      socket.leave(room.code);
+      return;
+    }
     if (room.disconnectedPlayerId === player.id) {
       clearRoomDisconnectGrace(room);
       room.lastActivity = Date.now();
@@ -1324,6 +1330,32 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
     const playerView = getPlayerView(room.state, playerId, playerLocale(room, playerId));
     reply({ ok: true, playerView });
+  });
+
+  socket.on('accept_technical_victory', () => {
+    if (rateLimited()) return;
+    const info = getRoomBySocket(socket.id);
+    if (!info) return;
+    const { room, playerId } = info;
+    if (!room.state || room.state.phase === 'game-over') return;
+
+    // Find the disconnected opponent (not connected, not bot, not self)
+    const disconnectedOpponent = room.players.find(
+      (p) => p.id !== playerId && !p.isBot && !p.isConnected,
+    );
+    if (!disconnectedOpponent) return;
+
+    clearRoomTurnTimer(room);
+    clearBotActionTimer(room);
+
+    const tvResult = technicalVictory(room.state, disconnectedOpponent.id);
+    if (!tvResult) return;
+
+    room.state = tvResult;
+    room.lastActivity = Date.now();
+    broadcastState(io, room);
+    emitRoomToasts(io, room);
+    maybeRecordMatch(room);
   });
 
   socket.on('create_class_session', (payload) => {
