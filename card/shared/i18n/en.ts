@@ -12,6 +12,8 @@ export const en: Record<string, string> = {
   'mp.reconnecting': 'Network dropped — reconnecting to the server…',
   'mp.connectingTitle': 'Connecting to table',
   'mp.connectingBody': 'Just a moment — connecting you to the table…',
+  'lobby.creatingTableTitle': 'Creating table',
+  'lobby.creatingTableBody': 'One moment — opening your table and moving you into the lobby…',
   'mp.connectError':
     'Cannot reach the game server. Check the server URL, Wi‑Fi, and that the game server is running (port 3001).',
   'mp.connectTimeoutTunnelHint':
@@ -179,6 +181,7 @@ export const en: Record<string, string> = {
   'lobby.fractions': 'Fractions',
   'lobby.withFractions': 'With fractions',
   'lobby.noFractions': 'No fractions',
+  'lobby.operators': 'Operators',
   'lobby.possibleResults': 'Possible results',
   'lobby.show': 'Show',
   'lobby.hide': 'Hide',
@@ -194,7 +197,11 @@ export const en: Record<string, string> = {
   'lobby.botDifficultyLabel': 'Bot level (vs bot)',
   'lobby.timerCustomHint': 'Turn duration',
   'lobby.summaryTitle': 'Summary before start (everyone)',
+  'lobby.summary.access': 'Access',
+  'lobby.summary.activeFractions': 'Active fractions',
+  'lobby.summary.removedFractions': 'Removed: {{value}}',
   'lobby.startGame': 'Start game',
+  'lobby.gameStartsSoon': 'The game is about to start',
   'lobby.minPlayers': 'At least 2 players are required to start',
   'lobby.waitingForPlayer': 'Looking for another player...',
   'lobby.waitingForPlayerCountdown': 'Looking for another player... bot option in {{n}} sec',
@@ -259,6 +266,7 @@ export const en: Record<string, string> = {
   'mp.playerEliminated': '{{name}} left — game continues',
   'mp.opponentDisconnectChoiceTitle': '{{name}} disconnected',
   'mp.acceptTechnicalVictory': 'Accept technical victory',
+  'mp.continueVsBot': 'Continue vs bot',
   'mp.eliminatedReconnect': 'No way back — try another table',
   'lobby.waitingRoomTitle': 'Table lobby',
   'lobby.waitingRoomHint': 'Waiting for players to join the table.',
@@ -801,7 +809,7 @@ export const en: Record<string, string> = {
   'start.advancedSetup.modalTitle': 'Full game settings',
   'start.advancedSetup.modalLead': 'The Excellence Meter fills when: 1. You build an equation using all 3 dice results. 2. You play cards 2 turns in a row. 3. You roll a triple. That is how you earn coins.',
   'start.advancedSetup.sectionPlayModeHeading': 'Play vs bot or local game',
-  'start.advancedSetup.sectionPlayModeIntro': '',
+  'start.advancedSetup.sectionPlayModeIntro': 'Choose whether this session stays local, moves online, or adds a bot opponent.',
   'start.advancedSetup.botLevelsHint':
     'Bot level and display name apply when you pick “vs bot” on the main wheel; you can set them here in advance.',
   'start.advancedSetup.sectionStageHeading': '1. Practice level (A–H)',
@@ -819,7 +827,7 @@ export const en: Record<string, string> = {
   'start.advancedSetup.hint.solveExerciseRow':
     'Solve exercise hints how to reach the target; it requires “Possible results” to be on — otherwise the control is disabled.',
   'start.advancedSetup.hint.timerOptions':
-    'Off: no countdown. 30 s / 1 min: fixed build time. Custom: pick seconds in the dialog; Cancel restores the timer you had before entering Custom (when you switched from another mode).',
+    'Off: no countdown. 30 s / 1 min: fixed build time. Custom: pick minutes and seconds; Cancel restores the timer you had before entering Custom (when you switched from another mode).',
   'start.advancedSetup.fractionKindsTitle': 'Which fractions are in the deck (when “with fractions”)',
   'start.advancedSetup.stagePicker.sectionTitle': 'Practice level (A–H)',
   'start.advancedSetup.stagePicker.intro':

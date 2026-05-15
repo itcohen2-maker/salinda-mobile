@@ -68,15 +68,18 @@ function identicalCardLabel(
 
 /** זמן המתנה לפעולת שחקן במשחק מקוון (אני מוכן) */
 export const ONLINE_TURN_ACTION_MS = 15_000;
+/** ברירת מחדל בטיחותית כשאין טיימר מוגדר */
+const DEFAULT_TURN_TIMEOUT_SECONDS = 15;
+/** תקרת שרת להגדרות טיימר מפורשות מהלקוח */
+const MAX_CONFIGURED_TURN_SECONDS = DEFAULT_TURN_TIMEOUT_SECONDS;
 const OVERFLOW_SWAP_ACTION_MS = OVERFLOW_SWAP_TIMER_SECONDS * 1000;
 
 function resolveConfiguredTurnTimerSeconds(st: ServerGameState): number | null {
   const cfg = st.hostGameSettings?.timerSetting ?? 'off';
-  if (cfg === '60') return 60;
-  if (cfg === '90') return 90;
+  if (cfg === '15' || cfg === '60' || cfg === '90') return Math.min(Number(cfg), MAX_CONFIGURED_TURN_SECONDS);
   if (cfg === 'custom') {
-    const custom = Math.max(1, Number(st.hostGameSettings?.timerCustomSeconds ?? 60));
-    return custom;
+    const custom = Math.max(1, Number(st.hostGameSettings?.timerCustomSeconds ?? DEFAULT_TURN_TIMEOUT_SECONDS));
+    return Math.min(custom, MAX_CONFIGURED_TURN_SECONDS);
   }
   return null;
 }
@@ -106,27 +109,27 @@ export function withOnlineTurnDeadline(st: ServerGameState): ServerGameState {
   // Pre-roll idle safety: the player pressed "אני מוכן" but hasn't rolled the
   // dice yet. Without a deadline here, an AFK player blocks the whole room
   // indefinitely. Use the configured host timer if set, otherwise fall back
-  // to 60s so the turn always has an upper bound.
+  // to DEFAULT_TURN_TIMEOUT_SECONDS so the turn always has an upper bound.
   // Bots are excluded — they act on their own timer (scheduleBotAction) and
   // don't need human idle protection.
   const currentIsBot = st.players[st.currentPlayerIndex]?.isBot === true;
   const isPreRollIdle = st.phase === 'pre-roll' && !st.hasPlayedCards && !currentIsBot;
   if (isPreRollIdle) {
-    const seconds = configuredSeconds ?? 60;
+    const seconds = Math.min(configuredSeconds ?? DEFAULT_TURN_TIMEOUT_SECONDS, MAX_CONFIGURED_TURN_SECONDS);
     return { ...st, turnDeadlineAt: Date.now() + seconds * 1000 };
   }
   // In online game:
-  // - If host enabled turn timer -> use only configured timer.
-  // - If host timer is off -> fallback safety timeout after dice roll (60s).
+  // - If host enabled turn timer -> use the configured timer.
+  // - If host timer is off -> fallback safety timeout after dice roll.
   const isPostRollWindow =
     (st.phase === 'building' || st.phase === 'solved') &&
     st.dice !== null &&
     !st.hasPlayedCards;
   if (configuredSeconds !== null && isPostRollWindow) {
-    return { ...st, turnDeadlineAt: Date.now() + configuredSeconds * 1000 };
+    return { ...st, turnDeadlineAt: Date.now() + Math.min(configuredSeconds, MAX_CONFIGURED_TURN_SECONDS) * 1000 };
   }
   if (configuredSeconds === null && isPostRollWindow) {
-    return { ...st, turnDeadlineAt: Date.now() + 60_000 };
+    return { ...st, turnDeadlineAt: Date.now() + DEFAULT_TURN_TIMEOUT_SECONDS * 1000 };
   }
   return {
     ...st,
@@ -187,9 +190,57 @@ const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
   2: 66,
   3: 100,
 };
+const EXCELLENCE_METER_FULL_REWARD_COINS = 1;
 
 function clampCourageStep(step: number): number {
   return Math.max(0, Math.min(3, step));
+}
+
+function getStoredPlayerMeter(player?: Player | null): {
+  courageMeterPercent: number;
+  courageMeterStep: number;
+  courageDiscardSuccessStreak: number;
+  courageRewardPulseId: number;
+  courageCoins: number;
+} {
+  return {
+    courageMeterPercent: player?.courageMeterPercent ?? 0,
+    courageMeterStep: player?.courageMeterStep ?? 0,
+    courageDiscardSuccessStreak: player?.courageDiscardSuccessStreak ?? 0,
+    courageRewardPulseId: player?.courageRewardPulseId ?? 0,
+    courageCoins: player?.courageCoins ?? 0,
+  };
+}
+
+function persistCurrentPlayerMeter(st: ServerGameState): ServerGameState {
+  const currentPlayer = st.players[st.currentPlayerIndex];
+  if (!currentPlayer) return st;
+  const nextPlayers = st.players.map((player, index) =>
+    index === st.currentPlayerIndex
+      ? {
+          ...player,
+          courageMeterPercent: st.courageMeterPercent,
+          courageMeterStep: st.courageMeterStep,
+          courageDiscardSuccessStreak: st.courageDiscardSuccessStreak,
+          courageRewardPulseId: st.courageRewardPulseId,
+          courageCoins: st.courageCoins,
+          lastCourageCoinsAwarded: st.lastCourageCoinsAwarded ?? false,
+        }
+      : player,
+  );
+  return { ...st, players: nextPlayers };
+}
+
+function loadPlayerMeterIntoState(st: ServerGameState, playerIndex: number = st.currentPlayerIndex): ServerGameState {
+  const snapshot = getStoredPlayerMeter(st.players[playerIndex]);
+  return {
+    ...st,
+    courageMeterPercent: snapshot.courageMeterPercent,
+    courageMeterStep: snapshot.courageMeterStep,
+    courageDiscardSuccessStreak: snapshot.courageDiscardSuccessStreak,
+    courageRewardPulseId: snapshot.courageRewardPulseId,
+    courageCoins: snapshot.courageCoins,
+  };
 }
 
 function applyCourageStepReward(st: ServerGameState): ServerGameState {
@@ -197,8 +248,8 @@ function applyCourageStepReward(st: ServerGameState): ServerGameState {
   if (nextStep === (st.courageMeterStep ?? 0)) return st;
   const nextPercent = COURAGE_STEP_TO_PERCENT[nextStep];
   const isFull = nextPercent >= 100;
-  const rewardCoins = isFull ? 5 : 0;
-  return {
+  const rewardCoins = isFull ? EXCELLENCE_METER_FULL_REWARD_COINS : 0;
+  return persistCurrentPlayerMeter({
     ...st,
     courageMeterStep: isFull ? 0 : nextStep,
     courageMeterPercent: isFull ? 0 : nextPercent,
@@ -206,7 +257,8 @@ function applyCourageStepReward(st: ServerGameState): ServerGameState {
     courageCoins: (st.courageCoins ?? 0) + rewardCoins,
     turnCoinsEarned: (st.turnCoinsEarned ?? 0) + rewardCoins,
     lastCourageCoinsAwarded: isFull,
-  };
+    lastCourageRewardPlayerId: st.players[st.currentPlayerIndex]?.id ?? null,
+  });
 }
 
 // ── Helper: draw N cards from draw pile for a player ──
@@ -287,13 +339,32 @@ export function eliminatePlayer(
   const activePlayers = getActivePlayers(s.players);
   if (activePlayers.length <= 1) {
     const winner = activePlayers[0] ?? null;
-    if (!winner) return { ...s, phase: 'game-over', winner: null };
+    if (!winner) {
+      return {
+        ...s,
+        phase: 'game-over',
+        winner: null,
+        turnDeadlineAt: null,
+        overflowSwapDeadlineAt: null,
+        overflowSwapCanUseUnderTop: false,
+        overflowSwapStage: null,
+        overflowSwapSelectedPileChoice: null,
+        overflowSwapSelectedHandCardId: null,
+      };
+    }
     const wi = s.players.indexOf(winner);
     return {
       ...s,
+      currentPlayerIndex: wi >= 0 ? wi : s.currentPlayerIndex,
       phase: 'game-over',
       winner,
       tournamentTable: bumpTournamentOnWin(s, wi),
+      turnDeadlineAt: null,
+      overflowSwapDeadlineAt: null,
+      overflowSwapCanUseUnderTop: false,
+      overflowSwapStage: null,
+      overflowSwapSelectedPileChoice: null,
+      overflowSwapSelectedHandCardId: null,
     };
   }
 
@@ -345,9 +416,6 @@ function checkWin(st: ServerGameState): ServerGameState {
 
 function endTurnLogic(st: ServerGameState): ServerGameState {
   let s = { ...st };
-  const next = getNextActivePlayerIndex(s.players, s.currentPlayerIndex);
-  const prevRounds = s.roundsPlayed ?? 0;
-
   // Condition 2: reward when human player succeeds 2 turns in a row
   const justPlayedIsBot = s.players[s.currentPlayerIndex]?.isBot === true;
   const curStreak = s.courageDiscardSuccessStreak ?? 0;
@@ -359,6 +427,9 @@ function endTurnLogic(st: ServerGameState): ServerGameState {
       s = { ...s, courageDiscardSuccessStreak: 0 };
     }
   }
+  s = persistCurrentPlayerMeter(s);
+  const next = getNextActivePlayerIndex(s.players, s.currentPlayerIndex);
+  const prevRounds = s.roundsPlayed ?? 0;
 
   return withOverflowSwapTurnTransition({
     ...s,
@@ -369,6 +440,8 @@ function endTurnLogic(st: ServerGameState): ServerGameState {
     pendingFractionTarget: null, fractionPenalty: 0,
     equationCommits: [],
     botPendingStagedIds: null,
+    slindaAttemptedThisTurn: false,
+    wildAttemptedThisTurn: false,
     roundsPlayed: prevRounds + 1,
   });
 }
@@ -436,6 +509,12 @@ export function startGame(
     afkWarnings: 0,
     isEliminated: false,
     isSpectator: false,
+    courageMeterPercent: 0,
+    courageMeterStep: 0,
+    courageDiscardSuccessStreak: 0,
+    courageRewardPulseId: 0,
+    courageCoins: 0,
+    lastCourageCoinsAwarded: false,
   }));
 
   const firstIdx = randomInt(0, players.length);
@@ -468,6 +547,7 @@ export function startGame(
     turnCoinsEarned: 0,
     lastCourageRewardReason: null,
     lastCourageCoinsAwarded: false,
+    lastCourageRewardPlayerId: null,
     identicalCelebration: null,
     lastMoveMessage: null,
     lastDiscardCount: 0,
@@ -484,6 +564,8 @@ export function startGame(
     overflowSwapStage: null,
     overflowSwapSelectedPileChoice: null,
     overflowSwapSelectedHandCardId: null,
+    slindaAttemptedThisTurn: false,
+    wildAttemptedThisTurn: false,
     roundsPlayed: 0,
     equationCommits: [],
     botPendingStagedIds: null,
@@ -500,19 +582,21 @@ export function startGame(
 export function beginTurn(st: ServerGameState): ServerGameState {
   if (st.overflowSwapPending) return st;
   if (st.pendingFractionTarget !== null && !st.fractionAttackResolved) {
-    return {
+    return loadPlayerMeterIntoState({
       ...st,
       phase: 'pre-roll',
       lastDiscardCount: 0,
       turnCoinsEarned: 0,
+      lastCourageRewardReason: null,
       lastCourageCoinsAwarded: false,
+      lastCourageRewardPlayerId: null,
       message: locMsg('toast.fractionDefenseRequired', {
         target: st.pendingFractionTarget,
         penalty: st.fractionPenalty,
       }),
-    };
+    });
   }
-  return {
+  return loadPlayerMeterIntoState({
     ...st,
     phase: 'pre-roll',
     fractionAttackResolved: st.fractionAttackResolved,
@@ -520,9 +604,11 @@ export function beginTurn(st: ServerGameState): ServerGameState {
     fractionPenalty: 0,
     lastDiscardCount: 0,
     turnCoinsEarned: 0,
+    lastCourageRewardReason: null,
     lastCourageCoinsAwarded: false,
+    lastCourageRewardPlayerId: null,
     message: '',
-  };
+  });
 }
 
 export function resolveOverflowSwap(
@@ -707,34 +793,34 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
   );
 
   if (nextWarnings >= 3) {
-    const playersAfterElimination = playersAfterWarning.map((p, idx) =>
-      idx === skippedIdx ? { ...p, isEliminated: true, isSpectator: true } : p
-    );
-    const remainingActive = getActivePlayers(playersAfterElimination);
-    if (remainingActive.length <= 1) {
-      const winner = remainingActive[0] ?? null;
-      const wi = winner ? playersAfterElimination.findIndex((p) => p.id === winner.id) : -1;
-      const tournamentTable =
-        wi >= 0 ? bumpTournamentOnWin({ ...st, players: playersAfterElimination, tournamentTable: st.tournamentTable }, wi) : st.tournamentTable;
+    const eliminated = eliminatePlayer({ ...st, players: playersAfterWarning }, skippedPlayer.id);
+    if (!eliminated) return locErr('timer.currentPlayerNotFound');
+    const playersAfterElimination = eliminated.players;
+    if (eliminated.phase === 'game-over') {
+      const winner = eliminated.winner;
+      const winnerIdx = winner ? eliminated.players.findIndex((p) => p.id === winner.id) : -1;
       return {
-        ...st,
-        players: playersAfterElimination,
-        currentPlayerIndex: wi >= 0 ? wi : skippedIdx,
+        ...eliminated,
+        currentPlayerIndex: winnerIdx >= 0 ? winnerIdx : eliminated.currentPlayerIndex,
         phase: 'game-over',
         winner,
-        tournamentTable,
         turnDeadlineAt: null,
+        overflowSwapDeadlineAt: null,
+        overflowSwapCanUseUnderTop: false,
+        overflowSwapStage: null,
+        overflowSwapSelectedPileChoice: null,
+        overflowSwapSelectedHandCardId: null,
         lastMoveMessage: locMsg('toast.playerEliminatedAfk', { name: skippedName }),
-        message: remainingActive[0]
-          ? locMsg('toast.winnerAfterKick', { winner: remainingActive[0].name, kicked: skippedName })
+        message: winner
+          ? locMsg('toast.winnerAfterKick', { winner: winner.name, kicked: skippedName })
           : locMsg('toast.gameOverNoActive'),
       };
     }
 
-    const nextAfterKick = getNextActivePlayerIndex(playersAfterElimination, skippedIdx);
+    const nextAfterKick = eliminated.currentPlayerIndex;
     const nextNameAfterKick = playersAfterElimination[nextAfterKick]?.name ?? '…';
     return withOverflowSwapTurnTransition({
-      ...st,
+      ...eliminated,
       players: playersAfterElimination.map((p) => ({ ...p, calledLolos: false })),
       currentPlayerIndex: nextAfterKick,
       phase: 'turn-transition',
@@ -947,6 +1033,7 @@ export function playIdentical(st: ServerGameState, cardId: string): ServerGameSt
     lastMoveMessage: toast, message: '',
     identicalCelebration: celebration,
   };
+  ns = applyCourageStepReward(ns);
   ns = checkWin(ns);
   if (ns.phase === 'game-over') return { ...ns, identicalCelebration: null };
   return endTurnLogic(ns);
@@ -964,6 +1051,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
     const newTarget = st.pendingFractionTarget / denom;
     const np = st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hand: cp.hand.filter(c => c.id !== card.id) } : p);
     let ns = { ...st, players: np, discardPile: [...st.discardPile, card], hasPlayedCards: true };
+    ns = persistCurrentPlayerMeter(ns);
     ns = checkWin(ns);
     if (ns.phase === 'game-over') return ns;
     const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
@@ -993,6 +1081,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
   const newTarget = effTop / denom;
   const np = st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hand: cp.hand.filter(c => c.id !== card.id) } : p);
   let ns = { ...st, players: np, discardPile: [...st.discardPile, card], hasPlayedCards: true };
+  ns = persistCurrentPlayerMeter(ns);
   ns = checkWin(ns);
   if (ns.phase === 'game-over') return ns;
   const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
@@ -1123,6 +1212,21 @@ export function doEndTurn(st: ServerGameState): ServerGameState {
 export function getPlayerView(state: ServerGameState, playerId: string, locale: AppLocale): PlayerView {
   const myPlayer = state.players.find(p => p.id === playerId);
   const pileTop = state.discardPile.length > 0 ? state.discardPile[state.discardPile.length - 1] : null;
+  const currentPlayerId = state.players[state.currentPlayerIndex]?.id ?? null;
+  const rewardOwnerId = state.lastCourageRewardPlayerId ?? null;
+  const shouldUseLiveMeter = state.phase !== 'turn-transition' && currentPlayerId === playerId;
+  const viewerMeter =
+    shouldUseLiveMeter
+      ? {
+          courageMeterPercent: state.courageMeterPercent,
+          courageMeterStep: state.courageMeterStep,
+          courageDiscardSuccessStreak: state.courageDiscardSuccessStreak,
+          courageRewardPulseId: state.courageRewardPulseId,
+          courageCoins: state.courageCoins ?? 0,
+          lastCourageCoinsAwarded: state.lastCourageCoinsAwarded ?? false,
+        }
+      : getStoredPlayerMeter(myPlayer);
+  const viewerOwnsReward = rewardOwnerId === playerId;
 
   return {
     roomCode: state.roomCode,
@@ -1154,6 +1258,16 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
       afkWarnings: p.afkWarnings,
       isEliminated: p.isEliminated,
       isSpectator: p.isSpectator,
+      ...(p.id === currentPlayerId && state.phase !== 'turn-transition'
+        ? {
+            courageMeterPercent: state.courageMeterPercent,
+            courageMeterStep: state.courageMeterStep,
+            courageDiscardSuccessStreak: state.courageDiscardSuccessStreak,
+            courageRewardPulseId: state.courageRewardPulseId,
+            courageCoins: state.courageCoins ?? 0,
+            lastCourageCoinsAwarded: state.lastCourageCoinsAwarded ?? false,
+          }
+        : getStoredPlayerMeter(p)),
     })),
     currentPlayerIndex: state.currentPlayerIndex,
     pileTop,
@@ -1171,14 +1285,14 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
     hasDrawnCard: state.hasDrawnCard,
     lastCardValue: state.lastCardValue,
     consecutiveIdenticalPlays: state.consecutiveIdenticalPlays,
-    courageMeterPercent: state.courageMeterPercent,
-    courageMeterStep: state.courageMeterStep,
-    courageDiscardSuccessStreak: state.courageDiscardSuccessStreak,
-    courageRewardPulseId: state.courageRewardPulseId,
-    courageCoins: state.courageCoins ?? 0,
-    turnCoinsEarned: state.turnCoinsEarned ?? 0,
-    lastCourageRewardReason: state.lastCourageRewardReason ?? null,
-    lastCourageCoinsAwarded: state.lastCourageCoinsAwarded ?? false,
+    courageMeterPercent: viewerMeter.courageMeterPercent,
+    courageMeterStep: viewerMeter.courageMeterStep,
+    courageDiscardSuccessStreak: viewerMeter.courageDiscardSuccessStreak,
+    courageRewardPulseId: viewerMeter.courageRewardPulseId,
+    courageCoins: viewerMeter.courageCoins,
+    turnCoinsEarned: viewerOwnsReward ? (state.turnCoinsEarned ?? 0) : 0,
+    lastCourageRewardReason: viewerOwnsReward ? (state.lastCourageRewardReason ?? null) : null,
+    lastCourageCoinsAwarded: viewerOwnsReward ? (state.lastCourageCoinsAwarded ?? false) : false,
     identicalCelebration: state.identicalCelebration ?? null,
     lastMoveMessage: formatLastMove(locale, state.lastMoveMessage),
     lastMoveMessageKey: Array.isArray(state.lastMoveMessage)
@@ -1197,6 +1311,8 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
     overflowSwapStage: state.overflowSwapStage ?? null,
     overflowSwapSelectedPileChoice: state.overflowSwapSelectedPileChoice ?? null,
     overflowSwapSelectedHandCardId: state.overflowSwapSelectedHandCardId ?? null,
+    slindaAttemptedThisTurn: (state as any).slindaAttemptedThisTurn ?? false,
+    wildAttemptedThisTurn: (state as any).wildAttemptedThisTurn ?? false,
     roundsPlayed: state.roundsPlayed ?? 0,
     equationCommits: state.equationCommits,
     tournamentTable: state.tournamentTable,

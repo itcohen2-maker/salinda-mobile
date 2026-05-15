@@ -77,6 +77,13 @@ export interface Player {
   role?: UserRole;
   /** Supabase auth UUID — set at join time for authenticated players; undefined for guests */
   supabaseUserId?: string;
+  /** Excellence meter state for this specific player (used by online modes). */
+  courageMeterPercent?: number;
+  courageMeterStep?: number;
+  courageDiscardSuccessStreak?: number;
+  courageRewardPulseId?: number;
+  courageCoins?: number;
+  lastCourageCoinsAwarded?: boolean;
 }
 
 /** What opponents see about a player (no hand details) */
@@ -115,6 +122,7 @@ export interface LobbyTableSummary {
   showSolveExercise?: boolean | null;
   timerSetting: HostGameSettings['timerSetting'] | null;
   timerCustomSeconds: number | null;
+  enabledOperators?: Operation[] | null;
 }
 
 /** עמודה בטבלת טורניר — אינדקס שחקן במערך `players` של המשחק */
@@ -183,7 +191,7 @@ export interface HostGameSettings {
   /** מכנים לשברים בחבילה — רלוונטי כש־showFractions */
   fractionKinds?: Fraction[];
   abVariant?: 'control_0_12_plus' | 'variant_0_15_plus';
-  timerSetting: '60' | '90' | 'off' | 'custom';
+  timerSetting: '15' | '60' | '90' | 'off' | 'custom';
   timerCustomSeconds: number;
   /** רמת בוט — משחק מול בוט בלובי / התאמה למנוע; אופציונלי */
   botDifficulty?: BotDifficulty;
@@ -229,6 +237,7 @@ export interface ServerGameState {
   lastCourageRewardReason: string | null;
   /** true exactly when the excellence meter just filled and awarded coins. */
   lastCourageCoinsAwarded?: boolean;
+  lastCourageRewardPlayerId?: string | null;
   /** לרוב null; מוגדר רק ב־state_update מיד אחרי playIdentical (מקוון) */
   identicalCelebration?: { playerName: string; cardDisplay: string; consecutive: number } | null;
   lastMoveMessage: LastMovePayload;
@@ -249,6 +258,9 @@ export interface ServerGameState {
   overflowSwapStage: OverflowSwapStage | null;
   overflowSwapSelectedPileChoice: OverflowSwapPileChoice | null;
   overflowSwapSelectedHandCardId: string | null;
+  /** האם כבר השתמשו בסלינדה/פרא בתור זה */
+  slindaAttemptedThisTurn: boolean;
+  wildAttemptedThisTurn: boolean;
   /** מונה סיומי תור (מעבר לשחקן הבא דרך endTurnLogic) */
   roundsPlayed: number;
   /** אחרי אישור תרגיל קוביות: עד 2 קלפי פעולה/סלינדה במשבצות 0 ו־1; יוסרו עם קלפי ההנחה */
@@ -268,7 +280,24 @@ export interface PlayerView {
   myPlayerId: string;
   opponents: OpponentView[];
   currentPlayerIndex: number;
-  players: { id: string; name: string; cardCount: number; isConnected: boolean; isHost: boolean; isBot: boolean; calledLolos: boolean; afkWarnings: number; isEliminated: boolean; isSpectator: boolean }[];
+  players: {
+    id: string;
+    name: string;
+    cardCount: number;
+    isConnected: boolean;
+    isHost: boolean;
+    isBot: boolean;
+    calledLolos: boolean;
+    afkWarnings: number;
+    isEliminated: boolean;
+    isSpectator: boolean;
+    courageMeterPercent?: number;
+    courageMeterStep?: number;
+    courageDiscardSuccessStreak?: number;
+    courageRewardPulseId?: number;
+    courageCoins?: number;
+    lastCourageCoinsAwarded?: boolean;
+  }[];
   pileTop: Card | null;
   deckCount: number;
   dice: DiceResult | null;
@@ -316,6 +345,8 @@ export interface PlayerView {
   overflowSwapStage: OverflowSwapStage | null;
   overflowSwapSelectedPileChoice: OverflowSwapPileChoice | null;
   overflowSwapSelectedHandCardId: string | null;
+  slindaAttemptedThisTurn?: boolean;
+  wildAttemptedThisTurn?: boolean;
   /** סיומי תור ל־UI (רמז טיימר); לקוח ישן בלי שדה — מתייחסים כ־0 */
   roundsPlayed?: number;
   /** נתון רק אחרי אישור תרגיל עם קלף/י פעולה או סלינדה מהיד */
@@ -389,7 +420,7 @@ export interface ClientToServerEvents {
   /** מארח בלבד — חדר עם בוט; מעדכן hostGameSettings.botDifficulty */
   set_bot_difficulty: (data: { difficulty: BotDifficulty }) => void;
   reconnect: (data: { roomCode: string; playerId: string; locale?: AppLocale }) => void;
-  continue_vs_bot: (ack?: (result: ContinueVsBotAck) => void) => void;
+  continue_vs_bot: (data?: { difficulty?: BotDifficulty }, ack?: (result: ContinueVsBotAck) => void) => void;
   accept_technical_victory: () => void;
 }
 

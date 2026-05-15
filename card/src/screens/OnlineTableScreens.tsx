@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import type {
   BotDifficulty,
@@ -24,15 +25,57 @@ import type {
 } from '../../shared/types';
 import type { MsgParams } from '../../shared/i18n';
 import { useLocale } from '../i18n/LocaleContext';
-import SalindaLogoOption06 from '../components/branding/SalindaLogoOption06';
+import SalindaPuzzleGameLogo from '../components/branding/SalindaPuzzleGameLogo';
 import { brand } from '../theme/brand';
 import { CARDS_PER_PLAYER } from '../../shared/gameConstants';
 import { pickQuickMatchTable } from './TablesLobbyScreen';
+import { buildPrivateInviteShareMessage, buildRoomShareMessage } from './onlineShareMessages';
+import { getScreenSafeTop } from '../theme/screenInsets';
+import { SlindaCoin } from '../../components/SlindaCoin';
 
 const WEB_INVITE_BASE_STORAGE_KEY = 'salinda_web_invite_base';
 const ALL_FRACTION_KINDS: readonly Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
 
 type TFn = (key: string, params?: MsgParams) => string;
+
+const ROOT_BG = '#0a0d14';
+const SURFACE = 'rgba(20, 15, 8, 0.76)';
+const SURFACE_ALT = 'rgba(20, 15, 8, 0.88)';
+const SURFACE_SOFT = 'rgba(0, 0, 0, 0.34)';
+const GOLD_LINE = 'rgba(245, 210, 122, 0.18)';
+const GOLD_LINE_STRONG = 'rgba(245, 210, 122, 0.3)';
+const ACTION_GOLD = '#f5d27a';
+const ACTION_GOLD_DARK = '#c9a55a';
+const ACTION_AMBER = '#a34705';
+const TEXT_MAIN = '#f5f1e6';
+const TEXT_DIM = '#b9b0a0';
+const TEXT_MUTE = '#8a8275';
+const DEFAULT_SUMMARY_MAX_PARTICIPANTS = 4;
+const DEFAULT_SUMMARY_VISIBILITY: LobbyTableVisibility = 'public';
+
+type SummaryTone = 'info' | 'danger' | 'warning' | 'accent';
+
+interface LobbySummaryItem {
+  key: string;
+  title: string;
+  value: string;
+  detail?: string;
+  tone: SummaryTone;
+  testID: string;
+}
+
+interface LobbySummarySource {
+  visibility?: LobbyTableVisibility | null;
+  maxParticipants?: number | null;
+  currentParticipants?: number | null;
+  configuredDifficulty?: 'easy' | 'full' | null;
+  showFractions?: boolean | null;
+  fractionKinds?: Fraction[] | readonly Fraction[] | null;
+  showPossibleResults?: boolean | null;
+  showSolveExercise?: boolean | null;
+  timerSetting?: HostGameSettings['timerSetting'] | null;
+  timerCustomSeconds?: number | null;
+}
 
 function lobbyTimerLabel(t: TFn, ts: HostGameSettings['timerSetting'], customSec: number): string {
   if (ts === 'off') return t('lobby.timerOff');
@@ -41,20 +84,200 @@ function lobbyTimerLabel(t: TFn, ts: HostGameSettings['timerSetting'], customSec
       ? t('lobby.timerFmtMinSec', { m: Math.floor(customSec / 60), s: customSec % 60 })
       : t('lobby.timerSec', { n: customSec });
   }
+  if (ts === '15') return t('lobby.timerSec', { n: 15 });
   if (ts === '60') return t('lobby.timerMin');
   if (ts === '90') return t('lobby.timerMinHalf');
   return t('lobby.timerSec', { n: ts });
 }
 
-function countdownSeconds(deadlineAt: number | null): number | null {
-  if (!deadlineAt) return null;
-  return Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
+function getSummaryToneColors(tone: SummaryTone) {
+  switch (tone) {
+    case 'danger':
+      return {
+        borderColor: 'rgba(248, 113, 113, 0.46)',
+        backgroundColor: 'rgba(127, 29, 29, 0.26)',
+        titleColor: '#FECACA',
+        valueColor: '#FEE2E2',
+        detailColor: '#FCA5A5',
+      };
+    case 'warning':
+      return {
+        borderColor: 'rgba(245, 158, 11, 0.42)',
+        backgroundColor: 'rgba(120, 53, 15, 0.26)',
+        titleColor: '#FDE68A',
+        valueColor: '#FEF3C7',
+        detailColor: '#FCD34D',
+      };
+    case 'accent':
+      return {
+        borderColor: 'rgba(168, 85, 247, 0.44)',
+        backgroundColor: 'rgba(88, 28, 135, 0.24)',
+        titleColor: '#DDD6FE',
+        valueColor: '#F3E8FF',
+        detailColor: '#C4B5FD',
+      };
+    case 'info':
+    default:
+      return {
+        borderColor: 'rgba(96, 165, 250, 0.42)',
+        backgroundColor: 'rgba(30, 64, 175, 0.22)',
+        titleColor: '#BFDBFE',
+        valueColor: '#EFF6FF',
+        detailColor: '#93C5FD',
+      };
+  }
+}
+
+function normalizeSummaryFractionKinds(kinds?: Fraction[] | readonly Fraction[] | null): Fraction[] {
+  const configuredKinds = new Set((kinds ?? []).filter(Boolean));
+  if (configuredKinds.size === 0) return [...ALL_FRACTION_KINDS];
+  return ALL_FRACTION_KINDS.filter((kind) => configuredKinds.has(kind));
+}
+
+function buildLobbySummaryItems(
+  source: LobbySummarySource,
+  t: TFn,
+  includeCurrentParticipants: boolean,
+): LobbySummaryItem[] {
+  const maxParticipants = Math.max(2, source.maxParticipants ?? DEFAULT_SUMMARY_MAX_PARTICIPANTS);
+  const currentParticipants = Math.max(0, source.currentParticipants ?? 0);
+  const visibility = source.visibility ?? DEFAULT_SUMMARY_VISIBILITY;
+  const showFractions = source.showFractions ?? true;
+  const fractionKinds = normalizeSummaryFractionKinds(source.fractionKinds);
+  const showPossibleResults = source.showPossibleResults ?? true;
+  const showSolveExercise = source.showSolveExercise ?? true;
+  const timerSetting = source.timerSetting ?? 'off';
+  const timerCustomSeconds = source.timerCustomSeconds ?? 60;
+  const items: LobbySummaryItem[] = [
+    {
+      key: 'seats',
+      title: t('lobby.maxParticipants'),
+      value: includeCurrentParticipants ? `${currentParticipants}/${maxParticipants}` : String(maxParticipants),
+      tone: 'info',
+      testID: 'lobby-summary-card-seats',
+    },
+  ];
+
+  if (visibility === 'private_locked') {
+    items.push({
+      key: 'private',
+      title: t('lobby.summary.access'),
+      value: t('lobby.tablePrivate'),
+      tone: 'warning',
+      testID: 'lobby-summary-card-private',
+    });
+  }
+
+  if (source.configuredDifficulty === 'easy') {
+    items.push({
+      key: 'difficulty',
+      title: t('lobby.difficulty'),
+      value: t('lobby.diffEasyRange'),
+      tone: 'accent',
+      testID: 'lobby-summary-card-difficulty',
+    });
+  }
+
+  if (!showFractions) {
+    items.push({
+      key: 'fractions-off',
+      title: t('lobby.fractions'),
+      value: t('lobby.noFractions'),
+      tone: 'danger',
+      testID: 'lobby-summary-card-fractions-off',
+    });
+  } else if (fractionKinds.length < ALL_FRACTION_KINDS.length) {
+    const removedKinds = ALL_FRACTION_KINDS.filter((kind) => !fractionKinds.includes(kind));
+    items.push({
+      key: 'fractions-partial',
+      title: t('lobby.summary.activeFractions'),
+      value: fractionKinds.join(', '),
+      detail: t('lobby.summary.removedFractions', { value: removedKinds.join(', ') }),
+      tone: 'warning',
+      testID: 'lobby-summary-card-fractions-partial',
+    });
+  }
+
+  if (!showPossibleResults) {
+    items.push({
+      key: 'possible-results',
+      title: t('lobby.possibleResults'),
+      value: t('lobby.hide'),
+      tone: 'danger',
+      testID: 'lobby-summary-card-possible-results',
+    });
+  }
+
+  if (!showSolveExercise) {
+    items.push({
+      key: 'solve-exercise',
+      title: t('lobby.solveExercise'),
+      value: t('lobby.off'),
+      tone: 'danger',
+      testID: 'lobby-summary-card-solve-exercise',
+    });
+  }
+
+  if (timerSetting !== 'off') {
+    items.push({
+      key: 'timer',
+      title: t('lobby.turnTimer'),
+      value: lobbyTimerLabel(t, timerSetting, timerCustomSeconds),
+      tone: 'info',
+      testID: 'lobby-summary-card-timer',
+    });
+  }
+
+  return items;
+}
+
+function LobbySummarySection({
+  items,
+  isRTL,
+  t,
+}: {
+  items: LobbySummaryItem[];
+  isRTL: boolean;
+  t: TFn;
+}) {
+  if (items.length === 0) return null;
+  const ta = isRTL ? 'right' : 'left';
+
+  return (
+    <View testID="lobby-summary-section" style={styles.summarySection}>
+      <Text style={[styles.summarySectionTitle, { textAlign: ta }]}>{t('lobby.summaryTitle')}</Text>
+      <View testID="lobby-summary-grid" style={styles.summaryGrid}>
+        {items.map((item) => {
+          const tone = getSummaryToneColors(item.tone);
+          return (
+            <View
+              key={item.key}
+              testID={item.testID}
+              style={[
+                styles.summaryCard,
+                {
+                  borderColor: tone.borderColor,
+                  backgroundColor: tone.backgroundColor,
+                },
+              ]}
+            >
+              <Text style={[styles.summaryCardTitle, { color: tone.titleColor, textAlign: ta }]}>{item.title}</Text>
+              <Text style={[styles.summaryCardValue, { color: tone.valueColor, textAlign: ta }]}>{item.value}</Text>
+              {item.detail ? (
+                <Text style={[styles.summaryCardDetail, { color: tone.detailColor, textAlign: ta }]}>{item.detail}</Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 export function LanguageToggle() {
   const { locale, setLocale, t } = useLocale();
   return (
-    <View style={styles.langRow}>
+    <View style={styles.langRow} testID="lobby-language-toggle">
       <Text style={styles.langLabel}>{t('lang.label')}:</Text>
       <TouchableOpacity onPress={() => void setLocale('he')} style={[styles.langBtn, locale === 'he' && styles.langBtnActive]}>
         <Text style={[styles.langBtnText, locale === 'he' && styles.langBtnTextActive]}>{t('lang.he')}</Text>
@@ -118,12 +341,13 @@ function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <View style={styles.rulesModalLogoWrap}>
-            <SalindaLogoOption06 width={220} />
+            <SalindaPuzzleGameLogo width={220} />
           </View>
           <Text style={styles.modalTitle}>{t('start.rulesTitle')}</Text>
           <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
             <Text style={[styles.rulesSectionTitle, { textAlign: ta }]}>{t('start.goalTitle')}</Text>
             <Text style={[styles.rulesLine, { textAlign: ta }]}>{t('start.rules.goal1', { n: CARDS_PER_PLAYER })}</Text>
+            <Text style={[styles.rulesLine, { textAlign: ta }]}>{t('start.rules.goalLimit')}</Text>
             <Text style={[styles.rulesLine, { textAlign: ta }]}>{t('start.rules.goal2')}</Text>
             <Text style={[styles.rulesSectionTitle, { textAlign: ta }]}>{t('start.turnTitle')}</Text>
             <Text style={[styles.rulesLine, { textAlign: ta }]}>{t('start.rules.t1')}</Text>
@@ -149,6 +373,8 @@ export function LobbyEntry({
   onOpenCelebrationMockup?: () => void;
 } = {}) {
   const { t, isRTL } = useLocale();
+  const insets = useSafeAreaInsets();
+  const safeTop = getScreenSafeTop(insets.top);
   const { createTable, joinTable, joinPrivateTable, refreshTables, tables, error, clearError, setServerUrl } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
   const [playerName, setPlayerName] = useState((defaultPlayerName ?? '').slice(0, 7));
@@ -199,8 +425,9 @@ export function LobbyEntry({
   }, [tables]);
 
   const renderTableStatus = (table: LobbyTableSummary) => {
-    if (table.status === 'countdown') return t('lobby.countdownRunning', { n: countdownSeconds(table.countdownEndsAt) ?? 0 });
-    if (table.status === 'full') return t('lobby.tableFull');
+    if (table.status === 'countdown' || table.status === 'in_game' || table.status === 'full') {
+      return t('lobby.tableOccupied');
+    }
     return t('lobby.tableWaiting');
   };
 
@@ -239,7 +466,11 @@ export function LobbyEntry({
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[styles.container, { paddingTop: Math.max(safeTop + 12, 60) }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <LanguageToggle />
       <Modal visible={isConnecting} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
@@ -252,17 +483,17 @@ export function LobbyEntry({
       </Modal>
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       {onBackToChoice && (
-        <TouchableOpacity style={styles.backBtn} onPress={onBackToChoice}>
+        <TouchableOpacity style={[styles.backBtn, Platform.OS === 'android' ? styles.backBtnAndroid : null]} onPress={onBackToChoice}>
           <Text style={styles.backBtnText}>{t('lobby.backToMode')}</Text>
         </TouchableOpacity>
       )}
       <View style={styles.logoWrap}>
-        <SalindaLogoOption06 width={260} />
+        <SalindaPuzzleGameLogo width={260} />
       </View>
       <Text style={styles.title}>{t('lobby.tablesTitle')}</Text>
       <Text style={styles.subtitle}>{t('lobby.tablesSubtitle')}</Text>
       <TouchableOpacity style={styles.rulesLinkBtn} onPress={() => setRulesOpen(true)}>
-        <Text style={styles.rulesLinkText}>הדרכה | {t('start.showRules')}</Text>
+        <Text style={styles.rulesLinkText}>׳”׳“׳¨׳›׳” | {t('start.showRules')}</Text>
       </TouchableOpacity>
 
       <Text style={[styles.label, { alignSelf: 'center', textAlign: 'center' }]}>{t('lobby.yourName')}</Text>
@@ -289,7 +520,7 @@ export function LobbyEntry({
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.label, { marginTop: 0 }]}>{t('lobby.availableTables')}</Text>
         <TouchableOpacity style={styles.refreshBtn} onPress={refreshTables}>
-          <Text style={styles.refreshBtnText}>↻</Text>
+          <Text style={styles.refreshBtnText}>ג†»</Text>
         </TouchableOpacity>
       </View>
       {tables.length === 0 ? (
@@ -328,7 +559,7 @@ export function LobbyEntry({
                   joinTable(table.roomCode, playerName.trim());
                 }}
               >
-                <Text style={styles.tableActionBtnText}>
+                <Text style={[styles.tableActionBtnText, table.visibility === 'private_locked' && styles.tableActionBtnTextOnDark]}>
                   {disabled ? renderTableStatus(table) : table.visibility === 'private_locked' ? t('lobby.enterCode') : t('lobby.joinTable')}
                 </Text>
               </TouchableOpacity>
@@ -376,8 +607,11 @@ export function LobbyEntry({
   );
 }
 
+
 export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup }: { onOpenCelebrationMockup?: () => void } = {}) {
   const { t, isRTL } = useLocale();
+  const insets = useSafeAreaInsets();
+  const safeTop = getScreenSafeTop(insets.top);
   const {
     roomCode,
     currentInviteCode,
@@ -396,6 +630,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     serverUrl,
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
+  const isAndroidRtlSetup = Platform.OS === 'android' && isRTL;
   const currentTable = tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
@@ -408,13 +643,12 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [botDisplayName, setBotDisplayName] = useState('');
   const [visibility, setVisibility] = useState<LobbyTableVisibility>('public');
-  const [maxParticipants, setMaxParticipants] = useState(6);
+  const [maxParticipants, setMaxParticipants] = useState(4);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [manualWebInviteBase, setManualWebInviteBase] = useState('');
   const [startingBot, setStartingBot] = useState(false);
-  const [, setTick] = useState(Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -438,12 +672,6 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
       setVisibility(currentTableVisibility);
     }
   }, [currentTableVisibility]);
-
-  useEffect(() => {
-    if (currentTable?.countdownEndsAt == null) return;
-    const timer = setInterval(() => setTick(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [currentTable?.countdownEndsAt]);
 
   useEffect(() => {
     const value = manualWebInviteBase.trim();
@@ -477,39 +705,60 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     return `${effectiveWebBase}${inviteSuffix}`;
   }, [roomCode, effectiveWebBase, inviteSuffix]);
   const shareRoomMessage = useMemo(() => {
-    if (!roomCode) return '';
-    const lines = [
-      t('lobby.shareCodeHint'),
-      `${t('lobby.roomCodeLabel')}: ${roomCode}`,
-      currentInviteCode ? `${t('lobby.inviteCodeLabel')}: ${currentInviteCode}` : null,
-      inviteLink || null,
-    ].filter((line): line is string => Boolean(line));
-    return lines.join('\n');
-  }, [currentInviteCode, inviteLink, roomCode, t]);
+    return buildRoomShareMessage({
+      t,
+      roomCode,
+      inviteCode: currentInviteCode,
+      inviteLink,
+      inviteSuffix,
+    });
+  }, [currentInviteCode, inviteLink, inviteSuffix, roomCode, t]);
+  const privateInviteShareMessage = useMemo(() => {
+    return buildPrivateInviteShareMessage({
+      t,
+      roomCode,
+      inviteCode: currentInviteCode,
+      inviteLink,
+      inviteSuffix,
+    });
+  }, [currentInviteCode, inviteLink, inviteSuffix, roomCode, t]);
   const humanCount = players.filter((player) => !player.isBot).length;
-  const configured = configSaved || currentTable != null;
-  const countdownRemaining = countdownSeconds(currentTable?.countdownEndsAt ?? null);
+  const configured = (!isHost && !!roomCode) || configSaved || currentTable?.configuredDifficulty != null;
+  const shouldRightAlignLeaveButton = Platform.OS === 'android' || (!configured && isRTL);
+  const setupPanelStyle = isRTL ? [styles.setupPanel, styles.setupPanelRtl] : styles.setupPanel;
+  const setupLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
+  const setupRowStyle = isAndroidRtlSetup ? [styles.row, styles.rowAndroidRtl] : styles.row;
+  const setupCountRowStyle = isAndroidRtlSetup ? [styles.countRow, styles.countRowAndroidRtl] : styles.countRow;
+  const setupChipWrapStyle = isAndroidRtlSetup ? [styles.chipWrap, styles.chipWrapAndroidRtl] : styles.chipWrap;
+  const minuteTimerStepper = {
+    key: 'min',
+    label: t('start.timerPickerMin'),
+    value: Math.floor(timerCustomSeconds / 60),
+    decrement: () => setTimerCustomSeconds((s) => Math.max(1, s - 60)),
+    increment: () => setTimerCustomSeconds((s) => Math.min(600, s + 60)),
+  };
+  const secondTimerStepper = {
+    key: 'sec',
+    label: t('start.timerPickerSec'),
+    value: String(timerCustomSeconds % 60).padStart(2, '0'),
+    decrement: () => setTimerCustomSeconds((s) => Math.max(1, Math.floor(s / 60) * 60 + Math.max(0, (s % 60) - 5))),
+    increment: () => setTimerCustomSeconds((s) => Math.min(600, Math.floor(s / 60) * 60 + Math.min(55, (s % 60) + 5))),
+  };
+  const customTimerSteppers = [minuteTimerStepper, secondTimerStepper];
   const roomStatusCard = useMemo(() => {
     if (!configured || !currentTable) return null;
-    if (currentTable.status === 'countdown') {
-      return {
-        accentStyle: styles.infoBoxCountdown,
-        primary: t('lobby.countdownAnnouncement', { n: countdownRemaining ?? 0 }),
-        secondary: t('lobby.startingSoonBanner'),
-      };
-    }
     if (humanCount < 2) {
       return {
         accentStyle: styles.infoBoxMuted,
-        primary: t('lobby.waitingForMorePlayers'),
+        primary: t('lobby.waitingForPlayer'),
         secondary: t('lobby.minPlayers'),
       };
     }
     if (isHost) {
       return {
         accentStyle: styles.infoBoxReady,
-        primary: t('lobby.hostCanStartCountdown'),
-        secondary: t('lobby.countdownCta'),
+        primary: t('lobby.roomReady'),
+        secondary: t('lobby.startGame'),
       };
     }
     return {
@@ -517,7 +766,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
       primary: t('lobby.waitHost'),
       secondary: t('lobby.waitingRoomHint'),
     };
-  }, [configured, countdownRemaining, currentTable, humanCount, isHost, t]);
+  }, [configured, currentTable, humanCount, isHost, t]);
 
   const buildGameSettings = (): HostGameSettings => ({
     diceMode: '3',
@@ -536,16 +785,40 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     ...(botDisplayName.trim() ? { botDisplayName: botDisplayName.trim().slice(0, 24) } : {}),
   });
 
-  const summaryText = useMemo(() => {
-    const timerSeconds = timerSetting === 'custom' ? timerCustomSeconds : 60;
-    return [
-      t('lobby.summary.difficulty', { value: difficulty === 'easy' ? t('lobby.diffEasyRange') : t('lobby.diffFullRange') }),
-      t('lobby.summary.fractions', { value: showFractions ? t('lobby.yes') : t('lobby.no') }),
-      t('lobby.summary.possible', { value: showPossibleResults ? t('lobby.show') : t('lobby.hide') }),
-      t('lobby.summary.solve', { value: showSolveExercise ? t('lobby.on') : t('lobby.off') }),
-      t('lobby.summary.timer', { value: lobbyTimerLabel(t, timerSetting, timerSeconds) }),
-    ].join('\n');
-  }, [difficulty, showFractions, showPossibleResults, showSolveExercise, timerSetting, timerCustomSeconds, t]);
+  const draftSummaryItems = useMemo(
+    () =>
+      buildLobbySummaryItems(
+        {
+          visibility,
+          maxParticipants,
+          configuredDifficulty: difficulty,
+          showFractions,
+          fractionKinds,
+          showPossibleResults,
+          showSolveExercise,
+          timerSetting,
+          timerCustomSeconds: timerSetting === 'custom' ? timerCustomSeconds : 60,
+        },
+        t,
+        false,
+      ),
+    [
+      difficulty,
+      fractionKinds,
+      maxParticipants,
+      showFractions,
+      showPossibleResults,
+      showSolveExercise,
+      t,
+      timerCustomSeconds,
+      timerSetting,
+      visibility,
+    ],
+  );
+  const configuredSummaryItems = useMemo(() => {
+    if (!currentTable) return [];
+    return buildLobbySummaryItems(currentTable, t, true);
+  }, [currentTable, t]);
 
   const handleSaveConfiguration = () => {
     configureTable({
@@ -556,6 +829,15 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     });
     setConfigSaved(true);
   };
+
+  const autoStartFiredRef = useRef(false);
+  useEffect(() => {
+    if (!isHost || !configSaved) return;
+    if (humanCount < 2) return;
+    if (autoStartFiredRef.current) return;
+    autoStartFiredRef.current = true;
+    startTableCountdown();
+  }, [isHost, configSaved, humanCount, startTableCountdown]);
 
   const handleShareRoomCode = async () => {
     if (!shareRoomMessage) return;
@@ -577,21 +859,24 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[styles.container, { paddingTop: Math.max(safeTop + 12, 60) }]}
+    >
       <LanguageToggle />
-      <TouchableOpacity style={styles.backBtn} onPress={leaveRoom}>
+      <TouchableOpacity style={[styles.backBtn, shouldRightAlignLeaveButton ? styles.backBtnAndroid : null]} onPress={leaveRoom}>
         <Text style={styles.backBtnText}>{t('lobby.leaveRoom')}</Text>
       </TouchableOpacity>
       <View style={styles.logoWrap}>
-        <SalindaLogoOption06 width={260} />
+        <SalindaPuzzleGameLogo width={260} />
       </View>
       <Text style={styles.title}>{configured ? t('lobby.waitingRoomTitle') : t('lobby.configureTitle')}</Text>
       <Text style={styles.subtitle}>{configured ? t('lobby.waitingRoomHint') : t('lobby.configureHint')}</Text>
 
       {!configured && isHost && (
-        <>
-          <Text style={styles.label}>{t('start.wheel.numberRange')}</Text>
-          <View style={styles.row}>
+        <View testID="lobby-config-panel" style={setupPanelStyle}>
+          <Text style={setupLabelStyle}>{t('start.wheel.numberRange')}</Text>
+          <View testID="lobby-config-number-range-row" style={setupRowStyle}>
             <TouchableOpacity style={[styles.optionBtn, difficulty === 'full' && styles.optionBtnActive]} onPress={() => setDifficulty('full')}>
               <Text style={[styles.optionBtnText, difficulty === 'full' && styles.optionBtnTextActive]}>0-25</Text>
             </TouchableOpacity>
@@ -600,8 +885,8 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>{t('lobby.privateToggle')}</Text>
-          <View style={styles.row}>
+          <Text style={setupLabelStyle}>{t('lobby.privateToggle')}</Text>
+          <View style={setupRowStyle}>
             <TouchableOpacity style={[styles.optionBtn, visibility === 'public' && styles.optionBtnActive]} onPress={() => setVisibility('public')}>
               <Text style={[styles.optionBtnText, visibility === 'public' && styles.optionBtnTextActive]}>{t('lobby.tablePublic')}</Text>
             </TouchableOpacity>
@@ -611,23 +896,23 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
           </View>
           <Text style={styles.hint}>{t('lobby.privateHint')}</Text>
 
-          <Text style={styles.label}>{t('lobby.maxParticipants')}</Text>
-          <View style={styles.countRow}>
-            {Array.from({ length: 5 }, (_, index) => index + 2).map((count) => (
+          <Text style={setupLabelStyle}>{t('lobby.maxParticipants')}</Text>
+          <View testID="lobby-config-max-participants-row" style={setupCountRowStyle}>
+            {Array.from({ length: 3 }, (_, index) => index + 2).map((count) => (
               <TouchableOpacity key={count} style={[styles.countBtn, maxParticipants === count && styles.countBtnActive]} onPress={() => setMaxParticipants(count)}>
                 <Text style={[styles.countBtnText, maxParticipants === count && styles.countBtnTextActive]}>{count}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowAdvanced((value) => !value)}>
+          <TouchableOpacity testID="lobby-config-advanced-toggle" style={styles.secondaryBtn} onPress={() => setShowAdvanced((value) => !value)}>
             <Text style={styles.secondaryBtnText}>{showAdvanced ? t('lobby.advancedToggleHide') : t('lobby.advancedToggleShow')}</Text>
           </TouchableOpacity>
 
           {showAdvanced && (
             <>
-              <Text style={styles.label}>{t('lobby.fractions')}</Text>
-              <View style={styles.row}>
+              <Text style={setupLabelStyle}>{t('lobby.fractions')}</Text>
+              <View style={setupRowStyle}>
                 <TouchableOpacity style={[styles.optionBtn, showFractions && styles.optionBtnActive]} onPress={() => setShowFractions(true)}>
                   <Text style={[styles.optionBtnText, showFractions && styles.optionBtnTextActive]}>{t('lobby.withFractions')}</Text>
                 </TouchableOpacity>
@@ -636,7 +921,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
                 </TouchableOpacity>
               </View>
               {showFractions && (
-                <View style={styles.chipWrap}>
+                <View style={setupChipWrapStyle}>
                   {ALL_FRACTION_KINDS.map((kind) => {
                     const active = fractionKinds.includes(kind);
                     return (
@@ -658,8 +943,8 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
                 </View>
               )}
 
-              <Text style={styles.label}>{t('lobby.possibleResults')}</Text>
-              <View style={styles.row}>
+              <Text style={setupLabelStyle}>{t('lobby.possibleResults')}</Text>
+              <View style={setupRowStyle}>
                 <TouchableOpacity style={[styles.optionBtn, showPossibleResults && styles.optionBtnActive]} onPress={() => setShowPossibleResults(true)}>
                   <Text style={[styles.optionBtnText, showPossibleResults && styles.optionBtnTextActive]}>{t('lobby.show')}</Text>
                 </TouchableOpacity>
@@ -668,8 +953,8 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>{t('lobby.solveExercise')}</Text>
-              <View style={styles.row}>
+              <Text style={setupLabelStyle}>{t('lobby.solveExercise')}</Text>
+              <View style={setupRowStyle}>
                 <TouchableOpacity style={[styles.optionBtn, showSolveExercise && styles.optionBtnActive]} onPress={() => setShowSolveExercise(true)}>
                   <Text style={[styles.optionBtnText, showSolveExercise && styles.optionBtnTextActive]}>{t('lobby.on')}</Text>
                 </TouchableOpacity>
@@ -678,38 +963,54 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>{t('lobby.turnTimer')}</Text>
-              <View style={styles.countRow}>
-                {(['off', '60', '90', 'custom'] as const).map((value) => (
-                  <TouchableOpacity key={value} style={[styles.timerChip, timerSetting === value && styles.optionBtnActive]} onPress={() => setTimerSetting(value)}>
+              <Text style={setupLabelStyle}>{t('lobby.turnTimer')}</Text>
+              <View style={styles.timerGrid}>
+                {(['off', '15', '60', '90', 'custom'] as const).map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.timerChip, timerSetting === value && styles.optionBtnActive]}
+                    onPress={() => setTimerSetting(value)}
+                  >
                     <Text style={[styles.optionBtnText, timerSetting === value && styles.optionBtnTextActive]}>
-                      {value === 'off' ? t('lobby.timerOff') : value === '60' ? t('lobby.timerMin') : value === '90' ? t('lobby.timerMinHalf') : t('lobby.timerCustom')}
+                      {value === 'off'
+                        ? t('lobby.timerOff')
+                        : value === '15'
+                          ? t('lobby.timerSec', { n: 15 })
+                          : value === '60'
+                            ? t('lobby.timerMin')
+                            : value === '90'
+                              ? t('lobby.timerMinHalf')
+                              : t('lobby.timerCustom')}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
               {timerSetting === 'custom' && (
-                <View style={styles.inputShell}>
-                  <TextInput
-                    style={styles.input}
-                    value={String(timerCustomSeconds)}
-                    onChangeText={(value) => setTimerCustomSeconds(Math.max(10, Math.min(600, Number(value.replace(/\D/g, '')) || 60)))}
-                    keyboardType="number-pad"
-                    textAlign="center"
-                  />
+                <View style={styles.timerCustomRow}>
+                  {customTimerSteppers.map((stepper) => (
+                    <View key={stepper.key} style={styles.timerStepper}>
+                      <Text style={styles.timerStepLabel}>{stepper.label}</Text>
+                      <View style={styles.timerStepRow}>
+                        <TouchableOpacity onPress={stepper.decrement} style={styles.timerStepBtn}>
+                          <Text style={styles.timerStepBtnTxt}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.timerStepVal}>{stepper.value}</Text>
+                        <TouchableOpacity onPress={stepper.increment} style={styles.timerStepBtn}>
+                          <Text style={styles.timerStepBtnTxt}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               )}
             </>
           )}
 
-          <Text style={styles.label}>{t('lobby.summaryTitle')}</Text>
-          <View style={styles.summaryBox}>
-            <Text style={[styles.summaryText, { textAlign: ta }]}>{summaryText}</Text>
-          </View>
+          <LobbySummarySection items={draftSummaryItems} isRTL={isRTL} t={t} />
           <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveConfiguration}>
             <Text style={styles.primaryBtnText}>{t('lobby.continueToRoom')}</Text>
           </TouchableOpacity>
-        </>
+        </View>
       )}
 
       {configured && (
@@ -742,10 +1043,18 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
                 />
                 <Text selectable style={styles.inviteLink}>{inviteLink || inviteSuffix}</Text>
                 <View style={styles.inviteActionsRow}>
-                  <TouchableOpacity style={styles.inviteBtn} onPress={async () => {
-                    const body = inviteLink || inviteSuffix;
-                    await Share.share({ message: body });
-                  }}>
+                  <TouchableOpacity
+                    style={[styles.inviteBtn, !privateInviteShareMessage && styles.inviteBtnDisabled]}
+                    disabled={!privateInviteShareMessage}
+                    onPress={async () => {
+                      if (!privateInviteShareMessage) return;
+                      try {
+                        await Share.share({ message: privateInviteShareMessage });
+                      } catch {
+                        // ignore user cancel / unavailable share target
+                      }
+                    }}
+                  >
                     <Text style={styles.inviteBtnText}>{t('lobby.share')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.inviteBtn, styles.inviteCopyBtn]} onPress={async () => {
@@ -772,6 +1081,8 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
             </View>
           ) : null}
 
+          <LobbySummarySection items={configuredSummaryItems} isRTL={isRTL} t={t} />
+
           <Text style={styles.label}>{t('lobby.playersInRoom', { count: players.length })}</Text>
           {players.map((player) => (
             <View key={player.id} style={styles.playerRow}>
@@ -781,33 +1092,61 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
             </View>
           ))}
 
-          {isHost && currentTable?.status !== 'countdown' && humanCount >= 2 && (
+          {isHost && humanCount >= 2 && (
             <TouchableOpacity style={styles.primaryBtn} onPress={startTableCountdown}>
-              <Text style={styles.primaryBtnText}>{t('lobby.countdownCta')}</Text>
+              <Text style={styles.primaryBtnText}>{t('lobby.startGame')}</Text>
             </TouchableOpacity>
           )}
 
           {isHost && humanCount === 1 && (
-            <TouchableOpacity
-              style={styles.secondaryPrimaryBtn}
-              onPress={async () => {
-                setStartingBot(true);
-                try {
-                  await startBotGame(difficulty, buildGameSettings());
-                } finally {
-                  setStartingBot(false);
-                }
-              }}
-            >
-              {startingBot ? <ActivityIndicator color="#fff" /> : <Text style={styles.secondaryPrimaryBtnText}>{t('lobby.startBotGame')}</Text>}
-            </TouchableOpacity>
+            <View style={styles.botStartBox}>
+              <Text style={[styles.botOfferInlineText, { textAlign: ta }]}>{t('lobby.botOfferInline')}</Text>
+              <Text style={[styles.label, styles.botDifficultyLabel]}>{t('lobby.botDifficultyLabel')}</Text>
+              <View style={styles.botDifficultyRow}>
+                {([
+                  ['easy', t('start.botEasy')],
+                  ['medium', t('start.botMedium')],
+                  ['hard', t('start.botHard')],
+                ] as const).map(([key, label]) => (
+                  <TouchableOpacity
+                    key={key}
+                    testID={`bot-difficulty-${key}`}
+                    style={[styles.timerChip, botDifficulty === key && styles.optionBtnActive]}
+                    onPress={() => setBotDifficulty(key)}
+                  >
+                    <Text style={[styles.optionBtnText, botDifficulty === key && styles.optionBtnTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.secondaryPrimaryBtn}
+                onPress={async () => {
+                  setStartingBot(true);
+                  try {
+                    await startBotGame(difficulty, buildGameSettings());
+                  } finally {
+                    setStartingBot(false);
+                  }
+                }}
+              >
+                {startingBot ? <ActivityIndicator color="#fff" /> : <Text style={styles.secondaryPrimaryBtnText}>{t('lobby.startBotGame')}</Text>}
+              </TouchableOpacity>
+            </View>
           )}
         </>
       )}
 
-      {error && (
+      {error && error !== t('game.countdownAlreadyRunning') && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+      {error === t('game.countdownAlreadyRunning') && (
+        <View style={styles.countdownBanner}>
+          <SlindaCoin size={52} spin />
+          <Text style={styles.countdownBannerText}>
+            {t('lobby.gameStartsSoon')}
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -815,106 +1154,133 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: brand.bg },
-  container: { padding: 24, paddingTop: 60, alignItems: 'center' },
+  scroll: { flex: 1, backgroundColor: ROOT_BG },
+  container: { padding: 24, paddingTop: 60, paddingBottom: 44, alignItems: 'center' },
   langRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' },
-  langLabel: { color: '#9CA3AF', fontSize: 12 },
-  langBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: brand.surface2 },
-  langBtnActive: { backgroundColor: brand.gold },
-  langBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  langBtnTextActive: { color: '#111827' },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 16, paddingVertical: 8, paddingHorizontal: 12 },
-  backBtnText: { color: brand.cyan, fontSize: 14, fontWeight: '600' },
+  langLabel: { color: TEXT_MUTE, fontSize: 12 },
+  langBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE },
+  langBtnActive: { backgroundColor: ACTION_GOLD, borderColor: GOLD_LINE_STRONG },
+  langBtnText: { color: TEXT_MAIN, fontWeight: '700', fontSize: 12 },
+  langBtnTextActive: { color: '#1a1207' },
+  backBtn: { alignSelf: 'flex-start', marginBottom: 16, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE },
+  backBtnAndroid: { alignSelf: 'flex-end' },
+  backBtnText: { color: ACTION_GOLD, fontSize: 14, fontWeight: '600' },
   logoWrap: { alignSelf: 'center', marginBottom: 12 },
-  title: { fontSize: 30, fontWeight: '800', color: '#F59E0B', marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
-  subtitle: { color: '#9CA3AF', fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'right' },
-  label: { color: '#D1D5DB', fontSize: 14, fontWeight: '600', alignSelf: 'stretch', marginTop: 16, marginBottom: 8 },
-  inputShell: { width: '100%', backgroundColor: '#D4A010', borderRadius: 18, padding: 3, marginBottom: 8 },
-  input: { width: '100%', backgroundColor: '#132238', borderWidth: 1, borderColor: 'rgba(255,240,180,0.22)', borderRadius: 15, paddingHorizontal: 16, paddingVertical: 12, color: '#FFF', fontSize: 16, fontWeight: '700' },
-  primaryBtn: { backgroundColor: brand.gold, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 12 },
+  title: { fontSize: 30, fontWeight: '800', color: ACTION_GOLD, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
+  subtitle: { color: TEXT_DIM, fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'right' },
+  label: { color: TEXT_MAIN, fontSize: 14, fontWeight: '600', alignSelf: 'stretch', marginTop: 16, marginBottom: 8 },
+  labelRtl: { textAlign: 'right' },
+  setupPanel: { width: '100%' },
+  setupPanelRtl: { alignItems: 'flex-end' },
+  inputShell: { width: '100%', backgroundColor: ACTION_GOLD_DARK, borderRadius: 18, padding: 2, marginBottom: 8 },
+  input: { width: '100%', backgroundColor: 'rgba(0,0,0,0.42)', borderWidth: 1, borderColor: 'rgba(255,240,180,0.16)', borderRadius: 15, paddingHorizontal: 16, paddingVertical: 12, color: TEXT_MAIN, fontSize: 16, fontWeight: '700' },
+  primaryBtn: { backgroundColor: ACTION_GOLD, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 12 },
   primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText: { color: '#111827', fontSize: 16, fontWeight: '700' },
-  secondaryBtn: { marginTop: 12 },
-  secondaryBtnText: { color: brand.cyan, fontSize: 14 },
-  hint: { color: '#94A3B8', fontSize: 12, marginTop: 4, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
+  primaryBtnText: { color: '#1a1207', fontSize: 16, fontWeight: '700' },
+  secondaryBtn: { width: '100%', marginTop: 12, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 14, borderWidth: 2, borderColor: '#A855F7', backgroundColor: 'rgba(168,85,247,0.18)', alignItems: 'center' },
+  secondaryBtnText: { color: '#DDD6FE', fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  hint: { color: TEXT_MUTE, fontSize: 12, marginTop: 4, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
   sectionHeaderRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  refreshBtn: { backgroundColor: 'rgba(34,211,238,0.15)', borderWidth: 1, borderColor: 'rgba(34,211,238,0.35)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  refreshBtnText: { color: '#67E8F9', fontSize: 16, fontWeight: '700' },
-  emptyTablesBox: { width: '100%', padding: 14, borderRadius: 12, backgroundColor: 'rgba(15,23,42,0.7)', borderWidth: 1, borderColor: 'rgba(148,163,184,0.2)' },
-  tableCard: { width: '100%', backgroundColor: 'rgba(15,23,42,0.78)', borderWidth: 1, borderColor: 'rgba(148,163,184,0.18)', borderRadius: 14, padding: 14, marginBottom: 10 },
+  refreshBtn: { backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  refreshBtnText: { color: ACTION_GOLD, fontSize: 16, fontWeight: '700' },
+  emptyTablesBox: { width: '100%', padding: 14, borderRadius: 16, backgroundColor: SURFACE, borderWidth: 1, borderColor: GOLD_LINE },
+  tableCard: { width: '100%', backgroundColor: SURFACE, borderWidth: 1, borderColor: GOLD_LINE, borderRadius: 16, padding: 14, marginBottom: 10 },
   tableTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  tableCode: { color: '#F8FAFC', fontSize: 24, fontWeight: '800', letterSpacing: 3 },
-  tableBadge: { color: '#082F49', backgroundColor: '#A5F3FC', fontSize: 11, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  tableBadgePrivate: { backgroundColor: '#FDE68A' },
-  tableHost: { color: '#E2E8F0', fontSize: 16, fontWeight: '700', marginTop: 10 },
-  tableMeta: { color: '#CBD5E1', fontSize: 13, marginTop: 4 },
-  tableMetaAccent: { color: '#FCD34D', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  tableCode: { color: TEXT_MAIN, fontSize: 24, fontWeight: '800', letterSpacing: 3 },
+  tableBadge: { color: '#2f2110', backgroundColor: 'rgba(245,210,122,0.22)', borderWidth: 1, borderColor: 'rgba(245,210,122,0.24)', fontSize: 11, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  tableBadgePrivate: { backgroundColor: 'rgba(163,71,5,0.34)', borderColor: 'rgba(245,210,122,0.16)', color: '#f7e7b3' },
+  tableHost: { color: TEXT_MAIN, fontSize: 16, fontWeight: '700', marginTop: 10 },
+  tableMeta: { color: TEXT_DIM, fontSize: 13, marginTop: 4 },
+  tableMetaAccent: { color: ACTION_GOLD, fontSize: 12, fontWeight: '700', marginTop: 4 },
   tableCountdownNotice: { lineHeight: 18 },
-  tableActionBtn: { marginTop: 12, backgroundColor: '#0F766E', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  tableActionBtnPrivate: { backgroundColor: '#B45309' },
-  tableActionBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  privateJoinCard: { width: '100%', marginTop: 8, padding: 14, borderRadius: 14, backgroundColor: 'rgba(30,41,59,0.88)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.28)' },
+  tableActionBtn: { marginTop: 12, backgroundColor: ACTION_GOLD, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  tableActionBtnPrivate: { backgroundColor: ACTION_AMBER },
+  tableActionBtnText: { color: '#1a1207', fontSize: 14, fontWeight: '700' },
+  tableActionBtnTextOnDark: { color: '#F8FAFC' },
+  privateJoinCard: { width: '100%', marginTop: 8, padding: 14, borderRadius: 16, backgroundColor: SURFACE_ALT, borderWidth: 1, borderColor: GOLD_LINE },
   privateJoinRoomCode: { color: '#FDE68A', fontSize: 26, fontWeight: '800', letterSpacing: 4, textAlign: 'center', marginBottom: 6 },
   row: { flexDirection: 'row', gap: 10, width: '100%', marginBottom: 8 },
-  optionBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
+  rowAndroidRtl: { flexDirection: 'row-reverse' },
+  optionBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, alignItems: 'center' },
   optionBtnActive: { backgroundColor: brand.gold },
-  optionBtnText: { color: '#D1D5DB', fontWeight: '700' },
-  optionBtnTextActive: { color: '#111827' },
+  optionBtnText: { color: TEXT_DIM, fontWeight: '700' },
+  optionBtnTextActive: { color: '#1a1207' },
   countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', justifyContent: 'center' },
-  countBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
+  countRowAndroidRtl: { flexDirection: 'row-reverse', justifyContent: 'flex-end' },
+  countBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, alignItems: 'center', justifyContent: 'center' },
   countBtnActive: { backgroundColor: brand.gold },
-  countBtnText: { color: '#E5E7EB', fontWeight: '700', fontSize: 16 },
-  countBtnTextActive: { color: '#111827' },
-  timerChip: { minWidth: 78, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
+  countBtnText: { color: TEXT_MAIN, fontWeight: '700', fontSize: 16 },
+  countBtnTextActive: { color: '#1a1207' },
+  timerGrid: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', gap: 8, marginBottom: 4, justifyContent: 'center' },
+  timerChip: { flexGrow: 1, flexBasis: '45%', paddingVertical: 10, borderRadius: 10, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, alignItems: 'center' },
+  timerCustomRow: { flexDirection: 'row', justifyContent: 'center', gap: 32, paddingVertical: 12, paddingHorizontal: 8 },
+  timerStepper: { alignItems: 'center', gap: 6 },
+  timerStepLabel: { color: TEXT_DIM, fontSize: 11, fontWeight: '700' },
+  timerStepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  timerStepBtn: { backgroundColor: SURFACE_SOFT, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: GOLD_LINE },
+  timerStepBtnTxt: { color: TEXT_MAIN, fontSize: 18, fontWeight: '700' },
+  timerStepVal: { color: TEXT_MAIN, fontSize: 24, fontWeight: '900', minWidth: 36, textAlign: 'center' },
   chipWrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 8 },
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(15,23,42,0.45)' },
+  chipWrapAndroidRtl: { flexDirection: 'row-reverse', justifyContent: 'flex-end' },
+  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: GOLD_LINE, backgroundColor: SURFACE_SOFT },
   chipActive: { borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.16)' },
-  chipText: { color: '#E2E8F0', fontWeight: '700' },
+  chipText: { color: TEXT_MAIN, fontWeight: '700' },
   chipTextActive: { color: '#FEF3C7' },
-  codeBox: { width: '100%', backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)' },
+  codeBox: { width: '100%', backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: GOLD_LINE_STRONG },
   codeLabel: { color: brand.gold, fontSize: 12, marginBottom: 4 },
-  codeValue: { fontSize: 36, fontWeight: '800', color: '#FFF', letterSpacing: 8 },
-  codeHint: { color: '#94A3B8', fontSize: 11, marginTop: 8 },
-  inviteBox: { marginTop: 12, width: '100%', backgroundColor: 'rgba(17,24,39,0.72)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(34,211,238,0.4)', padding: 10 },
-  inviteLabel: { color: brand.cyan, fontSize: 12, marginBottom: 6 },
+  codeValue: { fontSize: 36, fontWeight: '800', color: TEXT_MAIN, letterSpacing: 8 },
+  codeHint: { color: TEXT_MUTE, fontSize: 11, marginTop: 8 },
+  inviteBox: { marginTop: 12, width: '100%', backgroundColor: SURFACE_SOFT, borderRadius: 12, borderWidth: 1, borderColor: GOLD_LINE, padding: 10 },
+  inviteLabel: { color: ACTION_GOLD, fontSize: 12, marginBottom: 6 },
   privateInviteCode: { color: '#FDE68A', fontSize: 28, fontWeight: '800', textAlign: 'center', letterSpacing: 4, marginBottom: 8 },
-  inviteLink: { color: '#E2E8F0', fontSize: 12, textAlign: 'left', marginTop: 8 },
+  inviteLink: { color: TEXT_MAIN, fontSize: 12, textAlign: 'left', marginTop: 8 },
   inviteActionsRow: { width: '100%', flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
-  inviteBtn: { backgroundColor: brand.gold, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  inviteBtn: { backgroundColor: ACTION_GOLD, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
   inviteBtnDisabled: { opacity: 0.5 },
-  inviteCopyBtn: { backgroundColor: '#0D9488' },
-  inviteBtnText: { color: '#111827', fontWeight: '700', fontSize: 12 },
-  inviteCopyBtnLabel: { color: '#FFF' },
+  inviteCopyBtn: { backgroundColor: ACTION_AMBER },
+  inviteBtnText: { color: '#1a1207', fontWeight: '700', fontSize: 12 },
+  inviteCopyBtnLabel: { color: '#F8FAFC' },
   copyFeedbackText: { color: '#A7F3D0', fontSize: 11, marginTop: 8, textAlign: 'center' },
-  playerRow: { flexDirection: 'row', alignItems: 'center', width: '100%', backgroundColor: 'rgba(55,65,81,0.5)', borderRadius: 10, padding: 12, marginBottom: 6 },
-  playerName: { color: '#E2E8F0', fontSize: 16, flex: 1, textAlign: 'right' },
+  playerRow: { flexDirection: 'row', alignItems: 'center', width: '100%', backgroundColor: 'rgba(0,0,0,0.24)', borderRadius: 12, borderWidth: 1, borderColor: GOLD_LINE, padding: 12, marginBottom: 6 },
+  playerName: { color: TEXT_MAIN, fontSize: 16, flex: 1, textAlign: 'right' },
   hostBadge: { backgroundColor: brand.gold, color: '#111827', fontSize: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
   disconnectedBadge: { color: '#EF4444', fontSize: 10 },
-  secondaryPrimaryBtn: { backgroundColor: '#0F766E', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, alignItems: 'center', width: '100%' },
+  botStartBox: { width: '100%', marginTop: 8 },
+  botOfferInlineText: { color: '#DDD6FE', fontSize: 13, lineHeight: 20, marginBottom: 10 },
+  botDifficultyLabel: { marginTop: 0, marginBottom: 8, textAlign: 'right' },
+  botDifficultyRow: { flexDirection: 'row', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 2 },
+  secondaryPrimaryBtn: { backgroundColor: ACTION_AMBER, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, alignItems: 'center', width: '100%' },
   secondaryPrimaryBtnText: { color: '#F8FAFC', fontSize: 15, fontWeight: '700' },
-  summaryBox: { width: '100%', backgroundColor: 'rgba(15,23,42,0.75)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(250,204,21,0.35)', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 4 },
-  summaryText: { color: '#E2E8F0', fontSize: 13, fontWeight: '600', lineHeight: 21, textAlign: 'right' },
-  errorBox: { marginTop: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.2)', borderRadius: 10, width: '100%' },
+  summarySection: { width: '100%', marginTop: 16, marginBottom: 4 },
+  summarySectionTitle: { color: TEXT_MAIN, fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  summaryGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryCard: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 150, borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12 },
+  summaryCardTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  summaryCardValue: { fontSize: 18, fontWeight: '800', lineHeight: 22 },
+  summaryCardDetail: { fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 8 },
+  errorBox: { marginTop: 16, padding: 12, backgroundColor: 'rgba(127,29,29,0.4)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(248,113,113,0.24)', width: '100%' },
   errorText: { color: '#FCA5A5', textAlign: 'right' },
-  infoBox: { width: '100%', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(34,211,238,0.35)', backgroundColor: 'rgba(34,211,238,0.08)', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 },
-  infoBoxMuted: { borderColor: 'rgba(148,163,184,0.28)', backgroundColor: 'rgba(51,65,85,0.2)' },
-  infoBoxReady: { borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(245,158,11,0.12)' },
-  infoBoxCountdown: { borderColor: 'rgba(34,211,238,0.45)', backgroundColor: 'rgba(8,145,178,0.14)' },
-  infoText: { color: brand.text, fontSize: 12, textAlign: 'right' },
+  infoBox: { width: '100%', borderRadius: 12, borderWidth: 1, borderColor: GOLD_LINE, backgroundColor: 'rgba(125, 86, 14, 0.2)', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 },
+  infoBoxMuted: { borderColor: 'rgba(245,210,122,0.12)', backgroundColor: SURFACE_SOFT },
+  infoBoxReady: { borderColor: GOLD_LINE, backgroundColor: 'rgba(125, 86, 14, 0.24)' },
+  infoBoxCountdown: { borderColor: 'rgba(245,210,122,0.24)', backgroundColor: 'rgba(163,71,5,0.22)' },
+  infoText: { color: TEXT_MAIN, fontSize: 12, textAlign: 'right' },
   infoTextStrong: { color: '#F8FAFC', fontSize: 14, fontWeight: '800', textAlign: 'right', marginBottom: 4 },
-  toastBox: { width: '100%', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(56,189,248,0.45)', backgroundColor: 'rgba(15,23,42,0.92)', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 },
-  toastText: { color: '#E0F2FE', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  toastBox: { width: '100%', borderRadius: 12, borderWidth: 1, borderColor: GOLD_LINE, backgroundColor: SURFACE_ALT, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 },
+  toastText: { color: ACTION_GOLD, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  countdownBanner: { width: '100%', borderRadius: 16, borderWidth: 2, borderColor: 'rgba(34,197,94,0.7)', backgroundColor: 'rgba(20,83,45,0.85)', paddingVertical: 20, paddingHorizontal: 16, marginTop: 16, alignItems: 'center', gap: 12 },
+  countdownBannerText: { color: '#86EFAC', fontSize: 20, fontWeight: '900', textAlign: 'center', lineHeight: 28 },
   rulesLinkBtn: { marginTop: 8, marginBottom: 4, paddingVertical: 8 },
-  rulesLinkText: { color: brand.cyan, fontSize: 14, fontWeight: '700', textAlign: 'right', textDecorationLine: 'underline' },
+  rulesLinkText: { color: ACTION_GOLD, fontSize: 14, fontWeight: '700', textAlign: 'right', textDecorationLine: 'underline' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#0f172a', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(250,204,21,0.35)', padding: 18 },
+  modalCard: { backgroundColor: SURFACE_ALT, borderRadius: 20, borderWidth: 1, borderColor: GOLD_LINE, padding: 18 },
   modalTitle: { color: '#F8FAFC', fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
   rulesModalLogoWrap: { alignItems: 'center', marginBottom: 12 },
   rulesSectionTitle: { color: '#FCD34D', fontSize: 14, fontWeight: '800', marginBottom: 8, marginTop: 12 },
-  rulesLine: { color: '#E2E8F0', fontSize: 13, lineHeight: 20, marginBottom: 4 },
-  rulesModalCloseBtn: { marginTop: 12, backgroundColor: '#334155', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  rulesLine: { color: TEXT_MAIN, fontSize: 13, lineHeight: 20, marginBottom: 4 },
+  rulesModalCloseBtn: { marginTop: 12, backgroundColor: SURFACE_SOFT, borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: GOLD_LINE },
   rulesModalCloseBtnText: { color: '#F8FAFC', fontWeight: '700' },
-  connectingCard: { backgroundColor: '#0f172a', borderRadius: 18, borderWidth: 2, borderColor: 'rgba(253,224,71,0.55)', paddingVertical: 26, paddingHorizontal: 24, alignItems: 'center' },
+  connectingCard: { backgroundColor: SURFACE_ALT, borderRadius: 18, borderWidth: 1.5, borderColor: GOLD_LINE_STRONG, paddingVertical: 26, paddingHorizontal: 24, alignItems: 'center' },
   connectingTitle: { color: '#FDE047', fontSize: 20, fontWeight: '800', marginTop: 16, marginBottom: 6 },
-  connectingBody: { color: '#CBD5E1', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  connectingBody: { color: TEXT_DIM, fontSize: 13, textAlign: 'center', lineHeight: 20 },
 });

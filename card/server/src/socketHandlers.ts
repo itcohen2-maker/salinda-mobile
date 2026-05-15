@@ -53,6 +53,7 @@ import {
   clearRoomCountdown,
   syncRoomTableStatus,
   getRoomTables,
+  promoteConnectedHumanHost,
 } from './roomManager';
 import {
   closeClassSession,
@@ -174,6 +175,14 @@ function emitTablesUpdated(io: IOServer, socket?: IOSocket): void {
     return;
   }
   io.emit('tables_updated', payload);
+}
+
+async function hydrateRoomTableTheme(io: IOServer, room: Room, userId?: string): Promise<void> {
+  if (!userId) return;
+  const theme = await fetchPlayerActiveTableTheme(userId);
+  if (room.tableTheme === theme) return;
+  room.tableTheme = theme;
+  emitTablesUpdated(io);
 }
 
 function clearBotOfferTimer(room: Room): void {
@@ -317,6 +326,9 @@ async function handleActiveGameExit(
   const remainingHumans = room.players.filter(
     (p) => !p.isBot && p.isConnected && p.id !== leavingPlayerId,
   );
+  if (remainingHumans.length > 0) {
+    promoteConnectedHumanHost(room, remainingHumans[0]?.id ?? null);
+  }
 
   if (remainingHumans.length >= 2) {
     // 3-player+ game: eliminate the exiting player and continue
@@ -389,6 +401,12 @@ function broadcastState(io: IOServer, room: Room): void {
 
 function scheduleRoomTurnTimer(io: IOServer, room: Room): void {
   clearRoomTurnTimer(room);
+  // Don't fire turn timers while waiting for the survivor to make a disconnect choice —
+  // otherwise a race-condition draw_card can trigger an AFK cycle on the absent player.
+  if (room.disconnectedPlayerId) {
+    const connectedHumans = room.players.filter((p) => !p.isBot && p.isConnected);
+    if (connectedHumans.length === 1) return;
+  }
   const deadlineAt = room.state?.overflowSwapDeadlineAt ?? room.state?.turnDeadlineAt ?? null;
   if (!deadlineAt) return;
   const ms = Math.max(0, deadlineAt - Date.now());
@@ -759,12 +777,15 @@ function runBotStep(io: IOServer, room: Room): void {
         const topCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
         const underTopCard = discardPile.length > 1 ? discardPile[discardPile.length - 2] : null;
         const choice = pickBotOverflowSwap(hand, topCard, underTopCard);
-        if (choice) {
-          applyBotState(io, room, (state) =>
-            resolveOverflowSwap(state, choice.handCardId, choice.pileChoice),
-          );
-          break;
-        }
+        applyBotState(io, room, (state) =>
+          resolveOverflowSwap(
+            state,
+            choice?.handCardId ?? null,
+            choice?.pileChoice ?? 'random',
+            true,
+          ),
+        );
+        break;
       }
       emitBotStepToast(io, room, (locale, name) =>
         botNarrationText(locale, { kind: 'beginTurn', name }),
@@ -817,12 +838,10 @@ function maybeRecordMatch(room: Room): void {
   room.matchRecorded = true;
 
   const state = room.state;
-  const humanPlayers = room.players.filter((p) => !p.isBot);
+  const humanPlayers = state.players.filter((p) => !p.isBot);
   if (humanPlayers.length === 0) return; // solo-bot practice — nothing to record
 
   const gameWinnerId = state.winner?.id ?? null;
-  const coinsEarned = state.courageCoins ?? 0;
-
   // Only record authenticated players; skip guests (supabaseUserId is undefined)
   const authenticatedPlayers = humanPlayers.filter((p) => !!p.supabaseUserId);
   if (authenticatedPlayers.length === 0) return; // all guests — nothing to record
@@ -835,7 +854,12 @@ function maybeRecordMatch(room: Room): void {
       : isWinner
         ? RATING_WIN
         : -RATING_LOSS;
-    return { playerId: p.supabaseUserId!, delta, abandoned, coinsEarned: abandoned ? 0 : coinsEarned };
+    return {
+      playerId: p.supabaseUserId!,
+      delta,
+      abandoned,
+      coinsEarned: abandoned ? 0 : Math.max(0, Math.floor(Number(p.courageCoins ?? 0) || 0)),
+    };
   });
 
   // Resolve winnerId to supabase UID for the match record
@@ -914,7 +938,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     emitTablesUpdated(io, socket);
   });
 
-  socket.on('create_table', async ({ playerName, locale }) => {
+  socket.on('create_table', ({ playerName, locale }) => {
     if (rateLimited()) return;
     const name = sanitizePlayerName(playerName);
     if (!name) {
@@ -925,9 +949,6 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const { room, playerId } = createRoom(name, socket.id, loc);
     const creatingPlayer = room.players.find((p) => p.id === playerId);
     if (creatingPlayer) creatingPlayer.supabaseUserId = socket.data.userId ?? undefined;
-    if (socket.data.userId) {
-      room.tableTheme = await fetchPlayerActiveTableTheme(socket.data.userId);
-    }
     socket.join(room.code);
     socket.emit('room_created', {
       roomCode: room.code,
@@ -938,6 +959,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
     emitTablesUpdated(io);
+    void hydrateRoomTableTheme(io, room, socket.data.userId);
   });
 
   socket.on('configure_table', ({ visibility, maxParticipants, difficulty, gameSettings }) => {
@@ -1280,8 +1302,16 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     reply({ ok: true, playerView });
   });
 
-  socket.on('continue_vs_bot', (ack) => {
+  socket.on('continue_vs_bot', (payloadOrAck, maybeAck) => {
     if (rateLimited()) return;
+    const payload =
+      typeof payloadOrAck === 'function' || payloadOrAck == null
+        ? undefined
+        : payloadOrAck;
+    const ack =
+      typeof payloadOrAck === 'function'
+        ? payloadOrAck
+        : maybeAck;
     const reply = (result: ContinueVsBotAck) => {
       if (typeof ack === 'function') ack(result);
     };
@@ -1315,10 +1345,42 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
 
+    const requestedDifficulty = payload?.difficulty != null
+      ? normalizeBotDifficulty(payload.difficulty)
+      : room.state.hostGameSettings.botDifficulty ?? 'medium';
+    if (!BOT_DIFF_LEVELS.includes(requestedDifficulty)) {
+      const message = t(loc, 'game.invalidBotDifficulty');
+      socket.emit('error', { message });
+      reply({ ok: false, message });
+      return;
+    }
+
+    const botName = target.locale === 'he' ? 'בוט' : 'Bot';
     target.isBot = true;
     target.isConnected = true;
     target.isHost = false;
-    target.name = target.locale === 'he' ? 'בוט' : 'Bot';
+    target.name = botName;
+    // Sync room.state.players — it's a separate array created by spread in startGame,
+    // so mutating room.players alone leaves isBot=false in the game engine.
+    const stateTarget = room.state.players.find((p) => p.id === target.id);
+    if (stateTarget) {
+      stateTarget.isBot = true;
+      stateTarget.isConnected = true;
+      stateTarget.isHost = false;
+      stateTarget.name = botName;
+    }
+    room.state = {
+      ...room.state,
+      hostGameSettings: {
+        ...room.state.hostGameSettings,
+        botDifficulty: requestedDifficulty,
+      },
+    };
+    room.configuredGameSettings = {
+      ...(room.configuredGameSettings ?? {}),
+      botDifficulty: requestedDifficulty,
+    };
+    promoteConnectedHumanHost(room, playerId);
     clearRoomDisconnectGrace(room);
     room.state = withOnlineTurnDeadline(room.state);
     room.lastActivity = Date.now();
@@ -1481,6 +1543,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     if (!canAct.ok) return;
     applyAction(io, socket, room, playerId, (state) => {
       if (state.phase !== 'turn-transition') return { error: { key: 'game.invalidPhase' } };
+      if ((state as any).wildAttemptedThisTurn) return { error: { key: 'game.invalidAction' } };
       const cp = state.players[state.currentPlayerIndex];
       if (!cp) return { error: { key: 'game.invalidAction' } };
       const replacedCard = cp.hand.find((c) => c.id === cardId);
@@ -1495,7 +1558,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
         ),
         discardPile: [...state.discardPile, replacedCard],
         wildAttemptedThisTurn: true,
-      };
+      } as any;
     });
   });
 
@@ -1508,6 +1571,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     if (!canAct.ok) return;
     applyAction(io, socket, room, playerId, (state) => {
       if (state.phase !== 'turn-transition') return { error: { key: 'game.invalidPhase' } };
+      if ((state as any).slindaAttemptedThisTurn) return { error: { key: 'game.invalidAction' } };
       const cp = state.players[state.currentPlayerIndex];
       if (!cp) return { error: { key: 'game.invalidAction' } };
       const replacedCard = cp.hand.find((c) => c.id === cardId);
@@ -1522,7 +1586,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
         ),
         discardPile: [...state.discardPile, replacedCard],
         slindaAttemptedThisTurn: true,
-      };
+      } as any;
     });
   });
 

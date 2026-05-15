@@ -35,7 +35,6 @@ import { useLocale } from '../i18n/LocaleContext';
 import { playSfx } from '../audio/sfx';
 
 const DEFAULT_SOCKET_PORT = 3001;
-
 const DEFAULT_FRACTION_KINDS: Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
 const ONLINE_LAST_MOVE_SUMMARY_SUPPRESS_KEYS = new Set([
   'toast.turnTimeoutEnded',
@@ -43,6 +42,19 @@ const ONLINE_LAST_MOVE_SUMMARY_SUPPRESS_KEYS = new Set([
   'toast.playerEliminatedAfk',
   'toast.eliminatedTurnTo',
 ]);
+
+function normalizeOnlineTimerSetting(timerSetting: HostGameSettings['timerSetting'] | undefined): HostGameSettings['timerSetting'] {
+  return timerSetting ?? 'off';
+}
+
+function normalizeOnlineTurnDeadlineAt(
+  deadlineAt: number | null | undefined,
+  timerSetting: HostGameSettings['timerSetting'] | undefined,
+): number | null {
+  void timerSetting;
+  if (deadlineAt == null) return null;
+  return deadlineAt;
+}
 
 /** hostUri של Expo במצב Tunnel — לא מעביר TCP לפורט 3001 על המחשב; חיבור ל-socket ייתקע ב-timeout */
 function isLikelyExpoTunnelRelayHost(host: string): boolean {
@@ -244,7 +256,7 @@ export interface MultiplayerContextValue {
   clearReconnectNotice: () => void;
   disconnectChoice: DisconnectChoiceState | null;
   clearDisconnectChoice: () => void;
-  continueVsBot: () => Promise<boolean>;
+  continueVsBot: (difficulty?: BotDifficulty) => Promise<boolean>;
   acceptTechnicalVictory: () => void;
   classroomState: ClassroomSocketState | null;
   createClassSession: (payload: CreateClassSessionPayload) => void;
@@ -306,6 +318,12 @@ function playerViewToGameState(view: PlayerView): any {
       afkWarnings: p.afkWarnings ?? 0,
       isEliminated: p.isEliminated ?? false,
       isSpectator: p.isSpectator ?? false,
+      courageMeterPercent: p.courageMeterPercent ?? (p.id === view.myPlayerId ? view.courageMeterPercent ?? 0 : 0),
+      courageMeterStep: p.courageMeterStep ?? (p.id === view.myPlayerId ? view.courageMeterStep ?? 0 : 0),
+      courageDiscardSuccessStreak: p.courageDiscardSuccessStreak ?? 0,
+      courageRewardPulseId: p.courageRewardPulseId ?? (p.id === view.myPlayerId ? view.courageRewardPulseId ?? 0 : 0),
+      courageCoins: p.courageCoins ?? (p.id === view.myPlayerId ? view.courageCoins ?? 0 : 0),
+      lastCourageCoinsAwarded: p.lastCourageCoinsAwarded ?? false,
     };
   });
   const drawPileFake = Array.from({ length: view.deckCount }, (_, i) => ({ id: `deck-${i}`, type: 'number' as const, value: 0 }));
@@ -317,6 +335,8 @@ function playerViewToGameState(view: PlayerView): any {
     timerSetting: 'off' as const,
     timerCustomSeconds: 60,
   };
+  const normalizedTimerSetting = normalizeOnlineTimerSetting(gs.timerSetting);
+  const normalizedTurnDeadlineAt = normalizeOnlineTurnDeadlineAt(view.turnDeadlineAt, gs.timerSetting);
   const hasBotPlayer = view.players.some((p) => p.isBot);
   const botPlayerIds = view.players.filter((p) => p.isBot).map((p) => p.id);
   const rawDiff = gs.botDifficulty as string | undefined;
@@ -411,21 +431,25 @@ function playerViewToGameState(view: PlayerView): any {
     enabledOperators: (normalizedEnabledOperators.length ? normalizedEnabledOperators : stageCfg.enabledOperators) as Operation[],
     allowNegativeTargets: gs.allowNegativeTargets ?? stageCfg.allowNegativeTargets,
     abVariant: gs.abVariant ?? (view.difficulty === 'full' ? 'variant_0_15_plus' : 'control_0_12_plus'),
-    timerSetting: gs.timerSetting,
+    timerSetting: normalizedTimerSetting,
     timerCustomSeconds: gs.timerCustomSeconds,
     winner: view.winner ? { id: 0, name: view.winner.name, hand: [], calledLolos: false } : null,
     message: view.message,
     openingDrawId: view.openingDrawId,
-    turnDeadlineAt: view.turnDeadlineAt,
+    turnDeadlineAt: normalizedTurnDeadlineAt,
     overflowSwapPending: view.overflowSwapPending ?? false,
     overflowSwapDeadlineAt: view.overflowSwapDeadlineAt ?? null,
     overflowSwapCanUseUnderTop: view.overflowSwapCanUseUnderTop ?? false,
     overflowSwapStage: view.overflowSwapStage ?? null,
     overflowSwapSelectedPileChoice: view.overflowSwapSelectedPileChoice ?? null,
     overflowSwapSelectedHandCardId: view.overflowSwapSelectedHandCardId ?? null,
+    slindaAttemptedThisTurn: view.slindaAttemptedThisTurn ?? false,
+    wildAttemptedThisTurn: view.wildAttemptedThisTurn ?? false,
     roundsPlayed: view.roundsPlayed ?? 0,
     notifications: [],
     moveHistory: [],
+    currentTurnPlayedCards: [],
+    lastTurnPlayedCards: [],
     suppressIdenticalOverlayOnline: false,
     hostBotDifficulty,
     tournamentTable,
@@ -692,7 +716,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       );
     });
     socket.on('player_joined', ({ players: p }) => {
-      const mapped = p.map((x: any) => ({
+      const mapped: LobbyPlayer[] = p.map((x: any): LobbyPlayer => ({
         id: x.id,
         name: x.name,
         isHost: x.isHost,
@@ -703,15 +727,15 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       const pid = playerIdRef.current;
       const me = pid ? p.find((x: { id: string }) => x.id === pid) : null;
       if (me) setIsHost(!!me.isHost);
-      const currentHumanPlayers = mapped.filter((player) => !player.isBot);
+      const currentHumanPlayers = mapped.filter((player: LobbyPlayer) => !player.isBot);
       const previousHumanIds = prevHumanPlayerIdsRef.current;
       const prev = previousHumanIds.length;
       const curr = currentHumanPlayers.length;
-      const newcomers = currentHumanPlayers.filter((player) => !previousHumanIds.includes(player.id));
+      const newcomers = currentHumanPlayers.filter((player: LobbyPlayer) => !previousHumanIds.includes(player.id));
       // הצטרפות שחקן חדש (לא הבוט, לא אנחנו): מנגן צליל ומציג התראה למארח וליתר השחקנים הקיימים.
       if (curr > prev && prev >= 1) {
-        const newcomer = newcomers.find((player) => player.id !== pid)
-          ?? currentHumanPlayers.find((player) => player.id !== pid)
+        const newcomer = newcomers.find((player: LobbyPlayer) => player.id !== pid)
+          ?? currentHumanPlayers.find((player: LobbyPlayer) => player.id !== pid)
           ?? newcomers[0]
           ?? currentHumanPlayers[0];
         const display = newcomer?.name ?? (localeRef.current === 'he' ? 'שחקן חדש' : 'A new player');
@@ -724,7 +748,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
           void playSfx('success', { cooldownMs: 400, volumeOverride: 0.26 });
         }
       }
-      prevHumanPlayerIdsRef.current = currentHumanPlayers.map((player) => player.id);
+      prevHumanPlayerIdsRef.current = currentHumanPlayers.map((player: LobbyPlayer) => player.id);
       prevPlayerCountRef.current = curr;
     });
     socket.on('lobby_status', (data: LobbyStatusState) => {
@@ -798,6 +822,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       setReconnectNotice(null);
       setDisconnectChoice((current) => {
         if (!current) return null;
+        if (view.phase === 'game-over') return null;
         const reconnectNow = view.players.some((p) => p.id === current.playerId && p.isConnected && !p.isBot);
         return reconnectNow ? null : current;
       });
@@ -981,7 +1006,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     });
   }, [locale]);
 
-  const continueVsBot = useCallback(() => {
+  const continueVsBot = useCallback((difficulty?: BotDifficulty) => {
     const socket = socketRef.current;
     if (!socket || !socket.connected) {
       const message = locale === 'he'
@@ -990,6 +1015,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       setError(message);
       return Promise.resolve(false);
     }
+    const payload = difficulty ? { difficulty } : undefined;
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const timeout = setTimeout(() => {
@@ -998,7 +1024,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
         setError(locale === 'he' ? 'השרת לא הגיב. נסו שוב.' : 'Server did not respond. Please try again.');
         resolve(false);
       }, 7000);
-      socket.emit('continue_vs_bot', (ack: ContinueVsBotAck) => {
+      socket.emit('continue_vs_bot', payload, (ack: ContinueVsBotAck) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);

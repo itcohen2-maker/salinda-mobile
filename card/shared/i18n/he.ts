@@ -7,6 +7,8 @@ const heLateOverrides: Record<string, string> = {
   'start.wheel.beginnerStage': 'רמת תרגול (A-H)',
   'start.wheel.beginnerStageHelp':
     'A–D: חיבור וחיסור — A/B על קלפים 0–12, C/D על 0–25. E–H: כפל וחילוק — E/F על 0–12, G/H על 0–25. השורה מתחת לכפתורים מסכמת את הבחירה.',
+  'lobby.creatingTableTitle': 'יוצרים שולחן',
+  'lobby.creatingTableBody': 'עוד רגע — פותחים עבורך שולחן ומעבירים אותך ללובי…',
 };
 
 export const he: Record<string, string> = {
@@ -189,6 +191,7 @@ export const he: Record<string, string> = {
   'lobby.fractions': 'שברים',
   'lobby.withFractions': 'עם שברים',
   'lobby.noFractions': 'בלי שברים',
+  'lobby.operators': 'אופרטורים',
   'lobby.possibleResults': 'תוצאות אפשריות',
   'lobby.show': 'הצג',
   'lobby.hide': 'הסתר',
@@ -204,7 +207,11 @@ export const he: Record<string, string> = {
   'lobby.botDifficultyLabel': 'רמת בוט (מול בוט)',
   'lobby.timerCustomHint': 'זמן לתור',
   'lobby.summaryTitle': 'סיכום לפני התחלה (כל השחקנים)',
+  'lobby.summary.access': 'גישה',
+  'lobby.summary.activeFractions': 'שברים פעילים',
+  'lobby.summary.removedFractions': 'הוסרו: {{value}}',
   'lobby.startGame': 'התחל משחק',
+  'lobby.gameStartsSoon': 'המשחק מיד יתחיל',
   'lobby.minPlayers': 'נדרשים לפחות 2 שחקנים כדי להתחיל',
   'lobby.waitHost': 'מחכים שהמארח יתחיל את המשחק… ההגדרות יופיעו אצל כולם עם תרחיש המשחק.',
   'lobby.summary.difficulty': 'קושי: {{value}}',
@@ -263,6 +270,7 @@ export const he: Record<string, string> = {
   'mp.playerEliminated': '{{name}} עזב/ה — המשחק ממשיך',
   'mp.opponentDisconnectChoiceTitle': '{{name}} התנתק/ה מהמשחק',
   'mp.acceptTechnicalVictory': 'קבל ניצחון טכני',
+  'mp.continueVsBot': 'המשך מול בוט',
   'mp.eliminatedReconnect': 'אין אפשרות חזרה — נסה שולחן אחר',
   'lobby.waitingRoomTitle': 'לובי השולחן',
   'lobby.waitingRoomHint': 'מחכים לשחקנים שיצטרפו לשולחן.',
@@ -804,7 +812,7 @@ export const he: Record<string, string> = {
   'start.advancedSetup.modalTitle': 'הגדרות משחק מלאות',
   'start.advancedSetup.modalLead': 'מד ההצטיינות יתמלא כש: 1. תבנו תרגיל עם כל 3 תוצאות הקוביות. 2. תצליחו להיפטר מקלף 2 תורות ברצף. 3. תגלגלו שלישייה. כך תצברו מטבעות.',
   'start.advancedSetup.sectionPlayModeHeading': 'משחק מול בוט או משחק מקומי',
-  'start.advancedSetup.sectionPlayModeIntro': '',
+  'start.advancedSetup.sectionPlayModeIntro': 'בחרו אם הסשן יישאר מקומי, יעבור לאונליין או יוסיף יריב בוט.',
   'start.advancedSetup.botLevelsHint':
     'רמת הבוט ושם הבוט חלים כשבוחרים «מול בוט» בגלגל הראשי; אפשר לכוון כאן מראש.',
   'start.advancedSetup.sectionStageHeading': '1. רמת תרגול',
@@ -822,7 +830,7 @@ export const he: Record<string, string> = {
   'start.advancedSetup.hint.solveExerciseRow':
     'פתרון תרגיל: רמז איך להגיע ליעד. דורש ש«תוצאות אפשריות» יופעל — אחרת הכפתור כבוי.',
   'start.advancedSetup.hint.timerOptions':
-    'כבוי: בלי ספירה לאחור. 30 שניות / דקה: זמן קבוע לבניית משוואה. מותאם: בוחרים שניות בחלון; ביטול מחזיר לטיימר שהיה לפני שנכנסתם ל«מותאם» (אם נכנסתם ממצב אחר).',
+    'כבוי: בלי ספירה לאחור. 30 שניות / דקה: זמן קבוע לבניית משוואה. מותאם: בוחרים דקות ושניות; ביטול מחזיר לטיימר שהיה לפני שנכנסתם ל«מותאם» (אם נכנסתם ממצב אחר).',
   'start.advancedSetup.fractionKindsTitle': 'אילו שברים בחבילה (כש«עם שברים»)',
   'start.advancedSetup.stagePicker.sectionTitle': 'רמת תרגול',
   'start.advancedSetup.stagePicker.intro':
@@ -879,7 +887,7 @@ export const he: Record<string, string> = {
   'start.wheel.operators': 'סימנים במשחק',
   'start.wheel.timerRow': 'טיימר',
   'start.wheel.guidanceRow': 'טיפים והסברים',
-  'start.customTimerMinSec': "{{sec}} שנ' {{min}} דק'",
+  'start.customTimerMinSec': "{{min}} דק' {{sec}} שנ'",
   'start.customTimerSecOnly': "{{sec}} שנ'",
   'start.timerPickerSec': 'שנ׳',
   'start.timerPickerMin': 'דק׳',

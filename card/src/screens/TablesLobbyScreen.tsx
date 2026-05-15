@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  Image,
   ImageBackground,
   Platform,
   Pressable,
@@ -11,9 +12,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { HostGameSettings, LobbyTableSummary, LobbyTableTheme } from '../../shared/types';
+import type { AppLocale } from '../../shared/i18n';
+import type { Fraction, HostGameSettings, LobbyTableSummary, LobbyTableTheme } from '../../shared/types';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
+import { useLocale } from '../i18n/LocaleContext';
+import { getScreenSafeTop } from '../theme/screenInsets';
 
 const BG_IMAGE = require('../../assets/bg.jpg');
+const LOBBY_LOGO = require('../../assets/branding/salinda-puzzle-game-logo.png');
 
 type LobbyFilter = 'all' | 'easy' | 'full' | 'open' | 'private';
 
@@ -23,6 +29,7 @@ interface TablesLobbyScreenProps {
   headerAccessory?: React.ReactNode;
   onBack?: () => void;
   onCreateTable: () => void;
+  onEnterCode?: () => void;
   onJoinTable: (table: LobbyTableSummary) => void;
   onOpenRules: () => void;
   onPlayerNameChange: (value: string) => void;
@@ -32,57 +39,219 @@ interface TablesLobbyScreenProps {
   tables: LobbyTableSummary[];
 }
 
-const GOLD_1 = '#f5d27a';
-const GOLD_2 = '#c9a55a';
-const INK = '#f5f1e6';
-const INK_DIM = '#b9b0a0';
-const INK_MUTE = '#8a8275';
-const LINE = 'rgba(245, 210, 122, 0.18)';
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
-const THEME_FELT: Record<LobbyTableTheme, [string, string]> = {
-  classic: ['#122440', '#060c1c'],
-  royal: ['#6b1818', '#2a0606'],
-  forest: ['#0f4a36', '#03251a'],
-  ocean: ['#1a3a8a', '#0a1c4a'],
+const GOLD = '#f5d27a';
+const TEXT = '#f5f1e6';
+const TEXT_DIM = '#b9b0a0';
+const TEXT_MUTE = '#8a8275';
+const ROOT_BG = '#0a0d14';
+const SURFACE = 'rgba(20,15,8,0.76)';
+const SURFACE_SOFT = 'rgba(0,0,0,0.4)';
+const LINE = 'rgba(245,210,122,0.18)';
+const MAX_TABLE_SLOTS = 4;
+const DEFAULT_FRACTION_KINDS: readonly Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
+const DEFAULT_OPERATORS: readonly string[] = ['+', '-', 'x', '÷'];
+
+function formatOperators(ops: string[]): string {
+  return ops.map((op) => (op === 'x' ? '×' : op === '÷' ? '÷' : op)).join(', ');
+}
+
+function usesDefaultOperators(ops: string[] | null | undefined): boolean {
+  if (!ops || ops.length === 0) return true;
+  if (ops.length !== DEFAULT_OPERATORS.length) return false;
+  return DEFAULT_OPERATORS.every((op) => ops.includes(op));
+}
+
+const TABLE_THEME_STYLES: Record<
+  LobbyTableTheme,
+  {
+    accent: string;
+    chip: string;
+    background: [string, string];
+  }
+> = {
+  classic: { accent: '#3B82F6', chip: '#BFDBFE', background: ['#122440', '#060c1c'] },
+  royal: { accent: '#E11D48', chip: '#FECDD3', background: ['#6b1818', '#2a0606'] },
+  forest: { accent: '#10B981', chip: '#A7F3D0', background: ['#0f4a36', '#03251a'] },
+  ocean: { accent: '#F59E0B', chip: '#FDE68A', background: ['#1a3a8a', '#0a1c4a'] },
 };
 
-const HEBREW_LETTERS = ['ש', 'א', 'מ', 'י', 'ל', 'ר', 'נ', 'ע', 'ד', 'ה', 'ב', 'ג', 'ת', 'ק'];
+function formatTimer(
+  translate: TranslateFn,
+  timerSetting: HostGameSettings['timerSetting'] | null,
+  timerCustomSeconds: number | null,
+): string {
+  if (!timerSetting || timerSetting === 'off') return translate('lobby.timerOff');
+  if (timerSetting === '15') return translate('lobby.timerSec', { n: 15 });
+  if (timerSetting === '60') return translate('lobby.timerMin');
+  if (timerSetting === '90') return translate('lobby.timerMinHalf');
 
-function countdownSeconds(deadlineAt: number | null): number | null {
-  if (!deadlineAt) return null;
-  return Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
-}
-
-function formatTimer(timerSetting: HostGameSettings['timerSetting'] | null, timerCustomSeconds: number | null): string {
-  if (!timerSetting || timerSetting === 'off') return 'ללא טיימר';
-  if (timerSetting === '60') return '60 שנ׳';
-  if (timerSetting === '90') return '90 שנ׳';
   const total = Math.max(0, timerCustomSeconds ?? 0);
   if (timerSetting === 'custom') {
-    return total >= 60 ? `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}` : `${total} שנ׳`;
+    return total >= 60
+      ? translate('lobby.timerFmtMinSec', { m: Math.floor(total / 60), s: total % 60 })
+      : translate('lobby.timerSec', { n: total });
   }
-  return timerSetting;
+
+  return translate('lobby.timerSec', { n: timerSetting });
 }
 
-function formatRange(table: LobbyTableSummary): string {
-  if (table.configuredDifficulty === 'easy') return '0-12';
-  if (table.configuredDifficulty === 'full') return '0-25';
-  return 'ברירת מחדל';
+function formatDifficulty(table: LobbyTableSummary, translate: TranslateFn): string {
+  return table.configuredDifficulty === 'easy'
+    ? translate('lobby.diffEasyRange')
+    : translate('lobby.diffFullRange');
 }
 
-function formatPot(table: LobbyTableSummary): string {
-  const active = table.currentParticipants;
-  const cap = table.maxParticipants;
-  if (active <= 1) return 'קופה חדשה';
-  return `${active}/${cap} מוכנים`;
+function formatCount(value: number, locale: AppLocale): string {
+  return new Intl.NumberFormat(locale === 'he' ? 'he-IL' : 'en-US').format(value);
 }
 
-function formatBalance(balance: number): string {
-  return new Intl.NumberFormat('he-IL').format(balance);
+export function getTableInfoRowDirection(
+  isRTL: boolean,
+  platformOS: string = Platform.OS,
+): 'row' | 'row-reverse' {
+  if (!isRTL) return 'row';
+  return platformOS === 'android' ? 'row' : 'row-reverse';
 }
 
-function getInitial(seed: number): string {
-  return HEBREW_LETTERS[seed % HEBREW_LETTERS.length] ?? 'ס';
+export function getTableInfoTextAlign(
+  isRTL: boolean,
+  side: 'label' | 'value',
+  platformOS: string = Platform.OS,
+): 'left' | 'right' | undefined {
+  void side;
+  void platformOS;
+  if (!isRTL) return undefined;
+  return 'right';
+}
+
+function getStatusLabel(table: LobbyTableSummary, translate: TranslateFn): string {
+  return table.status === 'waiting'
+    ? translate('lobby.tableWaiting')
+    : translate('lobby.tableOccupied');
+}
+
+function normalizeFractionKinds(kinds: LobbyTableSummary['fractionKinds']): Fraction[] {
+  const configuredKinds = new Set((kinds ?? []).filter(Boolean));
+  return DEFAULT_FRACTION_KINDS.filter((kind) => configuredKinds.has(kind));
+}
+
+function usesDefaultFractions(table: LobbyTableSummary): boolean {
+  if (table.showFractions !== true) return false;
+  const kinds = normalizeFractionKinds(table.fractionKinds);
+  if (kinds.length === 0) return true;
+  return DEFAULT_FRACTION_KINDS.every((kind, index) => kinds[index] === kind);
+}
+
+function formatFractions(table: LobbyTableSummary, translate: TranslateFn): string {
+  if (!table.showFractions) return translate('lobby.noFractions');
+  const kinds = normalizeFractionKinds(table.fractionKinds);
+  if (kinds.length === 0 || usesDefaultFractions(table)) return translate('lobby.withFractions');
+  return `${translate('lobby.withFractions')}: ${kinds.join(', ')}`;
+}
+
+function getTableInfoRows(
+  table: LobbyTableSummary,
+  translate: TranslateFn,
+): Array<{ label: string; value: string; accent?: boolean }> {
+  const rows: Array<{ label: string; value: string; accent?: boolean }> = [
+    { label: translate('lobby.host'), value: table.hostName },
+    {
+      label: translate('lobby.playersLabel'),
+      value: translate('lobby.tablePlayers', {
+        count: table.currentParticipants,
+        max: table.maxParticipants,
+      }),
+    },
+    {
+      label: translate('lobby.privateToggle'),
+      value: table.visibility === 'private_locked' ? translate('lobby.tablePrivate') : translate('lobby.tablePublic'),
+    },
+  ];
+
+  if (table.configuredDifficulty === 'easy') {
+    rows.push({
+      label: translate('lobby.difficulty'),
+      value: formatDifficulty(table, translate),
+      accent: true,
+    });
+  }
+
+  if (!usesDefaultOperators(table.enabledOperators)) {
+    rows.push({
+      label: translate('lobby.operators'),
+      value: formatOperators(table.enabledOperators ?? []),
+      accent: true,
+    });
+  }
+
+  if (table.showFractions === false || (table.showFractions === true && !usesDefaultFractions(table))) {
+    rows.push({
+      label: translate('lobby.fractions'),
+      value: formatFractions(table, translate),
+      accent: table.showFractions,
+    });
+  }
+
+  if (table.showPossibleResults === false) {
+    rows.push({
+      label: translate('lobby.possibleResults'),
+      value: translate('lobby.hide'),
+    });
+  }
+
+  if (table.showSolveExercise === false) {
+    rows.push({
+      label: translate('lobby.solveExercise'),
+      value: translate('lobby.off'),
+    });
+  }
+
+  if (table.timerSetting && table.timerSetting !== 'off') {
+    rows.push({
+      label: translate('lobby.turnTimer'),
+      value: formatTimer(translate, table.timerSetting, table.timerCustomSeconds),
+      accent: true,
+    });
+  }
+
+  return rows;
+}
+
+function getActionHint(table: LobbyTableSummary, canAct: boolean, translate: TranslateFn): string {
+  if (!canAct) return translate('lobby.enterNameFirst');
+  if (table.status === 'waiting') {
+    return table.visibility === 'private_locked'
+      ? translate('lobby.tableTapToEnterCode')
+      : translate('lobby.tableTapToJoin');
+  }
+  return translate('lobby.tableOccupied');
+}
+
+function getStatusTone(table: LobbyTableSummary) {
+  if (table.status === 'waiting') {
+    return {
+      dot: '#22C55E',
+      text: '#86EFAC',
+      border: 'rgba(34,197,94,0.3)',
+      background: 'rgba(34,197,94,0.14)',
+    };
+  }
+  if (table.status === 'countdown') {
+    return {
+      dot: '#F59E0B',
+      text: '#FDE68A',
+      border: 'rgba(245,158,11,0.3)',
+      background: 'rgba(245,158,11,0.14)',
+    };
+  }
+  return {
+    dot: '#F43F5E',
+    text: '#FCA5A5',
+    border: 'rgba(244,63,94,0.3)',
+    background: 'rgba(244,63,94,0.14)',
+  };
 }
 
 export function isTableJoinable(table: LobbyTableSummary): boolean {
@@ -110,280 +279,498 @@ function applyFilter(tables: LobbyTableSummary[], filter: LobbyFilter): LobbyTab
   return tables;
 }
 
-function statusView(table: LobbyTableSummary): { label: string; fg: string; bg: string; border: string } {
-  if (table.status === 'countdown') {
-    return {
-      label: `מתחיל עוד ${countdownSeconds(table.countdownEndsAt) ?? 0}`,
-      fg: '#f5d27a',
-      bg: 'rgba(245,210,122,0.2)',
-      border: 'rgba(245,210,122,0.5)',
-    };
-  }
-  if (table.status === 'full') {
-    return {
-      label: 'מלא',
-      fg: '#fca5a5',
-      bg: 'rgba(239,68,68,0.18)',
-      border: 'rgba(252,165,165,0.4)',
-    };
-  }
-  if (table.visibility === 'private_locked') {
-    return {
-      label: 'פרטי',
-      fg: '#d8b4fe',
-      bg: 'rgba(168,85,247,0.18)',
-      border: 'rgba(216,180,254,0.4)',
-    };
-  }
-  return {
-    label: 'פתוח',
-    fg: '#86efac',
-    bg: 'rgba(34,197,94,0.18)',
-    border: 'rgba(134,239,172,0.4)',
-  };
-}
-
-function Felt({ table }: { table: LobbyTableSummary }) {
-  const [c1, c2] = THEME_FELT[table.tableTheme] ?? THEME_FELT.classic;
-  const status = statusView(table);
+function StatusPill({
+  compactWeb,
+  isRTL,
+  stacked = false,
+  table,
+  t,
+}: {
+  compactWeb: boolean;
+  isRTL: boolean;
+  stacked?: boolean;
+  table: LobbyTableSummary;
+  t: TranslateFn;
+}) {
+  const tone = getStatusTone(table);
 
   return (
-    <View style={[styles.felt, { backgroundColor: c2 }]}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: c1, opacity: 0.85 }]} />
-      <View style={[StyleSheet.absoluteFill, styles.feltVignette]} />
-
-      <View style={[styles.statusPill, { backgroundColor: status.bg, borderColor: status.border }]}>
-        <Text style={[styles.statusText, { color: status.fg }]}>{status.label}</Text>
-      </View>
-
-      <View style={styles.pile}>
-        {[-12, -4, 5, 14].map((angle, index) => (
-          <View
-            key={index}
-            style={[
-              styles.miniCard,
-              index % 2 === 0 && styles.miniCardBack,
-              { transform: [{ rotate: `${angle}deg` }, { translateX: (index - 1.5) * 4 }] },
-            ]}
-          />
-        ))}
-      </View>
-
-      <Seats currentParticipants={table.currentParticipants} maxParticipants={table.maxParticipants} />
+    <View
+        style={[
+          styles.statusPill,
+          compactWeb && styles.statusPillCompactWeb,
+          stacked && styles.statusPillStacked,
+          {
+            borderColor: tone.border,
+            backgroundColor: tone.background,
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+          },
+      ]}
+    >
+      <View style={[styles.statusPillDot, { backgroundColor: tone.dot }]} />
+      <Text style={[styles.statusPillText, { color: tone.text }]} numberOfLines={1}>
+        {getStatusLabel(table, t)}
+      </Text>
     </View>
   );
 }
 
-function Seats({ currentParticipants, maxParticipants }: Pick<LobbyTableSummary, 'currentParticipants' | 'maxParticipants'>) {
-  const positions =
-    maxParticipants === 6
-      ? [
-          styles.seatPosTopLeft,
-          styles.seatPosTopRight,
-          styles.seatPosMidRight,
-          styles.seatPosBottomRight,
-          styles.seatPosBottomLeft,
-          styles.seatPosMidLeft,
-        ]
-      : [styles.seatPosTopLeft, styles.seatPosTopRight, styles.seatPosBottomRight, styles.seatPosBottomLeft];
-
+function SeatsRow({
+  current,
+  isRTL,
+  locale,
+  max,
+  accent,
+}: {
+  current: number;
+  isRTL: boolean;
+  locale: AppLocale;
+  max: number;
+  accent: string;
+}) {
   return (
-    <>
-      {positions.map((positionStyle, index) => {
-        const filled = index < currentParticipants;
-        return (
-          <View key={`${maxParticipants}-${index}`} style={[styles.seat, positionStyle, !filled && styles.seatEmpty]}>
-            {filled ? <Text style={styles.seatText}>{getInitial(index + currentParticipants * 7)}</Text> : null}
-          </View>
-        );
-      })}
-    </>
-  );
-}
-
-function PlayerStack({ currentParticipants, maxParticipants }: Pick<LobbyTableSummary, 'currentParticipants' | 'maxParticipants'>) {
-  return (
-    <View style={styles.avatarStack}>
-      {Array.from({ length: maxParticipants }).map((_, index) => {
-        const filled = index < currentParticipants;
-        return (
-          <View
-            key={`${maxParticipants}-${index}`}
-            style={[
-              styles.avatar,
-              !filled && styles.avatarEmpty,
-              { marginRight: index === 0 ? 0 : -6, zIndex: maxParticipants - index },
-            ]}
-          >
-            {filled ? <Text style={styles.avatarText}>{getInitial(index * 3 + currentParticipants)}</Text> : null}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metaItem}>
-      <Text style={styles.metaLabel}>{label}</Text>
-      <Text style={styles.metaValue}>{value}</Text>
+    <View style={[styles.seatsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+      {Array.from({ length: max }).map((_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.seatDot,
+            { backgroundColor: index < current ? accent : 'rgba(255,255,255,0.15)' },
+          ]}
+        />
+      ))}
+      <Text style={styles.seatsCount}>
+        {formatCount(current, locale)}/{formatCount(max, locale)}
+      </Text>
     </View>
   );
 }
 
 function TableCard({
-  canJoin,
+  canAct,
+  compactVisuals,
+  isRTL,
+  locale,
   onPress,
+  singleColumn,
+  stackedHeader,
   table,
+  tileWidth,
+  t,
 }: {
-  canJoin: boolean;
+  canAct: boolean;
+  compactVisuals: boolean;
+  isRTL: boolean;
+  locale: AppLocale;
   onPress: (table: LobbyTableSummary) => void;
+  singleColumn: boolean;
+  stackedHeader: boolean;
   table: LobbyTableSummary;
+  tileWidth?: number;
+  t: TranslateFn;
 }) {
-  const disabled = !canJoin || !isTableJoinable(table);
-  const countdownLocked = table.status === 'countdown';
-  const countdownRemaining = countdownSeconds(table.countdownEndsAt) ?? 0;
+  const joinable = canAct && isTableJoinable(table);
+  const locked = table.visibility === 'private_locked';
+  const theme = TABLE_THEME_STYLES[table.tableTheme] ?? TABLE_THEME_STYLES.classic;
+  const [bgTop, bgBottom] = theme.background;
+  const actionHint = getActionHint(table, canAct, t);
+  const infoRowDirection = getTableInfoRowDirection(isRTL);
+  const infoLabelAlign = getTableInfoTextAlign(isRTL, 'label');
+  const infoValueAlign = getTableInfoTextAlign(isRTL, 'value');
+  const infoRows = getTableInfoRows(table, t);
 
   return (
     <Pressable
       testID={`table-card-${table.roomCode}`}
-      style={[styles.card, disabled && styles.cardDisabled]}
+      style={({ pressed }) => [
+        styles.tile,
+        singleColumn ? styles.tileSingleColumn : [styles.tileTwoColumn, tileWidth ? { width: tileWidth } : null],
+        compactVisuals && styles.tileCompactWeb,
+        !joinable && styles.tileDisabled,
+        pressed && joinable && styles.tilePressed,
+      ]}
       onPress={() => onPress(table)}
-      disabled={disabled}
+      disabled={!joinable}
     >
-      <Felt table={table} />
+      <View style={styles.tileBaseLayer} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: bgBottom }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: bgTop, opacity: 0.52 }]} />
+      <View style={styles.tileOverlayLayer} />
+      <View style={[styles.tileAccentBar, { backgroundColor: theme.accent }]} />
 
-      <View style={styles.cardBody}>
-        <View style={styles.cardRow}>
-          <Text style={styles.tableName}>שולחן {table.roomCode}</Text>
-          <Text style={styles.tableId}>ROOM {table.roomCode}</Text>
-        </View>
-
-        <View style={styles.metaLine}>
-          <MetaItem label="טווח" value={formatRange(table)} />
-          <View style={styles.metaDivider} />
-          <MetaItem label="טיימר" value={formatTimer(table.timerSetting, table.timerCustomSeconds)} />
-          <View style={styles.metaDivider} />
-          <MetaItem label="קופה" value={formatPot(table)} />
-        </View>
-
-        <View style={[styles.cardRow, { marginTop: 4 }]}>
-          <View style={styles.playersBar}>
-            <PlayerStack currentParticipants={table.currentParticipants} maxParticipants={table.maxParticipants} />
-            <Text style={styles.playersCount}>
-              {table.currentParticipants}/{table.maxParticipants}
-            </Text>
-          </View>
-          <Text style={styles.hostText}>
-            מארח: <Text style={styles.hostName}>{table.hostName}</Text>
+      <View
+        testID={`table-card-${table.roomCode}-header`}
+        style={[
+          styles.tileHeader,
+          compactVisuals && styles.tileHeaderCompactWeb,
+          stackedHeader
+            ? [styles.tileHeaderStacked, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]
+            : { flexDirection: isRTL ? 'row-reverse' : 'row' },
+        ]}
+      >
+        <View
+          style={[
+            styles.tileBadge,
+            compactVisuals && styles.tileBadgeCompactWeb,
+            stackedHeader && styles.tileBadgeStacked,
+            { borderColor: `${theme.accent}55`, backgroundColor: `${theme.accent}22` },
+          ]}
+        >
+          <Text style={[styles.tileBadgeText, compactVisuals && styles.tileBadgeTextCompactWeb, { color: theme.chip }]} numberOfLines={1}>
+            {locked ? t('lobby.tablePrivate') : t('lobby.tablePublic')}
           </Text>
         </View>
-        {countdownLocked ? (
-          <View style={styles.countdownNotice}>
-            <Text style={styles.countdownNoticeText}>לא ניתן להצטרף יותר. המשחק מתחיל בעוד {countdownRemaining} שניות.</Text>
-          </View>
+        <View style={stackedHeader ? styles.tileStatusWrapStacked : null}>
+          <StatusPill compactWeb={compactVisuals} stacked={stackedHeader} table={table} isRTL={isRTL} t={t} />
+        </View>
+      </View>
+
+      <View style={[styles.tileCenter, compactVisuals && styles.tileCenterCompactWeb]}>
+        <Text style={[styles.tileRoomLabel, compactVisuals && styles.tileRoomLabelCompactWeb]}>{t('lobby.roomCodeLabel')}</Text>
+        <Text style={[styles.tileRoomCode, compactVisuals && styles.tileRoomCodeCompactWeb, { color: theme.chip }]}>
+          {table.roomCode}
+        </Text>
+
+        <View style={[styles.tileInfoList, compactVisuals && styles.tileInfoListCompactWeb]}>
+          {infoRows.map((row) => (
+            <View key={row.label} style={[styles.tileInfoRow, { flexDirection: infoRowDirection }]}>
+              <Text
+                style={[
+                  styles.tileInfoLabel,
+                  compactVisuals && styles.tileInfoLabelCompactWeb,
+                  infoLabelAlign ? { textAlign: infoLabelAlign } : null,
+                ]}
+              >
+                {row.label}
+              </Text>
+              <Text
+                style={[
+                  styles.tileInfoValue,
+                  compactVisuals && styles.tileInfoValueCompactWeb,
+                  infoValueAlign ? { textAlign: infoValueAlign } : null,
+                  row.accent ? { color: theme.chip } : null,
+                ]}
+              >
+                {row.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {table.hasRandomJoiner ? (
+          <Text
+            style={[
+              styles.tileMetaNote,
+              { color: theme.chip, textAlign: isRTL ? 'right' : 'left' },
+            ]}
+          >
+            {t('lobby.randomJoiner')}
+          </Text>
         ) : null}
+      </View>
+
+      <View style={[styles.tileFooter, compactVisuals && styles.tileFooterCompactWeb]}>
+        <SeatsRow
+          current={table.currentParticipants}
+          max={table.maxParticipants}
+          accent={theme.accent}
+          isRTL={isRTL}
+          locale={locale}
+        />
+        <Text
+          style={[
+            styles.tileActionHint,
+            compactVisuals && styles.tileActionHintCompactWeb,
+            {
+              color: joinable ? TEXT : locked && canAct ? theme.chip : TEXT_MUTE,
+              textAlign: isRTL ? 'right' : 'left',
+            },
+          ]}
+        >
+          {actionHint}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function EmptyTableCard({
+  canAct,
+  compactVisuals,
+  isRTL,
+  onPress,
+  singleColumn,
+  stackedHeader,
+  t,
+  testID,
+  tileWidth,
+}: {
+  canAct: boolean;
+  compactVisuals: boolean;
+  isRTL: boolean;
+  onPress: () => void;
+  singleColumn: boolean;
+  stackedHeader: boolean;
+  t: TranslateFn;
+  testID: string;
+  tileWidth?: number;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      style={({ pressed }) => [
+        styles.tile,
+        singleColumn ? styles.tileSingleColumn : [styles.tileTwoColumn, tileWidth ? { width: tileWidth } : null],
+        compactVisuals && styles.tileCompactWeb,
+        !canAct && styles.tileDisabled,
+        pressed && canAct && styles.tilePressed,
+      ]}
+      onPress={onPress}
+      disabled={!canAct}
+    >
+      <View style={styles.tileBaseLayer} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#10131d' }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1f2937', opacity: 0.36 }]} />
+      <View style={styles.tileOverlayLayer} />
+      <View style={[styles.tileAccentBar, { backgroundColor: GOLD }]} />
+
+      <View
+        testID={`${testID}-header`}
+        style={[
+          styles.tileHeader,
+          compactVisuals && styles.tileHeaderCompactWeb,
+          stackedHeader
+            ? [styles.tileHeaderStacked, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]
+            : { flexDirection: isRTL ? 'row-reverse' : 'row' },
+        ]}
+      >
+        <View
+          style={[
+            styles.tileBadge,
+            compactVisuals && styles.tileBadgeCompactWeb,
+            stackedHeader && styles.tileBadgeStacked,
+            {
+              borderColor: 'rgba(245,210,122,0.28)',
+              backgroundColor: 'rgba(245,210,122,0.12)',
+            },
+          ]}
+        >
+          <Text style={[styles.tileBadgeText, compactVisuals && styles.tileBadgeTextCompactWeb, { color: GOLD }]} numberOfLines={1}>
+            {t('lobby.tableWaiting')}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.tileCenter, compactVisuals && styles.tileCenterCompactWeb]}>
+        <Text style={[styles.tileRoomLabel, compactVisuals && styles.tileRoomLabelCompactWeb]}>{t('browse.table')}</Text>
+        <Text style={[styles.emptyTilePlus, compactVisuals && styles.emptyTilePlusCompactWeb]}>+</Text>
+        <Text style={[styles.emptyTileTitle, compactVisuals && styles.emptyTileTitleCompactWeb]}>
+          {t('lobby.createTable')}
+        </Text>
+      </View>
+
+      <View style={[styles.tileFooter, compactVisuals && styles.tileFooterCompactWeb]}>
+        <Text
+          style={[
+            styles.tileActionHint,
+            compactVisuals && styles.tileActionHintCompactWeb,
+            {
+              color: canAct ? GOLD : TEXT_MUTE,
+              textAlign: isRTL ? 'right' : 'left',
+            },
+          ]}
+        >
+          {canAct ? t('lobby.createTable') : t('lobby.enterNameFirst')}
+        </Text>
       </View>
     </Pressable>
   );
 }
 
 export default function TablesLobbyScreen({
-  balance = 0,
+  balance: _balance = 0,
   error,
   headerAccessory,
   onBack,
   onCreateTable,
+  onEnterCode,
   onJoinTable,
-  onOpenRules,
+  onOpenRules: _onOpenRules,
   onPlayerNameChange,
   onQuickMatch,
   onRefresh,
   playerName,
   tables,
 }: TablesLobbyScreenProps) {
+  const { isRTL, locale, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const safeTop = getScreenSafeTop(insets.top);
+  const responsive = useResponsiveLayout();
+  const { width } = responsive;
   const [filter, setFilter] = useState<LobbyFilter>('all');
-  const [tick, setTick] = useState(Date.now());
-
-  useEffect(() => {
-    const hasCountdown = tables.some((table) => table.countdownEndsAt != null);
-    if (!hasCountdown) return;
-    const timer = setInterval(() => setTick(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [tables]);
 
   const visibleTables = useMemo(() => applyFilter(tables, filter), [filter, tables]);
+  const displayItems = useMemo(() => {
+    const activeTables = visibleTables.slice(0, MAX_TABLE_SLOTS).map((table) => ({
+      kind: 'table' as const,
+      table,
+    }));
+    const placeholders = Array.from(
+      { length: Math.max(0, MAX_TABLE_SLOTS - activeTables.length) },
+      (_, index) => ({
+        kind: 'empty' as const,
+        key: `empty-${index + 1}`,
+      }),
+    );
+    return [...activeTables, ...placeholders];
+  }, [visibleTables]);
   const canAct = playerName.trim().length > 0;
-  const fabBottom = Math.max(insets.bottom + 18, Platform.OS === 'web' ? 34 : 22);
-  const scrollBottomPad = fabBottom + 86;
+  const compactVisuals = Platform.OS === 'web' || responsive.isTight;
+  const stackedActions = responsive.isSingleColumn;
+  const singleColumn = !responsive.isTablet || responsive.isSingleColumn;
+  const stackedTileHeader = responsive.isTight;
+  const twoColumnTileWidth = singleColumn ? undefined : Math.floor((Math.max(width, 320) - 36) / 2);
+  const scrollBottomPad = Math.max(insets.bottom + 40, Platform.OS === 'web' ? 68 : 56);
 
-  void tick;
+  const filters = useMemo(
+    () => [
+      { key: 'all' as const, label: t('lobby.filterAll') },
+      { key: 'easy' as const, label: t('lobby.diffEasyRange') },
+      { key: 'full' as const, label: t('lobby.diffFullRange') },
+      { key: 'open' as const, label: t('lobby.filterOpen') },
+      { key: 'private' as const, label: t('lobby.tablePrivate') },
+    ],
+    [t],
+  );
 
   return (
-    <ImageBackground source={BG_IMAGE} style={styles.root} resizeMode="cover">
+    <ImageBackground
+      source={BG_IMAGE}
+      style={styles.root}
+      imageStyle={styles.backgroundImage}
+      resizeMode="cover"
+    >
       <View style={styles.overlay} />
 
-      <View style={[styles.topbar, { marginTop: Math.max(insets.top + 8, 12) }]}>
-        <View style={styles.topbarLeft}>
-          {onBack ? (
-            <TouchableOpacity style={styles.smallGhostButton} onPress={onBack}>
-              <Text style={styles.smallGhostButtonText}>חזרה</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.smallGhostButtonPlaceholder} />
-          )}
-          <TouchableOpacity style={styles.smallGhostButton} onPress={onRefresh}>
-            <Text style={styles.smallGhostButtonText}>רענן</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.brand}>
-          <View style={styles.brandMark} />
-          <Text style={styles.brandText}>Salinda</Text>
-        </View>
-
-        <View style={styles.balance}>
-          <View style={styles.coin} />
-          <Text style={styles.balanceText}>{formatBalance(balance)}</Text>
-        </View>
-      </View>
+      {onBack ? (
+        <TouchableOpacity
+          testID="online-lobby-back"
+          style={[
+            styles.floatingBackBtn,
+            Platform.OS === 'android' ? styles.floatingBackBtnAndroid : styles.floatingBackBtnDefault,
+            { top: Math.max(safeTop + 8, 12) },
+          ]}
+          onPress={onBack}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.floatingBackBtnText}>{isRTL ? '>' : '<'}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPad }]}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: 0,
+            paddingBottom: scrollBottomPad,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.sectionHead}>
-          <View>
-            <Text style={styles.sectionTitle}>שולחנות פתוחים</Text>
-            <Text style={styles.sectionSub}>OPEN TABLES · LIVE</Text>
+        <View
+          style={[
+            styles.heroPanel,
+            compactVisuals ? styles.heroPanelCompactWeb : null,
+            { paddingTop: Math.max(safeTop + (compactVisuals ? 10 : 20), compactVisuals ? 14 : 30) },
+          ]}
+        >
+          {!compactVisuals ? (
+            <View style={styles.logoWrap}>
+              <Image
+                source={LOBBY_LOGO}
+                style={[styles.logoImage, compactVisuals && styles.logoImageCompactWeb]}
+                resizeMode="contain"
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionTitle, compactVisuals && styles.sectionTitleCompactWeb, { textAlign: 'center' }]}>
+              {t('lobby.tablesTitle')}
+            </Text>
+            {!compactVisuals ? (
+              <Text style={[styles.sectionSub, compactVisuals && styles.sectionSubCompactWeb, { textAlign: 'center' }]}>
+                {t('lobby.tablesSubtitle')}
+              </Text>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.controlCard}>
+        <View style={[styles.controlCard, compactVisuals && styles.controlCardCompactWeb]}>
           {headerAccessory ? <View style={styles.headerAccessoryWrap}>{headerAccessory}</View> : null}
-          <View style={styles.controlRow}>
-            <TouchableOpacity testID="lobby-create-room" style={[styles.createBtn, !canAct && styles.disabledButton]} disabled={!canAct} onPress={onCreateTable}>
-              <Text style={styles.createBtnText}>צור שולחן</Text>
-            </TouchableOpacity>
-            <View style={styles.inputWrap}>
-              <TextInput
-                testID="lobby-player-name"
-                style={styles.nameInput}
-                value={playerName}
-                onChangeText={(value) => onPlayerNameChange(value.slice(0, 7))}
-                placeholder="השם שלך"
-                placeholderTextColor="#8a8275"
-                maxLength={7}
-                textAlign="center"
-              />
-            </View>
+
+          {!compactVisuals ? (
+            <Text style={[styles.fieldLabel, { textAlign: isRTL ? 'right' : 'left' }]}>
+              {t('lobby.yourName')}
+            </Text>
+          ) : null}
+          <View style={[styles.nameInputShell, compactVisuals && styles.nameInputShellCompactWeb]}>
+            <TextInput
+              testID="lobby-player-name"
+              style={[styles.nameInput, compactVisuals && styles.nameInputCompactWeb]}
+              value={playerName}
+              onChangeText={(value) => onPlayerNameChange(value.slice(0, 7))}
+              placeholder={t('lobby.namePlaceholder')}
+              placeholderTextColor={TEXT_MUTE}
+              maxLength={7}
+              textAlign="center"
+            />
           </View>
-          <View style={styles.utilityRow}>
-            <TouchableOpacity style={styles.linkButton} onPress={onOpenRules}>
-              <Text style={styles.linkButtonText}>הדרכה</Text>
+
+          <View
+            testID="lobby-action-row"
+            style={[
+              styles.actionRow,
+              { flexDirection: stackedActions ? 'column' : isRTL ? 'row-reverse' : 'row' },
+            ]}
+          >
+            <TouchableOpacity
+              testID="lobby-quick-match"
+              style={[
+                styles.quickMatchBtn,
+                compactVisuals && styles.quickMatchBtnCompactWeb,
+                stackedActions ? styles.actionBtnStacked : null,
+                { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                !canAct && styles.disabledButton,
+              ]}
+              disabled={!canAct}
+              onPress={onQuickMatch}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.quickMatchText}>{t('lobby.quickMatch')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.utilityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            {onEnterCode ? (
+              <TouchableOpacity
+                testID="lobby-enter-code"
+                style={[styles.utilityBtn, styles.utilityBtnEnterCode, compactVisuals && styles.utilityBtnCompactWeb]}
+                onPress={onEnterCode}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.enterCode')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              testID="lobby-refresh"
+              style={[styles.utilityBtn, styles.utilityBtnRefresh, compactVisuals && styles.utilityBtnCompactWeb]}
+              onPress={onRefresh}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.refresh')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -391,335 +778,606 @@ export default function TablesLobbyScreen({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.chips}
-          contentContainerStyle={styles.chipsContent}
+          style={[styles.chips, compactVisuals && styles.chipsCompactWeb]}
+          contentContainerStyle={[styles.chipsContent, compactVisuals && styles.chipsContentCompactWeb]}
         >
-          {[
-            { key: 'all' as const, label: 'הכול' },
-            { key: 'easy' as const, label: '0-12' },
-            { key: 'full' as const, label: '0-25' },
-            { key: 'open' as const, label: 'מקום פנוי' },
-            { key: 'private' as const, label: 'פרטי' },
-          ].map((item) => (
+          {filters.map((item) => (
             <TouchableOpacity
               key={item.key}
               onPress={() => setFilter(item.key)}
-              style={[styles.chip, filter === item.key && styles.chipActive]}
+              style={[styles.chip, compactVisuals && styles.chipCompactWeb, filter === item.key && styles.chipActive]}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.chipText, filter === item.key && styles.chipTextActive]}>{item.label}</Text>
+              <Text style={[styles.chipText, compactVisuals && styles.chipTextCompactWeb, filter === item.key && styles.chipTextActive]}>
+                {item.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        <View style={styles.list}>
-          {visibleTables.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyTitle}>אין כרגע שולחנות מתאימים</Text>
-              <Text style={styles.emptyBody}>אפשר ליצור שולחן חדש או לעדכן את הרשימה.</Text>
-            </View>
-          ) : (
-            visibleTables.map((table) => (
-              <TableCard key={`${table.roomCode}-${table.status}-${table.currentParticipants}`} table={table} onPress={onJoinTable} canJoin={canAct} />
-            ))
+        <View style={[styles.grid, compactVisuals && styles.gridCompactWeb]}>
+          {displayItems.map((item) =>
+            item.kind === 'table' ? (
+              <TableCard
+                key={`${item.table.roomCode}-${item.table.status}-${item.table.currentParticipants}`}
+                table={item.table}
+                onPress={onJoinTable}
+                canAct={canAct}
+                compactVisuals={compactVisuals}
+                locale={locale}
+                isRTL={isRTL}
+                singleColumn={singleColumn}
+                stackedHeader={stackedTileHeader}
+                tileWidth={twoColumnTileWidth}
+                t={t}
+              />
+            ) : (
+              <EmptyTableCard
+                key={item.key}
+                testID={`table-card-${item.key}`}
+                canAct={canAct}
+                compactVisuals={compactVisuals}
+                isRTL={isRTL}
+                onPress={onCreateTable}
+                singleColumn={singleColumn}
+                stackedHeader={stackedTileHeader}
+                tileWidth={twoColumnTileWidth}
+                t={t}
+              />
+            ),
           )}
         </View>
 
         {error ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={[styles.errorText, { textAlign: isRTL ? 'right' : 'left' }]}>{error}</Text>
           </View>
         ) : null}
       </ScrollView>
-
-      <TouchableOpacity
-        style={[styles.fab, { bottom: fabBottom }, !canAct && styles.disabledButton]}
-        onPress={onQuickMatch}
-        activeOpacity={0.85}
-        disabled={!canAct}
-      >
-        <Text style={styles.fabBolt}>⚡</Text>
-        <Text style={styles.fabText}>התאמה מהירה</Text>
-      </TouchableOpacity>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0d14' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
-  topbar: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginHorizontal: 12,
-    marginTop: 12,
-    backgroundColor: 'rgba(20,15,8,0.85)',
-    borderWidth: 1,
-    borderColor: LINE,
-    borderRadius: 14,
+  root: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: ROOT_BG,
+    overflow: 'hidden',
   },
-  topbarLeft: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
   },
-  smallGhostButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  scroll: {
+    flex: 1,
+  },
+  floatingBackBtn: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: LINE,
-    backgroundColor: 'rgba(0,0,0,0.32)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
   },
-  smallGhostButtonText: {
-    color: INK_DIM,
-    fontWeight: '700',
+  floatingBackBtnDefault: {
+    left: 12,
+  },
+  floatingBackBtnAndroid: {
+    right: 12,
+  },
+  floatingBackBtnText: {
+    color: TEXT,
+    fontWeight: '900',
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 88,
+  },
+  heroPanel: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 14,
+  },
+  heroPanelCompactWeb: {
+    paddingBottom: 6,
+    gap: 6,
+  },
+  logoWrap: {
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 300,
+    height: 88,
+  },
+  logoImageCompactWeb: {
+    width: 220,
+    height: 64,
+  },
+  sectionHead: {
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: GOLD,
+    letterSpacing: 0.2,
+  },
+  sectionTitleCompactWeb: {
+    fontSize: 24,
+  },
+  sectionSub: {
+    fontSize: 13,
+    color: TEXT_DIM,
+    lineHeight: 20,
+  },
+  sectionSubCompactWeb: {
     fontSize: 12,
+    lineHeight: 18,
   },
-  smallGhostButtonPlaceholder: {
-    width: 0,
-    height: 0,
-  },
-  brand: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
-  brandMark: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: GOLD_2,
-    borderWidth: 1.5,
-    borderColor: '#6e4f17',
-  },
-  brandText: { fontSize: 22, color: GOLD_1, fontWeight: '600', letterSpacing: 1 },
-  balance: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderWidth: 1,
-    borderColor: LINE,
-    borderRadius: 999,
-  },
-  coin: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: GOLD_2,
-    borderWidth: 1,
-    borderColor: '#6e4f17',
-  },
-  balanceText: { color: INK, fontWeight: '600', fontSize: 14 },
-  scrollContent: { paddingBottom: 110 },
-  sectionHead: { paddingHorizontal: 16, marginTop: 16, marginBottom: 12 },
-  sectionTitle: { fontSize: 26, fontWeight: '600', color: GOLD_1, letterSpacing: 0.5, textAlign: 'right' },
-  sectionSub: { fontSize: 11, color: INK_MUTE, letterSpacing: 2, marginTop: 2, textAlign: 'right' },
   controlCard: {
     marginHorizontal: 12,
     marginBottom: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: LINE,
-    backgroundColor: 'rgba(20,15,8,0.72)',
+    backgroundColor: SURFACE,
+    gap: 12,
+  },
+  controlCardCompactWeb: {
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
   },
   headerAccessoryWrap: {
-    marginBottom: 8,
-  },
-  controlRow: {
-    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 2,
   },
-  inputWrap: {
-    flex: 1,
+  fieldLabel: {
+    color: TEXT,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  nameInputShell: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: GOLD,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.38)',
+  },
+  nameInputShellCompactWeb: {
+    borderRadius: 14,
   },
   nameInput: {
-    backgroundColor: 'rgba(0,0,0,0.38)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: LINE,
-    color: INK,
-    fontSize: 15,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    color: TEXT,
+    fontSize: 16,
     fontWeight: '700',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    letterSpacing: 0.4,
+  },
+  nameInputCompactWeb: {
+    fontSize: 15,
+    paddingVertical: 7,
+  },
+  helperText: {
+    color: TEXT_DIM,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  actionRow: {
+    gap: 10,
+  },
+  actionBtnStacked: {
+    width: '100%',
+  },
+  utilityRow: {
+    gap: 10,
+    justifyContent: 'center',
+  },
+  utilityBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: LINE,
+    backgroundColor: SURFACE_SOFT,
+  },
+  utilityBtnEnterCode: {
+    borderColor: 'rgba(96,165,250,0.85)',
+    backgroundColor: 'rgba(37,99,235,0.2)',
+  },
+  utilityBtnRefresh: {
+    borderColor: 'rgba(196,181,253,0.85)',
+    backgroundColor: 'rgba(168,85,247,0.2)',
+  },
+  utilityBtnCompactWeb: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  utilityBtnText: {
+    color: GOLD,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  utilityBtnTextLight: {
+    color: '#F8FAFC',
+  },
+  quickMatchBtn: {
+    flex: 1.2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: GOLD,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0 10px 24px rgba(245,210,122,0.18)' }
+      : {
+          shadowColor: GOLD,
+          shadowOpacity: 0.22,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 5 },
+          elevation: 5,
+        }),
+  },
+  quickMatchBtnCompactWeb: {
+    paddingVertical: 8,
+  },
+  quickMatchText: {
+    color: '#1a1207',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
   createBtn: {
-    backgroundColor: GOLD_1,
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: LINE,
   },
   createBtnText: {
-    color: '#1a1207',
+    color: TEXT,
     fontWeight: '800',
     fontSize: 14,
   },
-  utilityRow: {
-    marginTop: 10,
-    flexDirection: 'row-reverse',
-    gap: 8,
+  chips: {
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    flexGrow: 0,
   },
-  linkButton: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  chipsCompactWeb: {
+    marginBottom: 6,
+  },
+  chipsContent: {
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  chipsContentCompactWeb: {
+    gap: 6,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: SURFACE_SOFT,
     borderWidth: 1,
     borderColor: LINE,
+    borderRadius: 999,
   },
-  linkButtonText: {
-    color: INK_DIM,
+  chipCompactWeb: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  chipActive: {
+    backgroundColor: 'rgba(245,210,122,0.18)',
+    borderColor: GOLD,
+  },
+  chipText: {
+    color: TEXT_DIM,
     fontSize: 12,
     fontWeight: '700',
   },
-  chips: { paddingHorizontal: 14, marginBottom: 12, flexGrow: 0 },
-  chipsContent: { gap: 6, paddingHorizontal: 2 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+  chipTextCompactWeb: {
+    fontSize: 11,
+  },
+  chipTextActive: {
+    color: GOLD,
+  },
+  emptyBox: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: LINE,
-    borderRadius: 999,
+    backgroundColor: SURFACE,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
-  chipActive: { backgroundColor: 'rgba(245,210,122,0.18)', borderColor: GOLD_2 },
-  chipText: { color: INK_DIM, fontSize: 12, fontWeight: '500' },
-  chipTextActive: { color: GOLD_1 },
-  list: { paddingHorizontal: 12, gap: 10 },
-  card: {
-    borderRadius: 14,
+  emptyTitle: {
+    color: TEXT,
+    fontSize: 19,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptyBody: {
+    color: TEXT_DIM,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  grid: {
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    alignItems: 'stretch',
+  },
+  gridCompactWeb: {
+    gap: 8,
+  },
+  tile: {
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: 'rgba(20,15,8,0.7)',
-  },
-  cardDisabled: {
-    opacity: 0.65,
-  },
-  felt: { aspectRatio: 2.25, position: 'relative', overflow: 'hidden' },
-  feltVignette: { backgroundColor: 'rgba(0,0,0,0.35)' },
-  pile: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniCard: {
-    position: 'absolute',
-    width: 22,
-    height: 30,
-    borderRadius: 4,
-    backgroundColor: '#fafaf6',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-  },
-  miniCardBack: { backgroundColor: '#4a1818', borderColor: 'rgba(245,210,122,0.4)' },
-  seat: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    position: 'relative',
     borderWidth: 1.5,
-    borderColor: 'rgba(245,210,122,0.6)',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    flexDirection: 'column',
+  },
+  tileSingleColumn: {
+    width: '100%',
+    minHeight: 318,
+  },
+  tileTwoColumn: {
+    minHeight: 332,
+  },
+  tileCompactWeb: {
+    minHeight: 148,
+  },
+  tileDisabled: {
+    opacity: 0.62,
+  },
+  tilePressed: {
+    transform: [{ scale: 0.99 }],
+  },
+  tileBaseLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#06060a',
+  },
+  tileOverlayLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  tileAccentBar: {
+    height: 4,
+    width: '100%',
+  },
+  tileHeader: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 8,
   },
-  seatEmpty: {
-    borderStyle: 'dashed',
-    borderColor: 'rgba(245,210,122,0.25)',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  seatText: { fontSize: 9, fontWeight: '600', color: GOLD_1 },
-  seatPosTopLeft: { top: '8%', left: '12%' },
-  seatPosTopRight: { top: '8%', right: '12%' },
-  seatPosMidRight: { top: '50%', right: '4%', marginTop: -9 },
-  seatPosBottomRight: { bottom: '8%', right: '12%' },
-  seatPosBottomLeft: { bottom: '8%', left: '12%' },
-  seatPosMidLeft: { top: '50%', left: '4%', marginTop: -9 },
-  statusPill: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 4,
+  tileHeaderCompactWeb: {
     paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 3,
+    gap: 6,
+  },
+  tileHeaderStacked: {
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+  },
+  tileBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: '58%',
+  },
+  tileBadgeStacked: {
+    maxWidth: '100%',
+  },
+  tileBadgeCompactWeb: {
+    paddingHorizontal: 7,
     paddingVertical: 3,
+  },
+  tileBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  tileBadgeTextCompactWeb: {
+    fontSize: 9,
+  },
+  statusPill: {
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '42%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
   },
-  statusText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
-  cardBody: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-  cardRow: {
-    flexDirection: 'row-reverse',
+  statusPillCompactWeb: {
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  statusPillStacked: {
+    maxWidth: '100%',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  statusPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  tileStatusWrapStacked: {
+    width: '100%',
+  },
+  tileCenter: {
+    flex: 1,
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    zIndex: 1,
+  },
+  tileCenterCompactWeb: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  tileRoomLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: TEXT_MUTE,
+    letterSpacing: 1,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  tileRoomLabelCompactWeb: {
+    fontSize: 9,
+    marginBottom: 2,
+  },
+  tileRoomCode: {
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: 3,
+    lineHeight: 40,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  tileRoomCodeCompactWeb: {
+    fontSize: 20,
+    lineHeight: 24,
+    marginBottom: 5,
+  },
+  emptyTilePlus: {
+    color: GOLD,
+    fontSize: 54,
+    fontWeight: '300',
+    textAlign: 'center',
+    lineHeight: 60,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  emptyTilePlusCompactWeb: {
+    fontSize: 28,
+    lineHeight: 30,
+    marginTop: 2,
+    marginBottom: 3,
+  },
+  emptyTileTitle: {
+    color: TEXT,
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptyTileTitleCompactWeb: {
+    fontSize: 13,
+  },
+  tileInfoList: {
+    gap: 8,
+  },
+  tileInfoListCompactWeb: {
+    gap: 4,
+  },
+  tileInfoRow: {
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
-  tableName: { fontSize: 16, fontWeight: '600', color: INK },
-  tableId: { fontSize: 10, color: INK_MUTE, letterSpacing: 1.5 },
-  metaLine: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  metaItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5 },
-  metaLabel: { color: INK_MUTE, fontSize: 10, letterSpacing: 0.8 },
-  metaValue: { color: GOLD_1, fontWeight: '600', fontSize: 12 },
-  metaDivider: { width: 1, height: 12, backgroundColor: LINE },
-  playersBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
-  avatarStack: { flexDirection: 'row-reverse' },
-  avatar: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#0a0804',
-    backgroundColor: '#3f2a10',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarEmpty: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderColor: 'rgba(245,210,122,0.15)',
-    borderStyle: 'dashed',
-  },
-  avatarText: { fontSize: 8, fontWeight: '700', color: GOLD_1 },
-  playersCount: { fontSize: 10, color: INK_MUTE },
-  hostText: { fontSize: 10, color: INK_MUTE },
-  hostName: { color: INK_DIM },
-  countdownNotice: {
-    marginTop: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(245,210,122,0.35)',
-    backgroundColor: 'rgba(245,158,11,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  countdownNoticeText: { color: GOLD_1, fontSize: 12, fontWeight: '700', textAlign: 'center' },
-  emptyBox: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: 'rgba(20,15,8,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-  },
-  emptyTitle: {
-    color: INK,
-    fontSize: 17,
+  tileInfoLabel: {
+    color: TEXT_DIM,
+    fontSize: 12,
     fontWeight: '700',
-    textAlign: 'center',
+    flex: 1,
+    flexShrink: 1,
   },
-  emptyBody: {
-    color: INK_MUTE,
+  tileInfoLabelCompactWeb: {
+    fontSize: 11,
+  },
+  tileInfoValue: {
+    color: TEXT,
     fontSize: 13,
-    textAlign: 'center',
-    marginTop: 6,
+    fontWeight: '800',
+    flex: 1,
+    flexShrink: 1,
+  },
+  tileInfoValueCompactWeb: {
+    fontSize: 12,
+  },
+  tileMetaNote: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tileFooter: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 8,
+    zIndex: 1,
+  },
+  tileFooterCompactWeb: {
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    paddingTop: 4,
+  },
+  seatsRow: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  seatDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  seatsCount: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: TEXT_DIM,
+    marginHorizontal: 3,
+  },
+  tileActionHint: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  tileActionHintCompactWeb: {
+    fontSize: 10,
+    lineHeight: 13,
   },
   errorBox: {
     marginTop: 14,
@@ -728,32 +1386,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(252,165,165,0.28)',
-    backgroundColor: 'rgba(127,29,29,0.55)',
+    borderColor: 'rgba(252,165,165,0.22)',
+    backgroundColor: 'rgba(127,29,29,0.44)',
   },
   errorText: {
     color: '#fecaca',
     fontSize: 13,
-    textAlign: 'right',
   },
-  fab: {
-    position: 'absolute',
-    left: 22,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    backgroundColor: GOLD_1,
-    borderRadius: 999,
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  fabBolt: { fontSize: 14, color: '#1a1207' },
-  fabText: { color: '#1a1207', fontWeight: '700', fontSize: 14, letterSpacing: 0.6 },
   disabledButton: {
     opacity: 0.5,
   },

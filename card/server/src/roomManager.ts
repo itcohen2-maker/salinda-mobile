@@ -55,7 +55,7 @@ const CODE_CHARS = '0123456789';
 const CODE_LENGTH = 4;
 const INVITE_CODE_LENGTH = 6;
 const TABLE_MIN_PARTICIPANTS = 2;
-const TABLE_MAX_PARTICIPANTS = 6;
+const TABLE_MAX_PARTICIPANTS = 4;
 
 function generateRoomCode(): string {
   let code: string;
@@ -204,6 +204,20 @@ export function joinPrivateRoom(
   return joinRoom(roomCode, playerName, socketId, locale);
 }
 
+export function destroyRoom(roomCode: string): void {
+  const room = rooms.get(roomCode);
+  if (room) {
+    clearRoomTimers(room);
+    rooms.delete(roomCode);
+  }
+  for (const [socketId, info] of socketToRoom.entries()) {
+    if (info.roomCode === roomCode) {
+      socketToRoom.delete(socketId);
+    }
+  }
+  console.log(`[ROOM] Destroyed ${roomCode}`);
+}
+
 export function leaveRoom(socketId: string): { room: Room; playerId: string; playerName: string } | null {
   const info = socketToRoom.get(socketId);
   if (!info) return null;
@@ -256,6 +270,32 @@ export function leaveRoom(socketId: string): { room: Room; playerId: string; pla
   socketToRoom.delete(socketId);
   console.log(`[ROOM] ${playerName} left ${info.roomCode}`);
   return { room, playerId: info.playerId, playerName };
+}
+
+export function promoteConnectedHumanHost(room: Room, preferredPlayerId?: string | null): Player | null {
+  const connectedHumans = room.players.filter((player) => !player.isBot && player.isConnected && !player.isEliminated);
+  if (connectedHumans.length === 0) return null;
+
+  const nextHost =
+    connectedHumans.find((player) => player.isHost)
+    ?? (preferredPlayerId ? connectedHumans.find((player) => player.id === preferredPlayerId) : undefined)
+    ?? connectedHumans[0];
+
+  for (const player of room.players) {
+    player.isHost = player.id === nextHost.id;
+  }
+
+  if (room.state) {
+    room.state = {
+      ...room.state,
+      players: room.state.players.map((player) => ({
+        ...player,
+        isHost: player.id === nextHost.id,
+      })),
+    };
+  }
+
+  return nextHost;
 }
 
 export function reconnectPlayer(
@@ -437,7 +477,7 @@ export function getRoomTables(): LobbyTableSummary[] {
   const summaries: LobbyTableSummary[] = [];
   for (const room of rooms.values()) {
     syncRoomTableStatus(room);
-    if (room.tableStatus === 'configuring' || room.tableStatus === 'in_game') continue;
+    if (room.tableStatus === 'configuring') continue;
     const host = room.players.find((player) => player.isHost && !player.isBot) ?? room.players.find((player) => !player.isBot);
     summaries.push({
       roomCode: room.code,
@@ -450,8 +490,13 @@ export function getRoomTables(): LobbyTableSummary[] {
       hasRandomJoiner: room.hasRandomJoiner,
       tableTheme: room.tableTheme,
       configuredDifficulty: room.configuredDifficulty,
+      showFractions: room.configuredGameSettings?.showFractions ?? null,
+      fractionKinds: room.configuredGameSettings?.fractionKinds ?? null,
+      showPossibleResults: room.configuredGameSettings?.showPossibleResults ?? null,
+      showSolveExercise: room.configuredGameSettings?.showSolveExercise ?? null,
       timerSetting: room.configuredGameSettings?.timerSetting ?? null,
       timerCustomSeconds: room.configuredGameSettings?.timerCustomSeconds ?? null,
+      enabledOperators: room.configuredGameSettings?.enabledOperators ?? null,
     });
   }
   return summaries.sort((a, b) => {
@@ -459,7 +504,8 @@ export function getRoomTables(): LobbyTableSummary[] {
       if (value === 'waiting') return 0;
       if (value === 'countdown') return 1;
       if (value === 'full') return 2;
-      return 3;
+      if (value === 'in_game') return 3;
+      return 4;
     };
     return statusRank(a.status) - statusRank(b.status) || a.roomCode.localeCompare(b.roomCode);
   });

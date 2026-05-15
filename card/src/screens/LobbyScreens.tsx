@@ -1,5 +1,5 @@
 // ============================================================
-// LobbyScreens — Create/Join room + Lobby wait
+// LobbyScreens ׳’ג‚¬ג€ Create/Join room + Lobby wait
 // ============================================================
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -24,7 +24,8 @@ import type { BotDifficulty, Fraction, HostGameSettings, LobbyTableSummary, Oper
 const ALL_FRACTION_KINDS: readonly Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
 import type { MsgParams } from '../../shared/i18n';
 import { useLocale } from '../i18n/LocaleContext';
-import SalindaLogoOption06 from '../components/branding/SalindaLogoOption06';
+import { buildRoomShareMessage } from './onlineShareMessages';
+import SalindaPuzzleGameLogo from '../components/branding/SalindaPuzzleGameLogo';
 import { brand } from '../theme/brand';
 import { CARDS_PER_PLAYER } from '../../shared/gameConstants';
 
@@ -39,6 +40,7 @@ function lobbyTimerLabel(t: TFn, ts: HostGameSettings['timerSetting'], customSec
       ? t('lobby.timerFmtMinSec', { m: Math.floor(customSec / 60), s: customSec % 60 })
       : t('lobby.timerSec', { n: customSec });
   }
+  if (ts === '15') return t('lobby.timerSec', { n: 15 });
   if (ts === '60') return t('lobby.timerMin');
   if (ts === '90') return t('lobby.timerMinHalf');
   return t('lobby.timerSec', { n: ts });
@@ -47,7 +49,10 @@ function lobbyTimerLabel(t: TFn, ts: HostGameSettings['timerSetting'], customSec
 export function LanguageToggle() {
   const { locale, setLocale, t } = useLocale();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' }}>
+    <View
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' }}
+      testID="lobby-language-toggle"
+    >
       <Text style={{ color: '#9CA3AF', fontSize: 12 }}>{t('lang.label')}:</Text>
       <TouchableOpacity onPress={() => void setLocale('he')} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: locale === 'he' ? brand.gold : brand.surface2 }}>
         <Text style={{ color: locale === 'he' ? '#111827' : '#fff', fontWeight: '700', fontSize: 12 }}>{t('lang.he')}</Text>
@@ -59,7 +64,7 @@ export function LanguageToggle() {
   );
 }
 
-/** בסיס URL של לקוח ה-Web המפורסם (ללא "/" בסוף). בלי הגדרה — ריק; המארח יכול למלא ידנית. */
+/** ׳³ג€˜׳³ֲ¡׳³ג„¢׳³ֲ¡ URL ׳³ֲ©׳³ֲ ׳³ֲ׳³ֲ§׳³ג€¢׳³ג€” ׳³ג€-Web ׳³ג€׳³ֲ׳³ג‚×׳³ג€¢׳³ֲ¨׳³ֲ¡׳³ֲ (׳³ֲ׳³ֲ׳³ֲ "/" ׳³ג€˜׳³ֲ¡׳³ג€¢׳³ֲ£). ׳³ג€˜׳³ֲ׳³ג„¢ ׳³ג€׳³ג€™׳³ג€׳³ֲ¨׳³ג€ ׳’ג‚¬ג€ ׳³ֲ¨׳³ג„¢׳³ֲ§; ׳³ג€׳³ֲ׳³ֲ׳³ֲ¨׳³ג€” ׳³ג„¢׳³ג€÷׳³ג€¢׳³ֲ ׳³ֲ׳³ֲ׳³ֲ׳³ֲ ׳³ג„¢׳³ג€׳³ֲ ׳³ג„¢׳³ֳ—. */
 function getInviteWebBaseUrl(): string {
   if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_WEB_APP_URL) {
     return String(process.env.EXPO_PUBLIC_WEB_APP_URL).trim();
@@ -131,7 +136,7 @@ export function LobbyEntry({
   const [roomCode, setRoomCode] = useState('');
   const [joinFromLinkReady, setJoinFromLinkReady] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  // "Connecting..." modal — shown between tapping Create/Join and the room
+  // "Connecting..." modal ׳’ג‚¬ג€ shown between tapping Create/Join and the room
   // actually appearing. Once the multiplayer hook reports `inRoom`, the
   // parent switches screen so this component unmounts; if the server errors,
   // the `error` effect below clears this back to false.
@@ -145,7 +150,7 @@ export function LobbyEntry({
     }
   }, [error, clearError]);
 
-  // Safety timeout — if the server doesn't answer within 15s, hide the
+  // Safety timeout ׳’ג‚¬ג€ if the server doesn't answer within 15s, hide the
   // connecting modal so the learner isn't stuck on a frozen spinner. A real
   // connection error will have already been surfaced via `error` above.
   useEffect(() => {
@@ -187,7 +192,7 @@ export function LobbyEntry({
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <LanguageToggle />
-      {/* "Connecting to room…" overlay — shown while the socket is handshaking
+      {/* "Connecting to room׳’ג‚¬ֲ¦" overlay ׳’ג‚¬ג€ shown while the socket is handshaking
           with the server and the room is being created/joined. Disappears the
           moment the parent switches to the lobby screen (inRoom=true) or a
           connection error surfaces. */}
@@ -211,7 +216,7 @@ export function LobbyEntry({
         </TouchableOpacity>
       )}
       <View style={styles.logoWrap}>
-        <SalindaLogoOption06 width={260} />
+        <SalindaPuzzleGameLogo width={260} />
       </View>
       <Text style={styles.title}>{t('lobby.connectTitle')}</Text>
       <Text style={styles.subtitle}>{t('lobby.connectSubtitle')}</Text>
@@ -222,12 +227,13 @@ export function LobbyEntry({
         <View style={styles.rulesModalBackdrop}>
           <View style={styles.rulesModalCard}>
             <View style={styles.rulesModalLogoWrap}>
-              <SalindaLogoOption06 width={220} />
+              <SalindaPuzzleGameLogo width={220} />
             </View>
             <Text style={styles.rulesModalTitle}>{t('start.rulesTitle')}</Text>
             <ScrollView style={styles.rulesModalScroll} showsVerticalScrollIndicator={false}>
               <Text style={[styles.rulesModalSection, { textAlign: ta }]}>{t('start.goalTitle')}</Text>
               <Text style={[styles.rulesModalBody, { textAlign: ta }]}>{t('start.rules.goal1', { n: CARDS_PER_PLAYER })}</Text>
+              <Text style={[styles.rulesModalBody, { textAlign: ta }]}>{t('start.rules.goalLimit')}</Text>
               <Text style={[styles.rulesModalBody, { textAlign: ta }]}>{t('start.rules.goal2')}</Text>
               <Text style={[styles.rulesModalSection, { textAlign: ta }]}>{t('start.turnTitle')}</Text>
               <Text style={[styles.rulesModalBody, { textAlign: ta }]}>{t('start.rules.t1')}</Text>
@@ -346,9 +352,9 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [botCountdown, setBotCountdown] = useState<number | null>(null);
   const [showAdvancedHostSettings, setShowAdvancedHostSettings] = useState(false);
-  /** המארח רואה קודם את מסך הכיוון; רק לאחר אישור נחשף קוד החדר */
+  /** ׳³ג€׳³ֲ׳³ֲ׳³ֲ¨׳³ג€” ׳³ֲ¨׳³ג€¢׳³ֲ׳³ג€ ׳³ֲ§׳³ג€¢׳³ג€׳³ֲ ׳³ֲ׳³ֳ— ׳³ֲ׳³ֲ¡׳³ֲ ׳³ג€׳³ג€÷׳³ג„¢׳³ג€¢׳³ג€¢׳³ֲ; ׳³ֲ¨׳³ֲ§ ׳³ֲ׳³ֲ׳³ג€”׳³ֲ¨ ׳³ֲ׳³ג„¢׳³ֲ©׳³ג€¢׳³ֲ¨ ׳³ֲ ׳³ג€”׳³ֲ©׳³ֲ£ ׳³ֲ§׳³ג€¢׳³ג€ ׳³ג€׳³ג€”׳³ג€׳³ֲ¨ */
   const [settingsConfirmed, setSettingsConfirmed] = useState(false);
-  /** עוקף בסיס Web אוטומטי; ריק = שימוש ב־EXPO_PUBLIC_WEB_APP_URL או במקור הדף (Web). נשמר במכשיר. */
+  /** ׳³ֲ¢׳³ג€¢׳³ֲ§׳³ֲ£ ׳³ג€˜׳³ֲ¡׳³ג„¢׳³ֲ¡ Web ׳³ֲ׳³ג€¢׳³ֻ׳³ג€¢׳³ֲ׳³ֻ׳³ג„¢; ׳³ֲ¨׳³ג„¢׳³ֲ§ = ׳³ֲ©׳³ג„¢׳³ֲ׳³ג€¢׳³ֲ© ׳³ג€˜׳²ֲ¾EXPO_PUBLIC_WEB_APP_URL ׳³ֲ׳³ג€¢ ׳³ג€˜׳³ֲ׳³ֲ§׳³ג€¢׳³ֲ¨ ׳³ג€׳³ג€׳³ֲ£ (Web). ׳³ֲ ׳³ֲ©׳³ֲ׳³ֲ¨ ׳³ג€˜׳³ֲ׳³ג€÷׳³ֲ©׳³ג„¢׳³ֲ¨. */
   const [manualWebInviteBase, setManualWebInviteBase] = useState('');
 
   useEffect(() => {
@@ -454,6 +460,21 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
     ];
     return lines.join('\n');
   }, [t, difficulty, showFractions, showPossibleResults, showSolveExercise, timerSetting, timerCustomSeconds]);
+  const minuteTimerStepper = {
+    key: 'min',
+    label: t('start.timerPickerMin'),
+    value: Math.floor(timerCustomSeconds / 60),
+    decrement: () => setTimerCustomSeconds((s) => Math.max(1, s - 60)),
+    increment: () => setTimerCustomSeconds((s) => Math.min(600, s + 60)),
+  };
+  const secondTimerStepper = {
+    key: 'sec',
+    label: t('start.timerPickerSec'),
+    value: String(timerCustomSeconds % 60).padStart(2, '0'),
+    decrement: () => setTimerCustomSeconds((s) => Math.max(1, Math.floor(s / 60) * 60 + Math.max(0, (s % 60) - 5))),
+    increment: () => setTimerCustomSeconds((s) => Math.min(600, Math.floor(s / 60) * 60 + Math.min(55, (s % 60) + 5))),
+  };
+  const customTimerSteppers = [minuteTimerStepper, secondTimerStepper];
 
   const configuredWebBase = getInviteWebBaseUrl().replace(/\/$/, '');
   const inviteSuffix = useMemo(() => {
@@ -467,17 +488,15 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
     if (!effectiveWebBase) return '';
     return `${effectiveWebBase}${inviteSuffix}`;
   }, [roomCode, inviteSuffix, effectiveWebBase]);
+  const shareRoomMessage = useMemo(() => buildRoomShareMessage({ t, roomCode }), [t, roomCode]);
 
   const copyableInvite = inviteLink || inviteSuffix;
 
   const handleShareInvite = async () => {
-    if (!copyableInvite) return;
+    if (!shareRoomMessage) return;
     try {
-      const body = inviteLink
-        ? inviteLink
-        : t('lobby.shareBodyNoLink', { suffix: inviteSuffix, room: roomCode ?? '' });
       await Share.share({
-        message: t('lobby.shareTitle', { body }),
+        message: shareRoomMessage,
       });
     } catch {
       // ignore user-cancel or share not available
@@ -516,7 +535,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
         </TouchableOpacity>
       )}
       <View style={styles.logoWrap}>
-        <SalindaLogoOption06 width={260} />
+        <SalindaPuzzleGameLogo width={260} />
       </View>
       <Text style={styles.title}>{isHost && !settingsConfirmed ? t('lobby.configureTitle') : t('lobby.roomReady')}</Text>
       {!(isHost && !settingsConfirmed) && (
@@ -549,7 +568,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
             ) : (
               <>
                 <Text style={[styles.inviteSuffixCaption, { textAlign: ta }]}>{t('lobby.suffixCaption')}</Text>
-                <Text selectable style={styles.inviteLink}>{inviteSuffix || '—'}</Text>
+                <Text selectable style={styles.inviteLink}>{inviteSuffix || '-'}</Text>
               </>
             )}
             <View style={styles.inviteActionsRow}>
@@ -705,6 +724,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
             {(
               [
                 ['off', t('lobby.timerOff')] as const,
+                ['15', t('lobby.timerSec', { n: 15 })] as const,
                 ['60', t('lobby.timerMin')] as const,
                 ['90', t('lobby.timerMinHalf')] as const,
                 ['custom', t('lobby.timerCustom')] as const,
@@ -721,30 +741,20 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
           </View>
           {timerSetting === 'custom' && (
             <View style={styles.timerCustomRow}>
-              <View style={styles.timerStepper}>
-                <Text style={styles.timerStepLabel}>{t('start.timerPickerMin')}</Text>
-                <View style={styles.timerStepRow}>
-                  <TouchableOpacity onPress={() => setTimerCustomSeconds((s) => Math.max(1, s - 60))} style={styles.timerStepBtn}>
-                    <Text style={styles.timerStepBtnTxt}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.timerStepVal}>{Math.floor(timerCustomSeconds / 60)}</Text>
-                  <TouchableOpacity onPress={() => setTimerCustomSeconds((s) => Math.min(600, s + 60))} style={styles.timerStepBtn}>
-                    <Text style={styles.timerStepBtnTxt}>+</Text>
-                  </TouchableOpacity>
+              {customTimerSteppers.map((stepper) => (
+                <View key={stepper.key} style={styles.timerStepper}>
+                  <Text style={styles.timerStepLabel}>{stepper.label}</Text>
+                  <View style={styles.timerStepRow}>
+                    <TouchableOpacity onPress={stepper.decrement} style={styles.timerStepBtn}>
+                      <Text style={styles.timerStepBtnTxt}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.timerStepVal}>{stepper.value}</Text>
+                    <TouchableOpacity onPress={stepper.increment} style={styles.timerStepBtn}>
+                      <Text style={styles.timerStepBtnTxt}>+</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.timerStepper}>
-                <Text style={styles.timerStepLabel}>{t('start.timerPickerSec')}</Text>
-                <View style={styles.timerStepRow}>
-                  <TouchableOpacity onPress={() => setTimerCustomSeconds((s) => Math.max(1, Math.floor(s / 60) * 60 + Math.max(0, (s % 60) - 5)))} style={styles.timerStepBtn}>
-                    <Text style={styles.timerStepBtnTxt}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.timerStepVal}>{String(timerCustomSeconds % 60).padStart(2, '0')}</Text>
-                  <TouchableOpacity onPress={() => setTimerCustomSeconds((s) => Math.min(600, Math.floor(s / 60) * 60 + Math.min(55, (s % 60) + 5)))} style={styles.timerStepBtn}>
-                    <Text style={styles.timerStepBtnTxt}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              ))}
             </View>
           )}
             </>
@@ -851,7 +861,7 @@ const styles = StyleSheet.create({
   backBtnText: { color: brand.cyan, fontSize: 14, fontWeight: '600' },
   title: { fontSize: 32, fontWeight: '800', color: '#F59E0B', marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
   subtitle: { color: '#9CA3AF', fontSize: 14, marginBottom: 24, alignSelf: 'stretch', textAlign: 'right' },
-  label: { color: '#D1D5DB', fontSize: 14, fontWeight: '600', alignSelf: 'flex-start', marginTop: 16, marginBottom: 8 },
+  label: { color: '#D1D5DB', fontSize: 14, fontWeight: '600', alignSelf: 'stretch', textAlign: 'center', marginTop: 16, marginBottom: 8 },
   inputShell: {
     width: '100%',
     backgroundColor: '#D4A010',
