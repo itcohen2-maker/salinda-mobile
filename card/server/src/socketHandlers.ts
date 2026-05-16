@@ -354,14 +354,17 @@ async function handleActiveGameExit(
       scheduleBotAction(io, room);
     }
   } else if (remainingHumans.length === 1) {
-    // 2-player game: let survivor choose
-    const survivor = remainingHumans[0];
-    emitToPlayer(io, room, survivor.id, (s) => {
-      s.emit('opponent_disconnect_choice', {
-        playerId: leavingPlayerId,
-        playerName: leavingName,
-      });
-    });
+    // 2-player game: automatic technical victory for the survivor
+    clearRoomTurnTimer(room);
+    clearBotActionTimer(room);
+    clearRoomDisconnectGrace(room);
+    room.lastActivity = Date.now();
+    const tvResult = technicalVictory(room.state, leavingPlayerId);
+    if (!tvResult) return;
+    room.state = tvResult;
+    broadcastState(io, room);
+    emitRoomToasts(io, room);
+    maybeRecordMatch(room);
   } else {
     // Nobody left: tear down the room
     destroyRoom(room.code);
@@ -1392,33 +1395,6 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
     const playerView = getPlayerView(room.state, playerId, playerLocale(room, playerId));
     reply({ ok: true, playerView });
-  });
-
-  socket.on('accept_technical_victory', () => {
-    if (rateLimited()) return;
-    const info = getRoomBySocket(socket.id);
-    if (!info) return;
-    const { room, playerId } = info;
-    if (!room.state || room.state.phase === 'game-over') return;
-
-    // Find the disconnected opponent (not connected, not bot, not self)
-    const disconnectedOpponent = room.players.find(
-      (p) => p.id !== playerId && !p.isBot && !p.isConnected,
-    );
-    if (!disconnectedOpponent) return;
-
-    clearRoomTurnTimer(room);
-    clearBotActionTimer(room);
-    clearRoomDisconnectGrace(room);
-    room.lastActivity = Date.now();
-
-    const tvResult = technicalVictory(room.state, disconnectedOpponent.id);
-    if (!tvResult) return;
-
-    room.state = tvResult;
-    broadcastState(io, room);
-    emitRoomToasts(io, room);
-    maybeRecordMatch(room);
   });
 
   socket.on('create_class_session', (payload) => {

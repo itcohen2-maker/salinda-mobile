@@ -1,4 +1,4 @@
-export type CardType = 'number' | 'fraction' | 'operation' | 'joker'
+export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild'
 export type Operation = '+' | '-' | 'x' | '÷'
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5'
 
@@ -15,6 +15,7 @@ export interface Player {
   name: string
   hand: Card[]
   calledLolos: boolean
+  courageCoins?: number
 }
 
 export interface DiceResult {
@@ -54,6 +55,8 @@ export interface GameState {
   hasPlayedCards: boolean
   hasDrawnCard: boolean
   guidanceTurnsRemaining: number
+  winReason?: 'technical'
+  disconnectedPlayerName?: string
 }
 
 export interface EquationOption {

@@ -851,6 +851,10 @@ interface GameState {
   lastTurnPlayedCards: Card[];
   /** Solo-only tracking shown on the victory summary screen. */
   soloSessionStats: SoloSessionStats | null;
+  /** Set when a player disconnected mid-game and the remaining player wins by default. */
+  winReason?: 'technical';
+  /** Name of the player who disconnected, triggering a technical victory. */
+  disconnectedPlayerName?: string;
 }
 
 interface Notification {
@@ -17431,7 +17435,7 @@ function PreVictoryCoinAwardScreen() {
   );
 }
 
-function GameOver() {
+function GameOver({ onPlayVsBot, onBackToLobby }: { onPlayVsBot?: () => void; onBackToLobby?: () => void } = {}) {
   const { t, isRTL } = useLocale();
   const { state, dispatch } = useGame();
   const viewport = useWebViewportSize();
@@ -17442,6 +17446,8 @@ function GameOver() {
   const playfieldFrameHeight = webGameLayout?.frameHeight ?? responsive.height;
   const playfieldContentScale = webGameLayout?.contentScale ?? 1;
   const sorted = [...state.players].sort((a,b)=>a.hand.length-b.hand.length);
+  const isTechnicalVictory = state.winReason === 'technical';
+  const disconnectedName = state.disconnectedPlayerName;
   const isSoloWin = state.mode === 'solo' && state.players.length === 1;
   const soloStats = state.soloSessionStats;
   const winningTurnCoins = getTurnCoinsEarned(state);
@@ -17485,7 +17491,7 @@ function GameOver() {
       <View style={{ marginBottom: 24, alignItems: 'center' }}>
         <HappyBubble
           tone="celebrate"
-          title="!המשחק נגמר"
+          title={isTechnicalVictory ? 'ניצחון טכני!' : '!המשחק נגמר'}
           text={`${state.winner?.name ?? ''} ניצח/ה!`}
           withTail={false}
         />
@@ -17625,8 +17631,24 @@ function GameOver() {
           </View>
         )}
       </ScrollView>
-      <LulosButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
-      <LulosButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
+      {isTechnicalVictory && disconnectedName ? (
+        <View style={{ backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, width: '100%', marginTop: 14, marginBottom: 4 }}>
+          <Text style={{ color: '#92400E', fontSize: 15, fontWeight: '600', textAlign: 'center' }}>
+            {t('game.technicalVictoryBody', { name: disconnectedName })}
+          </Text>
+        </View>
+      ) : null}
+      {isTechnicalVictory ? (
+        <>
+          <LulosButton text={t('game.playVsBot')} color="green" width={280} height={64} onPress={() => onPlayVsBot?.()} style={{marginTop:16}} />
+          <LulosButton text={t('game.backToLobby')} color="blue" width={280} height={56} onPress={() => onBackToLobby?.()} style={{marginTop:12}} />
+        </>
+      ) : (
+        <>
+          <LulosButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
+          <LulosButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
+        </>
+      )}
     </View>
     </WebGameScreenFrame>
   );
@@ -19286,7 +19308,6 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
   const [classroomLaunchConfig, setClassroomLaunchConfig] = useState<ClassroomLaunchConfig | null>(null);
-  const [disconnectBotDifficulty, setDisconnectBotDifficulty] = useState<BotDifficulty>('medium');
   // showTutorial removed — replaced by playMode === 'tutorial'
   const welcomeMusicRef = useRef<Audio.Sound | null>(null);
   const soundOn = state.soundsEnabled !== false;
@@ -19877,7 +19898,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         case 'game-over':
           screen = shouldShowPreVictoryCoinAwardScreen
             ? <PreVictoryCoinAwardScreen />
-            : <GameOver />;
+            : <GameOver
+                onPlayVsBot={() => { mp?.leaveRoom?.(); setSelectedLocalGameMode('vs-bot'); setPlayMode('local'); }}
+                onBackToLobby={() => { mp?.leaveRoom?.(); setPlayMode('game-entry'); }}
+              />;
           break;
         default:
           screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />;
@@ -19909,78 +19933,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const tutorialHeaderActionPaddingVertical = 8;
   const tutorialHeaderActionPaddingHorizontal = 12;
   const tutorialHeaderZIndex = 20000;
-  const onlineDisconnectChoice = playMode === 'online' ? (mp?.disconnectChoice ?? null) : null;
-  useEffect(() => {
-    if (!onlineDisconnectChoice) return;
-    setDisconnectBotDifficulty(state.hostBotDifficulty ?? 'medium');
-  }, [onlineDisconnectChoice, state.hostBotDifficulty]);
-  const onlineDisconnectModal = onlineDisconnectChoice ? (
-    <AppModal visible onClose={() => {}} customHeader={<View />}>
-      <View style={{ gap: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#F9FAFB', fontSize: 20, fontWeight: '900', textAlign: 'center', lineHeight: 28 }}>
-          {t('mp.opponentDisconnectChoiceTitle', { name: onlineDisconnectChoice.playerName })}
-        </Text>
-        <Text style={{ color: '#D1D5DB', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20 }}>
-          {locale === 'he' ? 'בחרו כיצד להמשיך:' : 'Choose how to continue:'}
-        </Text>
-        <View style={{ gap: 8, width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: '#E5E7EB', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
-            {t('lobby.botDifficultyLabel')}
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-            {ONLINE_BOT_DIFF_KEYS.map((key) => {
-              const selected = disconnectBotDifficulty === key;
-              const label =
-                key === 'easy'
-                  ? t('start.botEasy')
-                  : key === 'medium'
-                    ? t('start.botMedium')
-                    : t('start.botHard');
-              return (
-                <TouchableOpacity
-                  key={key}
-                  testID={`disconnect-bot-difficulty-${key}`}
-                  onPress={() => setDisconnectBotDifficulty(key)}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                    borderRadius: 10,
-                    borderWidth: 2,
-                    borderColor: selected ? '#F97316' : 'rgba(255,255,255,0.15)',
-                    backgroundColor: selected ? 'rgba(249,115,22,0.2)' : 'rgba(255,255,255,0.06)',
-                  }}
-                >
-                  <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-        <View style={{ gap: 12, width: '100%', alignItems: 'center' }}>
-          <LulosButton
-            text={t('mp.acceptTechnicalVictory')}
-            color="green"
-            width={280}
-            height={52}
-            fontSize={17}
-            onPress={() => { mp?.acceptTechnicalVictory?.(); }}
-          />
-          <LulosButton
-            text={t('mp.continueVsBot')}
-            color="blue"
-            width={280}
-            height={52}
-            fontSize={17}
-            onPress={() => { void mp?.continueVsBot?.(disconnectBotDifficulty); }}
-          />
-        </View>
-      </View>
-    </AppModal>
-  ) : null;
   return (
     <View style={{ flex: 1, backgroundColor: '#0a1628' }}>
       {screen}
-      {onlineDisconnectModal}
       <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
       {playMode === 'classroom-game' && state.phase === 'game-over' && (
         <View style={{ position: 'absolute', top: 18, left: 18, zIndex: 20001 }}>

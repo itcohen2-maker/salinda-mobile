@@ -69,9 +69,9 @@ function identicalCardLabel(
 /** זמן המתנה לפעולת שחקן במשחק מקוון (אני מוכן) */
 export const ONLINE_TURN_ACTION_MS = 15_000;
 /** ברירת מחדל בטיחותית כשאין טיימר מוגדר */
-const DEFAULT_TURN_TIMEOUT_SECONDS = 15;
+const DEFAULT_TURN_TIMEOUT_SECONDS = 60;
 /** תקרת שרת להגדרות טיימר מפורשות מהלקוח */
-const MAX_CONFIGURED_TURN_SECONDS = DEFAULT_TURN_TIMEOUT_SECONDS;
+const MAX_CONFIGURED_TURN_SECONDS = 120;
 const OVERFLOW_SWAP_ACTION_MS = OVERFLOW_SWAP_TIMER_SECONDS * 1000;
 
 function resolveConfiguredTurnTimerSeconds(st: ServerGameState): number | null {
@@ -309,6 +309,8 @@ export function technicalVictory(
     winner: remaining,
     tournamentTable: bumpTournamentOnWin(st, wi),
     lastMoveMessage: { key: 'toast.technicalVictory', params: { left: st.players.find((p) => p.id === leavingPlayerId)?.name ?? 'Player' } },
+    winReason: 'technical' as const,
+    disconnectedPlayerName: st.players.find((p) => p.id === leavingPlayerId)?.name ?? '',
   };
 }
 
@@ -1316,5 +1318,7 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
     roundsPlayed: state.roundsPlayed ?? 0,
     equationCommits: state.equationCommits,
     tournamentTable: state.tournamentTable,
+    winReason: state.winReason,
+    disconnectedPlayerName: state.disconnectedPlayerName,
   };
 }

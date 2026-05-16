@@ -269,6 +269,10 @@ export interface ServerGameState {
   botPendingStagedIds?: string[] | null;
   /** ניצחונות/הפסדים למשחק הנוכחי — מתעדכן בסיום משחק */
   tournamentTable: TournamentStanding[];
+  /** Set when game ended due to opponent disconnect; drives the technical-win variant of GameOver */
+  winReason?: 'technical';
+  /** Name of the player who disconnected, when winReason === 'technical' */
+  disconnectedPlayerName?: string;
 }
 
 // ── Client Player View (what each player sees) ──
@@ -355,6 +359,8 @@ export interface PlayerView {
   equationCommit?: EquationCommitPayload | null;
   /** טבלת טורניר למשחק הנוכחי; לקוח ישן בלי שדה — יבנה מאפס לפי שמות שחקנים */
   tournamentTable?: TournamentStanding[];
+  winReason?: 'technical';
+  disconnectedPlayerName?: string;
 }
 
 // ── Socket Events: Client → Server ──

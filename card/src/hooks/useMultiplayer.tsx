@@ -17,7 +17,6 @@ import type {
   ClassroomSendInterventionPayload,
   ClassroomSocketState,
   CreateClassSessionPayload,
-  ContinueVsBotAck,
   Fraction,
   LobbyStatus,
   LobbyTableSummary,
@@ -201,12 +200,6 @@ export interface LobbyStatusState {
   botOfferAt: number | null;
 }
 
-export interface DisconnectChoiceState {
-  playerId: string;
-  playerName: string;
-  deadlineAt?: number; // optional — only set by legacy grace-timer path
-}
-
 export interface MultiplayerContextValue {
   playMode: PlayMode;
   setPlayMode: (m: PlayMode) => void;
@@ -254,10 +247,6 @@ export interface MultiplayerContextValue {
   /** ניתוק רשת זמני במהלך משחק — מנסים להתחבר מחדש לשרת */
   reconnectNotice: string | null;
   clearReconnectNotice: () => void;
-  disconnectChoice: DisconnectChoiceState | null;
-  clearDisconnectChoice: () => void;
-  continueVsBot: (difficulty?: BotDifficulty) => Promise<boolean>;
-  acceptTechnicalVictory: () => void;
   classroomState: ClassroomSocketState | null;
   createClassSession: (payload: CreateClassSessionPayload) => void;
   joinClassSession: (payload: JoinClassSessionPayload) => void;
@@ -465,6 +454,8 @@ function playerViewToGameState(view: PlayerView): any {
     botPresentation: { action: null, candidateCardId: null, ticks: 0, notification: null },
     botPostEquationPauseTicks: 0,
     botTickSeq: 0,
+    winReason: view.winReason,
+    disconnectedPlayerName: view.disconnectedPlayerName,
   };
 }
 
@@ -558,7 +549,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState<string | null>(null);
-  const [disconnectChoice, setDisconnectChoice] = useState<DisconnectChoiceState | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
   /** כתובת ה-io האחרונה — לזיהוי החלפת שרת מול socket ישן */
@@ -607,7 +597,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     setPlayers([]);
     setLobbyStatus(null);
     setServerState(null);
-    setDisconnectChoice(null);
     setIsHost(false);
     prevPlayerCountRef.current = 0;
     prevHumanPlayerIdsRef.current = [];
@@ -768,9 +757,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       clearRoomSession();
       socket.emit('list_tables');
     });
-    socket.on('opponent_disconnect_choice', ({ playerId: disconnectedId, playerName }) => {
-      setDisconnectChoice({ playerId: disconnectedId, playerName });
-    });
     socket.on('player_eliminated', ({ playerName }) => {
       setToast(
         localeRef.current === 'he'
@@ -778,27 +764,21 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
           : `${playerName} left — game continues`,
       );
     });
-    socket.on('opponent_disconnect_grace', ({ playerId: disconnectedId, playerName, deadlineAt }) => {
-      setDisconnectChoice({ playerId: disconnectedId, playerName, deadlineAt });
+    socket.on('opponent_disconnect_grace', ({ playerName }) => {
       setToast(
         localeRef.current === 'he'
           ? `${playerName} התנתק. מחכים לחזרה עד הטיימר.`
           : `${playerName} disconnected. Waiting until the timer expires.`,
       );
     });
-    socket.on('opponent_reconnected', ({ playerId: reconnectedId }) => {
-      setDisconnectChoice((current) => (current?.playerId === reconnectedId ? null : current));
+    socket.on('opponent_reconnected', () => {
+      setToast(null);
     });
-    socket.on('opponent_disconnect_expired', ({ playerId: disconnectedId, playerName }) => {
-      setDisconnectChoice((current) => ({
-        playerId: disconnectedId,
-        playerName,
-        deadlineAt: current?.deadlineAt ?? Date.now(),
-      }));
+    socket.on('opponent_disconnect_expired', ({ playerName }) => {
       setToast(
         localeRef.current === 'he'
-          ? `${playerName} לא חזר בזמן. אפשר להמשיך מול בוט או לצאת ללובי.`
-          : `${playerName} did not return in time. Continue vs bot or return to lobby.`,
+          ? `${playerName} לא חזר בזמן. ניצחון טכני נרשם.`
+          : `${playerName} did not return. Technical victory recorded.`,
       );
     });
     socket.on('game_started', (view: PlayerView) => {
@@ -809,7 +789,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       awaitingReconnectSyncRef.current = false;
       setReconnectNotice(null);
       setLobbyStatus({ status: 'bot_game_started', botOfferAt: null });
-      setDisconnectChoice(null);
       void playSfx('start', { cooldownMs: 900, volumeOverride: 0.4 });
       setServerState(view);
     });
@@ -820,12 +799,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       }
       awaitingReconnectSyncRef.current = false;
       setReconnectNotice(null);
-      setDisconnectChoice((current) => {
-        if (!current) return null;
-        if (view.phase === 'game-over') return null;
-        const reconnectNow = view.players.some((p) => p.id === current.playerId && p.isConnected && !p.isBot);
-        return reconnectNow ? null : current;
-      });
+      if (view.phase === 'game-over') setToast(null);
       setServerState(view);
     });
     socket.on('classroom_state', (view: ClassroomSocketState) => {
@@ -1006,49 +980,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     });
   }, [locale]);
 
-  const continueVsBot = useCallback((difficulty?: BotDifficulty) => {
-    const socket = socketRef.current;
-    if (!socket || !socket.connected) {
-      const message = locale === 'he'
-        ? 'אין חיבור לשרת. בדקו כתובת שרת ונסו שוב.'
-        : 'No server connection. Check server URL and try again.';
-      setError(message);
-      return Promise.resolve(false);
-    }
-    const payload = difficulty ? { difficulty } : undefined;
-    return new Promise<boolean>((resolve) => {
-      let settled = false;
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        setError(locale === 'he' ? 'השרת לא הגיב. נסו שוב.' : 'Server did not respond. Please try again.');
-        resolve(false);
-      }, 7000);
-      socket.emit('continue_vs_bot', payload, (ack: ContinueVsBotAck) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        if (!ack?.ok) {
-          setError(ack?.message || (locale === 'he' ? 'לא ניתן להמשיך מול בוט.' : 'Unable to continue vs bot.'));
-          resolve(false);
-          return;
-        }
-        if (ack.playerView) {
-          setServerState(ack.playerView);
-        }
-        setDisconnectChoice(null);
-        resolve(true);
-      });
-    });
-  }, [locale]);
-
-  const acceptTechnicalVictory = useCallback(() => {
-    const socket = socketRef.current;
-    if (!socket || !socket.connected) return;
-    socket.emit('accept_technical_victory');
-    setDisconnectChoice(null);
-  }, []);
-
   const createClassSession = useCallback((payload: CreateClassSessionPayload) => {
     connect();
     socketRef.current?.emit('create_class_session', payload);
@@ -1165,10 +1096,6 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     clearToast: () => setToast(null),
     reconnectNotice: reconnectNotice ?? null,
     clearReconnectNotice: () => setReconnectNotice(null),
-    disconnectChoice,
-    clearDisconnectChoice: () => setDisconnectChoice(null),
-    continueVsBot,
-    acceptTechnicalVictory,
     classroomState,
     createClassSession,
     joinClassSession,
