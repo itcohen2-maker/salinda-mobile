@@ -1,5 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import OperatorGlyph from '../ui/OperatorGlyph';
 
 interface EquationDraftView {
   targetTileId: string | null;
@@ -43,7 +44,7 @@ function SourceBubble({ value, onPress }: { value: number; onPress: () => void }
   );
 
   return (
-    <Pressable onPress={handlePress}>
+    <Pressable android_disableSound onPress={handlePress}>
       <Animated.View style={[styles.sourceShape, style]}>
         <Text style={styles.sourceTxt}>{value}</Text>
       </Animated.View>
@@ -74,19 +75,20 @@ export default function EquationSlots({
           <TouchableOpacity
             key={idx}
             activeOpacity={0.9}
+            touchSoundDisabled
             onPress={() => onSelectEquation(idx as 0 | 1)}
             style={[styles.eqBox, active && styles.eqActive]}
           >
             <View style={styles.eqRow}>
               <View style={styles.slot}><Text style={styles.slotTxt}>{eq.slots[0] ?? ' '}</Text></View>
-              <TouchableOpacity style={styles.operatorBtn} onPress={() => onToggleOperator(idx as 0 | 1)}>
-                <Text style={styles.slotTxt}>{eq.operator}</Text>
+              <TouchableOpacity style={styles.operatorBtn} onPress={() => onToggleOperator(idx as 0 | 1)} touchSoundDisabled>
+                <OperatorGlyph op={eq.operator} color="#FFFFFF" size={22} />
               </TouchableOpacity>
               <View style={styles.slot}><Text style={styles.slotTxt}>{eq.slots[1] ?? ' '}</Text></View>
               <Text style={styles.equals}>=</Text>
               <View style={styles.slot}><Text style={styles.slotTxt}>{eq.result ?? '?'}</Text></View>
             </View>
-            <TouchableOpacity style={styles.confirmBtn} onPress={() => onConfirmEquation(idx as 0 | 1)}>
+            <TouchableOpacity style={styles.confirmBtn} onPress={() => onConfirmEquation(idx as 0 | 1)} touchSoundDisabled>
               <Text style={styles.confirmTxt}>Confirm</Text>
             </TouchableOpacity>
           </TouchableOpacity>

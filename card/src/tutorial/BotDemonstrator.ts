@@ -7,8 +7,27 @@
 import { Audio } from 'expo-av';
 import { tutorialBus, type FanDemoEasing } from './tutorialBus';
 import { playSfx, isSfxMuted } from '../audio/sfx';
+import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatus';
 
-const diceRollAsset = require('../../assets/dice_roll.m4a');
+const diceRollAsset = require('../../assets/dice_roll.mp3');
+const cardSelectSoundAsset = require('../../assets/card_select.mov');
+
+async function playTutorialCardSelectSound(): Promise<void> {
+  if (isSfxMuted()) return;
+  try {
+    const { sound } = await Audio.Sound.createAsync(cardSelectSoundAsset, getAudioLoadStatus());
+    if (isSfxMuted()) {
+      sound.unloadAsync().catch(() => {});
+      return;
+    }
+    await sound.replayAsync(getAudioReplayStatus());
+    sound.setOnPlaybackStatusUpdate((s) => {
+      if ((s as { didJustFinish?: boolean }).didJustFinish) sound.unloadAsync().catch(() => {});
+    });
+  } catch {
+    // No card-select sound available — fail silently.
+  }
+}
 
 export type ScrollOpts = {
   durationMs?: number;
@@ -76,11 +95,11 @@ export function createBotDemonstrator(isCancelled?: () => boolean): DemoApi {
       // createAsync is still loading the sound file.
       if (!isSfxMuted()) {
         try {
-          const { sound } = await Audio.Sound.createAsync(diceRollAsset);
+          const { sound } = await Audio.Sound.createAsync(diceRollAsset, getAudioLoadStatus());
           if (isSfxMuted()) {
             sound.unloadAsync().catch(() => {});
           } else {
-            await sound.playAsync();
+            await sound.replayAsync(getAudioReplayStatus());
             sound.setOnPlaybackStatusUpdate((s) => {
               if ((s as { didJustFinish?: boolean }).didJustFinish) sound.unloadAsync().catch(() => {});
             });
@@ -116,7 +135,7 @@ export function createBotDemonstrator(isCancelled?: () => boolean): DemoApi {
     async stageCardByValue(value: number): Promise<void> {
       if (cancelled()) return;
       tutorialBus.emitFanDemo({ kind: 'stageCardByValue', value });
-      void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.3 });
+      void playTutorialCardSelectSound();
       await sleep(500);
     },
     async wait(ms: number): Promise<void> {

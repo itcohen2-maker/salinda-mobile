@@ -10,6 +10,7 @@ import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 import { registerSocketHandlers } from './socketHandlers';
 import { cleanupStaleRooms } from './roomManager';
+import { cleanupStaleClassSessions } from './classroomManager';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
@@ -61,6 +62,7 @@ io.on('connection', (socket) => {
 // Cleanup stale rooms every 5 minutes
 setInterval(() => {
   cleanupStaleRooms();
+  cleanupStaleClassSessions();
 }, 5 * 60 * 1000);
 
 // 0.0.0.0 — טלפון/אמולטור ברשת המקומית מתחברים ל־http://<IP-המחשב>:PORT

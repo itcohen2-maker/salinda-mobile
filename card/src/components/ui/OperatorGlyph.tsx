@@ -1,6 +1,8 @@
 import React from 'react';
 import { Platform, Text, View } from 'react-native';
 
+import { displayFontFamily } from '../../theme/fonts';
+
 export type OperatorGlyphToken = '+' | '-' | 'x' | '/';
 const OPERATOR_GLYPH_CONTROL_RE = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069\s]/g;
 
@@ -20,6 +22,8 @@ export function normalizeOperatorGlyphToken(op: string | null | undefined): Oper
 
 export function operatorGlyphFallback(op: string | null | undefined): string {
   const token = normalizeOperatorGlyphToken(op);
+  if (token === 'x') return '\u00D7';
+  if (token === '/') return '\u00F7';
   if (token === '-') return '-';
   return token ?? sanitizeOperatorGlyphInput(op);
 }
@@ -42,6 +46,7 @@ export default function OperatorGlyph({
         style={{
           color,
           fontSize: Math.max(12, Math.round(size * 0.92)),
+          fontFamily: displayFontFamily(label),
           fontWeight: Platform.OS === 'android' ? '900' : '800',
           includeFontPadding: false,
           lineHeight: size,

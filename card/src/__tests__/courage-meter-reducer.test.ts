@@ -213,7 +213,22 @@ describe('courage meter reducer rules', () => {
     expect(next.courageMeterStep).toBe(0);
     expect(next.courageMeterPercent).toBe(0);
     expect(next.courageCoins).toBe(8);
+    expect(next.turnCoinsEarned).toBe(1);
     expect(next.courageDiscardSuccessStreak).toBe(1);
     expect(next.courageRewardPulseId).toBe(5);
+  });
+
+  it('clears turnCoinsEarned when the next turn begins', () => {
+    const st: GameState = {
+      ...initialState,
+      phase: 'turn-transition',
+      players: [basePlayer([])],
+      currentPlayerIndex: 0,
+      turnCoinsEarned: 1,
+      lastCourageCoinsAwarded: true,
+    };
+
+    const next = gameReducer(st, { type: 'BEGIN_TURN' } as GameAction, tf);
+    expect(next.turnCoinsEarned).toBe(0);
   });
 });

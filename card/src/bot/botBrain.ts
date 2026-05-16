@@ -19,7 +19,7 @@ import {
 import type { BotAction, BotDifficulty } from './types';
 import { pickBotStagedPlan } from '../../shared/botPlan';
 import { pickBotOverflowSwap } from '../../shared/overflowSwap';
-import { extractEquationOperators } from '../../shared/validation';
+import { equationMatchesDiceAndResult, extractEquationOperators } from '../../shared/validation';
 
 export type DecideBotActionOptions = {
   /** Defaults to Math.random; tests may inject a sequence. */
@@ -50,8 +50,11 @@ function buildBotStagedPlan(
 } | null {
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const maxWild = state.mathRangeMax ?? 25;
+  const viableTargets = state.validTargets.filter((target) =>
+    equationMatchesDiceAndResult(target.equation, target.result, state.dice),
+  );
   return pickBotStagedPlan(
-    state.validTargets,
+    viableTargets,
     hand,
     maxWild,
     validateStagedCards,

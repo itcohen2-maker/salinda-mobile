@@ -1004,11 +1004,12 @@ function FractionCard({ card, selected, onPress, small }: { card: Card; selected
 }
 
 function OperationCardComp({ card, selected, onPress, small }: { card: Card; selected?: boolean; onPress?: () => void; small?: boolean }) {
+  const displayOp = card.operation === 'x' ? '\u00D7' : (card.operation ?? '+');
   return (
     <BaseCard borderColor="#F97316" selected={selected} onPress={onPress} small={small}>
       <Text style={{
-        color: '#F97316', fontSize: small ? 22 : 32, fontFamily: 'Fredoka_700Bold',
-      }}>{card.operation}</Text>
+        color: '#F97316', fontSize: small ? 22 : 32, fontFamily: displayFontFamily(displayOp),
+      }}>{displayOp}</Text>
     </BaseCard>
   );
 }

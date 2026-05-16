@@ -1,0 +1,21 @@
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.33 - expected version: ~54.0.34
+  expo-screen-orientation@9.0.8 - expected version: ~9.0.9
+Your project may not work correctly until you install the expected versions of the packages.
+C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\build\src\utils\errors.js:130
+    throw error;
+    ^
+
+Error: UNKNOWN: unknown error, lstat 'C:\Users\asus\bmad\card\test-results\.playwright-artifacts-0\traces\?\C:\Users\asus\bmad\card\test-results\.playwright-artifacts-0\traces'
+    at Object.lstat (node:internal/fs/promises:1021:18)
+    at FallbackWatcher._processChange (C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:205:20)
+Emitted 'error' event at:
+    at FallbackWatcher.emitError (C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\AbstractWatcher.js:70:19)
+    at C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:193:25 {
+  errno: -4094,
+  code: 'UNKNOWN',
+  syscall: 'lstat',
+  path: 'C:\\Users\\asus\\bmad\\card\\test-results\\.playwright-artifacts-0\\traces\\?\\C:\\Users\\asus\\bmad\\card\\test-results\\.playwright-artifacts-0\\traces'
+}
+
+Node.js v24.13.0

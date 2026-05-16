@@ -52,11 +52,13 @@ export function SlindaCoin({ size = 32, pulseKey, spin = false, style }: Props) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulseKey]);
 
-  // Approximates |cos(t·2π)| — wide at faces, fast through the thin edge,
-  // smooth deceleration near 0° and 180°
-  const scaleX = spinAnim.interpolate({
-    inputRange: [0, 0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88, 1],
-    outputRange: [1, 0.7, 0.04, 0.7, 1, 0.7, 0.04, 0.7, 1],
+  const spinRotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  const spinScale = spinAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.06, 1],
   });
 
   return (
@@ -65,7 +67,10 @@ export function SlindaCoin({ size = 32, pulseKey, spin = false, style }: Props) 
       style={[{
         width: size,
         height: size,
-        transform: [{ translateY: bounceY }, { scaleX }],
+        transform: [
+          { translateY: bounceY },
+          ...(spin ? [{ rotate: spinRotate }, { scale: spinScale }] : []),
+        ],
       }, style]}
       resizeMode="contain"
     />

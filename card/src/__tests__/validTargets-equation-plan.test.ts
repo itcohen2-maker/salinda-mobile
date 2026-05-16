@@ -137,6 +137,9 @@ function minimalServerState(partial: {
     message: '',
     openingDrawId: 'opening-test',
     turnDeadlineAt: null,
+    overflowSwapPending: false,
+    overflowSwapDeadlineAt: null,
+    overflowSwapCanUseUnderTop: false,
     equationCommits: [],
     tournamentTable: [{ playerIndex: 0, playerName: 'Test', wins: 0, losses: 0 }],
   };
@@ -309,5 +312,36 @@ describe('מולטיפלייר: doRollDice / confirmEquation', () => {
     if ('error' in good) throw new Error(JSON.stringify(good.error));
     expect(good.phase).toBe('solved');
     expect(good.equationResult).toBe(3);
+  });
+
+  it('confirmEquation דוחה תרגיל שלא תואם לקוביות גם אם התוצאה קיימת', () => {
+    const st = minimalServerState({
+      phase: 'building',
+      dice: { die1: 1, die2: 1, die3: 1 },
+      validTargets: [{ equation: '1+1+1=3', result: 3 }],
+    });
+    const bad = confirmEquation(st, 3, '2 + 1 = 3');
+    expect('error' in bad && bad.error.key).toBe('equation.displayMismatch');
+  });
+
+  it('confirmEquation דוחה קלף פעולה שלא תואם לסימן שבתוך התרגיל', () => {
+    const base = minimalServerState({
+      phase: 'building',
+      dice: { die1: 1, die2: 1, die3: 1 },
+      validTargets: [{ equation: '1 + 1 = 2', result: 2 }],
+    });
+    const st: ServerGameState = {
+      ...base,
+      players: [
+        {
+          ...base.players[0],
+          hand: [{ id: 'op-x', type: 'operation', operation: 'x' }],
+        },
+      ],
+    };
+    const bad = confirmEquation(st, 2, '1 + 1 = 2', [
+      { cardId: 'op-x', position: 0, jokerAs: null },
+    ]);
+    expect('error' in bad && bad.error.key).toBe('equation.commitOpMismatch');
   });
 });

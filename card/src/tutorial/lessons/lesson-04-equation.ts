@@ -97,8 +97,9 @@ export const lesson04Equation: Lesson = {
         const v = cardIdValue(event.cardId);
         return v === eqResult;
       },
+      // Keep only the learner-turn hint on layer 24. The preceding
+      // bot-demo bubble ("the framed card hints...") was removed by request.
       hintKey: 'tutorial.l4b.hintFillDie',
-      botHintKey: 'tutorial.l4b.botFillDie',
       celebrateKey: 'tutorial.l4b.celebrate',
     },
     {

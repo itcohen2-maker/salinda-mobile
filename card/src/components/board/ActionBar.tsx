@@ -1,6 +1,7 @@
 import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { useGame } from '../../hooks/useGame'
+import { useResponsiveLayout } from '../../hooks/useResponsiveLayout'
 import { useLocale } from '../../i18n/LocaleContext'
 import { Operation } from '../../types/game'
 import Button from '../ui/Button'
@@ -10,6 +11,7 @@ import EquationBuilder from './EquationBuilder'
 export default function ActionBar() {
   const { state, dispatch } = useGame()
   const { t } = useLocale()
+  const responsive = useResponsiveLayout()
   const currentPlayer = state.players[state.currentPlayerIndex]
   if (!currentPlayer) return null
 
@@ -21,6 +23,10 @@ export default function ActionBar() {
     const jokerCard = state.selectedCards[0]
     if (jokerCard) dispatch({ type: 'PLAY_JOKER', card: jokerCard, chosenOperation: op })
   }
+  const buttonRowStyle = responsive.isSingleColumn ? styles.rowStacked : null
+  const actionButtonStyle = responsive.isSingleColumn ? styles.fullWidthButton : null
+  const jokerGridStyle = responsive.isSingleColumn ? styles.jokerGridStacked : null
+  const jokerButtonStyle = responsive.isSingleColumn ? styles.jokerBtnSingleColumn : styles.jokerBtn
 
   return (
     <View style={styles.container}>
@@ -31,8 +37,14 @@ export default function ActionBar() {
           <Text style={styles.opHint}>
             {t('game.opChallengeHint')}
           </Text>
-          <View style={styles.row}>
-            <Button variant="danger" size="sm" onPress={() => dispatch({ type: 'END_TURN' })}>
+          <View style={[styles.row, buttonRowStyle]}>
+            <Button
+              testID="action-bar-penalty"
+              variant="danger"
+              size="sm"
+              onPress={() => dispatch({ type: 'END_TURN' })}
+              style={actionButtonStyle ?? undefined}
+            >
               {t('game.takePenalty')}
             </Button>
           </View>
@@ -43,8 +55,13 @@ export default function ActionBar() {
       {isSelectPhase && !hasActiveOp && !hasPlayed && (
         <>
           <EquationBuilder />
-          <View style={styles.row}>
-            <Button variant="secondary" onPress={() => dispatch({ type: 'DRAW_CARD' })}>
+          <View style={[styles.row, buttonRowStyle]}>
+            <Button
+              testID="action-bar-draw"
+              variant="secondary"
+              onPress={() => dispatch({ type: 'DRAW_CARD' })}
+              style={actionButtonStyle ?? undefined}
+            >
               {t('game.drawCard')}
             </Button>
           </View>
@@ -53,9 +70,14 @@ export default function ActionBar() {
 
       {/* End Turn (enabled after playing or drawing) */}
       {isSelectPhase && !hasActiveOp && (
-        <View style={styles.row}>
+        <View style={[styles.row, buttonRowStyle]}>
           {(hasPlayed || state.hasDrawnCard) && (
-            <Button variant="secondary" onPress={() => dispatch({ type: 'END_TURN' })}>
+            <Button
+              testID="action-bar-end-turn"
+              variant="secondary"
+              onPress={() => dispatch({ type: 'END_TURN' })}
+              style={actionButtonStyle ?? undefined}
+            >
               {t('game.endTurn')}
             </Button>
           )}
@@ -75,14 +97,15 @@ export default function ActionBar() {
         onClose={() => dispatch({ type: 'CLOSE_JOKER_MODAL' })}
         title={t('game.pickJokerOp')}
       >
-        <View style={styles.jokerGrid}>
+        <View testID="action-bar-joker-grid" style={[styles.jokerGrid, jokerGridStyle]}>
           {(['+', '-', 'x', '÷'] as Operation[]).map((op) => (
             <Button
+              testID={`action-bar-joker-${op}`}
               key={op}
               variant="primary"
               size="lg"
               onPress={() => handleJokerChoice(op)}
-              style={styles.jokerBtn}
+              style={jokerButtonStyle}
             >
               {op}
             </Button>
@@ -96,6 +119,7 @@ export default function ActionBar() {
 const styles = StyleSheet.create({
   container: { width: '100%', gap: 10 },
   row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  rowStacked: { flexDirection: 'column' },
   opSection: {
     backgroundColor: 'rgba(154,52,18,0.2)',
     borderWidth: 1,
@@ -118,5 +142,11 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'center',
   },
+  jokerGridStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
   jokerBtn: { width: '45%', minWidth: 100 },
+  jokerBtnSingleColumn: { width: '100%' },
+  fullWidthButton: { width: '100%' },
 })

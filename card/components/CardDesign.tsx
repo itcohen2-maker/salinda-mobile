@@ -1,7 +1,7 @@
-// ═══════════════════════════════════════════════════════════════
-// CardDesign.tsx — עיצוב הקלפים (הוצא מ-index.tsx)
-// LinearGradient, צללים 3D, טקסט 3D, קלף בסיס, קלפי מספר/שבר/פעולה/סלינדה/פרא
-// ═══════════════════════════════════════════════════════════════
+// ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
+// CardDesign.tsx ג€” ׳¢׳™׳¦׳•׳‘ ׳”׳§׳׳₪׳™׳ (׳”׳•׳¦׳ ׳-index.tsx)
+// LinearGradient, ׳¦׳׳׳™׳ 3D, ׳˜׳§׳¡׳˜ 3D, ׳§׳׳£ ׳‘׳¡׳™׳¡, ׳§׳׳₪׳™ ׳׳¡׳₪׳¨/׳©׳‘׳¨/׳₪׳¢׳•׳׳”/׳¡׳׳™׳ ׳“׳”/׳₪׳¨׳
+// ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•ג•
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Animated, Platform } from 'react-native';
@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
 import { displayFontFamily } from '../src/theme/fonts';
 
-// ─── טיפוס קלף לתצוגה ─────────────────────────────────────────
+// ג”€ג”€ג”€ ׳˜׳™׳₪׳•׳¡ ׳§׳׳£ ׳׳×׳¦׳•׳’׳” ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
 export type Operation = '+' | '-' | 'x' | '÷';
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
@@ -24,7 +24,7 @@ export interface Card {
   resolvedTarget?: number;
 }
 
-// ─── עזרי צל 3D ו־glow ────────────────────────────────────────
+// ג”€ג”€ג”€ ׳¢׳–׳¨׳™ ׳¦׳ 3D ׳•ײ¾glow ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export const shadow3D = (color = '#000', elev = 10) =>
   Platform.select({
@@ -38,7 +38,7 @@ export const glowActive = () =>
     android: { elevation: 14 },
   }) as any;
 
-// ─── עזרי טקסט 3D ──────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳¢׳–׳¨׳™ ׳˜׳§׳¡׳˜ 3D ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 function interpolateColor(hex1: string, hex2: string, steps: number): string[] {
   const parse = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -129,7 +129,7 @@ export function Line3D({
   );
 }
 
-// ─── Jester SVG (סלינדה) ────────────────────────────────────────
+// ג”€ג”€ג”€ Jester SVG (׳¡׳׳™׳ ׳“׳”) ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function JesterSvg({ size = 45 }: { size?: number }) {
   const h = size * 1.4;
@@ -162,7 +162,7 @@ export function JesterSvg({ size = 45 }: { size?: number }) {
   );
 }
 
-// ─── קלף בסיס — גרדיאנט לבן, ברק, מסגרת צבעונית ─────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳‘׳¡׳™׳¡ ג€” ׳’׳¨׳“׳™׳׳ ׳˜ ׳׳‘׳, ׳‘׳¨׳§, ׳׳¡׳’׳¨׳× ׳¦׳‘׳¢׳•׳ ׳™׳× ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function BaseCard({
   children,
@@ -277,7 +277,7 @@ export function BaseCard({
   );
 }
 
-// ─── צבעים לפי ערך מספר ───────────────────────────────────────
+// ג”€ג”€ג”€ ׳¦׳‘׳¢׳™׳ ׳׳₪׳™ ׳¢׳¨׳ ׳׳¡׳₪׳¨ ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function getNumColors(v: number) {
   if (v <= 9) return { face: '#2196F3', border: '#2196F3', dark: '#0D5FA3', light: '#1F8CD9' };
@@ -285,7 +285,7 @@ export function getNumColors(v: number) {
   return { face: '#34A853', border: '#34A853', dark: '#1B5E2B', light: '#36944F' };
 }
 
-// ─── קלף מספר ───────────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳׳¡׳₪׳¨ ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function NumberCard({
   card,
@@ -311,7 +311,7 @@ export function NumberCard({
   );
 }
 
-// ─── קלף מיני לתוצאה ────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳׳™׳ ׳™ ׳׳×׳•׳¦׳׳” ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 const MINI_W = 36;
 const MINI_H = 48;
@@ -383,7 +383,7 @@ export function MiniResultCard({
   );
 }
 
-// ─── קלף שבר ───────────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳©׳‘׳¨ ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 const fracColors: Record<string, { face: string; dark: string; light: string }> = {
   '2': { face: '#2196F3', dark: '#0D5FA3', light: '#1F8CD9' },
@@ -424,7 +424,7 @@ export function FractionCard({
   );
 }
 
-// ─── קלף פעולה ─────────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳₪׳¢׳•׳׳” ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 const opColors: Record<string, { face: string; dark: string; light: string }> = {
   '+': { face: '#EA4335', dark: '#8B1A12', light: '#DC4736' },
@@ -435,8 +435,15 @@ const opColors: Record<string, { face: string; dark: string; light: string }> = 
 // Android: Fredoka_700Bold doesn't ship the Unicode math glyphs (× − ÷).
 // iOS + web render them fine; Android falls back to ASCII to stay visible.
 const opDisplay: Record<string, string> = Platform.OS === 'android'
-  ? { 'x': 'x', '-': '-', '/': '÷', '+': '+', '×': 'x', '−': '-' }
+  ? { 'x': '×', '-': '-', '/': '÷', '+': '+', '×': '×', '−': '-' }
   : { 'x': '×', '-': '−', '/': '÷', '+': '+' };
+
+const stableOpDisplay: Record<string, string> = {
+  x: '\u00D7',
+  '/': '\u00F7',
+  '\u00D7': '\u00D7',
+  '\u00F7': '\u00F7',
+};
 
 export function OperationCardComp({
   card,
@@ -451,7 +458,7 @@ export function OperationCardComp({
 }) {
   const op = card.operation ?? '+';
   const cl = opColors[op] ?? opColors['+'];
-  const display = opDisplay[op] ?? op;
+  const display = stableOpDisplay[op] ?? opDisplay[op] ?? op;
   const fs = small ? 46 : 52;
   const maxOff = small ? 10 : 12;
   return (
@@ -461,7 +468,7 @@ export function OperationCardComp({
   );
 }
 
-// ─── קלף סלינדה ─────────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳¡׳׳™׳ ׳“׳” ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function JokerCard({
   card: _c,
@@ -485,12 +492,11 @@ export function JokerCard({
     Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
   }, []);
 
-  const isAndroid = Platform.OS === 'android';
   const corners = [
     { sym: '+', face: '#EA4335', dark: '#8B1A12', light: '#DC4736', pos: { top: 3, left: 3 } as any, rot: '-12deg' },
-    { sym: isAndroid ? '/' : '÷', face: '#2196F3', dark: '#0D5FA3', light: '#1F8CD9', pos: { top: 3, right: 3 } as any, rot: '10deg' },
-    { sym: isAndroid ? 'x' : '×', face: '#34A853', dark: '#1B5E2B', light: '#36944F', pos: { bottom: 10, left: 3 } as any, rot: '10deg' },
-    { sym: isAndroid ? '-' : '−', face: '#FBBC05', dark: '#8B6800', light: '#DC9E00', pos: { bottom: 10, right: 3 } as any, rot: '-10deg' },
+    { sym: '÷', face: '#2196F3', dark: '#0D5FA3', light: '#1F8CD9', pos: { top: 3, right: 3 } as any, rot: '10deg' },
+    { sym: '×', face: '#34A853', dark: '#1B5E2B', light: '#36944F', pos: { bottom: 10, left: 3 } as any, rot: '10deg' },
+    { sym: '−', face: '#FBBC05', dark: '#8B6800', light: '#DC9E00', pos: { bottom: 10, right: 3 } as any, rot: '-10deg' },
   ];
 
   return (
@@ -548,11 +554,11 @@ export function JokerCard({
   );
 }
 
-// הערה: ב־index.tsx סלינדה משתמשת ב־Image של joker.jpg. כאן השארנו JesterSvg.
-// אם תרצה תמונה, החלף את ה־View עם JesterSvg ב־:
+// ׳”׳¢׳¨׳”: ׳‘ײ¾index.tsx ׳¡׳׳™׳ ׳“׳” ׳׳©׳×׳׳©׳× ׳‘ײ¾Image ׳©׳ joker.jpg. ׳›׳׳ ׳”׳©׳׳¨׳ ׳• JesterSvg.
+// ׳׳ ׳×׳¨׳¦׳” ׳×׳׳•׳ ׳”, ׳”׳—׳׳£ ׳׳× ׳”ײ¾View ׳¢׳ JesterSvg ׳‘ײ¾:
 // <Image source={require('../assets/joker.jpg')} style={{ width: svgSize, height: svgSize, borderRadius: 6 }} resizeMode="contain" />
 
-// ─── קלף פרא ───────────────────────────────────────────────────
+// ג”€ג”€ג”€ ׳§׳׳£ ׳₪׳¨׳ ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function WildCard({
   card,
@@ -621,7 +627,7 @@ export function WildCard({
                 ) : (
                   <>
                     <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>★</Text>
-                    <Text style={{ fontSize: small ? 10 : 11, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>0–25</Text>
+                    <Text style={{ fontSize: small ? 10 : 11, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>0-25</Text>
                   </>
                 )}
               </View>
@@ -633,7 +639,7 @@ export function WildCard({
   );
 }
 
-// ─── רכיב קלף משחק (מפנה לפי סוג) ─────────────────────────────
+// ג”€ג”€ג”€ ׳¨׳›׳™׳‘ ׳§׳׳£ ׳׳©׳—׳§ (׳׳₪׳ ׳” ׳׳₪׳™ ׳¡׳•׳’) ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export function GameCard({
   card,

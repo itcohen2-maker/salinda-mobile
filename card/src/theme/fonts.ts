@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 const HEBREW_TEXT_RE = /[\u0590-\u05FF]/;
-const MATH_SYMBOL_RE = /[×÷−]/;
+const MATH_SYMBOL_RE = /[×÷−ֳ—ֳ·גˆ’Ã—Ã·]/;
 
 const HEBREW_FONT_FAMILY =
   Platform.OS === 'web'

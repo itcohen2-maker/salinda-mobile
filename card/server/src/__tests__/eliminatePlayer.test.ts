@@ -59,6 +59,8 @@ function makeState3P(): ServerGameState {
     overflowSwapCanUseUnderTop: false,
     overflowSwapSelectedPileChoice: null,
     overflowSwapSelectedHandCardId: null,
+    slindaAttemptedThisTurn: false,
+    wildAttemptedThisTurn: false,
     hasPlayedCards: false,
     hasDrawnCard: false,
     lastCardValue: null,
@@ -78,7 +80,7 @@ function makeState3P(): ServerGameState {
     equationCommits: [],
     tournamentTable: [],
     winner: null,
-    message: null,
+    message: '',
   };
 }
 
@@ -123,6 +125,7 @@ describe('eliminatePlayer', () => {
     const after2 = eliminatePlayer(after1, 'p3');
     expect(after2!.phase).toBe('game-over');
     expect(after2!.winner?.id).toBe('p1');
+    expect(after2!.currentPlayerIndex).toBe(0);
   });
 
   it('returns null for unknown playerId', () => {
@@ -147,9 +150,9 @@ describe('eliminatePlayer', () => {
     const st = {
       ...makeState3P(),
       currentPlayerIndex: 1, // p2 is current
-      dice: { d1: 3, d2: 4, d3: 5 } as any,
+      dice: { die1: 3, die2: 4, die3: 5 },
       stagedCards: [makeNumber('s1', 7)],
-      validTargets: [12],
+      validTargets: [{ equation: '3 + 4 + 5', result: 12 }],
       equationResult: 12,
       pendingFractionTarget: null,
     };

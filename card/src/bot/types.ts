@@ -2,6 +2,7 @@
 // See docs/superpowers/specs/2026-04-11-single-player-vs-bot-design.md §0.5.1 and §0.6.
 
 import type { Operation, EquationCommitPayload } from '../../index';
+import type { OverflowSwapPileChoice } from '../../shared/types';
 
 export type { BotDifficulty } from '../../shared/types';
 
@@ -13,6 +14,7 @@ export type { BotDifficulty } from '../../shared/types';
  */
 export type BotAction =
   | { kind: 'beginTurn' }
+  | { kind: 'resolveOverflowSwap'; cardId: string; pileChoice: OverflowSwapPileChoice }
   | { kind: 'rollDice' }
   | { kind: 'playIdentical'; cardId: string }
   | { kind: 'playFractionAttack'; cardId: string }

@@ -14,6 +14,10 @@ export interface LulosButtonProps {
   testID?: string;
   /** Override text color (e.g. '#FFFFFF' for white on dark yellow button) */
   textColor?: string;
+  /** Optional centered overlay for custom icons while keeping the poker-button chrome. */
+  overlayContent?: React.ReactNode;
+  /** Hide the built-in canvas text when using a custom overlay icon. */
+  hideText?: boolean;
   style?: any;
 }
 
@@ -249,7 +253,20 @@ loop();
 <\/script></body></html>`;
 }
 
-export function LulosButton({ text, color, onPress, disabled, width, height = 68, fontSize, testID, textColor, style }: LulosButtonProps) {
+export function LulosButton({
+  text,
+  color,
+  onPress,
+  disabled,
+  width,
+  height = 68,
+  fontSize,
+  testID,
+  textColor,
+  overlayContent,
+  hideText = false,
+  style,
+}: LulosButtonProps) {
   const fs = fontSize ?? Math.round(height * 0.38);
   const w = width ?? Math.max(140, Math.min(300, text.length * fs * 0.6 + 80));
   const palette = PALETTES[color];
@@ -266,12 +283,13 @@ export function LulosButton({ text, color, onPress, disabled, width, height = 68
 
   const translateY = pressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
 
-  const html = buildHTML(text, color, w, height, fs, textColor);
+  const html = buildHTML(hideText ? '' : text, color, w, height, fs, textColor);
 
   return (
     <View style={[{ width: w, height: height + 8, opacity: disabled ? 0.3 : 1 }, style]}>
       <TouchableOpacity
         activeOpacity={0.8}
+        touchSoundDisabled
         accessibilityRole="button"
         accessibilityState={{ disabled: !!disabled }}
         disabled={!!disabled}
@@ -319,6 +337,22 @@ export function LulosButton({ text, color, onPress, disabled, width, height = 68
               androidLayerType="hardware"
             />
           )}
+          {overlayContent ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {overlayContent}
+            </View>
+          ) : null}
         </Animated.View>
       </TouchableOpacity>
     </View>

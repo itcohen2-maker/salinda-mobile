@@ -1,10 +1,12 @@
 export type TableSkinId = 'poker_red' | 'poker_gold' | 'poker_blue';
+export type TableSurfacePresentation = 'fill' | 'framed';
 
 export interface TableSkin {
   id: TableSkinId;
   name_he: string;
   name_en: string;
   price: number;
+  surfacePresentation: TableSurfacePresentation;
   // PNG with transparent background — golden poker table
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   image: any;
@@ -16,6 +18,7 @@ export const TABLE_SKINS: Record<TableSkinId, TableSkin> = {
     name_he: 'שולחן אדום',
     name_en: 'Red Table',
     price: 40,
+    surfacePresentation: 'framed',
     image: require('../../assets/table_royal_nobg.png'),
   },
   poker_gold: {
@@ -23,6 +26,7 @@ export const TABLE_SKINS: Record<TableSkinId, TableSkin> = {
     name_he: 'שולחן זהב',
     name_en: 'Gold Table',
     price: 40,
+    surfacePresentation: 'framed',
     image: require('../../assets/table_golden_nobg.png'),
   },
   poker_blue: {
@@ -30,6 +34,7 @@ export const TABLE_SKINS: Record<TableSkinId, TableSkin> = {
     name_he: 'שולחן כחול',
     name_en: 'Blue Table',
     price: 40,
+    surfacePresentation: 'framed',
     image: require('../../assets/table_ocean_nobg.png'),
   },
 };

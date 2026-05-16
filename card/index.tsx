@@ -3809,8 +3809,10 @@ function GameProvider({ children }: { children: ReactNode }) {
     const diff = localState.botConfig?.difficulty ?? 'medium';
     const { min, max } = botTeachingDelayRange(localState, diff);
     const delay = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
-    // Slower pacing improves readability of bot teaching steps.
-    const slowedDelay = localState.botDicePausePending ? delay : Math.round(delay * 1.4);
+    // Apply 1.4× only during active demo steps (action != null) for readability.
+    // The initial "thinking" step has no content to read — keep it at 1×.
+    const hasActiveDemo = localState.botPresentation?.action != null;
+    const slowedDelay = (localState.botDicePausePending || !hasActiveDemo) ? delay : Math.round(delay * 1.4);
     const effectiveDelay =
       localState.phase === 'turn-transition' && shouldShowTurnCoinCelebration(localState)
         ? Math.max(slowedDelay, BOT_TURN_COIN_CELEBRATION_HOLD_MS)
@@ -14519,6 +14521,8 @@ function TurnTransition() {
 // ???????????????????????????????????????????????????????????????
 //  GAME SCREEN
 // ???????????????????????????????????????????????????????????????
+// Module-level: survives GameScreen unmount/remount across turns.
+let _identicalGuidanceShownForGame: string | null = null;
 
 // ??? הודעות במסך המשחק (הצגה ב־NotificationZone) ???
 // מקור 1 — GameScreen showOnb (ONB): הדרכה לפי הקשר (נשמר ב־AsyncStorage לפי מפתח מ־ONB_KEYS)
@@ -15371,8 +15375,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // loop in tutorial building phase.
   const notificationsRef = useRef(state.notifications);
   useEffect(() => { notificationsRef.current = state.notifications; }, [state.notifications]);
+  const isBotTurnAnyRef = useRef(isBotTurnAny);
+  useEffect(() => { isBotTurnAnyRef.current = isBotTurnAny; }, [isBotTurnAny]);
 
   const showOnb = useCallback((key: OnbKey, emoji: string, title: string, body: string) => {
+    // Never show onboarding notifications during the bot's turn — they require a tap to dismiss
+    // and would block the user while the bot is playing.
+    if (isBotTurnAnyRef.current) return;
     const hasOpenOnbAck = (notificationsRef.current ?? []).some((n) => n.requireAck && n.id.startsWith('onb-'));
     if (__DEV__) console.log('[ONB] showOnb called:', key, 'alreadySeen:', onbSeen.current.has(key), 'hasOpenOnbAck:', hasOpenOnbAck);
     if (onbSeen.current.has(key) || hasOpenOnbAck) return;
@@ -16009,7 +16018,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const identicalGuidanceGameKey =
     state.openingDrawId ?? `${state.mode}-${state.players.map((player) => String(player.id)).join('|')}`;
   const identicalGuidanceNotificationId = `card-hint-identical-${identicalGuidanceGameKey}`;
-  const identicalGuidanceShownForGame = useRef<string | null>(null);
   const identicalGuidanceQueued = (state.notifications ?? []).some(
     (notification) => notification.id === identicalGuidanceNotificationId,
   );
@@ -16017,7 +16025,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const identArrowShownForTurn = useRef<string | null>(null);
 
   useEffect(() => {
-    identicalGuidanceShownForGame.current = null;
+    _identicalGuidanceShownForGame = null;
   }, [identicalGuidanceGameKey]);
 
   useEffect(() => {
@@ -16036,9 +16044,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       }
       return;
     }
-    if (identicalGuidanceShownForGame.current === identicalGuidanceGameKey) return;
+    if (_identicalGuidanceShownForGame === identicalGuidanceGameKey) return;
 
-    identicalGuidanceShownForGame.current = identicalGuidanceGameKey;
+    _identicalGuidanceShownForGame = identicalGuidanceGameKey;
     const isFirstIdenticalGuidance = !guidanceSeen.current.has('guidance_identical');
     if (isFirstIdenticalGuidance) {
       guidanceSeen.current.add('guidance_identical');
@@ -19317,6 +19325,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const routerScreenWidth = routerWebLayout?.playfieldWidth ?? responsive.width;
   const webPresentation = useContext(WebPresentationContext);
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
+  // Auto-start tutorial for first-time users (tutorial lock)
+  useEffect(() => {
+    AsyncStorage.getItem('lulos_tutorial_done').then((done) => {
+      if (!done) setPlayMode('tutorial');
+    }).catch(() => {});
+  }, []);
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
@@ -19632,6 +19646,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const tutorialExit = useCallback(() => {
     dispatch({ type: 'RESET_GAME' });
     setTutorialMeter(INITIAL_TUTORIAL_METER_STATE);
+    AsyncStorage.setItem('lulos_tutorial_done', 'true').catch(() => {});
     setPlayMode('choose');
   }, [dispatch]);
   const tutorialBack = useCallback(() => {

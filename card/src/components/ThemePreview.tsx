@@ -8,10 +8,28 @@ interface Props {
   size?: 'small' | 'medium';
 }
 
+function ClassicThemePreview({ width, height }: { width: number; height: number }) {
+  const theme = THEMES.classic;
+
+  return (
+    <View style={{ borderRadius: 8, overflow: 'hidden', width, height }}>
+      <ImageBackground
+        source={theme.background.image}
+        resizeMode="cover"
+        style={{ width, height }}
+      />
+    </View>
+  );
+}
+
 export function ThemePreview({ themeId, size = 'medium' }: Props) {
   const theme = THEMES[themeId];
   const w = size === 'small' ? 64 : 80;
   const h = size === 'small' ? 42 : 52;
+
+  if (themeId === 'classic') {
+    return <ClassicThemePreview width={w} height={h} />;
+  }
 
   return (
     <View style={{ borderRadius: 8, overflow: 'hidden', width: w, height: h }}>
@@ -44,3 +62,4 @@ export function ThemePreview({ themeId, size = 'medium' }: Props) {
     </View>
   );
 }
+

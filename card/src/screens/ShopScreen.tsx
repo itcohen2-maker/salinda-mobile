@@ -5,6 +5,7 @@ import {
   useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { SpinningCard } from '../components/SpinningCard';
 import { ThemePreview } from '../components/ThemePreview';
@@ -15,10 +16,13 @@ import { useLocale } from '../i18n/LocaleContext';
 import { useActiveTheme } from '../theme/ThemeContext';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import { getWebContentWidth } from '../theme/webLayout';
+import { activateTableSkin } from '../theme/activateTableSkin';
+import { getScreenSafeTop } from '../theme/screenInsets';
 
-const SALINDA_IMAGE = require('../../assets/salinda.jpg');
-const CLASSIC_TABLE_IMAGE = require('../../assets/table_green_nobg.png');
-const SLINDA_PRICE = 100;
+const SALINDA_IMAGE = require('../../assets/salinda-transparent.png');
+const CLASSIC_TABLE_IMAGE = require('../../assets/table_green_default.png');
+const SLINDA_PRICE = 150;
+const WILD_PRICE = 200;
 
 type FeedbackTone = 'success' | 'error';
 
@@ -35,38 +39,89 @@ function isTableSkinId(value: string | null | undefined): value is TableSkinId {
   return !!value && TABLE_SKIN_IDS.includes(value as TableSkinId);
 }
 
+function WildPreviewFace({ width }: { width: number }) {
+  const height = Math.round(width * (3.5 / 2.5));
+  return (
+    <View style={{ width, height, borderRadius: 14, overflow: 'hidden' }}>
+      <LinearGradient
+        colors={['#7C3AED', '#5B21B6', '#4C1D95', '#6D28D9']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ flex: 1, padding: 3 }}
+      >
+        <View style={styles.wildPreviewInner}>
+          <LinearGradient
+            colors={['#EDE9FE', '#DDD6FE', '#C4B5FD']}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0.3, y: 0 }}
+            end={{ x: 0.7, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.wildPreviewGlow} />
+          <View style={styles.wildPreviewCenter}>
+            <Text style={styles.wildPreviewStar}>★</Text>
+            <Text style={styles.wildPreviewRange}>0-25</Text>
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
 export function ShopScreen({ visible, onClose }: Props) {
-  const { t, locale } = useLocale();
-  const { profile, purchaseSlinda, purchaseTheme, purchaseTableSkin, setActiveSkin } = useAuth();
+  const { t, locale, isRTL } = useLocale();
+  const { profile, purchaseSlinda, purchaseWild, purchaseTheme, purchaseTableSkin, setActiveSkin } = useAuth();
   const { background } = useActiveTheme();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
   const viewportWidth = Platform.OS === 'web' ? viewport.width : width;
   const contentWidth = Platform.OS === 'web'
     ? getWebContentWidth(viewportWidth, { maxWidth: 1120, sidePadding: 40 })
     : width;
+  const safeTop = getScreenSafeTop(insets.top);
+  const headerTopPadding = Platform.OS === 'ios' ? 16 : 16;
+  const shouldRightAlignTitle = isRTL && (Platform.OS === 'android' || Platform.OS === 'ios');
+  const shouldRightAlignAll = isRTL && Platform.OS === 'ios';
   const [slindaLoading, setSlindaLoading] = useState(false);
+  const [wildLoading, setWildLoading] = useState(false);
   const [themeLoading, setThemeLoading] = useState<ThemeId | null>(null);
   const [tableSkinLoading, setTableSkinLoading] = useState<TableSkinId | null>(null);
   const [activationLoading, setActivationLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<FeedbackTone | null>(null);
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
-  const [previewTableSkin, setPreviewTableSkin] = useState<TableSkinId | null>(null);
+  const [previewTableSkin, setPreviewTableSkin] = useState<TableSkinId | 'none' | null>(null);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
 
   const slindaOwned = profile?.slinda_owned ?? false;
+  const wildOwned = profile?.wild_owned ?? false;
   const rawOwnedThemes = profile?.themes_owned ?? ['classic'];
   const ownedThemes = THEME_IDS.filter((themeId) => themeId === 'classic' || rawOwnedThemes.includes(themeId));
   const rawOwnedTableSkins = profile?.table_skins_owned ?? [];
   const ownedTableSkins = TABLE_SKIN_IDS.filter((skinId) => rawOwnedTableSkins.includes(skinId));
   const coins = profile?.total_coins ?? 0;
+  const coinCountText = `${Math.max(0, Math.floor(Number(coins) || 0))}`;
+  const hasLongCoinCount = coinCountText.length >= 5;
+  const coinCountFontSize = hasLongCoinCount
+    ? viewportWidth < 390
+      ? 18
+      : 20
+    : 24;
+  const coinCountLineHeight = hasLongCoinCount
+    ? viewportWidth < 390
+      ? 20
+      : 22
+    : 26;
   const activeBackgroundThemeId = isThemeId(profile?.active_card_back) ? profile.active_card_back : 'classic';
   const activeTableThemeId = isThemeId(profile?.active_table_theme) ? profile.active_table_theme : 'classic';
   const activeTableSkinId = isTableSkinId(profile?.active_table_skin) ? profile.active_table_skin : null;
 
   const previewData = previewTheme ? THEMES[previewTheme] : null;
-  const previewTableSkinData = previewTableSkin ? TABLE_SKINS[previewTableSkin] : null;
+  const previewTableSkinData =
+    previewTableSkin && previewTableSkin !== 'none'
+      ? TABLE_SKINS[previewTableSkin]
+      : null;
   const isPreviewOpen = !!previewTheme || !!previewTableSkin;
 
   function clearFeedback() {
@@ -99,6 +154,20 @@ export function ShopScreen({ visible, onClose }: Props) {
       else if (result !== 'already_owned') showError(t('shop.purchaseError'));
     } finally {
       setSlindaLoading(false);
+    }
+  }
+
+  async function handleBuyWild() {
+    if (wildOwned || wildLoading || coins < WILD_PRICE) return;
+    setWildLoading(true);
+    clearFeedback();
+    try {
+      const result = await purchaseWild();
+      if (result === 'ok') showSuccess(t('shop.purchaseSuccess'));
+      else if (result === 'insufficient_coins') showError(t('shop.insufficientCoins'));
+      else if (result !== 'already_owned') showError(t('shop.purchaseError'));
+    } finally {
+      setWildLoading(false);
     }
   }
 
@@ -157,11 +226,7 @@ export function ShopScreen({ visible, onClose }: Props) {
     setActivationLoading(key);
     clearFeedback();
     try {
-      const result = await setActiveSkin('table_skin', skinId);
-      if (result === 'ok' && skinId === 'none') {
-        await setActiveSkin('table_theme', 'classic');
-        await setActiveSkin('card_back', 'classic');
-      }
+      const result = await activateTableSkin(setActiveSkin, skinId);
       if (result === 'ok') {
         showSuccess(skinId === 'none' ? t('shop.tableSkinRemovedSuccess') : t('shop.activationSuccess'));
       } else if (result === 'not_owned') {
@@ -173,9 +238,103 @@ export function ShopScreen({ visible, onClose }: Props) {
       setActivationLoading(null);
     }
   }
+  function renderSpecialCard({
+    kind,
+    name,
+    description,
+    price,
+    owned,
+    loading,
+    onBuy,
+  }: {
+    kind: 'slinda' | 'wild';
+    name: string;
+    description: string;
+    price: number;
+    owned: boolean;
+    loading: boolean;
+    onBuy: () => void;
+  }) {
+    const canAfford = coins >= price;
+    const btnDisabled = owned || loading || !canAfford;
+    const btnStyle = owned ? styles.btnOwned : !canAfford ? styles.btnLocked : styles.btnBuy;
+    const preview = kind === 'slinda'
+      ? (
+          <SpinningCard
+            frontSource={SALINDA_IMAGE}
+            width={104}
+            speed={28}
+            backLabel={name}
+            active={visible}
+          />
+        )
+      : (
+          <SpinningCard
+            width={104}
+            speed={28}
+            backLabel={name}
+            active={visible}
+            front={<WildPreviewFace width={104} />}
+          />
+        );
 
-  const slindaBtnDisabled = slindaOwned || slindaLoading || coins < SLINDA_PRICE;
-  const slindaBtnStyle = slindaOwned ? styles.btnOwned : coins < SLINDA_PRICE ? styles.btnLocked : styles.btnBuy;
+    return (
+      <View style={styles.specialCard}>
+        <LinearGradient
+          colors={['rgba(252,211,77,0.08)', 'rgba(252,211,77,0.03)', 'transparent']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.specialCardInner}>
+          <View style={styles.cardCol}>
+            {preview}
+          </View>
+          <View style={styles.infoCol}>
+            <View style={styles.infoTop}>
+              <View style={[styles.itemBadge, shouldRightAlignAll ? styles.itemBadgeRtl : null]}>
+                <Text style={[styles.itemBadgeText, shouldRightAlignAll ? styles.rtlText : null]}>
+                  {t('shop.specialCardBadge')}
+                </Text>
+              </View>
+              <Text style={[styles.cardName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                {name}
+              </Text>
+              <Text style={[styles.cardType, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                {description}
+              </Text>
+            </View>
+            <View style={styles.specialCardBottom}>
+              <View style={styles.infoSep} />
+              <View style={[styles.priceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
+                <SlindaCoin size={16} />
+                <Text style={styles.priceValue}>{price}</Text>
+                <Text style={[styles.priceMeta, shouldRightAlignAll ? styles.rtlText : null]}>
+                  {t('shop.coinsUnit')}
+                </Text>
+              </View>
+              {!owned && !canAfford && (
+                <Text style={[styles.shortfall, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                  {t('shop.shortfall', { count: price - coins })}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={[styles.btn, btnStyle]}
+                onPress={onBuy}
+                disabled={btnDisabled}
+                activeOpacity={0.8}
+              >
+                {loading
+                  ? <ActivityIndicator color="#FFF" size="small" />
+                  : <Text style={styles.btnText}>
+                      {owned ? t('shop.ownedButton') : !canAfford ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}
+                    </Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   function handleClose() {
     if (previewTheme) { setPreviewTheme(null); return; }
@@ -192,7 +351,7 @@ export function ShopScreen({ visible, onClose }: Props) {
   function renderStatusPill(label: string) {
     return (
       <View key={label} style={styles.statusPill}>
-        <Text style={styles.statusPillText}>{label}</Text>
+        <Text style={[styles.statusPillText, shouldRightAlignAll ? styles.rtlText : null]}>{label}</Text>
       </View>
     );
   }
@@ -201,7 +360,10 @@ export function ShopScreen({ visible, onClose }: Props) {
     const active = isThemeFullyActive(themeId);
     const busy = activationLoading === `theme:${themeId}`;
     const containerStyle = previewMode ? styles.previewActionBtn : styles.productBtn;
-    const textStyle = previewMode ? styles.previewActionBtnText : styles.productBtnText;
+    const textStyle = [
+      previewMode ? styles.previewActionBtnText : styles.productBtnText,
+      shouldRightAlignAll ? styles.rtlTextFull : null,
+    ];
     return (
       <TouchableOpacity
         style={[containerStyle, active ? styles.productBtnActive : styles.productBtnSelect]}
@@ -212,6 +374,38 @@ export function ShopScreen({ visible, onClose }: Props) {
         {busy
           ? <ActivityIndicator color="#FFF" size="small" />
           : <Text style={textStyle}>{active ? t('shop.activeBadge') : t('shop.activateButton')}</Text>
+        }
+      </TouchableOpacity>
+    );
+  }
+
+  function renderNoTableSkinAction(previewMode: boolean) {
+    const active = !activeTableSkinId;
+    const busy = activationLoading === 'table_skin:none';
+    const containerStyle = previewMode ? styles.previewActionBtn : styles.productBtn;
+    const textStyle = [
+      previewMode ? styles.previewActionBtnText : styles.productBtnText,
+      shouldRightAlignAll ? styles.rtlTextFull : null,
+    ];
+
+    if (active) {
+      return (
+        <View style={[containerStyle, styles.productBtnActive]}>
+          <Text style={textStyle}>{t('shop.activeBadge')}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[containerStyle, styles.productBtnSelect]}
+        onPress={() => void handleActivateTableSkin('none')}
+        disabled={busy}
+        activeOpacity={0.8}
+      >
+        {busy
+          ? <ActivityIndicator color="#FFF" size="small" />
+          : <Text style={textStyle}>{t('shop.removeTableSkinButton')}</Text>
         }
       </TouchableOpacity>
     );
@@ -235,7 +429,10 @@ export function ShopScreen({ visible, onClose }: Props) {
         >
           {busy
             ? <ActivityIndicator color="#FFF" size="small" />
-            : <Text style={previewMode ? styles.previewActionBtnText : styles.productBtnText}>
+            : <Text style={[
+                previewMode ? styles.previewActionBtnText : styles.productBtnText,
+                shouldRightAlignAll ? styles.rtlTextFull : null,
+              ]}>
                 {!canAfford ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}
               </Text>
           }
@@ -253,7 +450,10 @@ export function ShopScreen({ visible, onClose }: Props) {
     const skin = TABLE_SKINS[skinId];
     const canAfford = coins >= skin.price;
     const containerStyle = previewMode ? styles.previewActionBtn : styles.productBtn;
-    const textStyle = previewMode ? styles.previewActionBtnText : styles.productBtnText;
+    const textStyle = [
+      previewMode ? styles.previewActionBtnText : styles.productBtnText,
+      shouldRightAlignAll ? styles.rtlTextFull : null,
+    ];
 
     if (owned) {
       return (
@@ -301,20 +501,38 @@ export function ShopScreen({ visible, onClose }: Props) {
             colors={['transparent', GOLD, 'transparent']}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
-            style={styles.topShimmer}
+            style={[styles.topShimmer, { marginTop: safeTop }]}
           />
 
           <View style={[styles.contentFrame, { width: contentWidth }]}>
-            <View style={styles.header}>
-              <View style={styles.coinBadge}>
+            <View style={[styles.header, { paddingTop: headerTopPadding }]}>
+              <View style={[styles.coinBadge, isRTL ? styles.coinBadgeRtl : null]}>
+                <View style={[styles.coinBadgeTextWrap, isRTL ? styles.coinBadgeTextWrapRtl : null]}>
+                  <Text style={[styles.coinBadgeLabel, isRTL ? styles.coinBadgeLabelRtl : null]}>
+                    {t('shop.earnedSoFar')}
+                  </Text>
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                    numberOfLines={1}
+                    style={[
+                      styles.coinCount,
+                      isRTL ? styles.coinCountRtl : null,
+                      { fontSize: coinCountFontSize, lineHeight: coinCountLineHeight },
+                    ]}
+                  >
+                    {coinCountText}
+                  </Text>
+                </View>
                 <View style={styles.coinHeroWrap}>
                   <View style={styles.coinHeroGlow} />
-                  <SlindaCoin size={34} spin />
+                  <SlindaCoin size={52} spin />
                 </View>
-                <Text style={styles.coinCount}>{coins}</Text>
               </View>
-              <View style={styles.titleWrap}>
-                <Text style={styles.titleSmall}>{t('shop.title')}</Text>
+              <View style={[styles.titleWrap, shouldRightAlignTitle ? styles.titleWrapRtl : null]}>
+                <Text style={[styles.titleSmall, shouldRightAlignTitle ? styles.rtlTextFull : null]}>
+                  {t('shop.title')}
+                </Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7}>
                 <Text style={styles.closeX}>X</Text>
@@ -334,52 +552,31 @@ export function ShopScreen({ visible, onClose }: Props) {
               scrollEventThrottle={16}
               contentContainerStyle={styles.scrollBody}
             >
-            <View style={styles.slindaCard}>
-              <LinearGradient
-                colors={['rgba(252,211,77,0.08)', 'rgba(252,211,77,0.03)', 'transparent']}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.slindaCardInner}>
-                <View style={styles.cardCol}>
-                  <View style={styles.cardGlow} />
-                  <SpinningCard frontSource={SALINDA_IMAGE} width={104} speed={28} backLabel={t('shop.slindaCard.name')} />
-                </View>
-                <View style={styles.infoCol}>
-                  <View style={styles.itemBadge}>
-                    <Text style={styles.itemBadgeText}>{t('shop.specialCardBadge')}</Text>
-                  </View>
-                  <Text style={styles.cardName}>{t('shop.slindaCard.name')}</Text>
-                  <Text style={styles.cardType}>{t('shop.slindaCard.description')}</Text>
-                  <View style={styles.infoSep} />
-                  <View style={styles.priceRow}>
-                    <SlindaCoin size={16} />
-                    <Text style={styles.priceValue}>{SLINDA_PRICE}</Text>
-                    <Text style={styles.priceMeta}>{t('shop.coinsUnit')}</Text>
-                  </View>
-                  {!slindaOwned && coins < SLINDA_PRICE && (
-                    <Text style={styles.shortfall}>
-                      {t('shop.shortfall', { count: SLINDA_PRICE - coins })}
-                    </Text>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.btn, slindaBtnStyle]}
-                    onPress={handleBuySlinda}
-                    disabled={slindaBtnDisabled}
-                    activeOpacity={0.8}
-                  >
-                    {slindaLoading
-                      ? <ActivityIndicator color="#FFF" size="small" />
-                      : <Text style={styles.btnText}>
-                          {slindaOwned ? `✓ ${t('shop.ownedButton')}` : coins < SLINDA_PRICE ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}
-                        </Text>
-                    }
-                  </TouchableOpacity>
-                </View>
-              </View>
+            <View style={styles.specialProductsWrap}>
+              {renderSpecialCard({
+                kind: 'slinda',
+                name: t('shop.slindaCard.name'),
+                description: t('shop.slindaCard.description'),
+                price: SLINDA_PRICE,
+                owned: slindaOwned,
+                loading: slindaLoading,
+                onBuy: handleBuySlinda,
+              })}
+              {renderSpecialCard({
+                kind: 'wild',
+                name: t('shop.wildCard.name'),
+                description: t('shop.wildCard.description'),
+                price: WILD_PRICE,
+                owned: wildOwned,
+                loading: wildLoading,
+                onBuy: handleBuyWild,
+              })}
             </View>
 
-            <SectionHeader title={t('shop.themesSection')} />
-            <Text style={styles.subsectionTitle}>{t('shop.backgroundsTitle')}</Text>
+            <SectionHeader title={t('shop.themesSection')} rightAligned={shouldRightAlignAll} />
+            <Text style={[styles.subsectionTitle, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+              {t('shop.backgroundsTitle')}
+            </Text>
 
             <ScrollView
               horizontal
@@ -389,7 +586,6 @@ export function ShopScreen({ visible, onClose }: Props) {
               {THEME_IDS.map((themeId) => {
                 const theme = THEMES[themeId];
                 const owned = ownedThemes.includes(themeId);
-                const hasPreview = !!theme.background.image;
                 return (
                   <View key={themeId} style={[styles.productCard, styles.themeProductCard, owned && styles.productCardOwned]}>
                     {owned && (
@@ -399,21 +595,21 @@ export function ShopScreen({ visible, onClose }: Props) {
                       />
                     )}
                     <TouchableOpacity
-                      onPress={hasPreview ? () => setPreviewTheme(themeId) : undefined}
-                      activeOpacity={hasPreview ? 0.8 : 1}
+                      onPress={() => setPreviewTheme(themeId)}
+                      activeOpacity={0.8}
                     >
                       <View style={styles.previewThumb}>
                         <ThemePreview themeId={themeId} size="medium" />
-                        {hasPreview && (
-                          <View style={styles.previewHint}>
-                            <Text style={styles.previewHintText}>{t('shop.previewHint')}</Text>
-                          </View>
-                        )}
+                        <View style={styles.previewHint}>
+                          <Text style={styles.previewHintText}>{t('shop.previewHint')}</Text>
+                        </View>
                       </View>
                     </TouchableOpacity>
-                    <Text style={styles.productName}>{locale === 'he' ? theme.name_he : theme.name_en}</Text>
+                    <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                      {locale === 'he' ? theme.name_he : theme.name_en}
+                    </Text>
                     {!owned && theme.price > 0 && (
-                      <View style={styles.productPriceRow}>
+                      <View style={[styles.productPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
                         <SlindaCoin size={13} />
                         <Text style={styles.productPriceText}>{theme.price}</Text>
                       </View>
@@ -424,7 +620,7 @@ export function ShopScreen({ visible, onClose }: Props) {
               })}
             </ScrollView>
 
-            <SectionHeader title={t('shop.tablesSection')} />
+            <SectionHeader title={t('shop.tablesSection')} rightAligned={shouldRightAlignAll} />
 
             <ScrollView
               horizontal
@@ -438,29 +634,22 @@ export function ShopScreen({ visible, onClose }: Props) {
                     style={StyleSheet.absoluteFill}
                   />
                 )}
-                <ImageBackground
-                  source={CLASSIC_TABLE_IMAGE as any}
-                  style={[styles.tableSkinThumb, styles.noneSkinThumb]}
-                  resizeMode="contain"
-                />
-                <Text style={styles.productName}>{t('shop.noTableSkinName')}</Text>
-                    {!activeTableSkinId ? (
-                  <View style={[styles.productBtn, styles.productBtnActive]}>
-                    <Text style={styles.productBtnText}>{t('shop.activeBadge')}</Text>
+                <TouchableOpacity onPress={() => setPreviewTableSkin('none')} activeOpacity={0.8}>
+                  <View style={styles.tableSkinThumb}>
+                    <Image
+                      source={CLASSIC_TABLE_IMAGE as any}
+                      style={styles.classicTableThumbImg}
+                      resizeMode="stretch"
+                    />
+                    <View style={styles.previewHint}>
+                      <Text style={styles.previewHintText}>{t('shop.previewHint')}</Text>
+                    </View>
                   </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.productBtn, styles.productBtnSelect]}
-                    onPress={() => void handleActivateTableSkin('none')}
-                    disabled={activationLoading === 'table_skin:none'}
-                    activeOpacity={0.8}
-                  >
-                    {activationLoading === 'table_skin:none'
-                      ? <ActivityIndicator color="#FFF" size="small" />
-                      : <Text style={styles.productBtnText}>{t('shop.removeTableSkinButton')}</Text>
-                    }
-                  </TouchableOpacity>
-                )}
+                </TouchableOpacity>
+                <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                  {t('shop.noTableSkinName')}
+                </Text>
+                {renderNoTableSkinAction(false)}
               </View>
               {TABLE_SKIN_IDS.map((skinId) => {
                 const skin = TABLE_SKINS[skinId];
@@ -485,9 +674,11 @@ export function ShopScreen({ visible, onClose }: Props) {
                         </View>
                       </View>
                     </TouchableOpacity>
-                    <Text style={styles.productName}>{locale === 'he' ? skin.name_he : skin.name_en}</Text>
+                    <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                      {locale === 'he' ? skin.name_he : skin.name_en}
+                    </Text>
                     {!owned && (
-                      <View style={styles.productPriceRow}>
+                      <View style={[styles.productPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
                         <SlindaCoin size={13} />
                         <Text style={styles.productPriceText}>{skin.price}</Text>
                       </View>
@@ -499,10 +690,11 @@ export function ShopScreen({ visible, onClose }: Props) {
             </ScrollView>
 
             {!!feedback && (
-              <View style={styles.feedbackWrap}>
+              <View style={[styles.feedbackWrap, shouldRightAlignAll ? styles.feedbackWrapRtl : null]}>
                 <Text style={[
                   styles.feedbackText,
                   feedbackTone === 'success' ? styles.feedbackSuccess : null,
+                  shouldRightAlignAll ? styles.rtlTextFull : null,
                 ]}>
                   {feedback}
                 </Text>
@@ -531,22 +723,35 @@ export function ShopScreen({ visible, onClose }: Props) {
             ) : (
               <LinearGradient colors={previewData.background.gradient} style={StyleSheet.absoluteFill} />
             )}
+            {previewTheme !== 'classic' && previewData.table.image ? (
+              <ImageBackground
+                source={previewData.table.image}
+                resizeMode="cover"
+                style={[StyleSheet.absoluteFill, { opacity: 0.85 }]}
+              />
+            ) : previewData.table.gradient ? (
+              <LinearGradient colors={previewData.table.gradient} style={[StyleSheet.absoluteFill, { opacity: 0.75 }]} />
+            ) : null}
 
             <LinearGradient
               colors={['transparent', 'rgba(0,0,0,0.85)']}
               style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 320 }}
             />
 
-            <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewTheme(null)}>
+            <TouchableOpacity style={[styles.previewClose, { top: safeTop + 8 }]} onPress={() => setPreviewTheme(null)}>
               <Text style={styles.previewCloseText}>X</Text>
             </TouchableOpacity>
 
-            <View style={styles.previewBar}>
-              <Text style={styles.previewThemeName}>{locale === 'he' ? previewData.name_he : previewData.name_en}</Text>
+            <View style={[styles.previewBar, shouldRightAlignAll ? styles.previewBarRtl : null]}>
+              <Text style={[styles.previewThemeName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                {locale === 'he' ? previewData.name_he : previewData.name_en}
+              </Text>
               {!ownedThemes.includes(previewTheme) && (
-                <View style={styles.previewPriceRow}>
+                <View style={[styles.previewPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
                   <SlindaCoin size={18} />
-                  <Text style={styles.previewPriceText}>{previewData.price} {t('shop.coinsUnit')}</Text>
+                  <Text style={[styles.previewPriceText, shouldRightAlignAll ? styles.rtlText : null]}>
+                    {previewData.price} {t('shop.coinsUnit')}
+                  </Text>
                 </View>
               )}
               {renderThemeActions(previewTheme, true)}
@@ -554,7 +759,7 @@ export function ShopScreen({ visible, onClose }: Props) {
           </View>
         )}
 
-        {previewTableSkin && previewTableSkinData && (
+        {previewTableSkin && (
           <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="auto">
             {background.image ? (
               <ImageBackground source={background.image} resizeMode="cover" style={StyleSheet.absoluteFill} />
@@ -566,35 +771,53 @@ export function ShopScreen({ visible, onClose }: Props) {
                 style={StyleSheet.absoluteFill}
               />
             )}
-            <Image
-              source={previewTableSkinData.image}
-              resizeMode="contain"
-              style={{ position: 'absolute', width: '100%', height: '100%' }}
-            />
+            {previewTableSkin === 'none' ? (
+              <View pointerEvents="none" style={styles.classicPreviewStage}>
+                <Image source={CLASSIC_TABLE_IMAGE} resizeMode="stretch" style={styles.classicPreviewStageImage} />
+              </View>
+            ) : (
+              <Image
+                source={previewTableSkinData?.image as any}
+                resizeMode="contain"
+                style={{ position: 'absolute', width: '100%', height: '100%' }}
+              />
+            )}
 
             <LinearGradient
               colors={['transparent', 'rgba(0,0,0,0.85)']}
               style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 }}
             />
 
-            <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewTableSkin(null)}>
+            <TouchableOpacity style={[styles.previewClose, { top: safeTop + 8 }]} onPress={() => setPreviewTableSkin(null)}>
               <Text style={styles.previewCloseText}>X</Text>
             </TouchableOpacity>
 
-            <View style={styles.previewBar}>
-              <Text style={styles.previewThemeName}>{locale === 'he' ? previewTableSkinData.name_he : previewTableSkinData.name_en}</Text>
-              {!ownedTableSkins.includes(previewTableSkin) && (
-                <View style={styles.previewPriceRow}>
+            <View style={[styles.previewBar, shouldRightAlignAll ? styles.previewBarRtl : null]}>
+              <Text style={[styles.previewThemeName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                {previewTableSkin === 'none'
+                  ? t('shop.noTableSkinName')
+                  : locale === 'he'
+                    ? previewTableSkinData?.name_he
+                    : previewTableSkinData?.name_en}
+              </Text>
+              {previewTableSkin !== 'none' && previewTableSkinData && !ownedTableSkins.includes(previewTableSkin) && (
+                <View style={[styles.previewPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
                   <SlindaCoin size={18} />
-                  <Text style={styles.previewPriceText}>{previewTableSkinData.price} {t('shop.coinsUnit')}</Text>
+                  <Text style={[styles.previewPriceText, shouldRightAlignAll ? styles.rtlText : null]}>
+                    {previewTableSkinData.price} {t('shop.coinsUnit')}
+                  </Text>
                 </View>
               )}
-              {ownedTableSkins.includes(previewTableSkin) && activeTableSkinId === previewTableSkin && (
-                <View style={styles.statusPillsRow}>
+              {previewTableSkin !== 'none' && ownedTableSkins.includes(previewTableSkin) && activeTableSkinId === previewTableSkin && (
+                <View style={[styles.statusPillsRow, shouldRightAlignAll ? styles.statusPillsRowRtl : null]}>
                   {renderStatusPill(t('shop.activeBadge'))}
                 </View>
               )}
-              {renderTableSkinAction(previewTableSkin, true)}
+              {previewTableSkin === 'none'
+                ? renderNoTableSkinAction(true)
+                : previewTableSkinData
+                  ? renderTableSkinAction(previewTableSkin, true)
+                  : null}
             </View>
           </View>
         )}
@@ -603,16 +826,16 @@ export function ShopScreen({ visible, onClose }: Props) {
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, rightAligned = false }: { title: string; rightAligned?: boolean }) {
   return (
-    <View style={sectionHeaderStyles.wrap}>
+    <View style={[sectionHeaderStyles.wrap, rightAligned ? sectionHeaderStyles.wrapRtl : null]}>
       <LinearGradient
         colors={['transparent', 'rgba(252,211,77,0.5)', 'transparent']}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={sectionHeaderStyles.line}
       />
-      <Text style={sectionHeaderStyles.text}>{title}</Text>
+      <Text style={[sectionHeaderStyles.text, rightAligned ? sectionHeaderStyles.textRtl : null]}>{title}</Text>
       <LinearGradient
         colors={['transparent', 'rgba(252,211,77,0.5)', 'transparent']}
         start={{ x: 0, y: 0.5 }}
@@ -625,8 +848,10 @@ function SectionHeader({ title }: { title: string }) {
 
 const sectionHeaderStyles = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 10, marginTop: 28, marginBottom: 14 },
+  wrapRtl: { flexDirection: 'row-reverse' },
   line: { flex: 1, height: 1 },
   text: { color: '#FFFFFF', fontWeight: '800', fontSize: 13, letterSpacing: 1 },
+  textRtl: { textAlign: 'right', writingDirection: 'rtl' },
 });
 
 const GOLD = '#FCD34D';
@@ -670,37 +895,63 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   coinBadge: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
+    justifyContent: 'space-between',
+    gap: 12,
     backgroundColor: 'rgba(252,211,77,0.1)',
     borderWidth: 1,
     borderColor: 'rgba(252,211,77,0.25)',
-    borderRadius: 24,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 7,
-    minWidth: 84,
+    borderRadius: 26,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minWidth: 172,
+    maxWidth: '62%',
+    flexShrink: 1,
+  },
+  coinBadgeRtl: {
+    flexDirection: 'row-reverse',
+  },
+  coinBadgeTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  coinBadgeTextWrapRtl: {
+    alignItems: 'flex-end',
+  },
+  coinBadgeLabel: {
+    color: 'rgba(254,243,199,0.9)',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  coinBadgeLabelRtl: {
+    textAlign: 'right',
   },
   coinHeroWrap: {
-    width: 42,
-    height: 38,
+    width: 58,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
   },
   coinHeroGlow: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: 'transparent',
     ...(Platform.OS === 'web'
-      ? { boxShadow: '0 0 20px 8px rgba(252,211,77,0.18)' }
-      : { shadowColor: '#FCD34D', shadowOpacity: 0.3, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 6 }),
+      ? { boxShadow: '0 0 28px 10px rgba(252,211,77,0.22)' }
+      : { shadowColor: '#FCD34D', shadowOpacity: 0.34, shadowRadius: 18, shadowOffset: { width: 0, height: 0 }, elevation: 7 }),
   },
-  coinCount: { color: GOLD_LIGHT, fontSize: 14, fontWeight: '800', lineHeight: 16 },
+  coinCount: { color: GOLD_LIGHT, fontSize: 24, fontWeight: '900', lineHeight: 26, width: '100%', flexShrink: 1 },
+  coinCountRtl: { textAlign: 'right' },
   titleWrap: { flex: 1, alignItems: 'center' },
+  titleWrapRtl: { alignItems: 'flex-end' },
   titleSmall: { color: GOLD, fontSize: 16, fontWeight: '900', letterSpacing: 3 },
   closeBtn: {
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -717,9 +968,18 @@ const styles = StyleSheet.create({
   dividerGradient: { height: 1, width: '100%', marginBottom: 4 },
   scrollBody: { paddingBottom: 10 },
 
-  slindaCard: {
-    marginHorizontal: 16,
+  specialProductsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    gap: 12,
+    paddingHorizontal: 16,
     marginTop: 20,
+  },
+  specialCard: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 300,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(252,211,77,0.2)',
@@ -728,15 +988,11 @@ const styles = StyleSheet.create({
       ? { boxShadow: '0 4px 32px rgba(252,211,77,0.08)' } as any
       : { shadowColor: GOLD, shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 4 }, elevation: 8 }),
   },
-  slindaCardInner: { flexDirection: 'row', alignItems: 'flex-start', padding: 20, gap: 16 },
+  specialCardInner: { flexDirection: 'row', alignItems: 'stretch', padding: 20, gap: 16, minHeight: 236 },
   cardCol: { alignItems: 'center', justifyContent: 'center' },
-  cardGlow: {
-    position: 'absolute', width: 110, height: 110, borderRadius: 55, top: 10, left: -4, backgroundColor: 'transparent',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 0 40px 16px rgba(252,211,77,0.18)' } as any
-      : { shadowColor: GOLD, shadowOpacity: 0.35, shadowRadius: 28, shadowOffset: { width: 0, height: 0 }, elevation: 12 }),
-  },
-  infoCol: { flex: 1, paddingTop: 2, gap: 6 },
+  infoCol: { flex: 1, paddingTop: 2, justifyContent: 'space-between' },
+  infoTop: { gap: 6 },
+  specialCardBottom: { gap: 6 },
   itemBadge: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(252,211,77,0.12)',
@@ -752,6 +1008,7 @@ const styles = StyleSheet.create({
   cardType: { color: 'rgba(253,230,138,0.7)', fontSize: 12, fontWeight: '500', fontStyle: 'italic' },
   infoSep: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 4 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  priceRowRtl: { alignSelf: 'flex-end' },
   priceValue: { color: GOLD, fontSize: 16, fontWeight: '900' },
   priceMeta: { color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: '500' },
   shortfall: { color: '#F87171', fontSize: 11, fontWeight: '700' },
@@ -759,7 +1016,23 @@ const styles = StyleSheet.create({
   btnBuy: { backgroundColor: '#15803D' },
   btnOwned: { backgroundColor: 'rgba(255,255,255,0.08)' },
   btnLocked: { backgroundColor: 'rgba(255,255,255,0.06)', opacity: 0.7 },
-  btnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  btnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
+  itemBadgeRtl: { alignSelf: 'flex-end' },
+  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
+  rtlTextFull: { width: '100%', textAlign: 'right', writingDirection: 'rtl' },
+  wildPreviewInner: { flex: 1, borderRadius: 11, overflow: 'hidden' },
+  wildPreviewGlow: {
+    position: 'absolute',
+    top: '-12%',
+    left: '10%',
+    width: '80%',
+    height: '40%',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  wildPreviewCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  wildPreviewStar: { color: '#5B21B6', fontSize: 28, fontWeight: '900', textAlign: 'center' },
+  wildPreviewRange: { color: '#6D28D9', fontSize: 12, fontWeight: '800', marginTop: 2, textAlign: 'center' },
 
   horizontalList: { paddingHorizontal: 16, paddingBottom: 4, gap: 10 },
   subsectionTitle: {
@@ -834,12 +1107,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
   tableSkinThumbImg: { width: 120, height: 46 },
+  classicTableThumbImg: { width: 120, height: 46 },
   noneSkinThumb: {
     backgroundColor: 'rgba(0,0,0,0.2)',
     overflow: 'hidden',
   },
+  classicPreviewStage: {
+    position: 'absolute',
+    left: '6%',
+    right: '6%',
+    top: '20%',
+    height: '42%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  classicPreviewStageImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
 
   feedbackWrap: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, alignItems: 'center' },
+  feedbackWrapRtl: { alignItems: 'flex-end' },
   feedbackText: { color: '#F87171', fontSize: 13, textAlign: 'center', fontWeight: '600' },
   feedbackSuccess: { color: '#4ADE80' },
 
@@ -868,6 +1157,7 @@ const styles = StyleSheet.create({
   previewBar: {
     position: 'absolute', bottom: 60, left: 24, right: 24, alignItems: 'center', gap: 12,
   },
+  previewBarRtl: { alignItems: 'flex-end' },
   previewThemeName: {
     color: '#FFF', fontSize: 30, fontWeight: '900', letterSpacing: 1,
     textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10,
@@ -877,4 +1167,5 @@ const styles = StyleSheet.create({
   previewPriceText: { color: GOLD, fontSize: 18, fontWeight: '800' },
   previewActionBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24, alignItems: 'center', width: '100%' },
   previewActionBtnText: { color: '#FFF', fontSize: 14, fontWeight: '900', letterSpacing: 0.4, textAlign: 'center' },
+  statusPillsRowRtl: { justifyContent: 'flex-end' },
 });

@@ -9,12 +9,18 @@ export class GamePage {
   readonly diceArea: Locator = this.page.getByTestId('dice-area');
   readonly endTurnButton: Locator = this.page.getByTestId('end-turn');
   readonly rollDiceButton: Locator = this.page.getByTestId('roll-dice');
+  readonly resetEquationButton: Locator = this.page.getByTestId('reset-equation');
+  readonly drawForfeitButton: Locator = this.page.getByTestId('draw-card-forfeit');
 
   card(value: number | string): Locator {
     return this.page.getByTestId(`card-${value}`);
   }
 
   async waitReady() {
-    await this.equationArea.waitFor({ state: 'visible' });
+    await Promise.any([
+      this.playerHand.waitFor({ state: 'visible' }),
+      this.equationArea.waitFor({ state: 'visible' }),
+      this.diceArea.waitFor({ state: 'visible' }),
+    ]);
   }
 }

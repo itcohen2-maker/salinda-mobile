@@ -415,14 +415,14 @@ test('M4.5.4 — frozen bot: no valid plan causes drawCard fallback; botTickSeq 
 // ---------------------------------------------------------------------------
 
 test('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Hard over 5 turns', () => {
-  // Fixture: two bots start from 'building' phase with an explicit validTargets
-  // list that offers TWO subsets solving target 12 via pure addition:
+  // Fixture: two bots start from 'building' phase with an explicit valid target
+  // from the current dice. That single target still allows TWO discard subsets:
   //   [5, 7]      → score 2  (minimizer / Easy prefers this)
   //   [3, 4, 5]   → score 3  (maximizer / Hard prefers this)
   //
   // Starting in 'building' (not 'pre-roll') bypasses ROLL_DICE, which would
   // regenerate validTargets from random dice and make the fixture non-deterministic.
-  // With explicit validTargets, Hard still picks the maximizer plan.
+  // With an explicit valid target, Hard still picks the maximizer plan.
   // Easy uses random plans — this test injects a seeded rng so each pick matches
   // the first enumerated valid plan (2 cards), keeping easyDiscards < hardDiscards stable.
   //
@@ -447,6 +447,7 @@ test('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Hard ove
     // This keeps validTargets under test control for all 5 turns.
     phase: 'building' as const,
     currentPlayerIndex: 1,
+    dice: [3, 4, 5] as unknown as GameState['dice'],
     discardPile: [{ id: 'dt', type: 'number' as const, value: 12 }],
     drawPile: Array.from({ length: 30 }, (_, i) => ({
       id: `dp${i}`,
@@ -481,9 +482,8 @@ test('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Hard ove
     botPendingStagedIds: null,
     botTickSeq: 0,
     enabledOperators: ['+'],
-    // Two subsets both sum to 12, giving minimizer and maximizer different picks.
+    // One dice-valid equation, two discard subsets that both reach 12.
     validTargets: [
-      { result: 12, equation: '5 + 7',     operations: ['+'] },
       { result: 12, equation: '3 + 4 + 5', operations: ['+', '+'] },
     ] as unknown as GameState['validTargets'],
   } as unknown as GameState;

@@ -52,6 +52,7 @@ export function CasinoButton({ text, onPress, disabled, width = 300, height = 62
     <View style={[{ width, height: height + 6, opacity: disabled ? 0.3 : 1 }, style]}>
       <TouchableOpacity
         activeOpacity={0.8}
+        touchSoundDisabled
         accessibilityRole="button"
         accessibilityState={{ disabled: !!disabled }}
         disabled={!!disabled}

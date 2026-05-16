@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useGame } from '../../hooks/useGame';
+import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import SalindaLogoOption06 from '../branding/SalindaLogoOption06';
 import Button from '../ui/Button';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -28,6 +29,7 @@ export default function StartScreen({
 }: StartScreenProps = {}) {
   const { t, isRTL } = useLocale();
   const { dispatch } = useGame();
+  const responsive = useResponsiveLayout();
   const [playerCount, setPlayerCount] = useState(2);
   const [names, setNames] = useState<string[]>(() => {
     const base = Array(10).fill('');
@@ -40,6 +42,15 @@ export default function StartScreen({
 
   const maxPlayers = difficulty === 'easy' ? 8 : 10;
   const ta = isRTL ? 'right' : 'left';
+  const topActionsDirection = responsive.isSingleColumn ? 'column' : 'row';
+  const topActionButtonWidth = responsive.isSingleColumn
+    ? ('100%' as const)
+    : responsive.isCompact
+      ? ('48%' as const)
+      : undefined;
+  const primaryCtaWidth = responsive.isSingleColumn ? '100%' : 220;
+  const primaryCtaHeight = responsive.isCompact ? 52 : 56;
+  const stackedChoiceRow = responsive.isSingleColumn;
 
   useEffect(() => {
     const first = (preferredName ?? '').trim();
@@ -63,26 +74,62 @@ export default function StartScreen({
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        responsive.isCompact ? styles.containerCompact : null,
+      ]}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.topActions}>
+      <View
+        testID="start-top-actions"
+        style={[
+          styles.topActions,
+          {
+            flexDirection: topActionsDirection,
+            alignItems: responsive.isSingleColumn ? 'stretch' : 'center',
+          },
+        ]}
+      >
         {onBackToChoice ? (
-          <Button variant="secondary" size="sm" onPress={onBackToChoice} style={styles.topActionBtn}>
+          <Button
+            testID="start-back-button"
+            variant="secondary"
+            size="sm"
+            onPress={onBackToChoice}
+            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
+          >
             {t('lobby.backToMode')}
           </Button>
         ) : null}
         {onHowToPlay ? (
-          <Button variant="primary" size="sm" onPress={onHowToPlay} style={styles.topActionBtn}>
+          <Button
+            testID="start-how-to-play-button"
+            variant="primary"
+            size="sm"
+            onPress={onHowToPlay}
+            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
+          >
             {t('mode.howToPlay')}
           </Button>
         ) : null}
         {onShop ? (
-          <Button variant="gold" size="sm" onPress={onShop} style={styles.topActionBtn}>
+          <Button
+            testID="start-shop-button"
+            variant="gold"
+            size="sm"
+            onPress={onShop}
+            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
+          >
             {t('shop.openShop')}
           </Button>
         ) : null}
-        <Button variant="secondary" size="sm" onPress={() => setShowRules((prev) => !prev)} style={styles.topActionBtn}>
+        <Button
+          testID="start-rules-button"
+          variant="secondary"
+          size="sm"
+          onPress={() => setShowRules((prev) => !prev)}
+          style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
+        >
           {t('start.rulesButton')}
         </Button>
       </View>
@@ -92,7 +139,13 @@ export default function StartScreen({
       <Text style={styles.subtitle}>{t('start.subtitle')}</Text>
 
       <Text style={[styles.label, { textAlign: ta }]}>{t('start.playerCount')}</Text>
-      <View style={styles.countRow}>
+      <View
+        testID="start-player-count-row"
+        style={[
+          styles.countRow,
+          responsive.isCompact ? styles.countRowCompact : null,
+        ]}
+      >
         {Array.from({ length: maxPlayers - 1 }, (_, i) => i + 2).map((n) => (
           <TouchableOpacity
             key={n}
@@ -121,7 +174,13 @@ export default function StartScreen({
       ))}
 
       <Text style={[styles.label, { textAlign: ta }]}>{t('start.difficulty')}</Text>
-      <View style={styles.diffRow}>
+      <View
+        testID="start-difficulty-row"
+        style={[
+          styles.diffRow,
+          stackedChoiceRow ? styles.diffRowStacked : null,
+        ]}
+      >
         <TouchableOpacity
           style={[styles.diffBtn, difficulty === 'full' && styles.diffFull]}
           onPress={() => setDifficulty('full')}
@@ -140,14 +199,27 @@ export default function StartScreen({
       </View>
 
       <Button
+        testID="start-play-button"
         variant="primary"
         size="lg"
         onPress={handleStart}
-        style={{ width: 220, height: 56, borderRadius: 28, marginTop: 12, alignSelf: 'center' }}
+        style={{
+          width: primaryCtaWidth,
+          height: primaryCtaHeight,
+          borderRadius: 28,
+          marginTop: 12,
+          alignSelf: 'center',
+        }}
       >
         {t('start.startGame')}
       </Button>
-      <Button variant="secondary" size="sm" onPress={() => setShowRules(!showRules)} style={{ width: '100%', marginTop: 8 }}>
+      <Button
+        testID="start-toggle-rules"
+        variant="secondary"
+        size="sm"
+        onPress={() => setShowRules(!showRules)}
+        style={{ width: '100%', marginTop: 8 }}
+      >
         {showRules ? t('start.hideRules') : t('start.showRules')}
       </Button>
 
@@ -162,6 +234,7 @@ export default function StartScreen({
           <View style={styles.rulesSection}>
             <Text style={[styles.sectionTitle, { textAlign: ta }]}>{t('start.goalTitle')}</Text>
             <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('start.rules.goal1', { n: String(CARDS_PER_PLAYER) })}</Text>
+            <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('start.rules.goalLimit')}</Text>
             <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('start.rules.goal2')}</Text>
           </View>
 
@@ -194,8 +267,8 @@ export default function StartScreen({
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#111827' },
   container: { padding: 24, paddingTop: 60, alignItems: 'stretch' },
+  containerCompact: { padding: 16, paddingTop: 40 },
   topActions: {
-    flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 8,
@@ -208,12 +281,14 @@ const styles = StyleSheet.create({
   subtitle: { color: '#9CA3AF', fontSize: 13, marginTop: 4, marginBottom: 28, alignSelf: 'center', textAlign: 'center' },
   label: { color: '#D1D5DB', fontSize: 13, fontWeight: '600', alignSelf: 'stretch', marginBottom: 8, marginTop: 16 },
   countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignSelf: 'flex-end', direction: 'ltr' },
-  countBtn: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
+  countRowCompact: { alignSelf: 'stretch', justifyContent: 'flex-end' },
+  countBtn: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
   countBtnActive: { backgroundColor: '#F59E0B' },
   countText: { color: '#D1D5DB', fontWeight: '700', fontSize: 14 },
   countTextActive: { color: '#FFF' },
   input: { width: '100%', backgroundColor: '#374151', borderWidth: 1, borderColor: '#4B5563', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, marginBottom: 6 },
   diffRow: { flexDirection: 'row', gap: 10, width: '100%', direction: 'ltr' },
+  diffRowStacked: { flexDirection: 'column' },
   diffBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
   diffEasy: { backgroundColor: '#16A34A' },
   diffFull: { backgroundColor: '#DC2626' },

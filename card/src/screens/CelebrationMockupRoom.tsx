@@ -10,9 +10,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../i18n/LocaleContext';
 import { initializeSfx, playMeterCelebrateSequence, playSfx } from '../audio/sfx';
-import { ExtractedMeterCelebrationOverlayCard } from '../components/ExtractedMeterCelebration';
+import { CoinAwardCelebrationCard } from '../components/CoinAwardCelebrationCard';
+import { getScreenSafeTop } from '../theme/screenInsets';
 
 type Props = {
   onBack: () => void;
@@ -105,6 +107,8 @@ function LiquidMeter({ progress }: { progress: number }) {
 
 export function CelebrationMockupRoom({ onBack }: Props) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const safeTop = getScreenSafeTop(insets.top);
   const { isRTL } = useLocale();
   const [fillStep, setFillStep] = useState(0);
   const [rewardCoins, setRewardCoins] = useState(25);
@@ -166,7 +170,7 @@ export function CelebrationMockupRoom({ onBack }: Props) {
       <LinearGradient colors={['#06101b', '#0d2137', '#173a58']} style={StyleSheet.absoluteFillObject} />
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: safeTop }]}
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
@@ -245,12 +249,14 @@ export function CelebrationMockupRoom({ onBack }: Props) {
 
       {showCelebration && (
         <View style={styles.overlay}>
-          <ExtractedMeterCelebrationOverlayCard
-            rewardCoins={rewardCoins}
+          <CoinAwardCelebrationCard
+            amount={rewardCoins}
             onContinue={closeCelebration}
+            continueLabel="נמשיך"
             badge="המד התמלא עד הסוף"
             title="כל הכבוד!"
             body="זו האנימציה המקורית מהקובץ שהבאת, והיא מוצגת עכשיו בתוך חדר המוקאפ."
+            pulseKey={rewardCoins}
           />
         </View>
       )}

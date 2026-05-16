@@ -237,21 +237,11 @@ function botNarrationText(locale: AppLocale, input: BotNarrationInput): string {
 }
 
 function emitBotStepToast(
-  io: IOServer,
-  room: Room,
-  builder: (locale: AppLocale, botName: string) => string,
+  _io: IOServer,
+  _room: Room,
+  _builder: (locale: AppLocale, botName: string) => string,
 ): void {
-  const state = room.state;
-  if (!state) return;
-  const botName = state.players[state.currentPlayerIndex]?.name ?? 'Bot';
-  for (const player of room.players) {
-    if (!player.isConnected || player.isBot) continue;
-    const text = builder(player.locale, botName);
-    if (!text) continue;
-    emitToPlayer(io, room, player.id, (sock) => {
-      sock.emit('toast', { message: text });
-    });
-  }
+  // Bot narration toasts disabled
 }
 
 function emitToPlayer(

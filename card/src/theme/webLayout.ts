@@ -11,6 +11,8 @@ export type ContentWidthOptions = {
 export type WebGameLayout = {
   viewportWidth: number;
   viewportHeight: number;
+  frameHeight: number;
+  contentScale: number;
   playfieldWidth: number;
   contentWidth: number;
   tableWidth: number;
@@ -33,6 +35,7 @@ export type WebGameLayout = {
 };
 
 export const WEB_GAME_PLAYFIELD_MAX_WIDTH = 412;
+export const WEB_GAME_PLAYFIELD_MIN_HEIGHT = 768;
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -49,33 +52,39 @@ export function getWebContentWidth(
 }
 
 export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
-  const viewportWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, Math.round(viewport.width || 0)));
+  const viewportWidth = Math.max(320, Math.round(viewport.width || 0));
   const viewportHeight = Math.max(568, Math.round(viewport.height || 0));
-  const playfieldWidth = viewportWidth;
+  const frameHeight = Math.max(viewportHeight, WEB_GAME_PLAYFIELD_MIN_HEIGHT);
+  const contentScale = clamp(viewportHeight / frameHeight, 0.5, 1);
+  const playfieldWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewportWidth);
   const contentWidth = playfieldWidth;
-  const tableHeight = clamp(Math.round(viewportHeight * 0.18), 150, 188);
-  const tableTop = clamp(Math.round(viewportHeight * 0.13), 92, 132);
-  const handBottom = clamp(Math.round(viewportHeight * 0.06), 40, 72);
-  const fanCardHeight = clamp(Math.round(viewportHeight * 0.15), 104, 124);
+  // Mobile-equivalent constants — web game column (≤412px) matches native mobile appearance.
+  const tableHeight = 220;
+  const tableTop = 185;
+  const tableBottomPadding = 65;
+  const handBottom = 155;
+  const fanCardHeight = 140;
   const fanCardWidth = Math.round(fanCardHeight * 0.71);
-  const fanViewportHeight = Math.round(fanCardHeight * 1.22);
+  // Matches native HAND_INNER_HEIGHT = Math.ceil(140*1.15+55-100) = 116
+  const fanViewportHeight = Math.ceil(fanCardHeight * 1.15 + 55 - 100);
   const handStripAboveFan = 24;
   const handStripHeight = fanViewportHeight + handStripAboveFan;
   const handZoneTop = handBottom + handStripHeight;
   const miniResultsBottom = handZoneTop - 10;
   const tableWidth = clamp(playfieldWidth - 24, 300, WEB_GAME_PLAYFIELD_MAX_WIDTH - 24);
-  const tableBottomPadding = Math.max(56, Math.round(tableHeight * 0.4));
-  const resultsTop = Math.max(68, tableTop - Math.round(tableHeight * 0.18));
-  const resultsRight = Math.max(20, Math.round((playfieldWidth - tableWidth) / 2) - 4);
-  const parensTop = Math.max(92, tableTop - Math.round(tableHeight * 0.18));
+  const resultsTop = 76;
+  const resultsRight = 128;
+  const parensTop = 156;
   const timerTop = tableTop + tableHeight + 32;
-  const maxButtonTop = viewportHeight - (handBottom + handStripHeight + 132);
-  const preferredButtonTop = tableTop + tableHeight + tableBottomPadding + 8;
-  const goldActionButtonTop = clamp(preferredButtonTop, 96, Math.max(96, maxButtonTop));
+  // Same formula as native, but against the unscaled playfield height so
+  // shorter desktop windows can shrink uniformly instead of colliding.
+  const goldActionButtonTop = Math.max(96, Math.min(680, frameHeight - 140));
 
   return {
     viewportWidth,
     viewportHeight,
+    frameHeight,
+    contentScale,
     playfieldWidth,
     contentWidth,
     tableWidth,

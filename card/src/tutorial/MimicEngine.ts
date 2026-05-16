@@ -188,6 +188,9 @@ export function mimicReducer(
     if (isLastStep) {
       return { ...state, phase: 'lesson-done' };
     }
+    if (lesson?.id === 'possible-results-basics' && state.stepIndex === 1) {
+      return { ...state, phase: 'intro', stepIndex: state.stepIndex + 1 };
+    }
     return { ...state, phase: 'bot-demo', stepIndex: state.stepIndex + 1 };
   }
 

@@ -29,7 +29,7 @@ export const lesson07Parens: Lesson = {
       botDemo: async (api) => {
         await api.wait(800);
       },
-      outcome: (e) => e.kind === 'userPlayedCards',
+      outcome: (e) => e.kind === 'l7ParensCopyConfirmed',
       hintKey: 'tutorial.l8.step2.hint',
       botHintKey: 'tutorial.l8.copyFullExercise',
       celebrateKey: 'tutorial.l8.step2.celebrate',

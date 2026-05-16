@@ -1,0 +1,107 @@
+
+> salinda-game@1.0.0 server:dev
+> npm run dev --prefix server
+
+
+> lolos-server@1.0.0 dev
+> ts-node-dev --respawn --transpile-only src/index.ts
+
+[INFO] 11:32:23 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] EdD52B45hAJH9RcSAAAB
+[ROOM] Created 2170 by "Dana" (c23bc3a0-814c-48a2-af1b-f48d92c656aa)
+[INFO] 11:44:39 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] _QtuBE-jd-ZezhGrAAAB
+[INFO] 11:44:53 Restarting: C:\Users\asus\bmad\card\shared\i18n\en.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] OUFzN70jsvpJ5JAJAAAB
+[DISCONNECT] OUFzN70jsvpJ5JAJAAAB
+[CONNECT] _zap_nenpLv_ji1TAAAD
+[DISCONNECT] _zap_nenpLv_ji1TAAAD
+[CONNECT] dqsoGpJg0NZj4k_OAAAF
+[DISCONNECT] dqsoGpJg0NZj4k_OAAAF
+[CONNECT] WR0POvCWlMYmMFtpAAAH
+[INFO] 14:12:26 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] MV9OXtBIRt1kSDxpAAAB
+[INFO] 14:59:11 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] cekqCLApTZMvA1TcAAAB
+[INFO] 15:04:28 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] gM2YDdv33sLqHqdqAAAB
+[INFO] 15:05:43 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] CS4Ff_1Qcl4fge3fAAAB
+[DISCONNECT] CS4Ff_1Qcl4fge3fAAAB
+[CONNECT] fQgpMN_wM6nhIhdLAAAD
+[INFO] 15:51:59 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+[INFO] 15:52:08 Restarting: C:\Users\asus\bmad\card\shared\i18n\en.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] 4LhTGWxKkTwZ8GOEAAAB
+[INFO] 16:46:58 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 16:47:06 Restarting: C:\Users\asus\bmad\card\shared\i18n\en.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] nJ1dudXZ_3wtt9-PAAAB
+[DISCONNECT] nJ1dudXZ_3wtt9-PAAAB
+[CONNECT] wIzfszdCB6US7aRQAAAD
+[DISCONNECT] wIzfszdCB6US7aRQAAAD
+[CONNECT] vWifcu0IP5Afv7sNAAAF
+[DISCONNECT] vWifcu0IP5Afv7sNAAAF
+[CONNECT] cCEy01GKrOhhIjL7AAAH
+[INFO] 19:12:05 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] wBu74GlBgDi6kkRPAAAB
+[DISCONNECT] wBu74GlBgDi6kkRPAAAB
+[CONNECT] c41CscPZhuGPoqR7AAAD
+[INFO] 19:45:26 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] cf4d0dkm9IDvSTkYAAAB
+[INFO] 19:45:36 Restarting: C:\Users\asus\bmad\card\shared\i18n\en.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] b5r3S2F7c2zPnJl1AAAB
+[DISCONNECT] b5r3S2F7c2zPnJl1AAAB
+[CONNECT] OPmd4Mo-BFdoWyJbAAAD
+[DISCONNECT] OPmd4Mo-BFdoWyJbAAAD
+[CONNECT] 4RULdzYYnIhjrRHkAAAF
+[DISCONNECT] 4RULdzYYnIhjrRHkAAAF
+[INFO] 19:59:49 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:00:32 Restarting: C:\Users\asus\bmad\card\shared\i18n\en.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:09:39 Restarting: C:\Users\asus\bmad\card\shared\i18n\he.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:18:13 Restarting: C:\Users\asus\bmad\card\server\src\gameEngine.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:24:36 Restarting: C:\Users\asus\bmad\card\server\src\gameEngine.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:26:55 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:27:11 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:27:17 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[INFO] 20:27:21 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] 1X3Q77xzJ65ROpmxAAAB
+[DISCONNECT] 1X3Q77xzJ65ROpmxAAAB
+[CONNECT] HupsPBUhBUYc-rVmAAAD
+[DISCONNECT] HupsPBUhBUYc-rVmAAAD
+[INFO] 20:38:01 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+[INFO] 20:38:10 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] iPh8wpADmQ38H9ZRAAAB
+[DISCONNECT] iPh8wpADmQ38H9ZRAAAB
+[INFO] 20:41:04 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] 4NcOUJrhLqb42z3XAAAB
+[INFO] 20:48:05 Restarting: C:\Users\asus\bmad\card\server\src\socketHandlers.ts has been modified
+🎴 Lolos server listening on 0.0.0.0:3001 (LAN: use this PC's IP)
+[CONNECT] uJlZGR2Vrrwt0BeRAAAB
+[DISCONNECT] uJlZGR2Vrrwt0BeRAAAB
+[CONNECT] zRMXGkrzWnUHFC-IAAAD
+[DISCONNECT] zRMXGkrzWnUHFC-IAAAD
+[CONNECT] 6D44esMG8D1YIOkeAAAF
+[DISCONNECT] 6D44esMG8D1YIOkeAAAF

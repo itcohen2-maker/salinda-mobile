@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>השוואה ויזואלית — שתי הקפסולות</title>
+  <style>
+    body {
+      margin: 0 auto;
+      max-width: 1200px;
+      padding: 16px;
+      font-family: system-ui, sans-serif;
+      background: #0f1115;
+      color: #e8eaed;
+    }
+    img { width: 100%; height: auto; display: block; border: 1px solid #333; margin: 16px 0; }
+    .caption { opacity: 0.85; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>השוואה ויזואלית</h1>
+  <p class="caption">
+    משמאל: קפסולה אדומה (מתמטיקה). באמצע: קפסולה ירוקה (פוקר). מימין: התמונה שמוציאה הפונקציה <code>diff</code> של Jimp על שתי משטחיות לבנות —
+    מה שמודגש שם הוא אזורים שונה מעל סף ההשוואה.
+  </p>
+  <img src="./capsule-triple-strip.png" alt="שלושת הפאנלים: משמאל A, במרכז B, מימין ההפרש הוויזואלי" />
+  <h2 class="caption">פאנל הפרש בלבד</h2>
+  <img src="./capsule-diff-only.png" alt="מפת הבדלי פיקסלים לבדה" />
+  <p class="caption">
+    מימדי קנבס: 1024×774 בשני הקבצים. אחרי הבהרה על רקע לבן, כ־<strong>38.4%</strong> מהפיקסלים השונים מעבר לסף (ברירת מחדל 0.1).
+    הנתון המלא נמצא ב־<code>capsule-diff-summary.json</code>.
+  </p>
+</body>
+</html>

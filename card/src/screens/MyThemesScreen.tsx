@@ -10,11 +10,13 @@ import {
   ActivityIndicator,
   ImageBackground,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { THEMES, THEME_IDS, type ThemeId } from '../theme/themes';
 import { TABLE_SKINS, TABLE_SKIN_IDS, type TableSkinId } from '../theme/tableSkins';
+import { activateTableSkin } from '../theme/activateTableSkin';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../i18n/LocaleContext';
 
@@ -27,9 +29,13 @@ export function MyThemesScreen({ visible, onClose }: Props) {
   const { t, locale } = useLocale();
   const { profile, setActiveSkin } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
 
   const ownedThemes = (profile?.themes_owned ?? ['classic']) as ThemeId[];
   const ownedTableSkins = (profile?.table_skins_owned ?? []) as TableSkinId[];
+  const coinCountText = `${Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0))}`;
+  const compactCoinCount = coinCountText.length >= 5 || width < 360;
+  const coinCountFontSize = compactCoinCount ? 14 : 16;
   const rawTable = profile?.active_table_theme ?? 'classic';
   const activeTable = (THEMES[rawTable as ThemeId] ? rawTable : 'classic') as ThemeId;
   const rawBg = profile?.active_card_back ?? 'classic';
@@ -48,7 +54,7 @@ export function MyThemesScreen({ visible, onClose }: Props) {
     const key = `table_skin:${skinId}`;
     if (loading === key) return;
     setLoading(key);
-    await setActiveSkin('table_skin', skinId);
+    await activateTableSkin(setActiveSkin, skinId);
     setLoading(null);
   }
 
@@ -61,7 +67,14 @@ export function MyThemesScreen({ visible, onClose }: Props) {
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <SlindaCoin size={22} spin />
-              <Text style={styles.coinCount}>{profile?.total_coins ?? 0}</Text>
+              <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                numberOfLines={1}
+                style={[styles.coinCount, { fontSize: coinCountFontSize }]}
+              >
+                {coinCountText}
+              </Text>
             </View>
             <Text style={styles.title}>{t('themes.myThemes')}</Text>
             <TouchableOpacity style={styles.closeHit} onPress={onClose}>
@@ -267,8 +280,8 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 10,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 60 },
-  coinCount: { color: GOLD, fontWeight: '700', fontSize: 16 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1, maxWidth: 88 },
+  coinCount: { color: GOLD, fontWeight: '700', fontSize: 16, flexShrink: 1, minWidth: 0 },
   title: { color: '#FFF', fontWeight: '700', fontSize: 17, textAlign: 'center', flex: 1 },
   closeHit: { padding: 6, minWidth: 32, alignItems: 'flex-end' },
   closeX: { color: '#9CA3AF', fontSize: 18, fontWeight: '700' },

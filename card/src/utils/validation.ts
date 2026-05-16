@@ -35,8 +35,6 @@ export function validateIdenticalPlay(
       return card.operation === topDiscard.operation
     case 'joker':
       return topDiscard.type === 'joker'
-    case 'wild':
-      return topDiscard.type === 'number' || topDiscard.type === 'wild'
     default:
       return false
   }

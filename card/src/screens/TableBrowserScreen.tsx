@@ -16,11 +16,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { LobbyTableSummary } from '../../shared/types';
 import { useAuth } from '../hooks/useAuth';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import { useLocale } from '../i18n/LocaleContext';
 import { getWebContentWidth } from '../theme/webLayout';
+import { getScreenSafeTop } from '../theme/screenInsets';
 
 export type OpenRoom = LobbyTableSummary;
 
@@ -46,7 +48,10 @@ function formatDifficulty(table: OpenRoom): string {
 export function TableBrowserScreen({ socket, onJoin, onCreate, onBack }: Props) {
   const { t } = useLocale();
   const { profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
+  const safeTop = getScreenSafeTop(insets.top);
+  const placeTopBackOnRightOnAndroid = Platform.OS === 'android';
   const contentWidth =
     Platform.OS === 'web'
       ? getWebContentWidth(viewport.width, { maxWidth: 960, sidePadding: 40 })
@@ -113,7 +118,7 @@ export function TableBrowserScreen({ socket, onJoin, onCreate, onBack }: Props) 
   return (
     <View style={styles.container}>
       <View style={[styles.contentFrame, contentWidth ? { width: contentWidth } : null]}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: safeTop + 8 }, placeTopBackOnRightOnAndroid ? styles.headerAndroid : null]}>
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
             <Text style={styles.backText}>{t('browse.back')}</Text>
           </TouchableOpacity>
@@ -167,8 +172,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 52,
     paddingBottom: 12,
+  },
+  headerAndroid: {
+    flexDirection: 'row-reverse',
   },
   backBtn: {
     paddingVertical: 6,

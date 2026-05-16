@@ -1,8 +1,8 @@
 // ============================================================
 // lesson-03-dice.ts — Third watch-and-mimic lesson: the dice.
-// The dice are now revealed automatically so the learner sees
-// the exact numbers that will feed the next exercise, without
-// an extra "roll to continue" interaction.
+// Bot points at the gold dice button: a yellow halo pulses
+// around it and the dice-roll sound plays, so the learner sees
+// (and hears) the roll before the dice values are revealed.
 // ============================================================
 
 import type { Lesson } from './types';
@@ -17,9 +17,11 @@ export const lesson03Dice: Lesson = {
     {
       id: 'roll-dice',
       botDemo: async (api) => {
-        // Give the learner a short beat to see the dice appear before the
-        // engine moves into the next tutorial phase.
-        await api.wait(PULSE_MS);
+        // Brief pause so the host can swap the underlying game phase
+        // (turn-transition → pre-roll) and mount the GoldDiceButton +
+        // its tutorialBus subscriber before we pulse it.
+        await api.wait(450);
+        await api.pulseDiceBtn(PULSE_MS);
       },
       outcome: (event) => event.kind === 'diceRolled',
       highlight: { target: 'dice', shape: 'ring' },

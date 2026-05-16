@@ -21,6 +21,7 @@ import type { BotDifficulty } from './types';
 export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
 export type Operation = '+' | '-' | 'x' | '÷';
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
+export type OverflowSwapPileChoice = 'top' | 'underTop';
 
 export interface Card {
   id: string;
@@ -106,6 +107,9 @@ export interface GameState {
   tournamentTable: unknown[];
   possibleResultsInfoUses: number;
   possibleResultsInfoCountedThisTurn: boolean;
+  overflowSwapPending: boolean;
+  overflowSwapDeadlineAt: number | null;
+  overflowSwapCanUseUnderTop: boolean;
   suppressIdenticalOverlayOnline: boolean;
   // M5 additions (optional so tests compile before M5 lands):
   botConfig?: {
@@ -189,6 +193,9 @@ const baseline: GameState = {
   tournamentTable: [],
   possibleResultsInfoUses: 0,
   possibleResultsInfoCountedThisTurn: false,
+  overflowSwapPending: false,
+  overflowSwapDeadlineAt: null,
+  overflowSwapCanUseUnderTop: false,
   suppressIdenticalOverlayOnline: false,
   botConfig: null,
   botPendingStagedIds: null,

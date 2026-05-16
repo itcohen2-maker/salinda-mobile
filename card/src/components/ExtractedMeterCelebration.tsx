@@ -3,6 +3,8 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions
 
 import { celebrationHtmlSource } from './excellenceMeterCelebrationHtml';
 
+const celebrationHtmlWithoutCoinBurst = celebrationHtmlSource.replace('fireCoinBurst();', '');
+
 type OverlayProps = {
   rewardCoins: number;
   onContinue?: () => void;
@@ -16,7 +18,7 @@ function HtmlAnimationFrame({ size }: { size: number }) {
   if (Platform.OS === 'web') {
     return (
       <iframe
-        srcDoc={celebrationHtmlSource}
+        srcDoc={celebrationHtmlWithoutCoinBurst}
         title="Excellence celebration"
         style={[styles.iframe, { width: size, height: size }] as any}
       />

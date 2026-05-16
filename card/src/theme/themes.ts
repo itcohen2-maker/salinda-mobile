@@ -32,7 +32,8 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       imageTint: '#B06820',
     },
     background: {
-      gradient: ['#070f1a', '#0f2840', '#153252'],
+      gradient: ['rgba(7,15,26,0.0)', 'rgba(15,40,64,0.0)', 'rgba(21,50,82,0.0)'],
+      image: require('../../assets/bg.jpg'),
     },
   },
   royal: {

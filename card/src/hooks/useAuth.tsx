@@ -13,6 +13,7 @@ export interface PlayerProfile {
   abandons: number;
   total_coins: number;
   slinda_owned: boolean;
+  wild_owned: boolean;
   themes_owned: string[];
   table_skins_owned: string[];
   active_card_back: string;
@@ -39,10 +40,14 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  /** Purchase the Slinda card for 100 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
+  /** Purchase the Slinda card for 150 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
   purchaseSlinda: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
   /** Consume owned Slinda after activating it in-game. */
   consumeSlinda: () => Promise<'ok' | 'not_owned' | 'error'>;
+  /** Purchase the Wild card for 200 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
+  purchaseWild: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
+  /** Consume owned Wild after activating it in-game. */
+  consumeWild: () => Promise<'ok' | 'not_owned' | 'error'>;
   /** Purchase a theme for its configured store price. */
   purchaseTheme: (themeId: string) => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'invalid_theme' | 'error'>;
   /** Purchase a table skin for its configured store price. */
@@ -57,6 +62,51 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const TUTORIAL_COINS_KEY = 'lulos_tutorial_coins_earned_count';
 const TUTORIAL_COINS_SYNCED_KEY = 'lulos_tutorial_coins_synced';
+const LOCAL_WILD_OWNED_KEY_PREFIX = 'lulos_local_wild_owned:';
+const MIN_PROFILE_COINS = 10000;
+const LOCAL_MIN_PROFILE_COINS_SEEDED_KEY_PREFIX = `lulos_local_min_profile_coins_seeded:${MIN_PROFILE_COINS}:`;
+
+function localWildOwnedKey(userId: string): string {
+  return `${LOCAL_WILD_OWNED_KEY_PREFIX}${userId}`;
+}
+
+function localMinProfileCoinsSeededKey(userId: string): string {
+  return `${LOCAL_MIN_PROFILE_COINS_SEEDED_KEY_PREFIX}${userId}`;
+}
+
+export async function ensureMinimumProfileCoins(userId: string, currentCoins: number): Promise<number> {
+  const safeCoins = Math.max(0, Math.floor(Number(currentCoins) || 0));
+  const seededKey = localMinProfileCoinsSeededKey(userId);
+
+  try {
+    const alreadySeeded = await AsyncStorage.getItem(seededKey);
+    if (alreadySeeded === 'true') {
+      return safeCoins;
+    }
+
+    if (safeCoins >= MIN_PROFILE_COINS) {
+      await AsyncStorage.setItem(seededKey, 'true');
+      return safeCoins;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ total_coins: MIN_PROFILE_COINS })
+      .eq('id', userId)
+      .lt('total_coins', MIN_PROFILE_COINS);
+
+    if (error) {
+      console.warn('[auth] ensureMinimumProfileCoins error:', error.message);
+      return safeCoins;
+    }
+
+    await AsyncStorage.setItem(seededKey, 'true');
+    return MIN_PROFILE_COINS;
+  } catch (err) {
+    console.warn('[auth] ensureMinimumProfileCoins exception:', err);
+    return safeCoins;
+  }
+}
 
 /** Migrate tutorial coins from AsyncStorage to Supabase. One-time, idempotent. */
 export async function syncTutorialCoins(): Promise<void> {
@@ -96,16 +146,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const [localWildOwnedRaw, profileResult] = await Promise.all([
+        AsyncStorage.getItem(localWildOwnedKey(userId)),
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+      ]);
+      const { data, error } = profileResult;
       if (error) {
         console.warn('[auth] fetchProfile error:', error.message);
         setProfile(null);
       } else {
-        setProfile(data as PlayerProfile);
+        const localWildOwned = localWildOwnedRaw === 'true';
+        const rawProfile = data as PlayerProfile;
+        const syncedCoins = await ensureMinimumProfileCoins(userId, rawProfile.total_coins);
+        setProfile({
+          ...rawProfile,
+          total_coins: syncedCoins,
+          wild_owned: (rawProfile as Partial<PlayerProfile>).wild_owned === true || localWildOwned,
+        });
         void syncTutorialCoins();
       }
     } catch (e) {
@@ -212,16 +273,147 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshProfile]);
 
   const consumeSlinda = useCallback(async (): Promise<'ok' | 'not_owned' | 'error'> => {
+    const consumeViaProfileUpdate = async (): Promise<'ok' | 'not_owned' | 'error'> => {
+      if (!user) return 'error';
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ slinda_owned: false })
+          .eq('id', user.id)
+          .eq('slinda_owned', true)
+          .select('id, slinda_owned');
+        if (error) return 'error';
+        if (!data || data.length === 0) {
+          await refreshProfile();
+          return 'not_owned';
+        }
+        setProfile((prev) => (prev ? { ...prev, slinda_owned: false } : prev));
+        await refreshProfile();
+        return 'ok';
+      } catch {
+        return 'error';
+      }
+    };
+
     try {
       const { data, error } = await supabase.rpc('consume_slinda');
-      if (error) return 'error';
+      if (error) {
+        return await consumeViaProfileUpdate();
+      }
       const result = data as string;
-      if (result === 'ok') await refreshProfile();
+      if (result === 'ok' || result === 'not_owned') {
+        setProfile((prev) => (prev ? { ...prev, slinda_owned: false } : prev));
+        await refreshProfile();
+      }
       return result as 'ok' | 'not_owned';
     } catch {
-      return 'error';
+      return await consumeViaProfileUpdate();
     }
-  }, [refreshProfile]);
+  }, [refreshProfile, user]);
+
+  const purchaseWild = useCallback(async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
+    const purchaseViaProfileUpdate = async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
+      if (!user) return 'error';
+      const currentCoins = profile?.total_coins ?? 0;
+      if ((profile?.wild_owned ?? false) === true) return 'already_owned';
+      if (currentCoins < 200) return 'insufficient_coins';
+      try {
+        const nextCoins = currentCoins - 200;
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ total_coins: nextCoins })
+          .eq('id', user.id)
+          .eq('total_coins', currentCoins)
+          .select('id, total_coins');
+        if (error) return 'error';
+        if (!data || data.length === 0) {
+          await refreshProfile();
+          return 'error';
+        }
+        await AsyncStorage.setItem(localWildOwnedKey(user.id), 'true');
+        setProfile((prev) => (prev ? { ...prev, total_coins: nextCoins, wild_owned: true } : prev));
+        await refreshProfile();
+        return 'ok';
+      } catch {
+        return 'error';
+      }
+    };
+
+    try {
+      const { data, error } = await supabase.rpc('purchase_wild');
+      if (error) {
+        return await purchaseViaProfileUpdate();
+      }
+      const result = data as string;
+      if (result === 'ok') {
+        if (user) await AsyncStorage.removeItem(localWildOwnedKey(user.id));
+        await refreshProfile();
+      }
+      return result as 'ok' | 'already_owned' | 'insufficient_coins';
+    } catch {
+      return await purchaseViaProfileUpdate();
+    }
+  }, [profile, refreshProfile, user]);
+
+  const consumeWild = useCallback(async (): Promise<'ok' | 'not_owned' | 'error'> => {
+    // Local-storage fallback: purchase_wild fallback path stores ownership only in
+    // AsyncStorage (not DB). When a DB call fails (Supabase returns { error }, not throws),
+    // the catch block is unreachable — so we extract the check into a shared helper.
+    const consumeViaLocalStorage = async (): Promise<'ok' | 'error'> => {
+      if (!user) return 'error';
+      try {
+        const localOwned = await AsyncStorage.getItem(localWildOwnedKey(user.id));
+        if (localOwned !== 'true') return 'error';
+        await AsyncStorage.removeItem(localWildOwnedKey(user.id));
+        setProfile((prev) => (prev ? { ...prev, wild_owned: false } : prev));
+        return 'ok';
+      } catch {
+        return 'error';
+      }
+    };
+
+    const consumeViaProfileUpdate = async (): Promise<'ok' | 'not_owned' | 'error'> => {
+      if (!user) return 'error';
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ wild_owned: false })
+          .eq('id', user.id)
+          .eq('wild_owned', true)
+          .select('id, wild_owned');
+        if (error) {
+          // Supabase SDK returns { error } for API errors — it does not throw, so the
+          // catch block below is unreachable for these cases. Fall through to local storage.
+          return await consumeViaLocalStorage();
+        }
+        if (!data || data.length === 0) {
+          await refreshProfile();
+          return 'not_owned';
+        }
+        setProfile((prev) => (prev ? { ...prev, wild_owned: false } : prev));
+        await refreshProfile();
+        return 'ok';
+      } catch {
+        return await consumeViaLocalStorage();
+      }
+    };
+
+    try {
+      const { data, error } = await supabase.rpc('consume_wild');
+      if (error) {
+        return await consumeViaProfileUpdate();
+      }
+      const result = data as string;
+      if (result === 'ok' || result === 'not_owned') {
+        if (user) await AsyncStorage.removeItem(localWildOwnedKey(user.id));
+        setProfile((prev) => (prev ? { ...prev, wild_owned: false } : prev));
+        await refreshProfile();
+      }
+      return result as 'ok' | 'not_owned';
+    } catch {
+      return await consumeViaProfileUpdate();
+    }
+  }, [refreshProfile, user]);
 
   const purchaseTheme = useCallback(async (themeId: string): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'invalid_theme' | 'error'> => {
     try {
@@ -292,6 +484,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshProfile,
         purchaseSlinda,
         consumeSlinda,
+        purchaseWild,
+        consumeWild,
         purchaseTheme,
         purchaseTableSkin,
         setActiveSkin,

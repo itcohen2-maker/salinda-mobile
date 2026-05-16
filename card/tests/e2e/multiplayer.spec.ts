@@ -12,14 +12,18 @@ test.describe('Multiplayer two-context sync', () => {
     const pageB = await ctxB.newPage();
 
     await pageA.goto('/');
+    await pageA.getByTestId('lobby-single-player').click();
+    await pageA.getByTestId('lobby-join-room').click();
+    await pageA.getByTestId('lobby-player-name').fill('Avi');
     await pageA.getByTestId('lobby-create-room').click();
     const code = (await pageA.getByTestId('room-code').textContent())?.trim() ?? '';
     expect(code).toMatch(/^[A-Z0-9]{4,6}$/);
 
     await pageB.goto('/');
+    await pageB.getByTestId('lobby-single-player').click();
     await pageB.getByTestId('lobby-join-room').click();
-    await pageB.getByTestId('room-code-input').fill(code);
-    await pageB.getByTestId('room-code-submit').click();
+    await pageB.getByTestId('lobby-player-name').fill('Dana');
+    await pageB.getByTestId(`table-card-${code}`).click();
 
     await expect(pageA.getByTestId('opponent-name')).toBeVisible({ timeout: 15_000 });
     await expect(pageB.getByTestId('opponent-name')).toBeVisible({ timeout: 15_000 });

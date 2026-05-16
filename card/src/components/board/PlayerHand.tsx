@@ -17,7 +17,7 @@ export default function PlayerHand() {
   const topDiscard = state.discardPile[state.discardPile.length - 1]
 
   const sortedHand = [...currentPlayer.hand].sort((a, b) => {
-    const order = { number: 0, fraction: 1, operation: 2, joker: 3 } as const
+    const order = { number: 0, fraction: 1, operation: 2, joker: 3, wild: 4 } as const
     const ta = order[a.type]
     const tb = order[b.type]
     if (ta !== tb) return ta - tb
@@ -55,6 +55,8 @@ export default function PlayerHand() {
         dispatch({ type: 'PLAY_OPERATION', card })
       } else if (card.type === 'joker') {
         dispatch({ type: 'OPEN_JOKER_MODAL', card })
+      } else if (card.type === 'wild') {
+        dispatch({ type: 'SELECT_CARD', card })
       }
     }
   }

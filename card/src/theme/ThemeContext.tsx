@@ -6,19 +6,29 @@ import { useAuth } from '../hooks/useAuth';
 export type { TableSkin };
 
 export interface ActiveTheme {
+  tableThemeId: ThemeId;
+  backgroundThemeId: ThemeId;
   table: TableTheme;
   background: BackgroundTheme;
   activeTableSkin: TableSkin | null;
 }
 
 function resolveTheme(tableId: string, backgroundId: string, tableSkinId?: string | null): ActiveTheme {
-  const table = (THEMES[tableId as ThemeId] ?? THEMES[DEFAULT_THEME_ID])?.table ?? THEMES[DEFAULT_THEME_ID].table;
-  const background = (THEMES[backgroundId as ThemeId] ?? THEMES[DEFAULT_THEME_ID])?.background ?? THEMES[DEFAULT_THEME_ID].background;
+  const resolvedTableThemeId = (THEMES[tableId as ThemeId]?.id ?? DEFAULT_THEME_ID) as ThemeId;
+  const resolvedBackgroundThemeId = (THEMES[backgroundId as ThemeId]?.id ?? DEFAULT_THEME_ID) as ThemeId;
+  const table = THEMES[resolvedTableThemeId]?.table ?? THEMES[DEFAULT_THEME_ID].table;
+  const background = THEMES[resolvedBackgroundThemeId]?.background ?? THEMES[DEFAULT_THEME_ID].background;
   const activeTableSkin =
     tableSkinId && TABLE_SKINS[tableSkinId as TableSkinId]
       ? TABLE_SKINS[tableSkinId as TableSkinId]
       : null;
-  return { table, background, activeTableSkin };
+  return {
+    tableThemeId: resolvedTableThemeId,
+    backgroundThemeId: resolvedBackgroundThemeId,
+    table,
+    background,
+    activeTableSkin,
+  };
 }
 
 const ThemeContext = createContext<ActiveTheme>(resolveTheme(DEFAULT_THEME_ID, DEFAULT_THEME_ID));

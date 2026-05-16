@@ -26,11 +26,11 @@ describe('lesson registry smoke', () => {
       'multi-play-exercise-2',
     ]);
   });
-  it('lesson 10 second exercise requires two positive numbers, zero, and wild', () => {
+  it('lesson 10 second exercise requires two positive numbers and wild, while zero stays optional', () => {
     const step = LESSONS[9].steps[1];
     expect(step.outcome({ kind: 'userPlayedCards', count: 4, positiveNumberCount: 2, hasZero: true, hasWild: true })).toBe(true);
+    expect(step.outcome({ kind: 'userPlayedCards', count: 3, positiveNumberCount: 2, hasZero: false, hasWild: true })).toBe(true);
     expect(step.outcome({ kind: 'userPlayedCards', count: 3, positiveNumberCount: 1, hasZero: true, hasWild: true })).toBe(false);
-    expect(step.outcome({ kind: 'userPlayedCards', count: 3, positiveNumberCount: 2, hasZero: false, hasWild: true })).toBe(false);
     expect(step.outcome({ kind: 'userPlayedCards', count: 3, positiveNumberCount: 2, hasZero: true, hasWild: false })).toBe(false);
   });
   it('lesson 4 (equation-basics) has 4 steps: play-card, fill-missing-die, did-you-know, full-build', () => {
@@ -48,6 +48,7 @@ describe('lesson registry smoke', () => {
   it('lesson 4 step 2 (fill-missing-die) outcome: card matching lastEquationResult', () => {
     tutorialBus.setLastEquationResult(9);
     const step = LESSONS[3].steps[1];
+    expect(step.botHintKey).toBeUndefined();
     expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-9-123' })).toBe(true);
     expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-bot-card-9-123' })).toBe(true);
     expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-5-123' })).toBe(false);
@@ -97,6 +98,11 @@ describe('lesson registry smoke', () => {
     expect(step.outcome({ kind: 'l3TipAck' })).toBe(true);
     expect(step.outcome({ kind: 'l3SolvedAck' })).toBe(false);
   });
+  it('lesson 6 step 2 (tap-mini) advances only after the manual continue ack', () => {
+    const step = LESSONS[5].steps[1];
+    expect(step.outcome({ kind: 'miniCardTapped', result: 5, equation: '2 + 3 = 5' })).toBe(false);
+    expect(step.outcome({ kind: 'l6TapMiniAck' })).toBe(true);
+  });
   it('lesson 7 (fractions-advanced) has intro + 2 attacks only', () => {
     const L7 = LESSONS[6];
     expect(L7.steps.map((s) => s.id)).toEqual([
@@ -109,6 +115,13 @@ describe('lesson registry smoke', () => {
     expect(L7.steps[1].outcome({ kind: 'fracAttackPlayed', fraction: '1/2' })).toBe(true);
     expect(L7.steps[1].outcome({ kind: 'fracAttackPlayed', fraction: '1/3' })).toBe(false);
     expect(L7.steps[2].outcome({ kind: 'fracAttackPlayed', fraction: '1/3' })).toBe(true);
+  });
+  it('lesson 8 (parens-move) finishes step 2 on confirming the copied mini equation', () => {
+    const L8 = LESSONS[7];
+    expect(L8.steps.map((s) => s.id)).toEqual(['move-parens', 'full-build']);
+    expect(L8.steps[0].outcome({ kind: 'l7ParensCopyConfirmed' })).toBe(true);
+    expect(L8.steps[1].outcome({ kind: 'l7ParensCopyConfirmed' })).toBe(true);
+    expect(L8.steps[1].outcome({ kind: 'userPlayedCards' })).toBe(false);
   });
   it('lesson 1 (fan-basics) has the scroll step only', () => {
     expect(LESSONS[0].steps.map(s => s.id)).toEqual(['scroll-fan']);

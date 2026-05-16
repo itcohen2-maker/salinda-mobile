@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Animated, Easing, TouchableOpacity, Text } from 'react-native';
 import { SlindaCoin } from './SlindaCoin';
 import { LinearGradient } from 'expo-linear-gradient';
-import { playSfx } from '../src/audio/sfx';
+import { playMeterCelebrateSequence, playSfx } from '../src/audio/sfx';
 
 const COIN_IMG = require('../assets/slinda_coin_nobg.png');
 
@@ -32,10 +32,12 @@ export default function ExcellenceMeter({
   pulseKey,
   isCelebrating = false,
   onPress,
+  title,
+  height,
   courageCoins,
 }: Props) {
-  const W = compact ? 45 : 55;
-  const H = compact ? 80 : 110;
+  const H = height ?? (compact ? 80 : 110);
+  const W = compact ? Math.round((45 / 80) * H) : Math.round((55 / 110) * H);
 
   const fillPx = useRef(new Animated.Value((value / 100) * H)).current;
   const scaleX = useRef(new Animated.Value(1)).current;
@@ -44,7 +46,6 @@ export default function ExcellenceMeter({
   const rot = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
   const party = useRef(new Animated.Value(0)).current;
-
   const burstCoins = useRef(
     COIN_BURST_CONFIGS.map(() => ({
       x: new Animated.Value(0),
@@ -76,6 +77,22 @@ export default function ExcellenceMeter({
       useNativeDriver: false,
     }).start();
   }, [fillPx, H]);
+
+  const playBounce = useCallback(() => {
+    void playSfx('meterBounce', { cooldownMs: 0, volumeOverride: 0.5 });
+    [scaleX, scaleY, transY, glow].forEach((a) => a.stopAnimation());
+    scaleX.setValue(1);
+    scaleY.setValue(1);
+    transY.setValue(0);
+    glow.setValue(0);
+
+    Animated.sequence([
+      Animated.parallel([t(1.08, 150)(scaleX), t(0.84, 150)(scaleY)]),
+      Animated.parallel([t(0.96, 220)(scaleX), t(1.1, 220)(scaleY), t(-14, 220)(transY), t(1, 220)(glow)]),
+      Animated.parallel([t(1.03, 220)(scaleX), t(0.97, 220)(scaleY), t(0, 220)(transY), t(0, 220)(glow)]),
+      Animated.parallel([t(1, 180)(scaleX), t(1, 180)(scaleY)]),
+    ]).start();
+  }, [glow, scaleX, scaleY, transY]);
 
   const fireCoinBurst = useCallback((extraDelay: number) => {
     burstCoins.forEach((coin, i) => {
@@ -156,24 +173,8 @@ export default function ExcellenceMeter({
     });
   }, [burstCoins]);
 
-  const playBounce = useCallback(() => {
-    void playSfx('meterBounce', { cooldownMs: 0, volumeOverride: 0.5 });
-    [scaleX, scaleY, transY, glow].forEach((a) => a.stopAnimation());
-    scaleX.setValue(1);
-    scaleY.setValue(1);
-    transY.setValue(0);
-    glow.setValue(0);
-
-    Animated.sequence([
-      Animated.parallel([t(1.08, 150)(scaleX), t(0.84, 150)(scaleY)]),
-      Animated.parallel([t(0.96, 220)(scaleX), t(1.1, 220)(scaleY), t(-14, 220)(transY), t(1, 220)(glow)]),
-      Animated.parallel([t(1.03, 220)(scaleX), t(0.97, 220)(scaleY), t(0, 220)(transY), t(0, 220)(glow)]),
-      Animated.parallel([t(1, 180)(scaleX), t(1, 180)(scaleY)]),
-    ]).start();
-  }, [glow, scaleX, scaleY, transY]);
-
   const playCelebrate = useCallback(() => {
-    void playSfx('meterCelebrate', { cooldownMs: 0, volumeOverride: 1.0 });
+    void playMeterCelebrateSequence({ cooldownMs: 0, volumeOverride: 0.8 });
     [scaleX, scaleY, transY, rot, glow, party].forEach((a) => a.stopAnimation());
     scaleX.setValue(1);
     scaleY.setValue(1);
@@ -239,6 +240,17 @@ export default function ExcellenceMeter({
 
   return (
     <View style={{ alignItems: 'center' }}>
+      {!!title && (
+        <Text
+          style={[
+            styles.title,
+            compact ? styles.titleCompact : null,
+          ]}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+      )}
       <TouchableOpacity activeOpacity={1} onPress={handlePress} style={{ alignItems: 'center' }}>
         <Animated.View style={{ transform: [{ scale: tapScale }], alignItems: 'center' }}>
           <Animated.View
@@ -320,6 +332,22 @@ export default function ExcellenceMeter({
 }
 
 const styles = StyleSheet.create({
+  title: {
+    color: '#FEF3C7',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 8,
+    maxWidth: 220,
+    textShadowColor: 'rgba(15,23,42,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  titleCompact: {
+    fontSize: 10,
+    marginBottom: 4,
+    maxWidth: 120,
+  },
   glass: {
     borderRadius: 12,
     overflow: 'hidden',

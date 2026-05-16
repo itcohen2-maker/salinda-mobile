@@ -1,0 +1,60 @@
+{
+  "url": "http://127.0.0.1:8085/",
+  "title": "Salinda / סלינדה",
+  "testIds": [
+    "app-web-shell",
+    "lobby-language-toggle",
+    "lobby-language-he",
+    "lobby-language-en",
+    "lobby-single-player",
+    "lobby-tutorial",
+    "lobby-shop"
+  ],
+  "buttons": [
+    {
+      "text": "",
+      "testid": "lobby-language-he"
+    },
+    {
+      "text": "",
+      "testid": "lobby-language-en"
+    },
+    {
+      "text": "",
+      "testid": "lobby-single-player"
+    },
+    {
+      "text": "",
+      "testid": "lobby-tutorial"
+    },
+    {
+      "text": "חנות",
+      "testid": "lobby-shop"
+    },
+    {
+      "text": "",
+      "testid": ""
+    },
+    {
+      "text": "",
+      "testid": ""
+    },
+    {
+      "text": "חזרה",
+      "testid": ""
+    },
+    {
+      "text": "מיקוד",
+      "testid": ""
+    },
+    {
+      "text": "מסך מלא",
+      "testid": ""
+    },
+    {
+      "text": "רקע לבן",
+      "testid": ""
+    }
+  ],
+  "bodyStart": "+\n-\n×\n÷\n+\n-\n×\n÷\n½\n¾\n⅓\n⅔\n¼\n⅕\n⅖\n⅗\nסלינדה\nסלינדה\nשפה\nהשם שלך\n✦\n✧\n✧\n✦\nחנות\nחזרה\nמיקוד\nמסך מלא\nרקע לבן\nAD"
+}

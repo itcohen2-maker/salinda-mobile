@@ -28,7 +28,6 @@ export const lesson10MultiPlay: Lesson = {
       outcome: (e) => e.kind === 'userPlayedCards' &&
         (e.count ?? 0) > 2 &&
         (e.positiveNumberCount ?? 0) >= 2 &&
-        !!e.hasZero &&
         !!e.hasWild,
       hintKey: 'tutorial.multiPlayExerciseMore.hint',
       celebrateKey: 'tutorial.multiPlayExercise.celebrate',

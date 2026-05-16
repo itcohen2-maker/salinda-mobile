@@ -11,7 +11,8 @@ test.describe('Smoke: app loads', () => {
     await lobby.goto();
 
     await expect(page).toHaveTitle(/.+/);
-    await expect(lobby.tutorialButton.or(lobby.playWithBot)).toBeVisible({ timeout: 30_000 });
+    await expect(lobby.tutorialButton).toBeVisible({ timeout: 30_000 });
+    await expect(lobby.openGameMenu).toBeVisible({ timeout: 30_000 });
 
     assertNoErrors();
   });

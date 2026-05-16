@@ -93,6 +93,43 @@ export async function awardCoinsForPlayer(opts: {
 
 // ── Rating helpers ──
 
+export async function deductCoinsForPlayer(playerId: string, amount: number): Promise<boolean> {
+  if (adminUnavailable(`deductCoinsForPlayer(${playerId})`)) return false;
+  const safeAmount = Math.max(1, Math.floor(amount));
+  try {
+    const { data: profile, error } = await supabaseAdmin!
+      .from('profiles')
+      .select('total_coins')
+      .eq('id', playerId)
+      .single();
+
+    if (error) {
+      console.error('[supabaseAdmin] deductCoinsForPlayer select:', error.message);
+      return false;
+    }
+    if (!profile) return false;
+
+    const currentCoins = Math.max(0, Number(profile.total_coins ?? 0) || 0);
+    const nextCoins = Math.max(0, currentCoins - safeAmount);
+
+    const { error: updateError } = await supabaseAdmin!
+      .from('profiles')
+      .update({ total_coins: nextCoins })
+      .eq('id', playerId);
+
+    if (updateError) {
+      console.error('[supabaseAdmin] deductCoinsForPlayer update:', updateError.message);
+      return false;
+    }
+
+    console.log(`[supabaseAdmin] deductCoinsForPlayer: ${playerId} coins ${currentCoins} -> ${nextCoins}`);
+    return true;
+  } catch (err) {
+    console.error('[supabaseAdmin] deductCoinsForPlayer exception:', err);
+    return false;
+  }
+}
+
 const RATING_WIN = 15;
 const RATING_LOSS = 10;
 const RATING_ABANDON_PENALTY = 30;

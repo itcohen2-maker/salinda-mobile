@@ -10,7 +10,16 @@ jest.mock('expo-av', () => ({
   Audio: {
     Sound: {
       createAsync: jest.fn().mockResolvedValue({
-        sound: { playAsync: jest.fn(), unloadAsync: jest.fn() },
+        sound: {
+          playAsync: jest.fn(),
+          replayAsync: jest.fn(),
+          stopAsync: jest.fn(),
+          unloadAsync: jest.fn(),
+          setVolumeAsync: jest.fn(),
+          setPositionAsync: jest.fn(),
+          getStatusAsync: jest.fn().mockResolvedValue({ isLoaded: true, isPlaying: false }),
+          setOnPlaybackStatusUpdate: jest.fn(),
+        },
       }),
     },
     setAudioModeAsync: jest.fn().mockResolvedValue(undefined),

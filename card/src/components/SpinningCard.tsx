@@ -1,16 +1,15 @@
 import React, { useEffect, useRef, ReactNode } from 'react';
 import { View, Image, StyleSheet, Animated, Easing, ImageSourcePropType } from 'react-native';
 
-const CARD_BACK = require('../../assets/card-back.png');
+const CARD_BACK = require('../../assets/card-back-salinda-preview.png');
 
 type Props = {
-  /** Image source for the card front (use require(...)). */
   frontSource?: ImageSourcePropType;
-  /** Fallback front face when no image provided. */
   front?: ReactNode;
   width?: number;
   speed?: number;
   backLabel?: string;
+  active?: boolean;
 };
 
 function CardFace({
@@ -26,8 +25,8 @@ function CardFace({
 }) {
   if (source) {
     return (
-      <View style={{ width, height, borderRadius: 14, overflow: 'hidden', backgroundColor: '#fafaf6' }}>
-        <Image source={source} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+      <View style={{ width, height, borderRadius: 14, backgroundColor: '#FFFFFF' }}>
+        <Image source={source} style={{ width: '100%', height: '100%' }} resizeMode="contain" fadeDuration={0} />
       </View>
     );
   }
@@ -39,14 +38,26 @@ export function SpinningCard({
   front,
   width = 110,
   speed = 40,
-  backLabel = 'סלינדה',
+  backLabel = 'Salinda',
+  active = true,
 }: Props) {
+  void backLabel;
   const height = Math.round(width * (3.5 / 2.5));
   const spinAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const msPerRev = (360 / speed) * 1000;
-    const loop = Animated.loop(
+    if (!active) {
+      spinAnim.stopAnimation();
+      floatAnim.stopAnimation();
+      spinAnim.setValue(0);
+      floatAnim.setValue(0);
+      return;
+    }
+
+    const msPerRev = Math.max(9000, Math.round((360 / Math.max(speed, 1)) * 1000));
+
+    const spinLoop = Animated.loop(
       Animated.timing(spinAnim, {
         toValue: 1,
         duration: msPerRev,
@@ -54,13 +65,39 @@ export function SpinningCard({
         useNativeDriver: true,
       }),
     );
-    loop.start();
-    return () => loop.stop();
-  }, [spinAnim, speed]);
+
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -4,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 4,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    spinLoop.start();
+    floatLoop.start();
+    return () => {
+      spinLoop.stop();
+      floatLoop.stop();
+    };
+  }, [active, floatAnim, spinAnim, speed]);
 
   const perspective = width * 18;
-
-  // opacity-based face switching (like the Expo HTML version)
   const frontOpacity = spinAnim.interpolate({
     inputRange: [0, 0.249, 0.25, 0.749, 0.75, 1],
     outputRange: [1, 1, 0, 0, 1, 1],
@@ -69,7 +106,6 @@ export function SpinningCard({
     inputRange: [0, 0.249, 0.25, 0.749, 0.75, 1],
     outputRange: [0, 0, 1, 1, 0, 0],
   });
-
   const frontRotate = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -80,31 +116,36 @@ export function SpinningCard({
   });
 
   return (
-    <View style={{ width, height }}>
-      {/* BACK */}
+    <Animated.View style={{ width, height, transform: [{ translateY: floatAnim }], overflow: 'visible' }}>
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { opacity: backOpacity, transform: [{ perspective }, { rotateY: backRotate }] },
+          {
+            opacity: backOpacity,
+            backfaceVisibility: 'hidden',
+            transform: [{ perspective }, { rotateY: backRotate }],
+          },
         ]}
       >
-        <View style={{ width, height, borderRadius: 14, overflow: 'hidden' }}>
-          <Image source={CARD_BACK} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        <View style={{ width, height, borderRadius: 14 }}>
+          <Image source={CARD_BACK} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
         </View>
       </Animated.View>
 
-      {/* FRONT */}
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { opacity: frontOpacity, transform: [{ perspective }, { rotateY: frontRotate }] },
+          {
+            opacity: frontOpacity,
+            backfaceVisibility: 'hidden',
+            transform: [{ perspective }, { rotateY: frontRotate }],
+          },
         ]}
       >
         <CardFace width={width} height={height} source={frontSource}>
           {front}
         </CardFace>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
-

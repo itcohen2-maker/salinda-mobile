@@ -1,0 +1,14 @@
+{
+  "sourceA": "C:/Users/asus/.cursor/projects/c-Users-asus-bmad-card/assets/c__Users_asus_AppData_Roaming_Cursor_User_workspaceStorage_21efa850dddde0d32cbc0b558184a7a1_images_____-0e70caa7-172b-4fd1-9e34-d928bd4b2d50.png",
+  "sourceB": "C:/Users/asus/.cursor/projects/c-Users-asus-bmad-card/assets/c__Users_asus_AppData_Roaming_Cursor_User_workspaceStorage_21efa850dddde0d32cbc0b558184a7a1_images_Gemini_Generated_Image_uhgqbmuhgqbmuhgq-18317e6d-6a4a-4de1-934c-1031f41910ef.png",
+  "widthHeightA": "1024x774",
+  "widthHeightB": "1024x774",
+  "sameDimensions": true,
+  "diffThreshold": 0.1,
+  "diffPercentFlattenedRgb": 38.4414,
+  "note": "Diff is computed on images flattened onto white so transparent regions do not skew the metric.",
+  "outputs": [
+    "assets\\visual-compare\\capsule-triple-strip.png",
+    "assets\\visual-compare\\capsule-diff-only.png"
+  ]
+}

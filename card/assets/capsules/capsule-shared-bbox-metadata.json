@@ -1,0 +1,43 @@
+{
+  "edgeBorderPx": 24,
+  "fgRgbDistThresh": 48,
+  "redEdgeMeanRgb": {
+    "r": 233.51791666666668,
+    "g": 233.18944047619047,
+    "b": 232.45884523809525
+  },
+  "greenEdgeMeanRgb": {
+    "r": 232.7637976190476,
+    "g": 232.39660714285714,
+    "b": 231.68033333333332
+  },
+  "redForegroundBox": {
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1023,
+    "maxY": 619,
+    "w": 1024,
+    "h": 620
+  },
+  "greenForegroundBox": {
+    "minX": 0,
+    "minY": 0,
+    "maxX": 1023,
+    "maxY": 619,
+    "w": 1024,
+    "h": 620
+  },
+  "greenNativeFgMatchesRedFgBox": true,
+  "canvas": "1024x774",
+  "pastedAt": {
+    "x": 0,
+    "y": 0
+  },
+  "outputs": {
+    "red1024x774TransparentPad": "C:\\Users\\asus\\bmad\\card\\assets\\capsules\\red-math-capsule-shared-layout-1024x774.png",
+    "green1024x774Matched": "C:\\Users\\asus\\bmad\\card\\assets\\capsules\\green-poker-table-matched-red-layout-1024x774.png",
+    "redCellOnlyPng": "C:\\Users\\asus\\bmad\\card\\assets\\capsules\\red-math-cell-cropped.png",
+    "greenMatchedCellOnlyPng": "C:\\Users\\asus\\bmad\\card\\assets\\capsules\\green-poker-matched-cell-cropped.png"
+  },
+  "note": "Opaque PNG edges; FG box uses rim-mean chroma separation. Identity scale when FG boxes coincide (your assets)."
+}

@@ -46,6 +46,10 @@
         "backgroundColor": "#121118"
       }
     },
+    "updates": {
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
     "extra": {
       "eas": {
         "projectId": "f6cd3cc8-5684-43de-bf3b-98b137c8d1a9"

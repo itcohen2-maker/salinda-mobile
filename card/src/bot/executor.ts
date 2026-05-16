@@ -92,6 +92,13 @@ function translateInner(
     case 'beginTurn':
       return { type: 'BEGIN_TURN' };
 
+    case 'resolveOverflowSwap':
+      return {
+        type: 'RESOLVE_OVERFLOW_SWAP',
+        handCardId: action.cardId,
+        pileChoice: action.pileChoice,
+      };
+
     case 'rollDice':
       // No values field: let the reducer generate random dice values.
       return { type: 'ROLL_DICE' };

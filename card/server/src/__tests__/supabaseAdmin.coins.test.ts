@@ -1,5 +1,8 @@
 const mockRpc = jest.fn().mockResolvedValue({ error: null });
 
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     rpc: mockRpc,
@@ -27,15 +30,19 @@ jest.mock('@supabase/supabase-js', () => ({
   }),
 }));
 
-import { awardCoinsForPlayer, recordMatch } from '../supabaseAdmin';
+function loadSupabaseAdmin() {
+  return require('../supabaseAdmin') as typeof import('../supabaseAdmin');
+}
 
 beforeEach(() => {
+  jest.resetModules();
   mockRpc.mockClear();
 });
 
 describe('awardCoinsForPlayer', () => {
   it('calls award_coins_for_player RPC with correct params', async () => {
     mockRpc.mockResolvedValueOnce({ error: null });
+    const { awardCoinsForPlayer } = loadSupabaseAdmin();
 
     await awardCoinsForPlayer({
       playerId: 'player-uuid',
@@ -54,6 +61,7 @@ describe('awardCoinsForPlayer', () => {
 
   it('passes null matchId when not provided', async () => {
     mockRpc.mockResolvedValueOnce({ error: null });
+    const { awardCoinsForPlayer } = loadSupabaseAdmin();
 
     await awardCoinsForPlayer({ playerId: 'player-uuid', amount: 10, source: 'tutorial_core' });
 
@@ -67,6 +75,7 @@ describe('awardCoinsForPlayer', () => {
 
   it('does not throw when RPC returns an error', async () => {
     mockRpc.mockResolvedValueOnce({ error: { message: 'DB error' } });
+    const { awardCoinsForPlayer } = loadSupabaseAdmin();
 
     await expect(
       awardCoinsForPlayer({ playerId: 'p', amount: 5, source: 'game_courage' })
@@ -77,6 +86,7 @@ describe('awardCoinsForPlayer', () => {
 describe('recordMatch — coin awarding', () => {
   it('calls award_coins_for_player for participant with coinsEarned > 0', async () => {
     mockRpc.mockResolvedValue({ error: null });
+    const { recordMatch } = loadSupabaseAdmin();
 
     await recordMatch({
       roomCode: 'ABCD',
@@ -103,6 +113,7 @@ describe('recordMatch — coin awarding', () => {
 
   it('skips coin award when coinsEarned is 0 or omitted', async () => {
     mockRpc.mockResolvedValue({ error: null });
+    const { recordMatch } = loadSupabaseAdmin();
 
     await recordMatch({
       roomCode: 'EFGH',

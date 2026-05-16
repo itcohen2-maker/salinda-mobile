@@ -27,6 +27,32 @@ describe('decideBotAction', () => {
     expect(result).toEqual({ kind: 'beginTurn' });
   });
 
+  test('turn-transition resolves forced overflow swap before beginning the turn', () => {
+    const opCard = makeCard('operation', undefined, undefined, '+');
+    const numberCard = makeCard('number', 9);
+    const topCard = makeCard('wild');
+    const underTopCard = makeCard('number', 4);
+    const filler = Array.from({ length: 7 }, (_, idx) => makeCard('number', idx));
+    const botPlayer = makePlayer(0, 'Bot', [opCard, numberCard, ...filler]);
+    const state = makeFixtureState({
+      phase: 'turn-transition',
+      players: [botPlayer],
+      currentPlayerIndex: 0,
+      discardPile: [underTopCard, topCard],
+      overflowSwapPending: true,
+      overflowSwapDeadlineAt: Date.now() + 10_000,
+      overflowSwapCanUseUnderTop: true,
+    });
+
+    const result = decideBotAction(state, 'hard');
+
+    expect(result).toEqual({
+      kind: 'resolveOverflowSwap',
+      cardId: opCard.id,
+      pileChoice: 'top',
+    });
+  });
+
   test('pre-roll plays identical when available', () => {
     const discardCard = makeCard('number', 5);
     const identicalCard = makeCard('number', 5); // same value as discard
@@ -206,6 +232,7 @@ describe('decideBotAction', () => {
       phase: 'building',
       players: [botPlayer],
       currentPlayerIndex: 0,
+      dice: [3, 4, 1],
       validTargets: [{ equation: '3+4', result: 7 }],
       enabledOperators: ['+'],
       mathRangeMax: 25,
@@ -279,6 +306,7 @@ describe('decideBotAction', () => {
       phase: 'building',
       players: [botPlayer],
       currentPlayerIndex: 0,
+      dice: [3, 4, 5],
       validTargets: [{ equation: '3+4', result: 7 }],
       enabledOperators: ['+'],
       mathRangeMax: 25,
@@ -296,6 +324,53 @@ describe('decideBotAction', () => {
     expect(action.stagedCardIds).toContain(card7.id);
   });
 
+  test('building does not commit unrelated operation cards to the dice equation', () => {
+    resetCardSeq();
+    const committedMismatch = makeCard('operation', undefined, undefined, 'x');
+    const stagedNine = makeCard('number', 9);
+    const stagedFive = makeCard('number', 5);
+    const stagedFour = makeCard('number', 4);
+    const stagedDivide = makeCard('operation', undefined, undefined, '÷');
+    const botPlayer = makePlayer(0, 'Bot', [
+      committedMismatch,
+      stagedNine,
+      stagedFive,
+      stagedFour,
+      stagedDivide,
+    ]);
+
+    const state = makeFixtureState({
+      phase: 'building',
+      players: [botPlayer],
+      currentPlayerIndex: 0,
+      dice: [1, 3, 3],
+      validTargets: [{ equation: '(1 + 3) - 3 = 1', result: 1 }],
+      enabledOperators: ['+', '-', 'x', '÷'],
+      mathRangeMax: 25,
+      discardPile: [makeCard('number', 1)],
+    });
+
+    const result = decideBotAction(state, 'hard');
+
+    expect(result).not.toBeNull();
+    expect(result!.kind).toBe('confirmEquation');
+
+    const action = result as {
+      kind: 'confirmEquation';
+      equationCommits: { cardId: string; position: number; jokerAs: null | string }[];
+      equationOps: string[];
+      stagedCardIds: ReadonlyArray<string>;
+    };
+
+    expect(action.equationCommits).toEqual([]);
+    expect(action.equationOps).toEqual(['+', '-']);
+    expect(action.stagedCardIds).toContain(stagedFive.id);
+    expect(action.stagedCardIds).toContain(stagedFour.id);
+    expect(action.stagedCardIds).toContain(stagedNine.id);
+    expect(action.stagedCardIds).toContain(stagedDivide.id);
+    expect(action.stagedCardIds).not.toContain(committedMismatch.id);
+  });
+
   test('game-over returns null', () => {
     const botPlayer = makePlayer(0, 'Bot', []);
     const state = makeFixtureState({
@@ -311,25 +386,24 @@ describe('decideBotAction', () => {
 
   test('Profile 3: Hard maximizes staged cards; Easy (seeded RNG) picks first enumerated plan', () => {
     resetCardSeq();
+    const card6 = makeCard('number', 6);
     const card1 = makeCard('number', 1);
     const card2 = makeCard('number', 2);
     const card3 = makeCard('number', 3);
     const card4 = makeCard('number', 4);
     const opCard = makeCard('operation', undefined, undefined, '+');
 
-    // Both targets are achievable:
+    // One dice-valid target still allows two discard plans:
     //   target=3:  staged=[card3]         → score 1 number + 1 op commit = 2
     //   target=10: staged=[card1,2,3,4]   → score 4 numbers + 1 op commit = 5
-    const botPlayer = makePlayer(0, 'Bot', [opCard, card1, card2, card3, card4]);
+    const botPlayer = makePlayer(0, 'Bot', [opCard, card6, card1, card2, card3]);
 
     const baseState = makeFixtureState({
       phase: 'building',
       players: [botPlayer],
       currentPlayerIndex: 0,
-      validTargets: [
-        { equation: '3', result: 3 },
-        { equation: '1+2+3+4', result: 10 },
-      ],
+      dice: [1, 2, 3],
+      validTargets: [{ equation: '1+2+3', result: 6 }],
       enabledOperators: ['+'],
       mathRangeMax: 25,
       discardPile: [makeCard('number', 5)],
@@ -354,19 +428,18 @@ describe('decideBotAction', () => {
     const easyAction = easyResult as { kind: 'confirmEquation'; stagedCardIds: ReadonlyArray<string> };
 
     // Hard maximizes card count → 4 cards staged
-    expect(hardAction.stagedCardIds).toHaveLength(4);
+    expect(hardAction.stagedCardIds).toHaveLength(3);
     // Easy with seeded RNG picks the first legal subset for target=3.
     // Enumeration order yields [1,2] before [3].
-    expect(easyAction.stagedCardIds).toHaveLength(2);
+    expect(easyAction.stagedCardIds).toHaveLength(1);
     expect(easyAction.stagedCardIds.length).toBeLessThan(hardAction.stagedCardIds.length);
-    expect(easyAction.stagedCardIds).toContain(card1.id);
-    expect(easyAction.stagedCardIds).toContain(card2.id);
+    expect(easyAction.stagedCardIds).toContain(card6.id);
 
     // Hard staged all four number cards (1+2+3+4=10 satisfies target=10)
     expect(hardAction.stagedCardIds).toContain(card1.id);
     expect(hardAction.stagedCardIds).toContain(card2.id);
     expect(hardAction.stagedCardIds).toContain(card3.id);
-    expect(hardAction.stagedCardIds).toContain(card4.id);
+    expect(hardAction.stagedCardIds).not.toContain(card6.id);
   });
 
 });

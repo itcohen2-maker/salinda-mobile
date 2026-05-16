@@ -3,6 +3,7 @@
  */
 
 import type { BotDifficulty, Card, EquationCommitPayload } from './types';
+import { enumerateEquationCommitOptions } from './validation';
 
 export type { BotDifficulty };
 
@@ -11,6 +12,11 @@ export type BotStagedPlanPick = {
   equationDisplay: string;
   stagedCardIds: string[];
   equationCommits: EquationCommitPayload[];
+};
+
+export type BotTargetOption = {
+  result: number;
+  equation: string;
 };
 
 type InternalPlan = BotStagedPlanPick & { score: number };
@@ -78,13 +84,89 @@ function pickFromPlans(
   }
 }
 
+function collectPlans(
+  validTargets: readonly { result: number; equation: string }[],
+  hand: Card[],
+  maxWild: number,
+  validateStagedCards: (
+    staged: Card[],
+    opCard: Card | null,
+    target: number,
+    maxWildArg: number,
+  ) => boolean,
+): InternalPlan[] {
+  const plans: InternalPlan[] = [];
+  for (const option of validTargets) {
+    const commitOptions = enumerateEquationCommitOptions(hand, option.equation);
+    for (const equationCommits of commitOptions) {
+      const commitIds = new Set(equationCommits.map((commit) => commit.cardId));
+      const candidates = hand.filter(
+        (card) =>
+          (card.type === 'number' || card.type === 'wild' || card.type === 'operation') &&
+          !commitIds.has(card.id),
+      );
+      const totalMasks = 1 << candidates.length;
+      for (let mask = 1; mask < totalMasks; mask++) {
+        const stagedCards: Card[] = [];
+        let wildCount = 0;
+        let operationCount = 0;
+        for (let index = 0; index < candidates.length; index++) {
+          if ((mask & (1 << index)) === 0) continue;
+          const card = candidates[index]!;
+          if (card.type === 'wild') wildCount++;
+          if (card.type === 'operation') operationCount++;
+          stagedCards.push(card);
+        }
+        if (wildCount > 1) continue;
+        if (operationCount > 1) continue;
+        const numberCards = stagedCards.filter(
+          (card) => card.type === 'number' || card.type === 'wild',
+        );
+        if (numberCards.length === 0) continue;
+        const opCard = stagedCards.find((card) => card.type === 'operation') ?? null;
+        if (!validateStagedCards(numberCards, opCard, option.result, maxWild)) continue;
+        const score = stagedCards.length + equationCommits.length;
+        plans.push({
+          target: option.result,
+          equationDisplay: option.equation,
+          stagedCardIds: [...numberCards.map((c) => c.id), ...(opCard ? [opCard.id] : [])],
+          equationCommits,
+          score,
+        });
+      }
+    }
+  }
+  return plans;
+}
+
+export function getSolvableTargetOptions(
+  validTargets: readonly { result: number; equation: string }[],
+  hand: Card[],
+  maxWild: number,
+  validateStagedCards: (
+    staged: Card[],
+    opCard: Card | null,
+    target: number,
+    maxWildArg: number,
+  ) => boolean,
+): BotTargetOption[] {
+  const seen = new Set<string>();
+  const options: BotTargetOption[] = [];
+  for (const plan of collectPlans(validTargets, hand, maxWild, validateStagedCards)) {
+    const key = `${plan.target}::${plan.equationDisplay}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({ result: plan.target, equation: plan.equationDisplay });
+  }
+  return options;
+}
+
 /**
  * Enumerate valid (number+wild) staging subsets per valid target and pick one plan by difficulty.
  */
 export function pickBotStagedPlan(
   validTargets: readonly { result: number; equation: string }[],
-  candidates: Card[],
-  equationCommits: EquationCommitPayload[],
+  hand: Card[],
   maxWild: number,
   validateStagedCards: (
     staged: Card[],
@@ -96,40 +178,7 @@ export function pickBotStagedPlan(
   options?: PickBotPlanOptions,
 ): BotStagedPlanPick | null {
   const rng = options?.rng ?? Math.random;
-  const plans: InternalPlan[] = [];
-  const totalMasks = 1 << candidates.length;
-  for (const option of validTargets) {
-    for (let mask = 1; mask < totalMasks; mask++) {
-      const stagedCards: Card[] = [];
-      let wildCount = 0;
-      let operationCount = 0;
-      for (let index = 0; index < candidates.length; index++) {
-        if ((mask & (1 << index)) === 0) continue;
-        const card = candidates[index]!;
-        if (card.type === 'wild') wildCount++;
-        if (card.type === 'operation') operationCount++;
-        stagedCards.push(card);
-      }
-      if (wildCount > 1) continue;
-      if (operationCount > 1) continue;
-      const numberCards = stagedCards.filter(
-        (card) => card.type === 'number' || card.type === 'wild',
-      );
-      if (numberCards.length === 0) continue;
-      const opCard = stagedCards.find((card) => card.type === 'operation') ?? null;
-      if (!validateStagedCards(numberCards, opCard, option.result, maxWild)) continue;
-      const score = stagedCards.length + equationCommits.length;
-      plans.push({
-        target: option.result,
-        equationDisplay: option.equation,
-        // The committed op card goes to equationCommits (dice-equation slot).
-        // A second op card from candidates used for staged arithmetic must be staged too.
-        stagedCardIds: [...numberCards.map((c) => c.id), ...(opCard ? [opCard.id] : [])],
-        equationCommits,
-        score,
-      });
-    }
-  }
+  const plans = collectPlans(validTargets, hand, maxWild, validateStagedCards);
   return pickFromPlans(plans, difficulty, rng);
 }
 

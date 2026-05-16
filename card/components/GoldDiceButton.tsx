@@ -229,6 +229,7 @@ export function GoldDiceButton({ onPress, disabled = false, width, size, style, 
       }} />
       <Pressable
         testID={testID}
+        android_disableSound
         onPress={disabled ? undefined : onPress}
         onPressIn={disabled ? undefined : handlePressIn}
         onPressOut={disabled ? undefined : handlePressOut}

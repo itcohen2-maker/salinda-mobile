@@ -23,6 +23,7 @@ describe('BotThinkingOverlay (M5.7)', () => {
     const path = require('path');
     const indexPath = path.resolve(__dirname, '../../../index.tsx');
     const source = fs.readFileSync(indexPath, 'utf8') as string;
-    expect(source.includes('pointerEvents="box-only" style={[botOverlayStyles.botThinkingOverlay')).toBe(true);
+    expect(source.includes('testID="bot-thinking-overlay"')).toBe(true);
+    expect(source.includes('pointerEvents="auto"')).toBe(true);
   });
 });

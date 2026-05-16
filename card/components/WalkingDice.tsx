@@ -3,10 +3,11 @@
 // Spawns every 20-40s, max 2 on screen, pauses when app is backgrounded
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { View, Animated, Easing, Dimensions, StyleSheet, AppState } from 'react-native';
+import { View, Animated, Easing, Dimensions, StyleSheet, AppState, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+const { width: _SW_RAW, height: SH } = Dimensions.get('window');
+const SW = Platform.OS === 'web' ? Math.min(412, _SW_RAW) : _SW_RAW;
 const BODY = 36;
 const PIP_R = 3;
 

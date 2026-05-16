@@ -58,7 +58,10 @@
       "mcp__supabase__get_publishable_keys",
       "mcp__render__list_services",
       "mcp__render__list_workspaces",
-      "mcp__render__update_environment_variables"
+      "mcp__render__update_environment_variables",
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(python -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\('scripts:', list\\(p.get\\('scripts',{}\\).keys\\(\\)\\)\\); print\\('deps keys:', [k for k in p.get\\('dependencies',{}\\).keys\\(\\) if 'react-native' in k or 'expo' in k or 'ios' in k.lower\\(\\)]\\)\")",
+      "Bash(findstr /i \"expo\\\\|react-native\\\\|ios\\\\|build\\\\|start\")"
     ]
   }
 }

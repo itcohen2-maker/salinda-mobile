@@ -76,6 +76,16 @@ describe('MimicEngine — step advance within a lesson', () => {
     expect(s.lessonIndex).toBe(0);
   });
 
+  it('CELEBRATE_DONE on L6 step 1 moves to intro on step 2', () => {
+    const shapes: LessonShape[] = [{ id: 'possible-results-basics', stepCount: 3 }];
+    const s = mimicReducer(
+      { phase: 'celebrate', lessonIndex: 0, stepIndex: 1 },
+      { type: 'CELEBRATE_DONE' },
+      shapes,
+    );
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 2 });
+  });
+
   it('CELEBRATE_DONE on last step of lesson moves to lesson-done', () => {
     const walkOneStep = (s: MimicState): MimicState =>
       after(s, { type: 'BOT_DEMO_DONE' }, { type: 'OUTCOME_MATCHED' }, { type: 'CELEBRATE_DONE' });

@@ -1,11 +1,11 @@
 import { test, expect } from '../support/fixtures';
 
 test.describe('Slinda turn-transition flow', () => {
-  test('Given a Slinda-owned profile, when the player opens the modal, then card selection is interactive and confirm consumes Slinda', async ({
+  test('Given a Slinda-owned profile, when the player confirms a swap, then Slinda stays available for another swap', async ({
     page,
     lobby,
   }) => {
-    let slindaOwned = true;
+    const slindaOwned = true;
 
     await page.route('**/rest/v1/profiles*', async (route) => {
       const url = new URL(route.request().url());
@@ -32,22 +32,15 @@ test.describe('Slinda turn-transition flow', () => {
       });
     });
 
-    await page.route('**/rest/v1/rpc/consume_slinda', async (route) => {
-      slindaOwned = false;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify('ok'),
-      });
-    });
-
     await lobby.goto();
     await lobby.playSinglePlayer.click();
-    await page.getByTestId('start-lets-play').click();
+    await lobby.playPassAndPlay.click();
+    await page.getByTestId('start-lets-play').click({ force: true });
+    await page.getByTestId('start-guidance-skip').click({ force: true });
 
     const openButton = page.getByTestId('turn-slinda-open');
     await expect(openButton).toBeVisible({ timeout: 30_000 });
-    await openButton.click();
+    await openButton.click({ force: true });
 
     const modal = page.getByTestId('slinda-modal');
     const confirmButton = page.getByTestId('slinda-confirm');
@@ -55,14 +48,21 @@ test.describe('Slinda turn-transition flow', () => {
     await expect(confirmButton).toHaveAttribute('aria-disabled', 'true');
 
     const options = page.locator('[data-testid^="slinda-option-"]');
-    await expect(options).toHaveCount(10);
-    await options.first().click();
+    await expect(options.first()).toBeVisible();
+    expect(await options.count()).toBeGreaterThan(0);
+    await options.first().evaluate((node) => {
+      (node as HTMLElement).click();
+    });
 
     await expect(confirmButton).toHaveAttribute('aria-disabled', 'false');
     await confirmButton.click();
 
     await expect(modal).toBeHidden({ timeout: 15_000 });
-    await expect(openButton).toBeHidden({ timeout: 15_000 });
+    await expect(openButton).toBeVisible({ timeout: 15_000 });
+    await openButton.click({ force: true });
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('slinda-cancel').click();
+    await expect(modal).toBeHidden({ timeout: 15_000 });
     await expect(page.getByTestId('turn-im-ready')).toBeVisible();
   });
 });

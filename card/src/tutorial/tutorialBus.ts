@@ -121,6 +121,9 @@ export type UserEvent =
    *    brief "try again" nudge without failing the step. */
   | { kind: 'resultsChipTapped' }
   | { kind: 'miniCardTapped'; result: number; equation: string }
+  /** Lesson 6 step 6.2: learner tapped the manual continue CTA after
+   *  exploring the mini cards. This is what actually advances the step. */
+  | { kind: 'l6TapMiniAck' }
   | { kind: 'l6CopyConfirmed' }
   | { kind: 'l6CopyMismatch'; expected: number; got: number }
   /** Lesson 7 (parens-move): fires when the learner taps the parens toggle. */
@@ -156,6 +159,8 @@ type VoidListener = () => void;
 const fanDemoListeners = new Set<Listener<FanDemoCmd>>();
 const userEventListeners = new Set<Listener<UserEvent>>();
 const exitListeners = new Set<VoidListener>();
+const backListeners = new Set<VoidListener>();
+const skipListeners = new Set<VoidListener>();
 const layoutListeners = new Set<(key: LayoutKey, rect: LayoutRect | null) => void>();
 
 let currentFanLength = 0;
@@ -165,6 +170,10 @@ const emphasizedListeners = new Set<(id: string | null) => void>();
 
 let opButtonPulse = 0;
 const opButtonPulseListeners = new Set<(v: number) => void>();
+
+/** Lesson 4b (fill-missing-die) await-mimic: pulse unplaced dice to draw attention. */
+let l4bDicePulse = false;
+const l4bDicePulseListeners = new Set<(on: boolean) => void>();
 
 /** Lesson 4 dynamic dice config, set by InteractiveTutorialScreen before
  *  the bot demo runs, read by lesson-04-equation via DemoApi. */
@@ -179,6 +188,7 @@ let l5Config: { a: number; b: number } | null = null;
  *  taps it themselves; both that button and "בחרתי" report their layout so
  *  the tutorial can draw an arrow at them. */
 let l4Step3Mode = false;
+let l4GuidedEqValidationMode = false;
 let l5GuidedMode = false;
 /** While true + L5 guided: hide the hand strip (step 5a — signs only; step 5b shows hand for joker). */
 let l5HideFan = false;
@@ -331,6 +341,30 @@ export const tutorialBus = {
     };
   },
 
+  /** The tutorial host can expose a visible "back" control outside the
+   *  overlay itself (for example in the Android header) and route it here. */
+  emitRequestBack(): void {
+    backListeners.forEach((l) => l());
+  },
+  subscribeRequestBack(fn: VoidListener): () => void {
+    backListeners.add(fn);
+    return () => {
+      backListeners.delete(fn);
+    };
+  },
+
+  /** The tutorial host can expose a visible "skip" control outside the
+   *  overlay itself (for example in the Android header) and route it here. */
+  emitRequestSkip(): void {
+    skipListeners.forEach((l) => l());
+  },
+  subscribeRequestSkip(fn: VoidListener): () => void {
+    skipListeners.add(fn);
+    return () => {
+      skipListeners.delete(fn);
+    };
+  },
+
   /** Fan component reports its current card count so lessons can author
    *  length-agnostic demos (e.g. "scroll to last card" without hardcoding 4). */
   setFanLength(n: number): void {
@@ -385,6 +419,18 @@ export const tutorialBus = {
     return lastEquationResult;
   },
 
+  setL4bDicePulse(on: boolean): void {
+    l4bDicePulse = on;
+    l4bDicePulseListeners.forEach(cb => cb(on));
+  },
+  getL4bDicePulse(): boolean {
+    return l4bDicePulse;
+  },
+  subscribeL4bDicePulse(cb: (on: boolean) => void): () => void {
+    l4bDicePulseListeners.add(cb);
+    return () => { l4bDicePulseListeners.delete(cb); };
+  },
+
   setL4Step3Mode(on: boolean): void {
     l4Step3Mode = on;
     if (!on) {
@@ -394,6 +440,12 @@ export const tutorialBus = {
   },
   getL4Step3Mode(): boolean {
     return l4Step3Mode;
+  },
+  setL4GuidedEqValidationMode(on: boolean): void {
+    l4GuidedEqValidationMode = on;
+  },
+  getL4GuidedEqValidationMode(): boolean {
+    return l4GuidedEqValidationMode;
   },
 
   setL5GuidedMode(on: boolean): void {
@@ -619,13 +671,17 @@ export const tutorialBus = {
     fanDemoListeners.clear();
     userEventListeners.clear();
     exitListeners.clear();
+    skipListeners.clear();
     layoutListeners.clear();
     emphasizedListeners.clear();
     emphasizedCardId = null;
     currentFanLength = 0;
     l4Config = null;
     l5Config = null;
+    l4bDicePulse = false;
+    l4bDicePulseListeners.clear();
     l4Step3Mode = false;
+    l4GuidedEqValidationMode = false;
     l5GuidedMode = false;
     l5HideFan = false;
     l5aBlockFanTaps = false;
