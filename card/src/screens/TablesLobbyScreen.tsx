@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Image,
   ImageBackground,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -668,18 +669,18 @@ export default function TablesLobbyScreen({
         </TouchableOpacity>
       ) : null}
 
-      {onExitApp && Platform.OS !== 'ios' ? (
+      {onExitApp ? (
         <TouchableOpacity
           testID="lobby-exit-app"
           style={[
             styles.floatingBackBtn,
-            Platform.OS === 'android' ? styles.floatingExitBtnAndroid : styles.floatingExitBtnDefault,
+            styles.floatingExitBtnAndroid,
             { top: Math.max(safeTop + 8, 12) },
           ]}
           onPress={() => setExitConfirmVisible(true)}
           activeOpacity={0.85}
         >
-          <Text style={styles.floatingBackBtnText}>✕</Text>
+          <Text style={styles.floatingExitBtnText}>X</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -927,6 +928,11 @@ const styles = StyleSheet.create({
   },
   floatingExitBtnAndroid: {
     left: 12,
+  },
+  floatingExitBtnText: {
+    color: GOLD,
+    fontWeight: '900',
+    fontSize: 20,
   },
   exitModalBackdrop: {
     flex: 1,
