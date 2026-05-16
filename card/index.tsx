@@ -13863,94 +13863,41 @@ function TurnTransition() {
         {/* Last move summary — הודעות צבעוניות (ללא כפילות במצב אתגר שבר) — מוסתר במשחק ברשת כי המידע מוצג במסך המעבר */}
         {!!state.lastMoveMessage && state.pendingFractionTarget === null && !state.isTutorial && !mp?.gameOverride && (
           state.lastDiscardCount > 0 && state.lastEquationDisplay ? (
-            <View style={{alignSelf:'center',marginBottom:8,maxWidth:340,width:'100%',alignItems:'center'}}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>
+            <View style={{alignSelf:'center',marginBottom:4,maxWidth:340,width:'100%',alignItems:'center'}}>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700', marginBottom: 3, textAlign: 'center' }}>
                 {t('ui.previousTurnSummary')}
               </Text>
-              <View style={[alertBubbleStyle.box, { backgroundColor: lastPlayerBubbleColor, borderColor: lastPlayerBorderColor }]}>
-                <Text style={[alertBubbleStyle.title, {textAlign:'center'}]}>{state.players[(currentIdx - 1 + state.players.length) % state.players.length].name} הניח {state.lastDiscardCount} קלפים</Text>
-                <Text style={[alertBubbleStyle.body, {marginTop:6,textAlign:'center',writingDirection:'ltr' as any}]}>{'⁦'}{state.lastEquationDisplay}{'⁩'}</Text>
+              <View style={[alertBubbleStyle.box, { backgroundColor: lastPlayerBubbleColor, borderColor: lastPlayerBorderColor, paddingVertical: 6, paddingHorizontal: 12 }]}>
+                <Text style={[alertBubbleStyle.title, {textAlign:'center', fontSize: 13}]}>{state.players[(currentIdx - 1 + state.players.length) % state.players.length].name} הניח {state.lastDiscardCount} קלפים</Text>
+                <Text style={[alertBubbleStyle.body, {marginTop:3,textAlign:'center',writingDirection:'ltr' as any, fontSize: 12}]}>{'⁦'}{state.lastEquationDisplay}{'⁩'}</Text>
                 {lastMoveChallengeLine ? (
-                  <Text style={[alertBubbleStyle.body, { marginTop: 8, textAlign: 'center', fontWeight: '700', color: '#FEF9C3' }]}>{lastMoveChallengeLine}</Text>
+                  <Text style={[alertBubbleStyle.body, { marginTop: 4, textAlign: 'center', fontWeight: '700', color: '#FEF9C3', fontSize: 11 }]}>{lastMoveChallengeLine}</Text>
                 ) : null}
               </View>
             </View>
           ) : (
-            <View style={{alignSelf:'center',marginBottom:8,maxWidth:340,width:'100%',alignItems:'center'}}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>
-                {t('ui.previousTurnSummary')}
-              </Text>
-              <View style={[alertBubbleStyle.box, { backgroundColor: lastPlayerBubbleColor, borderColor: lastPlayerBorderColor }]}>
-                <Text style={[alertBubbleStyle.title, { textAlign: 'center', writingDirection: 'rtl' }]}>{state.lastMoveMessage}</Text>
+            <View style={{alignSelf:'center',marginBottom:4,maxWidth:340,width:'100%',alignItems:'center'}}>
+              <View style={[alertBubbleStyle.box, { backgroundColor: lastPlayerBubbleColor, borderColor: lastPlayerBorderColor, paddingVertical: 6, paddingHorizontal: 12 }]}>
+                <Text style={[alertBubbleStyle.title, { textAlign: 'center', writingDirection: 'rtl', fontSize: 13 }]}>{state.lastMoveMessage}</Text>
               </View>
             </View>
           )
         )}
         {state.lastDiscardCount === 1 && state.pendingFractionTarget === null && !state.players[lastPlayerIndex]?.isBot && !state.isTutorial && (
-          <View style={{ alignSelf: 'center', marginBottom: 8, maxWidth: 360, width: '100%', alignItems: 'center' }}>
-            <View
-              style={[
-                alertBubbleStyle.box,
-                {
-                  paddingVertical: 14,
-                  paddingHorizontal: 24,
-                  maxWidth: 340,
-                  backgroundColor: '#0F766E',
-                  borderColor: 'rgba(94,234,212,0.95)',
-                  borderWidth: 3,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  alertBubbleStyle.title,
-                  {
-                    fontSize: 22,
-                    color: '#ECFEFF',
-                    textShadowColor: 'rgba(0,0,0,0.3)',
-                    textShadowOffset: { width: 0, height: 1 },
-                    textShadowRadius: 3,
-                  },
-                ]}
-              >
+          <View style={{ alignSelf: 'center', marginBottom: 4, maxWidth: 340, width: '100%', alignItems: 'center' }}>
+            <View style={[alertBubbleStyle.box, { paddingVertical: 6, paddingHorizontal: 14, maxWidth: 320, backgroundColor: '#0F766E', borderColor: 'rgba(94,234,212,0.95)', borderWidth: 2 }]}>
+              <Text style={[alertBubbleStyle.title, { fontSize: 14, color: '#ECFEFF' }]}>
                 ?? איזה יופי — יש לנו קלף פחות!
               </Text>
             </View>
           </View>
         )}
-        {/* Excellence-meter reward explanation — shown once after a turn in
-            which the meter advanced, except when the meter actually fills and
-            the celebration stays inline on the game screen. */}
+        {/* Excellence-meter reward explanation */}
         {!!state.lastCourageRewardReason && !state.lastCourageCoinsAwarded && !state.players[lastPlayerIndex]?.isBot && !state.isTutorial && (
-          <View style={{ alignSelf: 'center', marginBottom: 8, maxWidth: 360, width: '100%', alignItems: 'center' }}>
-            <View
-              style={[
-                alertBubbleStyle.box,
-                {
-                  paddingVertical: 12,
-                  paddingHorizontal: 20,
-                  maxWidth: 340,
-                  backgroundColor: '#B45309',
-                  borderColor: '#FCD34D',
-                  borderWidth: 3,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  alertBubbleStyle.title,
-                  { fontSize: 16, color: '#FEF3C7', textAlign: 'center', marginBottom: 4 },
-                ]}
-              >
-                {t('courage.reason.title')}
-              </Text>
-              <Text
-                style={[
-                  alertBubbleStyle.body,
-                  { fontSize: 15, color: '#FFFBEB', textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' },
-                ]}
-              >
-                {state.lastCourageRewardReason}
+          <View style={{ alignSelf: 'center', marginBottom: 4, maxWidth: 340, width: '100%', alignItems: 'center' }}>
+            <View style={[alertBubbleStyle.box, { paddingVertical: 5, paddingHorizontal: 12, maxWidth: 320, backgroundColor: '#B45309', borderColor: '#FCD34D', borderWidth: 2 }]}>
+              <Text style={[alertBubbleStyle.title, { fontSize: 12, color: '#FEF3C7', textAlign: 'center' }]}>
+                {t('courage.reason.title')} — {state.lastCourageRewardReason?.split('—').pop()?.trim() ?? state.lastCourageRewardReason}
               </Text>
             </View>
           </View>
