@@ -2474,9 +2474,31 @@ function gameReducer(
       if (stNumbers.length === 0) return { ...st, message: tf('confirm.needNumberOrWild') };
       if (st.isTutorial && tutorialBus.getL6WildStepMode()) {
         const hasWild = stNumbers.some(c => c.type === 'wild');
-        if (!hasWild) return { ...st, message: 'בחרו גם קלף פרא' };
-        if (stOpCard == null) return { ...st, message: 'בחרו גם קלף סימן' };
-        if (stNumbers.length < 3) return { ...st, message: 'בחרו פרא יחד עם 0 ועם עוד קלף' };
+        if (!hasWild) return { ...st, message: 'בחרו קלף פרא' };
+        // Wild alone is valid — no op card or extra numbers required.
+        // Auto-set wild resolvedValue so validateStagedCards can pass.
+        const fixedSum = stNumbers.filter(c => c.type === 'number').reduce((a, c) => a + (c.value ?? 0), 0);
+        const wildNeededVal = (st.equationResult ?? 0) - fixedSum;
+        const resolvedStaged = stNumbers.map(c =>
+          c.type === 'wild' && c.resolvedValue == null
+            ? { ...c, resolvedValue: wildNeededVal }
+            : c,
+        );
+        const stIdsWild = new Set(st.stagedCards.map(c => c.id));
+        for (const slot of st.equationHandSlots) if (slot) stIdsWild.add(slot.card.id);
+        const stCpWild = st.players[st.currentPlayerIndex];
+        const stNpWild = st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hand: stCpWild.hand.filter(c => !stIdsWild.has(c.id)) } : p);
+        return endTurnLogic({
+          ...st,
+          players: stNpWild,
+          stagedCards: [],
+          selectedCards: [],
+          hasPlayedCards: true,
+          lastDiscardCount: resolvedStaged.length,
+          lastTurnPlayedCards: resolvedStaged,
+          currentTurnPlayedCards: [...st.currentTurnPlayedCards, ...resolvedStaged],
+          message: '',
+        }, tf);
       }
       if (st.isTutorial && !st.showPossibleResults && (st.lastEquationDisplay?.includes('(') ?? false) && stNumbers.length < 2) {
         return { ...st, message: 'בחרו לפחות שני קלפים' };
@@ -13060,7 +13082,7 @@ function TurnTransition() {
     setPlayerWelcomeDismissed(true);
     AsyncStorage.setItem(WELCOME_PLAYER_SCREEN_KEY, 'true');
   }, []);
-  const showPlayerWelcomeBubble = guidanceOn && !isOnlineSpectator && !playerWelcomeDismissed && !state.isTutorial;
+  const showPlayerWelcomeBubble = false;
   useEffect(() => {
     turnPhaseRef.current = state.phase;
     turnPlayerIdxRef.current = state.currentPlayerIndex;
@@ -17963,17 +17985,8 @@ function BotMissionStrip(
   );
 }
 
-function BotThinkingOverlay({ topOffset }: { topOffset: number }) {
-  const { state, dispatch } = useGame();
-  const { t, isRTL } = useLocale();
-  const insets = useSafeAreaInsets();
-  const viewport = useWebViewportSize();
-  const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
-  if (!state.botConfig) return null;
-  // In the tutorial, the lesson speech bubble already narrates the bot's
-  // actions in learner-friendly copy. The "thinking / coach" overlay is
-  // game-mode noise that distracts from what the learner is being taught.
-  if (state.isTutorial) return null;
+function BotThinkingOverlay({ topOffset: _topOffset }: { topOffset: number }) {
+  return null;
   const current = state.players[state.currentPlayerIndex];
   if (!current || !state.botConfig.playerIds.includes(current.id)) return null;
   if (state.phase === 'game-over') return null;
