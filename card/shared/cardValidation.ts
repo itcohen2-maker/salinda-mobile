@@ -36,6 +36,10 @@ export function validateFractionPlay(card: Card, topDiscard: Card | undefined): 
 export function validateIdenticalPlay(card: Card, topDiscard: Card | undefined): boolean {
   if (!topDiscard) return false;
   if (card.type === 'wild') return topDiscard.type === 'number' || topDiscard.type === 'wild';
+  // Number card on wild: valid when the wild's resolved value equals the card's value
+  if (card.type === 'number' && topDiscard.type === 'wild') {
+    return topDiscard.resolvedValue != null && topDiscard.resolvedValue === card.value;
+  }
   if (card.type !== topDiscard.type) return false;
   switch (card.type) {
     case 'number': return card.value === topDiscard.value;
