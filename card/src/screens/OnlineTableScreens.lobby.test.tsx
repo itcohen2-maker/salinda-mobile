@@ -56,7 +56,6 @@ function renderLobbyScreen(
     clearError: jest.fn(),
     toast: null,
     clearToast: jest.fn(),
-    startBotGame: jest.fn(),
     serverUrl: 'https://lolos-mobile.onrender.com',
     ...overrides,
   });
@@ -193,7 +192,6 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      startBotGame: jest.fn(),
       serverUrl: 'https://lolos-mobile.onrender.com',
     });
 
@@ -218,7 +216,6 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      startBotGame: jest.fn(),
       serverUrl: 'https://lolos-mobile.onrender.com',
     });
     view.rerender(tree);
@@ -242,7 +239,6 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      startBotGame: jest.fn(),
       serverUrl: 'https://lolos-mobile.onrender.com',
     });
     view.rerender(tree);
