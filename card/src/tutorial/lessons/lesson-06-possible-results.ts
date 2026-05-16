@@ -28,11 +28,10 @@ export const lesson06PossibleResults: Lesson = {
   steps: [
     {
       id: 'open-chip',
-      // Bot-demo is instant — the bubble text (botHintKey) and the hint (hintKey)
-      // are identical, so the learner sees ONE continuous bubble throughout.
-      // Skipping the 3.2s wait means the green chip's boostedPulse is visible
-      // immediately once await-mimic starts.
-      botDemo: async (_api) => {},
+      // Wait 200ms so the 140ms setTimeout for TUTORIAL_FORCE_SOLVED has time to
+      // fire before BOT_DEMO_DONE transitions to await-mimic. Without this delay
+      // there is a ~140ms window where the equation isn't shown yet on entry.
+      botDemo: async (api) => { await api.wait(200); },
       outcome: (e) => e.kind === 'resultsChipTapped',
       hintKey: 'tutorial.l6a.hintTapChip',
       botHintKey: 'tutorial.l6a.hintTapChip',
@@ -41,12 +40,13 @@ export const lesson06PossibleResults: Lesson = {
     {
       id: 'tap-mini',
       botDemo: async (api) => {
-        await api.wait(7000);
+        await api.wait(1800);
         // Bot taps the first mini-card in the strip (sorted by result ascending).
         // The host rigs dice + hand so at least one mini-card is always present.
+        // Wait is kept well below the 6 s safety fallback so the tap actually fires.
         await api.tapMiniResult(0);
       },
-      outcome: (e) => e.kind === 'miniCardTapped',
+      outcome: (e) => e.kind === 'l6TapMiniAck',
       hintKey: 'tutorial.l6b.hintTapMini',
       botHintKey: 'tutorial.l6b.botIntro',
       celebrateKey: 'tutorial.l6b.celebrate',
@@ -54,9 +54,15 @@ export const lesson06PossibleResults: Lesson = {
     {
       id: 'wild-finish',
       botDemo: async (api) => {
-        await api.wait(900);
+        // Minimal delay — await-mimic rig sets up TUTORIAL_FORCE_SOLVED
+        // with the wild-card hand. No equation building here to avoid
+        // confusing the learner about dice vs. multi-play staging.
+        await api.wait(400);
       },
       outcome: (e) => e.kind === 'userPlayedCards',
+      hintKey: 'tutorial.l6c.hintCopy',
+      botHintKey: 'tutorial.l6c.botIntro',
+      celebrateKey: 'tutorial.l6c.celebrate',
     },
   ],
 };

@@ -2163,21 +2163,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqSetOp', which: 1, op: '+' }), 560);
       setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqSetOp', which: 2, op: '+' }), 700);
     } else if (engine.stepIndex === 2) {
-      const cfg = tutorialBus.getL6CopyConfig();
-      const target = cfg?.target ?? 7;
-      const eqNumbers = (cfg?.equation?.match(/\d+/g) ?? []).map((n) => Number(n));
-      const tutorialDice =
-        eqNumbers.length >= 3
-          ? { die1: eqNumbers[0] ?? 2, die2: eqNumbers[1] ?? 1, die3: eqNumbers[2] ?? 4 }
-          : { die1: 2, die2: 1, die3: 4 };
       gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: false });
       gameDispatch({ type: 'TUTORIAL_SET_SHOW_SOLVE_EXERCISE', value: false });
       tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
       tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
       tutorialBus.setL6WildStepMode(true);
-      // Only roll dice — TUTORIAL_FORCE_SOLVED with the wild hand fires in await-mimic
-      // so the bot demo's eqReset/eqPickDice can run without a race condition.
-      gameDispatch({ type: 'ROLL_DICE', values: tutorialDice });
+      // TUTORIAL_FORCE_SOLVED with solved state + wild hand fires in await-mimic rig.
     }
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
@@ -2645,26 +2636,28 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.stepIndex !== 2) { l6WildAwaitRiggedRef.current = false; return; }
     if (l6WildAwaitRiggedRef.current) return;
     l6WildAwaitRiggedRef.current = true;
-    const cfg = tutorialBus.getL6CopyConfig();
-    const target = cfg?.target ?? 7;
     const ts = Date.now();
-    const baseCard = Math.max(1, Math.min(4, target - 1));
-    const wildNeeded = target - baseCard;
-    // 7-card hand: wild (no resolvedValue → shows ★ only) + baseCard + distractors
-    const extras = [0, 1, baseCard - 1, baseCard + 1, target - 2]
-      .filter((v) => v > 0 && v !== baseCard && v !== target)
-      .slice(0, 5);
+    // Pick a random target 5-12, independent of l6CopyConfig
+    const TARGET_POOL = [5, 6, 7, 8, 9, 10, 11, 12];
+    const target = TARGET_POOL[Math.floor(Math.random() * TARGET_POOL.length)];
+    const baseCard = Math.min(target - 1, 4 + Math.floor(Math.random() * 3)); // 4-6
+    const wildNeeded = target - baseCard; // always ≥ 1
+    // 7-card hand: wild (★ only, no resolvedValue) + baseCard + 5 distractors
+    const distractors = new Set<number>();
+    while (distractors.size < 5) {
+      const v = 1 + Math.floor(Math.random() * 10);
+      if (v !== baseCard && v !== target) distractors.add(v);
+    }
     const playerHand = [
       { id: `tut-l6w-wild-${ts}`, type: 'wild' as const },
       { id: `tut-l6w-base-${ts}`, type: 'number' as const, value: baseCard },
-      ...extras.map((v, i) => ({ id: `tut-l6w-x${i}-${ts}`, type: 'number' as const, value: v })),
+      ...[...distractors].map((v, i) => ({ id: `tut-l6w-d${i}-${ts}`, type: 'number' as const, value: v })),
     ].slice(0, 7);
     const botHand = playerHand.map((c) => ({ ...c, id: `bot-${c.id}` }));
-    const eqNumbers = (cfg?.equation?.match(/\d+/g) ?? []).map((n) => Number(n));
-    const dice = eqNumbers.length >= 3
-      ? { die1: eqNumbers[0] ?? 2, die2: eqNumbers[1] ?? 1, die3: eqNumbers[2] ?? 4 }
-      : { die1: 2, die2: 1, die3: 4 };
-    // Clear equation builder UI state before forcing solved
+    const d1 = Math.ceil(target / 2);
+    const d2 = target - d1;
+    const dice = { die1: d1, die2: d2, die3: d1 };
+    // Reset equation builder + force solved state with clean hand
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
     gameDispatch({ type: 'CLEAR_EQ_HAND' });
     void wildNeeded;
@@ -2672,7 +2665,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       type: 'TUTORIAL_FORCE_SOLVED',
       equationResult: target,
       dice,
-      equationDisplay: `${dice.die1} + ${dice.die2} = ${target}`,
+      equationDisplay: `${d1} + ${d2} = ${target}`,
       playerHand,
       botHand,
     });
