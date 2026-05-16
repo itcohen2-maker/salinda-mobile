@@ -102,34 +102,28 @@ function collectPlans(
       const commitIds = new Set(equationCommits.map((commit) => commit.cardId));
       const candidates = hand.filter(
         (card) =>
-          (card.type === 'number' || card.type === 'wild' || card.type === 'operation') &&
+          (card.type === 'number' || card.type === 'wild') &&
           !commitIds.has(card.id),
       );
       const totalMasks = 1 << candidates.length;
       for (let mask = 1; mask < totalMasks; mask++) {
         const stagedCards: Card[] = [];
         let wildCount = 0;
-        let operationCount = 0;
         for (let index = 0; index < candidates.length; index++) {
           if ((mask & (1 << index)) === 0) continue;
           const card = candidates[index]!;
           if (card.type === 'wild') wildCount++;
-          if (card.type === 'operation') operationCount++;
           stagedCards.push(card);
         }
         if (wildCount > 1) continue;
-        if (operationCount > 1) continue;
-        const numberCards = stagedCards.filter(
-          (card) => card.type === 'number' || card.type === 'wild',
-        );
-        if (numberCards.length === 0) continue;
-        const opCard = stagedCards.find((card) => card.type === 'operation') ?? null;
-        if (!validateStagedCards(numberCards, opCard, option.result, maxWild)) continue;
+        if (stagedCards.length === 0) continue;
+        // Multi-play: numbers/wilds only — opCard=null forces simple sum
+        if (!validateStagedCards(stagedCards, null, option.result, maxWild)) continue;
         const score = stagedCards.length + equationCommits.length;
         plans.push({
           target: option.result,
           equationDisplay: option.equation,
-          stagedCardIds: [...numberCards.map((c) => c.id), ...(opCard ? [opCard.id] : [])],
+          stagedCardIds: [...stagedCards.map((c) => c.id)],
           equationCommits,
           score,
         });

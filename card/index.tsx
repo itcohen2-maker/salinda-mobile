@@ -2472,6 +2472,10 @@ function gameReducer(
         : null;
       if (l11MissingKey) return { ...st, message: tf(l11MissingKey) };
       if (stNumbers.length === 0) return { ...st, message: tf('confirm.needNumberOrWild') };
+      // Reject operation cards in multi-play (outside l6 tutorial wild step)
+      if (stOpCard != null && !(st.isTutorial && tutorialBus.getL6WildStepMode())) {
+        return { ...st, message: tf('confirm.sumMismatch') };
+      }
       if (st.isTutorial && tutorialBus.getL6WildStepMode()) {
         const hasWild = stNumbers.some(c => c.type === 'wild');
         if (!hasWild) return { ...st, message: 'בחרו קלף פרא' };
@@ -3464,23 +3468,6 @@ function gameReducer(
         return {
           ...stWithTick,
           botPresentation: buildBotPresentation(stWithTick, { kind: 'drawCard' }),
-        };
-      }
-      // Teaching demo: right before the bot confirms an equation, show two
-      // short narration beats that open the "possible results" strip and draw
-      // the player's attention to the mini result cards. Only in vs-bot with
-      // guidance on, and only once per turn. Total extension ? 2 × tick ? 2.4s.
-      if (
-        action_.kind === 'confirmEquation' &&
-        stWithTick.guidanceEnabled !== false &&
-        !stWithTick.botConfirmDemoShownThisTurn &&
-        stWithTick.validTargets.length > 0
-      ) {
-        return {
-          ...stWithTick,
-          botConfirmDemoShownThisTurn: true,
-          botPendingDemoActions: [{ kind: 'useMiniCards' }, action_],
-          botPresentation: buildBotPresentation(stWithTick, { kind: 'checkPossibleResults' }),
         };
       }
       return { ...stWithTick, botPresentation: buildBotPresentation(stWithTick, action_) };
@@ -14470,6 +14457,7 @@ function TurnTransition() {
 // ???????????????????????????????????????????????????????????????
 // Module-level: survives GameScreen unmount/remount across turns.
 let _identicalGuidanceShownForGame: string | null = null;
+let _identArrowShownForGame: string | null = null;
 
 // ??? הודעות במסך המשחק (הצגה ב־NotificationZone) ???
 // מקור 1 — GameScreen showOnb (ONB): הדרכה לפי הקשר (נשמר ב־AsyncStorage לפי מפתח מ־ONB_KEYS)
@@ -15973,59 +15961,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
   useEffect(() => {
     _identicalGuidanceShownForGame = null;
+    _identArrowShownForGame = null;
   }, [identicalGuidanceGameKey]);
 
+  // Identical-card guidance notification disabled: the inline arrow bubble above
+  // the discard pile already shows this hint. Keeping both caused duplicates.
   useEffect(() => {
-    const shouldBlockIdenticalGuidance =
-      state.isTutorial ||
-      !guidanceEnabledRef.current ||
-      state.guidanceEnabled === false ||
-      !tutLoaded ||
-      !hasIdentical ||
-      !!state.identicalAlert ||
-      state.pendingFractionTarget !== null;
-
-    if (shouldBlockIdenticalGuidance) {
-      if (identicalGuidanceQueued) {
-        dispatch({ type: 'DISMISS_NOTIFICATION', id: identicalGuidanceNotificationId });
-      }
-      return;
+    if (identicalGuidanceQueued) {
+      dispatch({ type: 'DISMISS_NOTIFICATION', id: identicalGuidanceNotificationId });
     }
-    if (_identicalGuidanceShownForGame === identicalGuidanceGameKey) return;
-
-    _identicalGuidanceShownForGame = identicalGuidanceGameKey;
-    const isFirstIdenticalGuidance = !guidanceSeen.current.has('guidance_identical');
-    if (isFirstIdenticalGuidance) {
-      guidanceSeen.current.add('guidance_identical');
-      void AsyncStorage.setItem('guidance_identical', 'true');
-    }
-    dispatch({
-      type: 'PUSH_NOTIFICATION',
-      payload: {
-        id: identicalGuidanceNotificationId,
-        title: t('guidance.identicalTitle'),
-        message: isFirstIdenticalGuidance
-          ? t('guidance.hint.matchTopCard')
-          : t('guidance.identicalShort'),
-        body: isFirstIdenticalGuidance ? t('guidance.identicalBody') : '',
-        emoji: REPEAT_EMOJI,
-        style: 'info',
-        autoDismissMs: isFirstIdenticalGuidance ? 9000 : 5500,
-      },
-    });
-  }, [
-    identicalGuidanceGameKey,
-    identicalGuidanceNotificationId,
-    identicalGuidanceQueued,
-    hasIdentical,
-    tutLoaded,
-    state.isTutorial,
-    state.guidanceEnabled,
-    state.identicalAlert,
-    state.pendingFractionTarget,
-    dispatch,
-    t,
-  ]);
+  }, [identicalGuidanceQueued, identicalGuidanceNotificationId, dispatch]);
 
   // Contract:
   // - hasIdentical: player can legally answer with a matching card now.
@@ -16037,10 +15982,12 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     && !noIdenticalHintSeen
     && midGameHintsUnlocked;
 
-  // Identical card arrow hint — מוצג כשיש קלף זהה זמין, פעם אחת בכל תור.
+  // Identical card arrow hint — once per game only (not every turn).
   useEffect(() => {
-    if (!guidanceEnabledRef.current || !tutLoaded || (identArrowSeen && identArrowShownForTurn.current === notificationTurnKey)) return;
+    if (!guidanceEnabledRef.current || !tutLoaded) return;
+    if (_identArrowShownForGame === identicalGuidanceGameKey) return;
     if (hasIdentical && !identArrowVisible && identArrowShownForTurn.current !== notificationTurnKey) {
+      _identArrowShownForGame = identicalGuidanceGameKey;
       identArrowShownForTurn.current = notificationTurnKey;
       setIdentArrowVisible(true);
       identArrowX.setValue(0);
@@ -16060,7 +16007,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       identArrowLoop.current?.stop();
       setIdentArrowVisible(false);
     }
-  }, [hasIdentical, tutLoaded, identArrowVisible, notificationTurnKey, identArrowSeen]);
+  }, [hasIdentical, tutLoaded, identArrowVisible, notificationTurnKey, identArrowSeen, identicalGuidanceGameKey]);
 
   const NO_IDENTICAL_HINT_DELAY_MS = 1400;
 
@@ -17796,6 +17743,10 @@ function getBotTeachingPhase(state: GameState): BotTeachingPhase {
 }
 
 function botTeachingDelayRange(state: GameState, difficulty: BotDifficulty): { min: number; max: number } {
+  // turn-transition: pause so the player can read the summary screen before bot advances.
+  if (state.phase === 'turn-transition' && state.botPresentation?.action == null) {
+    return { min: 1500, max: 1500 };
+  }
   // All delays shortened by ?? for a snappier feel.
   if (state.botPresentation?.action != null) {
     if (state.botPresentation.ticks > 0) {
@@ -19276,12 +19227,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const routerScreenWidth = routerWebLayout?.playfieldWidth ?? responsive.width;
   const webPresentation = useContext(WebPresentationContext);
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
-  // Auto-start tutorial for first-time users (tutorial lock)
-  useEffect(() => {
-    AsyncStorage.getItem('lulos_tutorial_done').then((done) => {
-      if (!done) setPlayMode('tutorial');
-    }).catch(() => {});
-  }, []);
+  // Auto-start tutorial disabled — app opens on choose screen
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
