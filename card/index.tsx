@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
-import type { ClassroomLaunchConfig, OverflowSwapPileChoice, OverflowSwapStage } from './shared/types';
+import type { ClassroomLaunchConfig, HostGameSettings, OverflowSwapPileChoice, OverflowSwapStage } from './shared/types';
 import {
   applyOperation as _applyOperation,
   fractionDenominator,
@@ -100,8 +100,13 @@ console.error = (...args: any[]) => {
     message: err?.message ?? (typeof first === 'string' ? first : null),
     stack: err?.stack ?? null,
   });
-  if (args[0] instanceof Error && args[0].message?.includes('length')) {
+  const isMaxDepth = (args[0] instanceof Error && args[0].message?.includes('Maximum update')) ||
+    (typeof args[0] === 'string' && args[0].includes('Maximum update'));
+  if (args[0] instanceof Error && (args[0].message?.includes('length') || args[0].message?.includes('Maximum update'))) {
     _origConsoleError('[STACK TRACE]', args[0].stack);
+  }
+  if (isMaxDepth) {
+    _origConsoleError('[MAX-DEPTH-STACK]', new Error('max-depth-capture').stack);
   }
   _origConsoleError(...args);
 };
@@ -128,7 +133,12 @@ import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
 import { resolveGameTableSurface } from './src/theme/gameTableSurface';
 import { resolveTurnTransitionBackdrop } from './src/theme/turnTransitionBackdrop';
-import { clamp, getWebGameLayout, WEB_GAME_PLAYFIELD_MAX_WIDTH } from './src/theme/webLayout';
+import {
+  clamp,
+  getWebGameLayout,
+  getWebTurnTransitionReadyButtonTop,
+  WEB_GAME_PLAYFIELD_MAX_WIDTH,
+} from './src/theme/webLayout';
 import { getNativeHandFanMetrics } from './src/theme/nativeHandFan';
 import { getNativeGameLayout } from './src/theme/nativeGameLayout';
 import { getScreenSafeTop } from './src/theme/screenInsets';
@@ -247,6 +257,42 @@ const LAYOUT_AXIS_GRID_STEP = Platform.OS === 'web' ? 40 : 48;
 const SOUND_ON_ICON = '\u{1F50A}';
 const SOUND_OFF_ICON = '\u{1F507}';
 const MUSIC_ICON = '\u{1F3B5}';
+const SALINDA_WEB_CURSOR_URL = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><path fill='%23FCD34D' stroke='%2378350F' stroke-width='1.5' stroke-linejoin='round' d='M18 1 L21 15 L35 18 L21 21 L18 35 L15 21 L1 18 L15 15 Z'/><circle cx='18' cy='18' r='5.5' fill='%23FFFBEB' stroke='%2378350F' stroke-width='1.2'/><text x='18' y='22' font-family='Georgia, serif' font-weight='900' font-size='9' fill='%2392400E' text-anchor='middle'>S</text></svg>") 18 18`;
+const SALINDA_WEB_CURSOR_DEFAULT = `${SALINDA_WEB_CURSOR_URL}, auto`;
+const SALINDA_WEB_CURSOR_POINTER = `${SALINDA_WEB_CURSOR_URL}, pointer`;
+const SALINDA_WEB_CURSOR_GRAB = `${SALINDA_WEB_CURSOR_URL}, grab`;
+const SALINDA_WEB_CURSOR_STYLE_ID = 'salinda-web-cursor-style';
+const SALINDA_WEB_CURSOR_CSS = `
+  html,
+  body,
+  #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  html,
+  body,
+  #root,
+  #root * {
+    cursor: ${SALINDA_WEB_CURSOR_DEFAULT};
+  }
+
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [role="button"],
+  [data-cursor="active"],
+  [tabindex]:not([tabindex="-1"]) {
+    cursor: ${SALINDA_WEB_CURSOR_POINTER};
+  }
+`;
 
 type SalindaAudioIconVariant = 'sound-on' | 'sound-off' | 'music';
 
@@ -3832,8 +3878,15 @@ function GameProvider({ children }: { children: ReactNode }) {
   ]);
   // ????????????????????????????????????????????????????????????????
 
+  // Keep overrideRef current so dispatch can read the latest override without being
+  // recreated on every server state_update (which would thrash all effect deps).
+  const overrideRef = useRef(override);
+  overrideRef.current = override;
+
   // במצב מולטיפלייר ה־override מגיע עם notifications: [] ו־guidanceEnabled חסר — שומרים מקומית ומוצגים תמיד
-  const state = override
+  // useMemo prevents a new object reference on every render — without it contextValue
+  // always changes, forcing every GameContext consumer to re-render on each server update.
+  const state = useMemo(() => override
     ? {
         ...override.state,
         equationHandSlots: useServerEquationHand ? override.state.equationHandSlots : localState.equationHandSlots,
@@ -3849,10 +3902,26 @@ function GameProvider({ children }: { children: ReactNode }) {
             : override.state.identicalAlert,
         suppressIdenticalOverlayOnline: localState.suppressIdenticalOverlayOnline,
       }
-    : localState;
+    : localState,
+  [
+    override,
+    useServerEquationHand,
+    localState.equationHandSlots,
+    localState.equationHandPick,
+    localState.jokerModalOpen,
+    localState.selectedCards,
+    localState.notifications,
+    localState.guidanceEnabled,
+    localState.soundsEnabled,
+    localState.suppressIdenticalOverlayOnline,
+    localState, // covers the !override branch
+  ]);
 
+  // dispatch reads overrideRef.current so it never needs to be recreated when override
+  // changes — making it stable prevents cascading useEffect re-runs in child components.
   const dispatch = useCallback((action: GameAction) => {
-    if (override && action.type === 'DISMISS_IDENTICAL_ALERT') {
+    const ov = overrideRef.current;
+    if (ov && action.type === 'DISMISS_IDENTICAL_ALERT') {
       localDispatch({ type: 'SUPPRESS_ONLINE_IDENTICAL_OVERLAY' });
     }
     const isLocalOnlyAction =
@@ -3866,22 +3935,22 @@ function GameProvider({ children }: { children: ReactNode }) {
       'SELECT_EQ_OP', 'SELECT_EQ_JOKER', 'PLACE_EQ_OP', 'REMOVE_EQ_HAND_SLOT', 'CLEAR_EQ_HAND', 'CLEAR_EQ_HAND_PICK',
       'OPEN_JOKER_MODAL', 'CLOSE_JOKER_MODAL', 'RESET_ONLINE_EQ_UI',
     ]);
-    const myIdx = override?.state?.myPlayerIndex;
+    const myIdx = ov?.state?.myPlayerIndex;
     const canActOnline =
-      !override || typeof myIdx !== 'number' || override.state.currentPlayerIndex === myIdx;
+      !ov || typeof myIdx !== 'number' || ov.state.currentPlayerIndex === myIdx;
     if (isLocalOnlyAction) localDispatch(action);
-    else if (override) {
+    else if (ov) {
       if (action.type === 'RESET_GAME') {
         localDispatch(action);
-        override.dispatch(action);
+        ov.dispatch(action);
         return;
       }
       if (!canActOnline) return;
       if (eqUiActions.has(action.type)) localDispatch(action);
       if (action.type === 'CONFIRM_EQUATION') localDispatch({ type: 'RESET_ONLINE_EQ_UI' });
-      override.dispatch(action);
+      ov.dispatch(action);
     } else localDispatch(action);
-  }, [override, localDispatch]);
+  }, [localDispatch]);
   const contextValue = useMemo(() => ({ state, dispatch }), [state, dispatch]);
   return <GameContext.Provider value={contextValue}>{children}</GameContext.Provider>;
 }
@@ -4531,7 +4600,9 @@ function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopP
         <Text style={{
           fontSize: fractionLabel ? 16 : 18, fontWeight: '900', color: cl.face,
           textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1,
-        }}>{fractionLabel ?? value}</Text>
+        }} numberOfLines={1}>
+          {fractionLabel ? getFractionDisplay(fractionLabel) : value}
+        </Text>
       </View>
     </View>
   );
@@ -7964,6 +8035,7 @@ const FAN_MAX_SPACING = 1.6;
 const FAN_DEFAULT_SPACING = 1.0;
 const PINCH_CARD_THRESHOLD = 8;
 const FAN_DRAG_START_DX = 6;
+const SIMPLE_HAND_FAN_TEST_ID = 'simple-hand-fan';
 
 function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium', interactionLocked = false, centerCardId = null, tutorialFocusCardId = null }: {
   cards: Card[];
@@ -8454,14 +8526,31 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const fanRootEl = fanRootRef.current as HTMLElement | null;
-    if (!fanRootEl) return;
+    const fanRootCandidate = fanRootRef.current as { contains?: (node: Node | null) => boolean } | null;
+    const queriedFanRoot = document.querySelector(`[data-testid="${SIMPLE_HAND_FAN_TEST_ID}"]`);
+    const fanRootEl =
+      fanRootCandidate && typeof fanRootCandidate.contains === 'function'
+        ? fanRootCandidate
+        : queriedFanRoot && typeof (queriedFanRoot as HTMLElement).contains === 'function'
+          ? (queriedFanRoot as HTMLElement)
+          : null;
+    if (!fanRootEl || typeof fanRootEl.contains !== 'function') return;
+    const fanContains = fanRootEl.contains.bind(fanRootEl);
 
-    const handlePointerDown = (evt: PointerEvent) => {
-      const targetNode = evt.target as Node | null;
-      if (!targetNode || !fanRootEl.contains(targetNode)) return;
+    const isInsideFan = (target: EventTarget | null) => {
+      if (!target || !(target instanceof Node)) return false;
+      return fanContains(target);
+    };
+
+    const resetWebMouseDragState = () => {
+      webMouseDragRef.current = null;
+      releaseUserGestureFlagSoon();
+    };
+
+    const handleMouseDownLike = (evt: MouseEvent | PointerEvent) => {
+      if (!isInsideFan(evt.target)) return;
       if (interactionLockedRef.current) return;
-      if (evt.pointerType !== 'mouse') return;
+      if ('pointerType' in evt && evt.pointerType !== 'mouse') return;
       if (evt.button !== 0) return;
       const now = typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
@@ -8469,16 +8558,33 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       webMouseDragRef.current = {
         pointerDown: true,
         dragging: false,
-        pointerId: evt.pointerId,
+        pointerId: 'pointerId' in evt ? evt.pointerId : null,
         startClientX: evt.clientX,
         lastClientX: evt.clientX,
         lastMoveAt: now,
       };
     };
 
+    const handlePointerDown = (evt: PointerEvent) => {
+      try {
+        handleMouseDownLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] pointerdown failed', error);
+      }
+    };
+
+    const handleMouseDown = (evt: MouseEvent) => {
+      try {
+        handleMouseDownLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] mousedown failed', error);
+      }
+    };
+
     const handleClickCapture = (evt: MouseEvent) => {
-      const targetNode = evt.target as Node | null;
-      if (!targetNode || !fanRootEl.contains(targetNode)) return;
+      if (!isInsideFan(evt.target)) return;
       if (Date.now() < suppressClickUntilRef.current) {
         evt.preventDefault();
         evt.stopPropagation();
@@ -8486,8 +8592,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleWheel = (evt: WheelEvent) => {
-      const targetNode = evt.target as Node | null;
-      if (!targetNode || !fanRootEl.contains(targetNode)) return;
+      if (!isInsideFan(evt.target)) return;
       if (interactionLockedRef.current) return;
       const dominantDelta = Math.abs(evt.deltaX) > Math.abs(evt.deltaY) ? evt.deltaX : evt.deltaY;
       if (Math.abs(dominantDelta) < 1) return;
@@ -8516,10 +8621,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       if (evt.cancelable) evt.preventDefault();
     };
 
-    const handlePointerMove = (evt: PointerEvent) => {
+    const handleMouseMoveLike = (evt: MouseEvent | PointerEvent) => {
       const dragState = webMouseDragRef.current;
       if (!dragState?.pointerDown || interactionLockedRef.current) return;
-      if (dragState.pointerId != null && evt.pointerId !== dragState.pointerId) return;
+      if ('pointerId' in evt && dragState.pointerId != null && evt.pointerId !== dragState.pointerId) return;
       const totalDx = evt.clientX - dragState.startClientX;
 
       if (!dragState.dragging) {
@@ -8536,14 +8641,50 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       if (evt.cancelable) evt.preventDefault();
     };
 
-    const handlePointerUp = (evt?: PointerEvent) => {
+    const handlePointerMove = (evt: PointerEvent) => {
+      try {
+        handleMouseMoveLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] pointermove failed', error);
+      }
+    };
+
+    const handleMouseMove = (evt: MouseEvent) => {
+      try {
+        handleMouseMoveLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] mousemove failed', error);
+      }
+    };
+
+    const handleMouseUpLike = (evt?: MouseEvent | PointerEvent) => {
       const dragState = webMouseDragRef.current;
       if (!dragState) return;
-      if (evt && dragState.pointerId != null && evt.pointerId !== dragState.pointerId) return;
+      if (evt && 'pointerId' in evt && dragState.pointerId != null && evt.pointerId !== dragState.pointerId) return;
       webMouseDragRef.current = null;
       if (!dragState.dragging) return;
       suppressClickUntilRef.current = Date.now() + 260;
       snapDraggedMouseGesture(dragState);
+    };
+
+    const handlePointerUp = (evt?: PointerEvent) => {
+      try {
+        handleMouseUpLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] pointerup failed', error);
+      }
+    };
+
+    const handleMouseUp = (evt?: MouseEvent) => {
+      try {
+        handleMouseUpLike(evt);
+      } catch (error) {
+        resetWebMouseDragState();
+        console.warn('[hand-web] mouseup failed', error);
+      }
     };
 
     const handleWindowBlur = () => {
@@ -8555,18 +8696,24 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('mousedown', handleMouseDown, true);
     document.addEventListener('click', handleClickCapture, true);
     document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     document.addEventListener('pointermove', handlePointerMove, true);
+    document.addEventListener('mousemove', handleMouseMove, true);
     document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('mouseup', handleMouseUp, true);
     document.addEventListener('pointercancel', handlePointerUp, true);
     window.addEventListener('blur', handleWindowBlur);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('mousedown', handleMouseDown, true);
       document.removeEventListener('click', handleClickCapture, true);
       document.removeEventListener('wheel', handleWheel, true);
       document.removeEventListener('pointermove', handlePointerMove, true);
+      document.removeEventListener('mousemove', handleMouseMove, true);
       document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('mouseup', handleMouseUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
       window.removeEventListener('blur', handleWindowBlur);
       if (wheelSnapTimerRef.current) {
@@ -8656,10 +8803,11 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   return (
     <View
       ref={fanRootRef}
+      testID={SIMPLE_HAND_FAN_TEST_ID}
       style={[
         { width: fanScreenWidth, height: fanH, overflow: 'visible' },
         Platform.OS === 'web'
-          ? ({ touchAction: 'none', userSelect: 'none', cursor: interactionLocked ? 'default' : 'grab' } as any)
+          ? ({ touchAction: 'none', userSelect: 'none', cursor: interactionLocked ? SALINDA_WEB_CURSOR_DEFAULT : SALINDA_WEB_CURSOR_GRAB } as any)
           : null,
       ]}
       {...panResponder.panHandlers}
@@ -8969,7 +9117,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
               onPressOut={() => setPressedCardId(null)}
               onPress={() => { if (interactionLocked) return; setPressedCardId(null); tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: card.id }); onTap(card); }}
               disabled={isDefenseInvalid || waitingMode || interactionLocked}
-              style={Platform.OS === 'web' ? ({ cursor: isDefenseInvalid || waitingMode || interactionLocked ? 'default' : 'pointer' } as any) : undefined}
+              style={Platform.OS === 'web' ? ({ cursor: isDefenseInvalid || waitingMode || interactionLocked ? SALINDA_WEB_CURSOR_DEFAULT : SALINDA_WEB_CURSOR_POINTER } as any) : undefined}
             >
               <View style={[
                 isStaged && { borderWidth: 3, borderColor: '#FF6B00', borderRadius: 12 },
@@ -9899,6 +10047,7 @@ function StartScreen({
   const safe = useGameSafeArea();
   const viewport = useWebViewportSize();
   const responsive = useResponsiveLayout();
+  const startWebLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const [playerCount, setPlayerCount] = useState(2);
   const [numberRange, setNumberRange] = useState<'easy' | 'full'>('full');
   const [gameMode, setGameMode] = useState<LocalGameMode>(forcedGameMode ?? 'vs-bot');
@@ -10082,9 +10231,9 @@ function StartScreen({
   }, [t]);
   const bounceAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
-  const compactStartScreen = responsive.isTight;
+  const compactStartScreen = Platform.OS === 'web' ? true : responsive.isTight;
   const startScreenHeight = responsive.height;
-  const startScreenWidth = responsive.width;
+  const startScreenWidth = startWebLayout?.playfieldWidth ?? responsive.width;
   // גלגלת תלת־מימד: מרכז שורה i ב־scroll ב־(i+0.5)*ROW_H + PADDING_V; viewport center ? 110
   const WHEEL_ROW_H = 64;
   const WHEEL_PADDING_V = compactStartScreen ? 64 : 76;
@@ -12854,6 +13003,7 @@ function TurnTransition() {
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
   const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, responsive.height - 140));
+  const handTop = turnScreenHeight - (handBottomOffset + handStripHeight);
   const compactAndroidReadyButton = Platform.OS === 'android';
   const compactIosReadyButton = Platform.OS === 'ios';
   const readyButtonWidth = compactAndroidReadyButton
@@ -12866,6 +13016,9 @@ function TurnTransition() {
   const readyButtonTimerSize = compactAndroidReadyButton ? 52 : compactIosReadyButton ? 56 : 58;
   const readyButtonGap = compactAndroidReadyButton ? 8 : compactIosReadyButton ? 9 : 10;
   const readyButtonTimerSide = 'left';
+  const readyButtonTop = Platform.OS === 'web'
+    ? getWebTurnTransitionReadyButtonTop(goldActionButtonTop, handTop, readyButtonHeight)
+    : goldActionButtonTop;
   const compactWebHud = Platform.OS === 'web';
   const hudButtonWidth = compactWebHud ? clamp(Math.round(turnScreenWidth * 0.05), 64, 70) : 72;
   const hudButtonHeight = compactWebHud ? 30 : 32;
@@ -13110,9 +13263,15 @@ function TurnTransition() {
   const rawStartTurnDeadlineAt = overflowSwapActive
     ? null
     : (state.isTutorial ? null : (isLocalBotTurn ? null : (isMyTurnOnline ? (state.turnDeadlineAt ?? null) : localStartTurnDeadlineAt)));
-  const startTurnDeadlineAt = rawStartTurnDeadlineAt == null
-    ? null
-    : Math.min(rawStartTurnDeadlineAt, Date.now() + START_TURN_TIMER_SECONDS * 1000);
+  // useMemo so Date.now() is captured once when the deadline changes, not on every render.
+  // Without this, Math.min always returns Date.now()+15000 (unstable), resetting the
+  // countdown circle every frame and making the timer appear frozen at 15 s.
+  const startTurnDeadlineAt = useMemo(
+    () => rawStartTurnDeadlineAt == null
+      ? null
+      : Math.min(rawStartTurnDeadlineAt, Date.now() + START_TURN_TIMER_SECONDS * 1000),
+    [rawStartTurnDeadlineAt],
+  );
   const showSmallTurnTimerHint = !state.isTutorial && state.roundsPlayed < TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED;
   useEffect(() => {
     if (startTurnDeadlineAt == null) return;
@@ -13610,6 +13769,12 @@ function TurnTransition() {
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
       testID="turn-transition-playfield"
+      outerStyle={{
+        backgroundColor:
+          turnTransitionBackdrop.kind === 'solid'
+            ? turnTransitionBackdrop.backgroundColor
+            : turnTransitionGradientColors[0],
+      }}
     >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }} collapsable={false}>
       {/* רקע נפרד ממסך המשחק — מסך המשחק משתמש ב־bg.jpg; כאן מעבר כחול כדי שלא ייראה כמו אותו מסך.
@@ -14191,7 +14356,7 @@ function TurnTransition() {
           pointerEvents="box-none"
           style={{
             position: 'absolute',
-            top: goldActionButtonTop,
+            top: readyButtonTop,
             left: 0,
             right: 0,
             // Must sit above NotificationZone (zIndex 9999) so notifications
@@ -14820,9 +14985,12 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     gameTurnTimeoutFiredRef.current = false;
   }, [state.phase, state.currentPlayerIndex, state.roundsPlayed, state.hasPlayedCards, state.dice, state.pendingFractionTarget]);
   const rawGameTurnDeadlineAt = state.isTutorial ? null : (state.turnDeadlineAt ?? localGameTurnDeadlineAt);
-  const gameTurnDeadlineAt = rawGameTurnDeadlineAt == null
-    ? null
-    : Math.min(rawGameTurnDeadlineAt, Date.now() + START_TURN_TIMER_SECONDS * 1000);
+  const gameTurnDeadlineAt = useMemo(
+    () => rawGameTurnDeadlineAt == null
+      ? null
+      : Math.min(rawGameTurnDeadlineAt, Date.now() + START_TURN_TIMER_SECONDS * 1000),
+    [rawGameTurnDeadlineAt],
+  );
   useEffect(() => {
     if (gameTurnDeadlineAt == null) return;
     const id = setInterval(() => setGameTurnNowMs(Date.now()), 200);
@@ -16293,6 +16461,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const bottomActionInset = Math.max(0, Math.round(30 * (1 - nativeActionCompaction)));
   const bottomActionLift = Math.max(0, Math.round(40 * (1 - nativeActionCompaction)));
   const bottomActionZoneHeight = Math.max(120, handBottomOffset + safe.insets.bottom - bottomActionInset);
+  const webBottomActionZoneHeight = 132;
+  const webBottomActionTop = Platform.OS === 'web'
+    ? clampFloatingActionTop(552, webBottomActionZoneHeight)
+    : null;
   const bottomActionTop = isAndroid
     ? (nativeGameLayout?.bottomControlTop ?? Math.max(0, playfieldFrameHeight - handBottomOffset + 14))
     : null;
@@ -16321,6 +16493,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
       testID="game-screen-playfield"
+      outerStyle={{
+        backgroundColor: state.isTutorial
+          ? '#0a1628'
+          : (background.gradient?.[0] ?? '#0a1628'),
+      }}
     >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }}>
       {/* שכבות הרקע נפרסות מתחת ל-safe area; ה-UI עצמו נשאר ממוקם לפי ה-insets. */}
@@ -17038,7 +17215,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               paddingHorizontal: 20,
               paddingTop: 12,
               paddingBottom: barPaddingBottom,
-              ...(isAndroid
+              ...(Platform.OS === 'web'
+                ? { top: webBottomActionTop ?? floatingActionMinTop, height: webBottomActionZoneHeight }
+                : isAndroid
                 ? { top: bottomActionTop ?? 0, bottom: bottomActionInset }
                 : { bottom: bottomActionInset, height: bottomActionZoneHeight }),
             }}
@@ -17343,6 +17522,7 @@ function PreVictoryCoinAwardScreen() {
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
       testID="pre-victory-coin-award-playfield"
+      outerStyle={{ backgroundColor: '#0f172a' }}
     >
       <LinearGradient
         colors={['#0f172a', '#1e293b', '#0f172a']}
@@ -17411,6 +17591,7 @@ function GameOver({ onPlayVsBot, onBackToLobby }: { onPlayVsBot?: () => void; on
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
       testID="game-over-playfield"
+      outerStyle={{ backgroundColor: '#0f172a' }}
     >
     <View style={{flex:1,width:'100%',justifyContent:'center',alignItems:'center',padding:24}}>
       <Confetti width={gameOverWidth} height={gameOverHeight} />
@@ -17743,23 +17924,48 @@ function getBotTeachingPhase(state: GameState): BotTeachingPhase {
 }
 
 function botTeachingDelayRange(state: GameState, difficulty: BotDifficulty): { min: number; max: number } {
+  const withExtra = (
+    range: { min: number; max: number },
+    extraMin: number,
+    extraMax: number = extraMin,
+  ): { min: number; max: number } => ({
+    min: range.min + extraMin,
+    max: range.max + extraMax,
+  });
+
+  // Spread ~1.5s of extra pacing across the whole bot turn so each stage reads
+  // more clearly instead of front-loading all the delay into a single pause.
+  const BOT_STAGE_DELAY_BONUS = {
+    preview: 250,
+    decide: 250,
+    dicePause: 250,
+    build: 250,
+    postEquationTick: 80,
+    cardStepQueue: 60,
+    cardStepApply: 60,
+  } as const;
+
   // turn-transition: pause so the player can read the summary screen before bot advances.
   if (state.phase === 'turn-transition' && state.botPresentation?.action == null) {
-    return { min: 1500, max: 1500 };
+    return withExtra({ min: 1500, max: 1500 }, BOT_STAGE_DELAY_BONUS.preview);
   }
   // All delays shortened by ?? for a snappier feel.
   if (state.botPresentation?.action != null) {
+    const action = state.botPresentation.action;
     if (state.botPresentation.ticks > 0) {
       return { min: 470, max: 570 };
+    }
+    if (action.kind === 'stageCard' || action.kind === 'confirmStaged') {
+      return withExtra({ min: 150, max: 220 }, BOT_STAGE_DELAY_BONUS.cardStepApply);
     }
     return { min: 150, max: 220 };
   }
   if (state.botPostEquationPauseTicks > 0) {
     // Pause after equation so the player can read the result (~1s total).
-    return { min: 330, max: 380 };
+    return withExtra({ min: 330, max: 380 }, BOT_STAGE_DELAY_BONUS.postEquationTick);
   }
   if (state.botDicePausePending) {
-    return { min: 1000, max: 1000 };
+    return withExtra({ min: 1000, max: 1000 }, BOT_STAGE_DELAY_BONUS.dicePause);
   }
   if (state.pendingFractionTarget !== null && state.botFractionDefenseTicks > 0) {
     return { min: 1130, max: 1370 };
@@ -17771,16 +17977,16 @@ function botTeachingDelayRange(state: GameState, difficulty: BotDifficulty): { m
   }
   if (state.phase === 'solved' && !state.hasPlayedCards) {
     if ((state.botPendingStagedIds?.length ?? 0) > 0) {
-      return { min: 150, max: 220 };
+      return withExtra({ min: 150, max: 220 }, BOT_STAGE_DELAY_BONUS.cardStepQueue);
     }
-    return { min: 250, max: 350 };
+    return withExtra({ min: 250, max: 350 }, BOT_STAGE_DELAY_BONUS.cardStepQueue);
   }
   if (state.phase === 'building') {
-    if (difficulty === 'easy') return { min: 1350, max: 1700 };
-    if (difficulty === 'medium') return { min: 1170, max: 1470 };
-    return { min: 1070, max: 1370 };
+    if (difficulty === 'easy') return withExtra({ min: 1350, max: 1700 }, BOT_STAGE_DELAY_BONUS.build);
+    if (difficulty === 'medium') return withExtra({ min: 1170, max: 1470 }, BOT_STAGE_DELAY_BONUS.build);
+    return withExtra({ min: 1070, max: 1370 }, BOT_STAGE_DELAY_BONUS.build);
   }
-  return botStepDelayRange(difficulty);
+  return withExtra(botStepDelayRange(difficulty), BOT_STAGE_DELAY_BONUS.decide);
 }
 
 function BotMissionStrip(
@@ -18540,6 +18746,7 @@ function PlayerWaitingScreen({
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
       testID="player-waiting-playfield"
+      outerStyle={{ backgroundColor: playerScreensGradientColors[0] }}
     >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
       <LinearGradient colors={[...playerScreensGradientColors]} start={{ x: 0, y: 0 }} end={{ x: 0.85, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -19226,7 +19433,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const routerWebLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const routerScreenWidth = routerWebLayout?.playfieldWidth ?? responsive.width;
   const webPresentation = useContext(WebPresentationContext);
-  const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
+  // Web opens directly on the online table browser so visitors see tables immediately.
+  const [playMode, setPlayMode] = useState<ShellPlayMode>(Platform.OS === 'web' ? 'online' : 'choose');
   // Auto-start tutorial disabled — app opens on choose screen
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
@@ -19331,6 +19539,41 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     setMockupReturnMode(playMode === 'online' ? 'online' : 'choose');
     setPlayMode('mockup-room');
   }, [playMode]);
+
+  const handleStartLocalBotGame = useCallback(
+    (difficulty: 'easy' | 'full', settings: HostGameSettings) => {
+      mp?.leaveRoom();
+      setPlayMode('local');
+      const botName = settings.botDisplayName || (locale === 'he' ? 'בוט' : 'Bot');
+      const humanName = preferredName.trim() || (locale === 'he' ? 'שחקן' : 'Player');
+      dispatch({
+        type: 'START_GAME',
+        mode: 'vs-bot',
+        botDifficulty: settings.botDifficulty ?? 'medium',
+        players: [
+          { name: humanName, isBot: false },
+          { name: botName, isBot: true },
+        ],
+        difficulty,
+        fractions: settings.showFractions ?? true,
+        fractionKinds: settings.fractionKinds && settings.fractionKinds.length > 0
+          ? [...settings.fractionKinds]
+          : [...ALL_FRACTION_KINDS],
+        showPossibleResults: settings.showPossibleResults ?? true,
+        showSolveExercise: settings.showSolveExercise ?? true,
+        timerSetting: settings.timerSetting ?? 'off',
+        timerCustomSeconds: settings.timerCustomSeconds ?? 60,
+        difficultyStage: difficulty === 'easy' ? 'A' : 'H',
+        enabledOperators: settings.enabledOperators && settings.enabledOperators.length > 0
+          ? [...settings.enabledOperators]
+          : (['+', '-', 'x', '÷'] as Operation[]),
+        allowNegativeTargets: settings.allowNegativeTargets ?? false,
+        mathRangeMax: settings.mathRangeMax ?? (difficulty === 'easy' ? 12 : 25),
+        abVariant: difficulty === 'easy' ? 'control_0_12_plus' : 'variant_0_15_plus',
+      });
+    },
+    [dispatch, locale, mp, preferredName, setPlayMode],
+  );
 
   const openGameEntry = useCallback(() => {
     setPlayMode('game-entry');
@@ -19809,7 +20052,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   } else {
     // playMode === 'online' — משחק ברשת (צפייה + מסך שחקן, מעבר אוטומטי בתורי)
     if (!mp?.inRoom) screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />;
-    else if (!mp.serverState) screen = <LobbyScreen onOpenCelebrationMockup={openCelebrationMockupRoom} />;
+    else if (!mp.serverState) screen = (
+      <LobbyScreen
+        onOpenCelebrationMockup={openCelebrationMockupRoom}
+        onStartLocalBotGame={handleStartLocalBotGame}
+      />
+    );
     else {
       switch (state.phase) {
         case 'setup': screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />; break;
@@ -19825,7 +20073,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
             ? <PreVictoryCoinAwardScreen />
             : <GameOver
                 onPlayVsBot={() => { mp?.leaveRoom?.(); setSelectedLocalGameMode('vs-bot'); setPlayMode('local'); }}
-                onBackToLobby={() => { mp?.leaveRoom?.(); setPlayMode('game-entry'); }}
+                onBackToLobby={() => { mp?.leaveRoom?.(); setPlayMode('online'); }}
               />;
           break;
         default:
@@ -20612,6 +20860,22 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     };
   }, [webBackdropColor, webBackdropTone]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const existingStyle = document.getElementById(SALINDA_WEB_CURSOR_STYLE_ID);
+    const styleEl = existingStyle instanceof HTMLStyleElement ? existingStyle : document.createElement('style');
+    styleEl.id = SALINDA_WEB_CURSOR_STYLE_ID;
+    styleEl.textContent = SALINDA_WEB_CURSOR_CSS;
+    if (!existingStyle) {
+      document.head.appendChild(styleEl);
+    }
+    return () => {
+      if (styleEl.parentNode) {
+        styleEl.parentNode.removeChild(styleEl);
+      }
+    };
+  }, []);
+
   const toggleWebBackdropTone = useCallback(() => {
     setWebBackdropTone((prev) => (prev === 'black' ? 'white' : 'black'));
   }, []);
@@ -20745,7 +21009,13 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
         <View style={{ flex: 1, alignItems: 'center' }}>
           <View
             testID="app-web-shell"
-            style={{ flex: 1, width: '100%', maxWidth: webShellMaxWidth, backgroundColor: '#0a1628' }}
+            style={{
+              flex: 1,
+              width: '100%',
+              maxWidth: webShellMaxWidth,
+              backgroundColor: '#0a1628',
+              overflow: 'hidden',
+            }}
           >
             {gameContent}
           </View>
