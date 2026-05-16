@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet } from 'react-native';
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Localization from 'expo-localization';
 import { he } from '../../shared/i18n/he';
@@ -37,11 +37,15 @@ jest.mock('../hooks/useMultiplayer', () => ({
   useMultiplayer: () => mockUseMultiplayer(),
 }));
 
-function renderLobbyScreen(overrides: Record<string, unknown> = {}) {
+function renderLobbyScreen(
+  overrides: Record<string, unknown> = {},
+  onStartLocalBotGame: jest.Mock = jest.fn(),
+) {
   mockUseMultiplayer.mockReturnValue({
     roomCode: '4821',
     currentInviteCode: null,
     currentTableVisibility: 'public',
+    currentRoomTable: null,
     players: [{ id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false }],
     tables: [],
     isHost: true,
@@ -65,7 +69,7 @@ function renderLobbyScreen(overrides: Record<string, unknown> = {}) {
       }}
     >
       <LocaleProvider>
-        <LobbyScreen />
+        <LobbyScreen onStartLocalBotGame={onStartLocalBotGame} />
       </LocaleProvider>
     </SafeAreaProvider>,
   );
@@ -115,6 +119,136 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(within(screen.getByTestId('lobby-summary-card-seats')).getByText('2/4')).toBeTruthy();
   });
 
+  it('keeps the room configured as 2 seats even after the table leaves the public list', () => {
+    renderLobbyScreen({
+      currentRoomTable: {
+        ...baseTable,
+        status: 'full',
+        currentParticipants: 2,
+        maxParticipants: 2,
+      },
+      players: [
+        { id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false },
+        { id: 'guest', name: 'Guest', isHost: false, isConnected: true, isBot: false },
+      ],
+      tables: [],
+      isHost: false,
+    });
+
+    expect(within(screen.getByTestId('lobby-summary-card-seats')).getByText('2/2')).toBeTruthy();
+    expect(screen.getByText('Players in room (2/2)')).toBeTruthy();
+  });
+
+  it('auto-starts from the host client when a 2-seat room becomes full', async () => {
+    const startTableCountdown = jest.fn();
+
+    renderLobbyScreen({
+      currentRoomTable: {
+        ...baseTable,
+        status: 'full',
+        currentParticipants: 2,
+        maxParticipants: 2,
+      },
+      players: [
+        { id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false },
+        { id: 'guest', name: 'Guest', isHost: false, isConnected: true, isBot: false },
+      ],
+      tables: [],
+      isHost: true,
+      startTableCountdown,
+    });
+
+    await waitFor(() => {
+      expect(startTableCountdown).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not auto-start from the host client before a 4-seat table is full', () => {
+    const configureTable = jest.fn();
+    const startTableCountdown = jest.fn();
+    const tree = (
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 390, height: 844 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }}
+      >
+        <LocaleProvider>
+          <LobbyScreen onStartLocalBotGame={jest.fn()} />
+        </LocaleProvider>
+      </SafeAreaProvider>
+    );
+
+    mockUseMultiplayer.mockReturnValue({
+      roomCode: '4821',
+      currentInviteCode: null,
+      currentTableVisibility: 'public',
+      players: [{ id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false }],
+      tables: [],
+      isHost: true,
+      configureTable,
+      startTableCountdown,
+      leaveRoom: jest.fn(),
+      error: null,
+      clearError: jest.fn(),
+      toast: null,
+      clearToast: jest.fn(),
+      startBotGame: jest.fn(),
+      serverUrl: 'https://lolos-mobile.onrender.com',
+    });
+
+    const view = render(tree);
+    fireEvent.press(screen.getByText('Save'));
+    expect(configureTable).toHaveBeenCalledTimes(1);
+
+    mockUseMultiplayer.mockReturnValue({
+      roomCode: '4821',
+      currentInviteCode: null,
+      currentTableVisibility: 'public',
+      players: [
+        { id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false },
+        { id: 'guest-1', name: 'Guest 1', isHost: false, isConnected: true, isBot: false },
+      ],
+      tables: [{ ...baseTable, currentParticipants: 2, maxParticipants: 4 }],
+      isHost: true,
+      configureTable,
+      startTableCountdown,
+      leaveRoom: jest.fn(),
+      error: null,
+      clearError: jest.fn(),
+      toast: null,
+      clearToast: jest.fn(),
+      startBotGame: jest.fn(),
+      serverUrl: 'https://lolos-mobile.onrender.com',
+    });
+    view.rerender(tree);
+    expect(startTableCountdown).not.toHaveBeenCalled();
+
+    mockUseMultiplayer.mockReturnValue({
+      roomCode: '4821',
+      currentInviteCode: null,
+      currentTableVisibility: 'public',
+      players: [
+        { id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false },
+        { id: 'guest-1', name: 'Guest 1', isHost: false, isConnected: true, isBot: false },
+        { id: 'guest-2', name: 'Guest 2', isHost: false, isConnected: true, isBot: false },
+      ],
+      tables: [{ ...baseTable, currentParticipants: 3, maxParticipants: 4 }],
+      isHost: true,
+      configureTable,
+      startTableCountdown,
+      leaveRoom: jest.fn(),
+      error: null,
+      clearError: jest.fn(),
+      toast: null,
+      clearToast: jest.fn(),
+      startBotGame: jest.fn(),
+      serverUrl: 'https://lolos-mobile.onrender.com',
+    });
+    view.rerender(tree);
+    expect(startTableCountdown).not.toHaveBeenCalled();
+  });
+
   it('shows bot guidance and difficulty options when the host is alone', () => {
     renderLobbyScreen({
       players: [{ id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false }],
@@ -135,17 +269,42 @@ describe('OnlineTableScreens LobbyScreen', () => {
     renderLobbyScreen();
 
     const configPanel = StyleSheet.flatten(screen.getByTestId('lobby-config-panel').props.style);
+    const numberRangeLabel = StyleSheet.flatten(screen.getByTestId('lobby-config-number-range-label').props.style);
+    const maxParticipantsLabel = StyleSheet.flatten(screen.getByTestId('lobby-config-max-participants-label').props.style);
     const numberRangeRow = StyleSheet.flatten(screen.getByTestId('lobby-config-number-range-row').props.style);
     const maxParticipantsRow = StyleSheet.flatten(screen.getByTestId('lobby-config-max-participants-row').props.style);
     const advancedToggle = StyleSheet.flatten(screen.getByTestId('lobby-config-advanced-toggle').props.style);
 
     expect(screen.getByText(he['lobby.advancedToggleShow'])).toBeTruthy();
     expect(configPanel.alignItems).toBe('flex-end');
+    expect(numberRangeLabel.textAlign).toBe('right');
+    expect(maxParticipantsLabel.textAlign).toBe('right');
     expect(numberRangeRow.flexDirection).toBe('row-reverse');
-    expect(maxParticipantsRow.flexDirection).toBe('row-reverse');
-    expect(maxParticipantsRow.justifyContent).toBe('flex-end');
+    expect(maxParticipantsRow.flexDirection).toBe('row');
+    expect(maxParticipantsRow.justifyContent).toBe('center');
     expect(advancedToggle.width).toBe('100%');
     expect(advancedToggle.alignItems).toBe('center');
+  });
+
+  it('right aligns players in room on iOS RTL', () => {
+    mockGetLocales.mockReturnValue([{ languageCode: 'he' }]);
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    renderLobbyScreen({
+      currentRoomTable: {
+        ...baseTable,
+        currentParticipants: 2,
+        maxParticipants: 4,
+      },
+      players: [
+        { id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false },
+        { id: 'guest', name: 'Guest', isHost: false, isConnected: true, isBot: false },
+      ],
+    });
+
+    const playersInRoomLabel = StyleSheet.flatten(screen.getByTestId('lobby-players-in-room-label').props.style);
+
+    expect(playersInRoomLabel.textAlign).toBe('right');
+    expect(playersInRoomLabel.writingDirection).toBe('rtl');
   });
 
   it('shows only the seats summary card before saving with default settings', () => {
@@ -198,6 +357,27 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(screen.getByTestId('lobby-summary-card-possible-results')).toBeTruthy();
     expect(screen.getByTestId('lobby-summary-card-solve-exercise')).toBeTruthy();
     expect(screen.getByTestId('lobby-summary-card-timer')).toBeTruthy();
+  });
+
+  it('calls onStartLocalBotGame with difficulty and settings when Start vs bot is pressed', () => {
+    const onStartLocalBotGame = jest.fn();
+
+    renderLobbyScreen(
+      {
+        players: [{ id: 'host', name: 'Host', isHost: true, isConnected: true, isBot: false }],
+        tables: [{ ...baseTable, currentParticipants: 1 }],
+        isHost: true,
+      },
+      onStartLocalBotGame,
+    );
+
+    fireEvent.press(screen.getByText('Start vs bot'));
+
+    expect(onStartLocalBotGame).toHaveBeenCalledTimes(1);
+    expect(onStartLocalBotGame).toHaveBeenCalledWith(
+      'full',
+      expect.objectContaining({ botDifficulty: 'medium' }),
+    );
   });
 
   it('shows the configured summary from current table metadata for the host and joiners', () => {

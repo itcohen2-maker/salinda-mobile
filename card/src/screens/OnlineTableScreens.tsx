@@ -27,10 +27,12 @@ import type { MsgParams } from '../../shared/i18n';
 import { useLocale } from '../i18n/LocaleContext';
 import SalindaPuzzleGameLogo from '../components/branding/SalindaPuzzleGameLogo';
 import { brand } from '../theme/brand';
+import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { CARDS_PER_PLAYER } from '../../shared/gameConstants';
 import { pickQuickMatchTable } from './TablesLobbyScreen';
 import { buildPrivateInviteShareMessage, buildRoomShareMessage } from './onlineShareMessages';
 import { getScreenSafeTop } from '../theme/screenInsets';
+import { WEB_GAME_PLAYFIELD_MAX_WIDTH } from '../theme/webLayout';
 import { SlindaCoin } from '../../components/SlindaCoin';
 
 const WEB_INVITE_BASE_STORAGE_KEY = 'salinda_web_invite_base';
@@ -242,10 +244,13 @@ function LobbySummarySection({
 }) {
   if (items.length === 0) return null;
   const ta = isRTL ? 'right' : 'left';
+  const summaryTitleStyle = isRTL
+    ? [styles.summarySectionTitle, styles.summarySectionTitleRtl]
+    : styles.summarySectionTitle;
 
   return (
     <View testID="lobby-summary-section" style={styles.summarySection}>
-      <Text style={[styles.summarySectionTitle, { textAlign: ta }]}>{t('lobby.summaryTitle')}</Text>
+      <Text style={[summaryTitleStyle, { textAlign: ta }]}>{t('lobby.summaryTitle')}</Text>
       <View testID="lobby-summary-grid" style={styles.summaryGrid}>
         {items.map((item) => {
           const tone = getSummaryToneColors(item.tone);
@@ -608,9 +613,16 @@ export function LobbyEntry({
 }
 
 
-export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup }: { onOpenCelebrationMockup?: () => void } = {}) {
+export function LobbyScreen({
+  onOpenCelebrationMockup: _onOpenCelebrationMockup,
+  onStartLocalBotGame,
+}: {
+  onOpenCelebrationMockup?: () => void;
+  onStartLocalBotGame: (difficulty: 'easy' | 'full', settings: HostGameSettings) => void;
+}) {
   const { t, isRTL } = useLocale();
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const safeTop = getScreenSafeTop(insets.top);
   const {
     roomCode,
@@ -618,6 +630,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     currentTableVisibility,
     players,
     tables,
+    currentRoomTable,
     isHost,
     configureTable,
     startTableCountdown,
@@ -626,12 +639,11 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     clearError,
     toast,
     clearToast,
-    startBotGame,
     serverUrl,
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
   const isAndroidRtlSetup = Platform.OS === 'android' && isRTL;
-  const currentTable = tables.find((table) => table.roomCode === roomCode) ?? null;
+  const currentTable = currentRoomTable ?? tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
   const [showFractions, setShowFractions] = useState(true);
@@ -648,8 +660,6 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
   const [configSaved, setConfigSaved] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [manualWebInviteBase, setManualWebInviteBase] = useState('');
-  const [startingBot, setStartingBot] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(WEB_INVITE_BASE_STORAGE_KEY)
@@ -723,12 +733,16 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     });
   }, [currentInviteCode, inviteLink, inviteSuffix, roomCode, t]);
   const humanCount = players.filter((player) => !player.isBot).length;
+  const roomCapacity = currentTable?.maxParticipants ?? (isHost ? maxParticipants : DEFAULT_SUMMARY_MAX_PARTICIPANTS);
   const configured = (!isHost && !!roomCode) || configSaved || currentTable?.configuredDifficulty != null;
   const shouldRightAlignLeaveButton = Platform.OS === 'android' || (!configured && isRTL);
+  const lobbyShellWidth = Platform.OS === 'web'
+    ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, responsive.width)
+    : responsive.width;
   const setupPanelStyle = isRTL ? [styles.setupPanel, styles.setupPanelRtl] : styles.setupPanel;
   const setupLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
   const setupRowStyle = isAndroidRtlSetup ? [styles.row, styles.rowAndroidRtl] : styles.row;
-  const setupCountRowStyle = isAndroidRtlSetup ? [styles.countRow, styles.countRowAndroidRtl] : styles.countRow;
+  const setupCountRowStyle = styles.countRow;
   const setupChipWrapStyle = isAndroidRtlSetup ? [styles.chipWrap, styles.chipWrapAndroidRtl] : styles.chipWrap;
   const minuteTimerStepper = {
     key: 'min',
@@ -830,14 +844,26 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
     setConfigSaved(true);
   };
 
-  const autoStartFiredRef = useRef(false);
+  const autoStartFiredRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isHost || !configSaved) return;
-    if (humanCount < 2) return;
-    if (autoStartFiredRef.current) return;
-    autoStartFiredRef.current = true;
+    if (!isHost) return;
+    if (currentTable?.configuredDifficulty == null) return;
+    if (humanCount < 2 || humanCount !== roomCapacity) {
+      autoStartFiredRef.current = null;
+      return;
+    }
+    const autoStartKey = `${roomCode ?? 'room'}:${roomCapacity}:${humanCount}`;
+    if (autoStartFiredRef.current === autoStartKey) return;
+    autoStartFiredRef.current = autoStartKey;
     startTableCountdown();
-  }, [isHost, configSaved, humanCount, startTableCountdown]);
+  }, [
+    currentTable?.configuredDifficulty,
+    humanCount,
+    isHost,
+    roomCapacity,
+    roomCode,
+    startTableCountdown,
+  ]);
 
   const handleShareRoomCode = async () => {
     if (!shareRoomMessage) return;
@@ -863,19 +889,20 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
       style={styles.scroll}
       contentContainerStyle={[styles.container, { paddingTop: Math.max(safeTop + 12, 60) }]}
     >
-      <LanguageToggle />
-      <TouchableOpacity style={[styles.backBtn, shouldRightAlignLeaveButton ? styles.backBtnAndroid : null]} onPress={leaveRoom}>
-        <Text style={styles.backBtnText}>{t('lobby.leaveRoom')}</Text>
-      </TouchableOpacity>
-      <View style={styles.logoWrap}>
-        <SalindaPuzzleGameLogo width={260} />
-      </View>
-      <Text style={styles.title}>{configured ? t('lobby.waitingRoomTitle') : t('lobby.configureTitle')}</Text>
-      <Text style={styles.subtitle}>{configured ? t('lobby.waitingRoomHint') : t('lobby.configureHint')}</Text>
+      <View style={[styles.contentFrame, Platform.OS === 'web' ? { width: lobbyShellWidth } : null]}>
+        <LanguageToggle />
+        <TouchableOpacity style={[styles.backBtn, shouldRightAlignLeaveButton ? styles.backBtnAndroid : null]} onPress={leaveRoom}>
+          <Text style={styles.backBtnText}>{t('lobby.leaveRoom')}</Text>
+        </TouchableOpacity>
+        <View style={styles.logoWrap}>
+          <SalindaPuzzleGameLogo width={260} />
+        </View>
+        <Text style={styles.title}>{configured ? t('lobby.waitingRoomTitle') : t('lobby.configureTitle')}</Text>
+        <Text style={styles.subtitle}>{configured ? t('lobby.waitingRoomHint') : t('lobby.configureHint')}</Text>
 
-      {!configured && isHost && (
-        <View testID="lobby-config-panel" style={setupPanelStyle}>
-          <Text style={setupLabelStyle}>{t('start.wheel.numberRange')}</Text>
+        {!configured && isHost && (
+          <View testID="lobby-config-panel" style={setupPanelStyle}>
+          <Text testID="lobby-config-number-range-label" style={setupLabelStyle}>{t('start.wheel.numberRange')}</Text>
           <View testID="lobby-config-number-range-row" style={setupRowStyle}>
             <TouchableOpacity style={[styles.optionBtn, difficulty === 'full' && styles.optionBtnActive]} onPress={() => setDifficulty('full')}>
               <Text style={[styles.optionBtnText, difficulty === 'full' && styles.optionBtnTextActive]}>0-25</Text>
@@ -896,7 +923,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
           </View>
           <Text style={styles.hint}>{t('lobby.privateHint')}</Text>
 
-          <Text style={setupLabelStyle}>{t('lobby.maxParticipants')}</Text>
+          <Text testID="lobby-config-max-participants-label" style={setupLabelStyle}>{t('lobby.maxParticipants')}</Text>
           <View testID="lobby-config-max-participants-row" style={setupCountRowStyle}>
             {Array.from({ length: 3 }, (_, index) => index + 2).map((count) => (
               <TouchableOpacity key={count} style={[styles.countBtn, maxParticipants === count && styles.countBtnActive]} onPress={() => setMaxParticipants(count)}>
@@ -1010,11 +1037,11 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
           <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveConfiguration}>
             <Text style={styles.primaryBtnText}>{t('lobby.continueToRoom')}</Text>
           </TouchableOpacity>
-        </View>
-      )}
+          </View>
+        )}
 
-      {configured && (
-        <>
+        {configured && (
+          <>
           <View style={styles.codeBox}>
             <Text style={styles.codeLabel}>{t('lobby.roomCodeLabel')}</Text>
             <Text testID="room-code" style={styles.codeValue}>{roomCode}</Text>
@@ -1083,7 +1110,9 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
 
           <LobbySummarySection items={configuredSummaryItems} isRTL={isRTL} t={t} />
 
-          <Text style={styles.label}>{t('lobby.playersInRoom', { count: players.length })}</Text>
+          <Text testID="lobby-players-in-room-label" style={setupLabelStyle}>
+            {t('lobby.playersInRoom', { count: players.length, max: roomCapacity })}
+          </Text>
           {players.map((player) => (
             <View key={player.id} style={styles.playerRow}>
               <Text testID={player.isHost !== isHost ? 'opponent-name' : 'player-name'} style={styles.playerName}>{player.name}</Text>
@@ -1120,35 +1149,29 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
               </View>
               <TouchableOpacity
                 style={styles.secondaryPrimaryBtn}
-                onPress={async () => {
-                  setStartingBot(true);
-                  try {
-                    await startBotGame(difficulty, buildGameSettings());
-                  } finally {
-                    setStartingBot(false);
-                  }
-                }}
+                onPress={() => onStartLocalBotGame(difficulty, buildGameSettings())}
               >
-                {startingBot ? <ActivityIndicator color="#fff" /> : <Text style={styles.secondaryPrimaryBtnText}>{t('lobby.startBotGame')}</Text>}
+                <Text style={styles.secondaryPrimaryBtnText}>{t('lobby.startBotGame')}</Text>
               </TouchableOpacity>
             </View>
           )}
-        </>
-      )}
+          </>
+        )}
 
-      {error && error !== t('game.countdownAlreadyRunning') && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-      {error === t('game.countdownAlreadyRunning') && (
-        <View style={styles.countdownBanner}>
-          <SlindaCoin size={52} spin />
-          <Text style={styles.countdownBannerText}>
-            {t('lobby.gameStartsSoon')}
-          </Text>
-        </View>
-      )}
+        {error && error !== t('game.countdownAlreadyRunning') && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+        {error === t('game.countdownAlreadyRunning') && (
+          <View style={styles.countdownBanner}>
+            <SlindaCoin size={52} spin />
+            <Text style={styles.countdownBannerText}>
+              {t('lobby.gameStartsSoon')}
+            </Text>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -1156,6 +1179,7 @@ export function LobbyScreen({ onOpenCelebrationMockup: _onOpenCelebrationMockup 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: ROOT_BG },
   container: { padding: 24, paddingTop: 60, paddingBottom: 44, alignItems: 'center' },
+  contentFrame: { width: '100%', alignSelf: 'center' },
   langRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' },
   langLabel: { color: TEXT_MUTE, fontSize: 12 },
   langBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE },
@@ -1169,7 +1193,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 30, fontWeight: '800', color: ACTION_GOLD, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
   subtitle: { color: TEXT_DIM, fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'right' },
   label: { color: TEXT_MAIN, fontSize: 14, fontWeight: '600', alignSelf: 'stretch', marginTop: 16, marginBottom: 8 },
-  labelRtl: { textAlign: 'right' },
+  labelRtl: { textAlign: 'right', writingDirection: 'rtl' },
   setupPanel: { width: '100%' },
   setupPanelRtl: { alignItems: 'flex-end' },
   inputShell: { width: '100%', backgroundColor: ACTION_GOLD_DARK, borderRadius: 18, padding: 2, marginBottom: 8 },
@@ -1206,7 +1230,6 @@ const styles = StyleSheet.create({
   optionBtnText: { color: TEXT_DIM, fontWeight: '700' },
   optionBtnTextActive: { color: '#1a1207' },
   countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', justifyContent: 'center' },
-  countRowAndroidRtl: { flexDirection: 'row-reverse', justifyContent: 'flex-end' },
   countBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, alignItems: 'center', justifyContent: 'center' },
   countBtnActive: { backgroundColor: brand.gold },
   countBtnText: { color: TEXT_MAIN, fontWeight: '700', fontSize: 16 },
@@ -1252,7 +1275,8 @@ const styles = StyleSheet.create({
   secondaryPrimaryBtn: { backgroundColor: ACTION_AMBER, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, alignItems: 'center', width: '100%' },
   secondaryPrimaryBtnText: { color: '#F8FAFC', fontSize: 15, fontWeight: '700' },
   summarySection: { width: '100%', marginTop: 16, marginBottom: 4 },
-  summarySectionTitle: { color: TEXT_MAIN, fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  summarySectionTitle: { color: TEXT_MAIN, fontSize: 14, fontWeight: '700', marginBottom: 8, alignSelf: 'stretch' },
+  summarySectionTitleRtl: { writingDirection: 'rtl' },
   summaryGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   summaryCard: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 150, borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12 },
   summaryCardTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
