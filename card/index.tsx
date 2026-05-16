@@ -3266,38 +3266,8 @@ function gameReducer(
       ): CardType | null {
         return s.players[s.currentPlayerIndex]?.hand.find((c) => c.id === cardId)?.type ?? null;
       }
-      function buildBotActionNotification(s: GameState, a: BotAction): Notification | null {
-        // Generic bot narration bubbles are disabled — no "מהלך הבוט" bubbles
-        // during bot turns. Exceptions: the teaching beats that the vs-bot
-        // game uses to demo "possible results" and "mini cards", and the
-        // identical-card play (including wild-as-identical) which gets its
-        // own bubble so the player can see what the bot is doing.
-        const isBubbleKind =
-          a.kind === 'checkPossibleResults' ||
-          a.kind === 'useMiniCards' ||
-          a.kind === 'playIdentical';
-        if (!isBubbleKind) return null;
-        if (s.guidanceEnabled === false) return null;
-        const name = s.players[s.currentPlayerIndex]?.name ?? tf('botOffline.botName');
-        const base = {
-          id: `bot-step-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          title: tf('botOffline.explain.title'),
-          style: 'info' as const,
-          body: '',
-          autoDismissMs: 2400,
-        };
-        if (a.kind === 'checkPossibleResults') {
-          return { ...base, emoji: SEARCH_EMOJI, message: tf('botOffline.explain.checkPossibleResults', { name }) };
-        }
-        if (a.kind === 'useMiniCards') {
-          return { ...base, emoji: CARDS_EMOJI, message: tf('botOffline.explain.useMiniCards', { name }) };
-        }
-        // playIdentical — pick wild vs normal copy by the card type.
-        const card = s.players[s.currentPlayerIndex]?.hand.find((c) => c.id === a.cardId);
-        if (card?.type === 'wild') {
-          return { ...base, emoji: '', message: tf('botOffline.explain.useIdenticalWild', { name }) };
-        }
-        return { ...base, emoji: REPEAT_EMOJI, message: tf('botOffline.explain.useIdentical', { name }) };
+      function buildBotActionNotification(_s: GameState, _a: BotAction): Notification | null {
+        return null;
       }
       function botActionCandidateCardId(a: BotAction): string | null {
         switch (a.kind) {
@@ -5264,6 +5234,8 @@ function DrawPile() {
   const canDraw =
     (state.phase === 'pre-roll' || state.phase === 'building' || state.phase === 'solved') &&
     !state.hasPlayedCards &&
+    !state.hasDrawnCard &&
+    (state.players[state.currentPlayerIndex]?.hand?.length ?? 0) < OVERFLOW_SWAP_THRESHOLD &&
     state.pendingFractionTarget === null;
   const count = state.drawPile.length;
   const layers = Math.min(count, 4);
@@ -17109,7 +17081,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         const showFallback = totalBtns === 0 && canUseActiveTurnUi && (pr||bl||so) && !state.isTutorial && !actionButtonsLocked;
         const barPaddingBottom = Math.max(24, safe.insets.bottom + 20);
         const BOTTOM_BAR_HEIGHT = 180;
-        const drawVisible = canUseActiveTurnUi && shouldShowDrawForfeitButton(state, canRoll);
+        const cpHandLen = state.players[state.currentPlayerIndex]?.hand?.length ?? 0;
+        const drawVisible = canUseActiveTurnUi && shouldShowDrawForfeitButton(state, canRoll) && cpHandLen < OVERFLOW_SWAP_THRESHOLD;
         const showSolvedRow = so && !state.hasPlayedCards;
         const hasStaged = showSolvedRow && state.stagedCards.length > 0;
         const showBackToEquation =
