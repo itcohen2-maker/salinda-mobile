@@ -16141,14 +16141,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // ?? Contextual onboarding triggers ??
   const onbBlocked = !!state.identicalAlert || state.pendingFractionTarget !== null;
 
-  // בנה תרגיל — רק אחרי הטלת קוביות (שלב building עם קוביות)
+  // בנה תרגיל — רק אחרי הטלת קוביות (שלב building עם קוביות), רק בתור השחקן
   useEffect(() => {
-    if (state.isTutorial) return; // tutorial has its own guidance system
+    if (state.isTutorial) return;
+    if (isBotTurnAny) return;
     if (!midGameHintsUnlocked) return;
     if (!guidanceEnabledRef.current || !tutLoaded || onbBlocked) return;
     if (state.phase !== 'building' || !state.dice) return;
     showOnb('onb_build_equation', ABACUS_EMOJI, t('onb.buildEquation.title'), t('onb.buildEquation.body'));
-  }, [state.isTutorial, midGameHintsUnlocked, tutLoaded, onbBlocked, state.phase, state.dice, showOnb, t]);
+  }, [state.isTutorial, isBotTurnAny, midGameHintsUnlocked, tutLoaded, onbBlocked, state.phase, state.dice, showOnb, t]);
 
   // מיני קלפים — רק בפעם הראשונה שהרצועה זמינה (לפי הגדרות המשחק)
   useEffect(() => {
@@ -16161,18 +16162,20 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     miniStripEverShownRef.current = true;
   }, [midGameHintsUnlocked, tutLoaded, onbBlocked, state.showPossibleResults, state.validTargets.length, state.phase, state.hasPlayedCards]);
 
-  // 7. First discard — after cards are discarded
+  // 7. First discard — after cards are discarded, only on player's own turn
   useEffect(() => {
     if (state.isTutorial) return;
+    if (isBotTurnAny) return;
     if (!guidanceEnabledRef.current || !tutLoaded || onbBlocked) return;
     if (state.lastDiscardCount > 0) {
       showOnb('onb_first_discard', CELEBRATION_EMOJI, t('onb.firstDiscard.title'), t('onb.firstDiscard.body'));
     }
-  }, [state.isTutorial, tutLoaded, onbBlocked, state.lastDiscardCount, t]);
+  }, [state.isTutorial, isBotTurnAny, tutLoaded, onbBlocked, state.lastDiscardCount, t]);
 
-  // 8. Choose cards — first time entering solved phase (בחר קלפים שסכומם שווה לתוצאה)
+  // 8. Choose cards — first time entering solved phase, only on player's own turn
   useEffect(() => {
     if (state.isTutorial) return;
+    if (isBotTurnAny) return;
     if (!guidanceEnabledRef.current || !tutLoaded || onbBlocked) return;
     if (state.phase === 'solved' && state.equationResult !== null && !state.hasPlayedCards) {
       showOnb(
@@ -16182,7 +16185,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         t('onb.chooseCardsAfterConfirm.body'),
       );
     }
-  }, [state.isTutorial, tutLoaded, onbBlocked, state.phase, state.equationResult, state.hasPlayedCards, t]);
+  }, [state.isTutorial, isBotTurnAny, tutLoaded, onbBlocked, state.phase, state.equationResult, state.hasPlayedCards, t]);
 
   // G1. Fraction attack — defender enters pre-roll with pendingFractionTarget
   // הודעות שבר מוצגות בבועות NotificationZone בלבד (ללא וילון תחתון).
@@ -18435,6 +18438,7 @@ function NotificationZone() {
         opacity: fadeOpacity,
         transform:[{translateY: entryTranslateY}],
         justifyContent: isOpeningDrawNotif ? undefined : 'flex-end',
+        alignItems: 'center',
       }} pointerEvents="box-none">
         <View style={[alertBubbleStyle.box, {
           flexDirection: 'column',
