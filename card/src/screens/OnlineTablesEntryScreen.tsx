@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Modal,
   ScrollView,
   StyleSheet,
@@ -9,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, syncTutorialCoins } from '../hooks/useAuth';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import type { LobbyTableSummary } from '../../shared/types';
 import { useLocale } from '../i18n/LocaleContext';
@@ -145,6 +146,10 @@ export function OnlineTablesEntryScreen({
 
   const hasPartialInviteCode = codeJoinInviteCode.length > 0 && codeJoinInviteCode.length < 6;
 
+  const handleExitApp = () => {
+    void syncTutorialCoins().then(() => BackHandler.exitApp());
+  };
+
   return (
     <>
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
@@ -166,6 +171,7 @@ export function OnlineTablesEntryScreen({
         onBack={onBackToChoice}
         onCreateTable={handleCreateTable}
         onEnterCode={() => setCodeJoinOpen(true)}
+        onExitApp={handleExitApp}
         onJoinTable={handleJoinTable}
         onOpenRules={() => setRulesOpen(true)}
         onPlayerNameChange={setPlayerName}

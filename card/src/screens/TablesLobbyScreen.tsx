@@ -30,6 +30,7 @@ interface TablesLobbyScreenProps {
   onBack?: () => void;
   onCreateTable: () => void;
   onEnterCode?: () => void;
+  onExitApp?: () => void;
   onJoinTable: (table: LobbyTableSummary) => void;
   onOpenRules: () => void;
   onPlayerNameChange: (value: string) => void;
@@ -592,6 +593,7 @@ export default function TablesLobbyScreen({
   onBack,
   onCreateTable,
   onEnterCode,
+  onExitApp,
   onJoinTable,
   onOpenRules: _onOpenRules,
   onPlayerNameChange,
@@ -606,6 +608,7 @@ export default function TablesLobbyScreen({
   const responsive = useResponsiveLayout();
   const { width } = responsive;
   const [filter, setFilter] = useState<LobbyFilter>('all');
+  const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
 
   const visibleTables = useMemo(() => applyFilter(tables, filter), [filter, tables]);
   const displayItems = useMemo(() => {
@@ -662,6 +665,21 @@ export default function TablesLobbyScreen({
           activeOpacity={0.85}
         >
           <Text style={styles.floatingBackBtnText}>{isRTL ? '>' : '<'}</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {onExitApp && Platform.OS !== 'ios' ? (
+        <TouchableOpacity
+          testID="lobby-exit-app"
+          style={[
+            styles.floatingBackBtn,
+            Platform.OS === 'android' ? styles.floatingExitBtnAndroid : styles.floatingExitBtnDefault,
+            { top: Math.max(safeTop + 8, 12) },
+          ]}
+          onPress={() => setExitConfirmVisible(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.floatingBackBtnText}>✕</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -832,6 +850,39 @@ export default function TablesLobbyScreen({
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        visible={exitConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExitConfirmVisible(false)}
+      >
+        <View style={styles.exitModalBackdrop}>
+          <View style={styles.exitModalCard}>
+            <Text style={styles.exitModalTitle}>{t('lobby.exitAppConfirmTitle')}</Text>
+            <Text style={styles.exitModalBody}>{t('lobby.exitAppConfirmBody')}</Text>
+            <View style={styles.exitModalButtons}>
+              <TouchableOpacity
+                style={[styles.exitModalBtn, styles.exitModalBtnConfirm]}
+                onPress={() => {
+                  setExitConfirmVisible(false);
+                  onExitApp?.();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.exitModalBtnConfirmText}>{t('lobby.exitApp')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exitModalBtn, styles.exitModalBtnCancel]}
+                onPress={() => setExitConfirmVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.exitModalBtnCancelText}>{t('ui.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -870,6 +921,69 @@ const styles = StyleSheet.create({
   },
   floatingBackBtnAndroid: {
     right: 12,
+  },
+  floatingExitBtnDefault: {
+    right: 12,
+  },
+  floatingExitBtnAndroid: {
+    left: 12,
+  },
+  exitModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exitModalCard: {
+    backgroundColor: '#1a1510',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(245,210,122,0.3)',
+    padding: 24,
+    marginHorizontal: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  exitModalTitle: {
+    color: GOLD,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  exitModalBody: {
+    color: TEXT,
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  exitModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  exitModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  exitModalBtnConfirm: {
+    backgroundColor: '#c0392b',
+  },
+  exitModalBtnConfirmText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  exitModalBtnCancel: {
+    backgroundColor: 'rgba(245,210,122,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,210,122,0.3)',
+  },
+  exitModalBtnCancelText: {
+    color: GOLD,
+    fontWeight: '600',
+    fontSize: 15,
   },
   floatingBackBtnText: {
     color: TEXT,
