@@ -147,8 +147,8 @@ function usesDefaultFractions(table: LobbyTableSummary): boolean {
 function formatFractions(table: LobbyTableSummary, translate: TranslateFn): string {
   if (!table.showFractions) return translate('lobby.noFractions');
   const kinds = normalizeFractionKinds(table.fractionKinds);
-  if (kinds.length === 0 || usesDefaultFractions(table)) return translate('lobby.withFractions');
-  return `${translate('lobby.withFractions')}: ${kinds.join(', ')}`;
+  if (kinds.length === 0 || usesDefaultFractions(table)) return translate('lobby.fractionsParticipating');
+  return `${translate('lobby.fractionsParticipating')}: ${kinds.join(', ')}`;
 }
 
 function getTableInfoRows(
@@ -186,13 +186,11 @@ function getTableInfoRows(
     });
   }
 
-  if (table.showFractions === false || (table.showFractions === true && !usesDefaultFractions(table))) {
-    rows.push({
-      label: translate('lobby.fractions'),
-      value: formatFractions(table, translate),
-      accent: table.showFractions,
-    });
-  }
+  rows.push({
+    label: translate('lobby.fractions'),
+    value: formatFractions(table, translate),
+    accent: table.showFractions ?? undefined,
+  });
 
   if (table.showPossibleResults === false) {
     rows.push({

@@ -2654,10 +2654,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       ...[...distractors].map((v, i) => ({ id: `tut-l6w-d${i}-${ts}`, type: 'number' as const, value: v })),
     ].slice(0, 7);
     const botHand = playerHand.map((c) => ({ ...c, id: `bot-${c.id}` }));
-    const d1 = Math.ceil(target / 2);
-    const d2 = target - d1;
-    const dice = { die1: d1, die2: d2, die3: d1 };
-    // Reset equation builder + force solved state with clean hand
+    // Use 3 dice that sum to target — no '?' slot left empty
+    const d1 = Math.max(1, Math.floor(target / 3));
+    const d2 = Math.max(1, Math.floor(target / 3));
+    const d3 = target - d1 - d2;
+    const dice = { die1: d1, die2: d2, die3: d3 };
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
     gameDispatch({ type: 'CLEAR_EQ_HAND' });
     void wildNeeded;
@@ -2665,7 +2666,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       type: 'TUTORIAL_FORCE_SOLVED',
       equationResult: target,
       dice,
-      equationDisplay: `${d1} + ${d2} = ${target}`,
+      equationDisplay: `${d1} + ${d2} + ${d3} = ${target}`,
       playerHand,
       botHand,
     });
@@ -3746,7 +3747,28 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           engine.stepIndex === 0 &&
           !parensMockupApproved
         ) {
+          // Skip should dismiss the explanatory mockup and continue immediately,
+          // not wait for a separate CTA press that leaves the lesson stuck.
           setParensMockupPendingAdvance(true);
+          setParensMockupApproved(true);
+          break;
+        }
+        if (
+          engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX &&
+          engine.stepIndex === 0 &&
+          !identicalMockupApproved
+        ) {
+          setIdenticalMockupPendingAdvance(true);
+          setIdenticalMockupApproved(true);
+          break;
+        }
+        if (
+          engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
+          engine.stepIndex === 1 &&
+          !l11MockupApproved
+        ) {
+          setL11MockupPendingAdvance(true);
+          setL11MockupApproved(true);
           break;
         }
         dispatchEngine({ type: 'BOT_DEMO_DONE' });
@@ -3760,7 +3782,16 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       case 'all-done': onExit(); break;
       default: break;
     }
-  }, [engine.phase, engine.lessonIndex, engine.stepIndex, onExit, parensMockupApproved, showWelcomeBubble]);
+  }, [
+    engine.phase,
+    engine.lessonIndex,
+    engine.stepIndex,
+    identicalMockupApproved,
+    l11MockupApproved,
+    onExit,
+    parensMockupApproved,
+    showWelcomeBubble,
+  ]);
 
   useEffect(() => tutorialBus.subscribeRequestBack(handleTutorialBack), [handleTutorialBack]);
   useEffect(() => tutorialBus.subscribeRequestSkip(skipForward), [skipForward]);
@@ -5315,7 +5346,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                     android: { elevation: 10 },
                   }),
                 }}>
-                  <Text style={{ fontSize: 28, color: '#78350F', fontWeight: '900' }}>{'ג†'}</Text>
+                  <Text style={{ fontSize: 28, color: '#78350F', fontWeight: '900' }}>{'→'}</Text>
                 </View>
               </Animated.View>
 
