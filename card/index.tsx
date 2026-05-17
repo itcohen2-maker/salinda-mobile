@@ -19007,6 +19007,7 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
   const lastPlayerIndex =
     (state.currentPlayerIndex - 1 + state.players.length) % Math.max(state.players.length, 1);
+  const amILastPlayer = myPlayerIndex === lastPlayerIndex;
   const ONLINE_WAIT_BUBBLE_COLORS = ['#14532d', '#1d4ed8', '#7c2d12', '#4b5563'] as const;
   const ONLINE_WAIT_BUBBLE_BORDERS = [
     'rgba(74,222,128,0.7)',
@@ -19092,7 +19093,7 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           currentTurnName={currentTurnName}
           waitingStatusText={waitingStatusText}
           onBack={() => setViewMode('game')}
-          lastMoveMessage={lastMoveForWaiting}
+          lastMoveMessage={amILastPlayer ? lastMoveForWaiting : null}
           pendingFractionTarget={state.pendingFractionTarget}
           lastMoveBubbleBg={lastMoveBubbleBg}
           lastMoveBubbleBorder={lastMoveBubbleBorder}
