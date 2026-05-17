@@ -5356,7 +5356,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 <View style={{ marginRight: 90, width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 13, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#F59E0B' }} />
                 <View style={{ width: '100%', backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 2.5, borderRadius: 18, paddingHorizontal: 20, paddingVertical: 16, ...Platform.select({ ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 8 } }) }}>
                   <Text style={{ color: '#78350F', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
-                    {locale === 'he' ? 'זאת ערימת הקלפים' : 'This is the card pile'}
+                    {locale === 'he' ? 'זאת ערימת הקלפים' : 'This is the card deck'}
                   </Text>
                 </View>
               </View>
