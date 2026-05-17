@@ -4,12 +4,13 @@
 
 ## Summary
 
-Five focused fixes to the online multiplayer experience:
+Six focused fixes to the online multiplayer experience:
 1. Personal turn-end messages shown only to the player who played
 2. One-time modal (not toast) when a player quits mid-game
 3. Eliminated player chip turns red with "מחוץ למשחק" label
 4. Excellence meter correctness verified (no code change needed)
 5. Missing coin sound in `CoinAwardCelebrationCard`
+6. "Play vs bot" from online lobby navigates to local game setup screen
 
 ---
 
@@ -178,9 +179,48 @@ This plays the coin sound immediately when the card appears, independent of
 
 ---
 
+---
+
+## Fix 6 — "Play vs Bot" from Online Lobby Navigates to Local Setup Screen
+
+### Problem
+
+`handleStartLocalBotGame` (`index.tsx:19703`) immediately dispatches `START_GAME` when the
+user clicks "play vs bot" from the online table lobby. The user has no chance to configure
+number range, fractions, or advanced settings. The local game setup screen (`StartScreen`,
+rendered at `index.tsx:20118` when `playMode === 'local' && state.phase === 'setup'`) already
+has all the controls needed.
+
+### Fix
+
+Replace the immediate `START_GAME` dispatch with navigation to `StartScreen`:
+
+```ts
+const handleStartLocalBotGame = useCallback(() => {
+  mp?.leaveRoom();
+  dispatch({ type: 'RESET_GAME' });          // ensures state.phase === 'setup'
+  setSelectedLocalGameMode('vs-bot');         // locks mode to vs-bot in StartScreen
+  setPlayMode('local');                       // renders StartScreen via line 20118
+}, [dispatch, mp, setPlayMode, setSelectedLocalGameMode]);
+```
+
+`StartScreen` is rendered with `forcedGameMode="vs-bot"` and `lockGameMode` (already the
+pattern at line 20118), so the user sees the full settings screen and clicks "בואו נשחק"
+to start.
+
+The `onStartLocalBotGame` prop passed through `GameRouter` → `LobbyScreens` no longer
+needs to carry `difficulty` or `settings` — the `StartScreen` collects them. Update the
+prop signature accordingly.
+
+**Files changed:** `index.tsx` (simplify `handleStartLocalBotGame`),
+`src/screens/OnlineTableScreens.tsx` (update `onStartLocalBotGame` call-site — remove
+difficulty/settings args if no longer needed)
+
+---
+
 ## Scope
 
-**In scope:** All five fixes above.
+**In scope:** All six fixes above.
 
 **Out of scope:** Localization of "מחוץ למשחק" to English (the chip is Hebrew-only UI,
 consistent with the rest of the HUD); changes to the server; new socket events.
