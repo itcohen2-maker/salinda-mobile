@@ -2598,9 +2598,17 @@ function gameReducer(
       if (usedAllDice && st.rolledTripleThisTurn) {
         stNs = { ...stNs, lastCourageRewardReason: tf('courage.reason.doubleBonus') };
       }
-      // Track consecutive success streak for human (non-bot) players
-      if (!stNs.botConfig?.playerIds.includes(stCp.id)) {
-        stNs = { ...stNs, courageDiscardSuccessStreak: (st.courageDiscardSuccessStreak ?? 0) + 1 };
+      // Track consecutive success streak for human (non-bot) players.
+      // Apply the streak reward BEFORE checkWin so it's captured in game-over
+      // state (endTurnLogic is skipped on early-return game-over).
+      const isHumanDiscard = !stNs.botConfig?.playerIds.includes(stCp.id);
+      const newStreak = isHumanDiscard ? (st.courageDiscardSuccessStreak ?? 0) + 1 : (st.courageDiscardSuccessStreak ?? 0);
+      if (isHumanDiscard) {
+        stNs = { ...stNs, courageDiscardSuccessStreak: newStreak };
+      }
+      if (isHumanDiscard && stNs.hasPlayedCards && newStreak >= 2) {
+        stNs = applyCourageStepReward(stNs, tf('courage.reason.consecutiveSuccess'));
+        stNs = { ...stNs, courageDiscardSuccessStreak: 0 };
       }
       stNs = checkWin(stNs);
       if (stNs.phase === 'game-over') return stNs;
