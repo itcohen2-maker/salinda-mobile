@@ -13968,12 +13968,18 @@ function TurnTransition() {
             <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'center',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
               {!state.isTutorial && displayPlayers.map((p) => {
                 const isCurrent = cp?.id === p.id;
+                const isEliminated = (p as any).isEliminated === true;
                 const shortName = (p.name || 'שחקן').length > 5 ? (p.name || 'שחקן').slice(0, 4) + '…' : (p.name || 'שחקן');
-                const btnText = isCurrent ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים` : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
+                const chipColor = isEliminated ? 'red' : (isCurrent ? 'green' : 'blue');
+                const btnText = isEliminated
+                  ? `${shortName}\nמחוץ למשחק`
+                  : isCurrent
+                    ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים`
+                    : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
                 const btn = (
                   <LulosButton
                     text={btnText}
-                    color={isCurrent ? 'green' : 'blue'}
+                    color={chipColor}
                     width={turnPlayerChipWidth}
                     height={turnPlayerChipHeight}
                     fontSize={turnPlayerChipFontSize}
@@ -13995,7 +14001,7 @@ function TurnTransition() {
                   );
                 }
                 return (
-                  <View key={p.id} style={{ opacity: 0.34 }}>
+                  <View key={p.id}>
                     {btn}
                   </View>
                 );
@@ -14074,12 +14080,18 @@ function TurnTransition() {
           <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'center',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
             {!state.isTutorial && displayPlayers.map((p) => {
               const isCurrent = cp?.id === p.id;
+              const isEliminated = (p as any).isEliminated === true;
               const shortName = (p.name || 'שחקן').length > 5 ? (p.name || 'שחקן').slice(0, 4) + '…' : (p.name || 'שחקן');
-              const btnText = isCurrent ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים` : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
+              const chipColor = isEliminated ? 'red' : (isCurrent ? 'green' : 'blue');
+              const btnText = isEliminated
+                ? `${shortName}\nמחוץ למשחק`
+                : isCurrent
+                  ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים`
+                  : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
               const btn = (
                 <LulosButton
                   text={btnText}
-                  color={isCurrent ? 'green' : 'blue'}
+                  color={chipColor}
                   width={turnPlayerChipWidth}
                   height={turnPlayerChipHeight}
                   fontSize={turnPlayerChipFontSize}
@@ -14101,7 +14113,7 @@ function TurnTransition() {
                 );
               }
               return (
-                <View key={p.id} style={{ opacity: 0.34 }}>
+                <View key={p.id}>
                   {btn}
                 </View>
               );
