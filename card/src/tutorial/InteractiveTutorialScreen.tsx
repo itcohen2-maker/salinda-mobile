@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getWebGameLayout } from '../theme/webLayout';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
+import { WebGameScreenFrame } from '../components/layout/WebGameScreenFrame';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
@@ -3800,8 +3801,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return null;
   }
 
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }}>
+  const tutorialOverlay = (
+    <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
       {/* Single-tone tutorial coverage ג€” one opaque color (#0a1628) painted
           as contiguous bands around the lesson's focal "window". All bands
           bleed past the screen edges (top:-60, sides:-10, bottom:-60) so
@@ -5680,8 +5681,42 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               <Text style={{ color: '#FEF3C7', fontSize: scaleTutorialWelcome(28, 14), fontWeight: '900', textAlign: 'center', lineHeight: scaleTutorialWelcome(32, 16) }}>
                 {t('tutorial.welcome.title')}
               </Text>
-              <Text style={{ color: '#FDE68A', fontSize: scaleTutorialWelcome(16, 10), fontWeight: '800', textAlign: 'center', lineHeight: scaleTutorialWelcome(23, 12) }}>
+              <Text
+                style={{
+                  color: '#FDE68A',
+                  fontSize: scaleTutorialWelcome(26, 13),
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  lineHeight: scaleTutorialWelcome(30, 15),
+                }}
+              >
                 {t('tutorial.welcome.headline')}
+              </Text>
+              <Text
+                style={{
+                  color: '#FDE68A',
+                  fontSize: scaleTutorialWelcome(18, 10),
+                  fontWeight: '800',
+                  textAlign: 'center',
+                  lineHeight: scaleTutorialWelcome(22, 12),
+                  opacity: 0.96,
+                  marginTop: scaleTutorialWelcome(-2, -1),
+                }}
+              >
+                {t('tutorial.welcome.headlineSub')}
+              </Text>
+              <Text
+                style={{
+                  color: '#FDE68A',
+                  fontSize: scaleTutorialWelcome(26, 13),
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  lineHeight: scaleTutorialWelcome(30, 15),
+                  marginTop: scaleTutorialWelcome(4, 2),
+                  marginBottom: scaleTutorialWelcome(4, 2),
+                }}
+              >
+                {t('tutorial.welcome.tagline')}
               </Text>
               <Text
                 style={{
@@ -5694,9 +5729,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   marginBottom: scaleTutorialWelcome(4, 2),
                 }}
               >
-                {t('tutorial.welcome.tagline')}
-              </Text>
-              <Text style={{ color: '#FDE68A', fontSize: scaleTutorialWelcome(13, 9), fontWeight: '600', textAlign: 'center', lineHeight: scaleTutorialWelcome(20, 11), opacity: 0.92 }}>
                 {t('tutorial.welcome.body')}
               </Text>
             </View>
@@ -6027,4 +6059,36 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       ) : null}
     </View>
   );
+
+  const useFullShellWebOverlay =
+    Platform.OS === 'web' &&
+    (
+      showWelcomeBubble ||
+      engine.phase === 'core-complete' ||
+      engine.phase === 'post-signs-choice' ||
+      engine.phase === 'advanced-complete' ||
+      engine.phase === 'all-done'
+    );
+
+  if (useFullShellWebOverlay) {
+    return tutorialOverlay;
+  }
+
+  if (Platform.OS === 'web' && webTutorialLayout) {
+    return (
+      <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <WebGameScreenFrame
+          width={webTutorialLayout.playfieldWidth}
+          frameHeight={webTutorialLayout.frameHeight}
+          contentScale={webTutorialLayout.contentScale}
+          outerStyle={{ backgroundColor: 'transparent' }}
+          innerStyle={{ backgroundColor: 'transparent' }}
+        >
+          {tutorialOverlay}
+        </WebGameScreenFrame>
+      </View>
+    );
+  }
+
+  return tutorialOverlay;
 }
