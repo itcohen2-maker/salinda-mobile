@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Platform,
   StyleProp,
@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { SlindaCoin } from '../../components/SlindaCoin';
+import { playSfx } from '../../src/audio/sfx';
 
 type Props = {
   amount: number;
@@ -45,6 +46,9 @@ export function CoinAwardCelebrationCard({
   const mini = size === 'mini';
   const compact = mini || inline || height < 860 || width < 430;
   const tight = mini || inline || height < 760 || width < 390;
+  useEffect(() => {
+    void playSfx('meterCelebrateCoins');
+  }, []);
   const coinOrbSize = mini ? 30 : inline ? (tight ? 92 : 106) : tight ? 112 : compact ? 126 : 142;
   const coinSize = mini ? 28 : inline ? (tight ? 54 : 64) : tight ? 68 : compact ? 78 : 90;
   const amountText = amount > 0 ? `+${amount}` : '0';
