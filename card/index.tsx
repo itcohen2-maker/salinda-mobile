@@ -16332,7 +16332,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
   // Identical card arrow hint — once per game only (not every turn).
   useEffect(() => {
-    if (!guidanceEnabledRef.current || !tutLoaded) return;
+    if (!guidanceEnabledRef.current || !tutLoaded || state.isTutorial) return;
     if (_identArrowShownForGame === identicalGuidanceGameKey) return;
     if (hasIdentical && !identArrowVisible && identArrowShownForTurn.current !== notificationTurnKey) {
       _identArrowShownForGame = identicalGuidanceGameKey;
@@ -16355,7 +16355,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       identArrowLoop.current?.stop();
       setIdentArrowVisible(false);
     }
-  }, [hasIdentical, tutLoaded, identArrowVisible, notificationTurnKey, identArrowSeen, identicalGuidanceGameKey]);
+  }, [hasIdentical, tutLoaded, identArrowVisible, notificationTurnKey, identArrowSeen, identicalGuidanceGameKey, state.isTutorial]);
 
   const NO_IDENTICAL_HINT_DELAY_MS = 1400;
 
