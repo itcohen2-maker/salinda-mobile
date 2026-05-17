@@ -6151,9 +6151,9 @@ const dcS = StyleSheet.create({
   pupil: { width: 4.4, height: 4.4, borderRadius: 2.2, backgroundColor: '#333' },
 });
 
-// ?? RoamingCoins — Slinda coins rolling in the background ??
+// ?? RoamingCoins — Slinda coins drifting while spinning upright on-axis ??
 // Uses Animated.View + Image (not Animated.Image) for reliable native-driver
-// rotation. combinedY is stored in a ref so it's stable across re-renders.
+// transforms. combinedY is stored in a ref so it's stable across re-renders.
 const COIN_CONFIGS = [
   { driftBase: 17000, startX: SCREEN_W_DICE * 0.12, startY: SCREEN_H_DICE * 0.08, spinMs: 2200 },
   { driftBase: 21000, startX: SCREEN_W_DICE * 0.78, startY: SCREEN_H_DICE * 0.28, spinMs: 2800 },
@@ -6169,7 +6169,7 @@ const CoinCharacter = React.memo(({ config }: { config: typeof COIN_CONFIGS[0] }
   const coinOpacity = useRef(new Animated.Value(0.6)).current;
   // combinedY created once so the animated node is stable across re-renders
   const combinedY   = useRef(Animated.add(driftY, bobY)).current;
-  const rotate      = useRef(
+  const rotateY     = useRef(
     spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] })
   ).current;
 
@@ -6202,8 +6202,14 @@ const CoinCharacter = React.memo(({ config }: { config: typeof COIN_CONFIGS[0] }
       transform: [{ translateX: driftX }, { translateY: combinedY as any }],
     }}>
       <View style={ccS.shadow} />
-      {/* Animated.View wrapper handles rotation reliably on all platforms */}
-      <Animated.View style={{ width: DICE_BODY, height: DICE_BODY, transform: [{ rotate }] }}>
+      {/* Keep the coin upright and spin it on its own axis instead of rolling flat. */}
+      <Animated.View
+        style={{
+          width: DICE_BODY,
+          height: DICE_BODY,
+          transform: [{ perspective: 900 }, { rotateY }],
+        }}
+      >
         <Image
           source={require('./assets/slinda_coin_nobg.png')}
           style={{ width: DICE_BODY, height: DICE_BODY }}
@@ -10197,6 +10203,36 @@ function StartScreen({
     if (has('x') && has('÷') && !has('+') && !has('-')) return 'mulDiv';
     return 'plusMinus';
   }, [enabledOperators]);
+  const rangeSummaryLabel = numberRange === 'easy' ? '0-12' : '0-25';
+  const operatorSummaryLabel = operatorPreset === 'all'
+    ? t('start.advancedSetup.operators.all.label')
+    : operatorPreset === 'mulDiv'
+      ? t('start.advancedSetup.operators.mulDiv.label')
+      : t('start.advancedSetup.operators.plusMinus.label');
+  const operatorBlockDescriptionKey = operatorPreset === 'all'
+    ? 'start.advancedSetup.operators.all.help'
+    : operatorPreset === 'mulDiv'
+      ? 'start.advancedSetup.operators.mulDiv.help'
+      : 'start.advancedSetup.operators.plusMinus.help';
+  const fractionSummaryLabel = !fractions
+    ? t('lobby.noFractions')
+    : fractionKinds.length === ALL_FRACTION_KINDS.length
+      ? t('lobby.withFractions')
+      : fractionKinds.join(' | ');
+  const timerSummaryLabel = timer === 'custom'
+    ? `${Math.floor(customTimerSeconds / 60)}:${String(customTimerSeconds % 60).padStart(2, '0')}`
+    : timerWheelOptions.find((option) => option.key === timer)?.label ?? t('lobby.off');
+  const advancedSummaryChips = [
+    { label: t('start.wheel.numberRange'), value: rangeSummaryLabel, colors: ['rgba(59,130,246,0.98)', 'rgba(34,211,238,0.98)'] as const },
+    { label: t('lobby.fractions'), value: fractionSummaryLabel, colors: ['rgba(96,165,250,0.98)', 'rgba(129,140,248,0.98)'] as const },
+    { label: t('start.advancedSetup.operatorsTitle'), value: operatorSummaryLabel, colors: ['rgba(236,72,153,0.98)', 'rgba(168,85,247,0.98)'] as const },
+    { label: t('start.wheel.timerRow'), value: timerSummaryLabel, colors: ['rgba(239,68,68,0.98)', 'rgba(251,146,60,0.98)'] as const },
+  ];
+  const advancedEntryPreviewChips = [
+    { label: t('start.wheel.numberRange'), value: rangeSummaryLabel, colors: ['rgba(59,130,246,0.98)', 'rgba(34,211,238,0.98)'] as const },
+    { label: t('lobby.fractions'), value: fractionSummaryLabel, colors: ['rgba(96,165,250,0.98)', 'rgba(129,140,248,0.98)'] as const },
+    { label: t('start.advancedSetup.operatorsTitle'), value: operatorSummaryLabel, colors: ['rgba(236,72,153,0.98)', 'rgba(168,85,247,0.98)'] as const },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -11079,30 +11115,25 @@ function StartScreen({
           >
             <View
               style={{
-                flexDirection: responsive.isSingleColumn ? 'column' : (isRTL ? 'row-reverse' : 'row'),
-                alignItems: responsive.isSingleColumn ? 'stretch' : 'center',
-                justifyContent: 'space-between',
+                alignItems: 'stretch',
                 gap: 10,
               }}
             >
-              <View style={{ flex: responsive.isSingleColumn ? 0 : 1, minWidth: 0 }}>
-                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
-                  <Text
-                    style={{
-                      color: '#FFFFFF',
-                      fontSize: 20,
-                      fontWeight: '900',
-                      textShadowColor: 'rgba(0,0,0,0.35)',
-                      textShadowOffset: { width: 0, height: 1 },
-                      textShadowRadius: 3,
-                      flex: 1,
-                      textAlign: isRTL ? 'right' : 'left',
-                      writingDirection: isRTL ? 'rtl' : 'ltr',
-                    }}
-                  >
-                    {t('start.advancedSetup.entryTitle')}
-                  </Text>
-                </View>
+              <View style={{ alignItems: 'center', paddingHorizontal: 8 }}>
+                <Text
+                  style={{
+                    color: '#FFFFFF',
+                    fontSize: 20,
+                    fontWeight: '900',
+                    textShadowColor: 'rgba(0,0,0,0.35)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 3,
+                    textAlign: 'center',
+                    writingDirection: isRTL ? 'rtl' : 'ltr',
+                  }}
+                >
+                  {t('start.advancedSetup.entryTitle')}
+                </Text>
                 <Text
                   style={{
                     color: 'rgba(254,249,195,0.96)',
@@ -11110,7 +11141,7 @@ function StartScreen({
                     fontWeight: '700',
                     lineHeight: 17,
                     marginTop: 6,
-                    textAlign: isRTL ? 'right' : 'left',
+                    textAlign: 'center',
                     writingDirection: isRTL ? 'rtl' : 'ltr',
                   }}
                 >
@@ -11134,7 +11165,7 @@ function StartScreen({
                   justifyContent: 'center',
                   width: responsive.isSingleColumn ? '100%' : undefined,
                   maxWidth: responsive.isSingleColumn ? '100%' : 220,
-                  alignSelf: responsive.isSingleColumn ? 'stretch' : 'auto',
+                  alignSelf: 'center',
                 }}
               >
                 <Text
@@ -11163,10 +11194,10 @@ function StartScreen({
             startScreenHeight - ((safe.insets.top || 12) + 8) - bottomPad - 16,
           ),
           marginTop: (safe.insets.top || 12) + 8,
-          borderRadius: 0,
-          backgroundColor: 'rgba(15,23,42,0.97)',
+          borderRadius: 26,
+          backgroundColor: 'rgba(2,6,23,0.98)',
           borderWidth: 1,
-          borderColor: 'rgba(148,163,184,0.45)',
+          borderColor: 'rgba(251,191,36,0.2)',
           paddingHorizontal: 12,
           paddingTop: 8,
           paddingBottom: 12,
@@ -11181,104 +11212,59 @@ function StartScreen({
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
         >
-          <Text
-            style={{
-              color: 'rgba(226,232,240,0.95)',
-              fontSize: 12,
-              lineHeight: 18,
-              fontWeight: '600',
-              textAlign: 'right',
-              writingDirection: 'rtl',
-              marginBottom: 14,
-              paddingHorizontal: 4,
-            }}
+          <LinearGradient
+            colors={['rgba(251,191,36,0.18)', 'rgba(244,114,182,0.16)', 'rgba(56,189,248,0.16)']}
+            start={{ x: isRTL ? 1 : 0, y: 0 }}
+            end={{ x: isRTL ? 0 : 1, y: 1 }}
+            style={hsS.advancedSummaryShell}
           >
-            {t('start.advancedSetup.modalLead')}
-          </Text>
-          <View style={{ alignItems: 'center', marginBottom: 12 }}>
-            <ExcellenceMeter
-              title={t('meter.excellenceTitle')}
-              value={EXCELLENCE_METER_DEMO_VALUE}
-              height={128}
-            />
-          </View>
-
-          <View style={hsS.advSection}>
-            <View style={hsS.advSectionHdr}>
-              <Text
-                style={[
-                  hsS.rowLabel,
-                  {
-                    fontSize: 15,
-                    fontWeight: '800',
-                    marginBottom: 6,
-                    textAlign: isRTL ? 'right' : 'left',
-                    writingDirection: isRTL ? 'rtl' : 'ltr',
-                  },
-                ]}
-              >
-                {t('start.advancedSetup.sectionPlayModeHeading')}
-              </Text>
-            </View>
-            {showPlayerCountRow && (
-              <LinearGradient testID="start-player-count-row" colors={['#188038','#34A853']} start={{x:0,y:0}} end={{x:1,y:1}} style={hsS.rowGradientOuter}>
-                <View style={[hsS.row, hsS.rowPlayers, { flexDirection: 'row' }]}>
-              <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.playerCount')}</Text>
-                  <View style={hsS.stepper}>
-                    <Text style={hsS.stepVal}>{playerCount}</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-            )}
-            {showModeRow ? (
-              <View style={showPlayerCountRow ? { marginTop: 10 } : null}>
-                <GameModeToggleBlock gameMode={gameMode} setGameMode={setGameMode} />
+            <View style={hsS.advancedSummaryInner}>
+              <View style={{ alignItems: 'center', marginBottom: 14 }}>
+                <ExcellenceMeter
+                  title={t('meter.excellenceTitle')}
+                  subtitle={t('meter.excellenceSubtitle')}
+                  value={EXCELLENCE_METER_DEMO_VALUE}
+                  height={128}
+                  courageCoins={5}
+                />
               </View>
-            ) : null}
-            {showBotSettings ? (
-              <BotDifficultySettingsBlock
-                botDifficulty={botDifficulty}
-                setBotDifficulty={setBotDifficulty}
-                botDisplayName={botDisplayName}
-                setBotDisplayName={setBotDisplayName}
-              />
-            ) : null}
-          </View>
-
-          <View style={hsS.advSection}>
-            <View style={hsS.advSectionHdr}>
-              <Text
-                style={[
-                  hsS.rowLabel,
-                  {
-                    fontSize: 15,
-                    fontWeight: '800',
-                    marginBottom: 6,
-                    textAlign: isRTL ? 'right' : 'left',
-                    writingDirection: isRTL ? 'rtl' : 'ltr',
-                  },
-                ]}
-              >
-                {t('start.advancedSetup.sectionNumbersHeading')}
-              </Text>
               <Text
                 style={{
-                  color: 'rgba(226,232,240,0.92)',
+                  color: 'rgba(226,232,240,0.95)',
                   fontSize: 12,
                   lineHeight: 18,
                   fontWeight: '600',
-                  textAlign: isRTL ? 'right' : 'left',
+                  textAlign: 'center',
                   writingDirection: isRTL ? 'rtl' : 'ltr',
-                  marginBottom: 8,
+                  marginBottom: 14,
+                  paddingHorizontal: 4,
                 }}
               >
-                {t('start.advancedSetup.sectionNumbersIntro')}
+                {t('start.advancedSetup.modalLead')}
               </Text>
+              <View style={[hsS.advancedSummaryChipGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                {advancedSummaryChips.map((chip) => (
+                  <AdvancedSetupPreviewChip
+                    key={chip.label}
+                    label={chip.label}
+                    value={chip.value}
+                    colors={chip.colors}
+                  />
+                ))}
+              </View>
             </View>
+          </LinearGradient>
+
+          <View style={hsS.advSection}>
+            <AdvancedSetupSectionHeading
+              badge="02"
+              title={t('start.advancedSetup.sectionNumbersHeading')}
+              colors={['#38bdf8', '#818cf8']}
+            />
           <LinearGradient colors={['#1a73e8', '#4285F4']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
-            <View style={[hsS.rowStackToggle, hsS.rowRange, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-              <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.wheel.numberRange')}</Text>
-              <View style={[hsS.toggleGroupFull, isRTL ? { justifyContent: 'flex-end', alignSelf: 'flex-end' } : null]}>
+            <View style={[hsS.rowStackToggle, hsS.rowRange, { alignItems: 'center' }]}>
+              <Text style={[hsS.rowLabel, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.wheel.numberRange')}</Text>
+              <View style={[hsS.toggleGroupFull, { justifyContent: 'center', alignSelf: 'center' }]}>
                 {([['full', '0-25'], ['easy', '0-12']] as const).map(([key, label]) => (
                   <TouchableOpacity key={key} onPress={() => setNumberRange(key)} activeOpacity={0.7}
                     style={[hsS.toggleBtn, numberRange === key ? hsS.toggleOn : hsS.toggleOff]}>
@@ -11288,13 +11274,13 @@ function StartScreen({
               </View>
             </View>
           </LinearGradient>
-          <Text style={[hsS.advHint, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+          <Text style={[hsS.advHint, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
             {isRTL ? 'בוחרים אם לשחק בטווח 0–12 או 0–25.' : 'Choose whether to play in the 0–12 or 0–25 range.'}
           </Text>
           <LinearGradient colors={['#4285F4', '#8ab4f8']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
-            <View style={[hsS.rowStackToggle, hsS.rowFractions, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-              <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.fractions')}</Text>
-              <View style={[hsS.toggleGroupFull, isRTL ? { justifyContent: 'flex-end', alignSelf: 'flex-end' } : null]}>
+            <View style={[hsS.rowStackToggle, hsS.rowFractions, { alignItems: 'center' }]}>
+              <Text style={[hsS.rowLabel, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.fractions')}</Text>
+              <View style={[hsS.toggleGroupFull, { justifyContent: 'center', alignSelf: 'center' }]}>
                 {([
                   [true, t('lobby.withFractions')],
                   [false, t('lobby.noFractions')],
@@ -11307,7 +11293,7 @@ function StartScreen({
               </View>
             </View>
           </LinearGradient>
-          <Text style={[hsS.advHint, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+          <Text style={[hsS.advHint, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
             {t('start.advancedSetup.hint.fractionsRow')}
           </Text>
           {fractions && (
@@ -11318,7 +11304,7 @@ function StartScreen({
                   fontSize: 12,
                   fontWeight: '700',
                   marginBottom: 8,
-                  textAlign: isRTL ? 'right' : 'left',
+                  textAlign: 'center',
                   writingDirection: isRTL ? 'rtl' : 'ltr',
                 }}
               >
@@ -11356,78 +11342,57 @@ function StartScreen({
               </View>
             </View>
           )}
-          <View style={{ paddingHorizontal: 10, paddingBottom: 10, gap: 8 }}>
-            <Text style={{ color: 'rgba(226,232,240,0.92)', fontSize: 12, fontWeight: '700', textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }}>
-              {t('start.advancedSetup.operatorsTitle')}
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-              {([
-                ['plusMinus', ['+', '-'] as Operation[], 'start.advancedSetup.operators.plusMinus.label', 'start.advancedSetup.operators.plusMinus.help'],
-                ['all', ['+', '-', 'x', '÷'] as Operation[], 'start.advancedSetup.operators.all.label', 'start.advancedSetup.operators.all.help'],
-              ] as const).map(([key, ops, labelKey, helpKey]) => {
-                const on = operatorPreset === key;
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => setEnabledOperators([...ops])}
-                    activeOpacity={0.75}
-                    style={{
-                      minWidth: 92,
-                      paddingVertical: 8,
-                      paddingHorizontal: 10,
-                      borderRadius: 10,
-                      borderWidth: 2,
-                      borderColor: on ? '#92400E' : 'rgba(255,255,255,0.25)',
-                      backgroundColor: on ? '#FBBF24' : 'rgba(15,23,42,0.45)',
-                      alignItems: 'center',
-                      ...(on
-                        ? Platform.select({
-                            ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.7, shadowRadius: 10 },
-                            android: { elevation: 6 },
-                          })
-                        : null),
-                    }}
-                  >
-                    <Text style={{ color: on ? '#451A03' : '#fff', fontSize: 14, fontWeight: '900' }}>{t(labelKey)}</Text>
-                    <Text style={{ color: on ? '#7C2D12' : 'rgba(255,255,255,0.86)', fontSize: 11, marginTop: 2, fontWeight: on ? '700' : '400' }}>{t(helpKey)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+          <LinearGradient colors={['#9333ea', '#ec4899']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
+            <View style={[hsS.rowStackToggle, { alignItems: 'center', backgroundColor: 'rgba(88,28,135,0.92)' }]}>
+              <Text style={{ color: 'rgba(226,232,240,0.92)', fontSize: 12, fontWeight: '700', textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }}>
+                {t('start.advancedSetup.operatorsTitle')}
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                {([
+                  ['plusMinus', ['+', '-'] as Operation[], 'start.advancedSetup.operators.plusMinus.label'],
+                  ['all', ['+', '-', 'x', '÷'] as Operation[], 'start.advancedSetup.operators.all.label'],
+                ] as const).map(([key, ops, labelKey]) => {
+                  const on = operatorPreset === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setEnabledOperators([...ops])}
+                      activeOpacity={0.75}
+                      style={{
+                        minWidth: 92,
+                        paddingVertical: 8,
+                        paddingHorizontal: 10,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: on ? '#92400E' : 'rgba(255,255,255,0.25)',
+                        backgroundColor: on ? '#FBBF24' : 'rgba(15,23,42,0.45)',
+                        alignItems: 'center',
+                        ...(on
+                          ? Platform.select({
+                              ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.7, shadowRadius: 10 },
+                              android: { elevation: 6 },
+                            })
+                          : null),
+                      }}
+                    >
+                      <Text style={{ color: on ? '#451A03' : '#fff', fontSize: 14, fontWeight: '900' }}>{t(labelKey)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
-
-          </View>
+          </LinearGradient>
+          <Text style={[hsS.advHint, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+            {t(operatorBlockDescriptionKey)}
+          </Text>
           </View>
 
           <View style={hsS.advSection}>
-            <View style={hsS.advSectionHdr}>
-              <Text
-                style={[
-                  hsS.rowLabel,
-                  {
-                    fontSize: 15,
-                    fontWeight: '800',
-                    marginBottom: 6,
-                    textAlign: isRTL ? 'right' : 'left',
-                    writingDirection: isRTL ? 'rtl' : 'ltr',
-                  },
-                ]}
-              >
-                {t('start.advancedSetup.sectionHelpersHeading')}
-              </Text>
-              <Text
-                style={{
-                  color: 'rgba(226,232,240,0.92)',
-                  fontSize: 12,
-                  lineHeight: 18,
-                  fontWeight: '600',
-                  textAlign: isRTL ? 'right' : 'left',
-                  writingDirection: isRTL ? 'rtl' : 'ltr',
-                  marginBottom: 8,
-                }}
-              >
-                {t('start.advancedSetup.sectionHelpersIntro')}
-              </Text>
-            </View>
+            <AdvancedSetupSectionHeading
+              badge="03"
+              title={t('start.advancedSetup.sectionHelpersHeading')}
+              colors={['#34d399', '#22c55e']}
+            />
           <LinearGradient colors={['#d93025', '#EA4335']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
             <View style={[hsS.rowStackToggle, hsS.rowPossibleResults, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.possibleResults')}</Text>
@@ -11480,35 +11445,11 @@ function StartScreen({
           </View>
 
           <View style={hsS.advSection}>
-            <View style={hsS.advSectionHdr}>
-              <Text
-                style={[
-                  hsS.rowLabel,
-                  {
-                    fontSize: 15,
-                    fontWeight: '800',
-                    marginBottom: 6,
-                    textAlign: isRTL ? 'right' : 'left',
-                    writingDirection: isRTL ? 'rtl' : 'ltr',
-                  },
-                ]}
-              >
-                {t('start.advancedSetup.sectionTimerHeading')}
-              </Text>
-              <Text
-                style={{
-                  color: 'rgba(226,232,240,0.92)',
-                  fontSize: 12,
-                  lineHeight: 18,
-                  fontWeight: '600',
-                  textAlign: isRTL ? 'right' : 'left',
-                  writingDirection: isRTL ? 'rtl' : 'ltr',
-                  marginBottom: 8,
-                }}
-              >
-                {t('start.advancedSetup.sectionTimerIntro')}
-              </Text>
-            </View>
+            <AdvancedSetupSectionHeading
+              badge="04"
+              title={t('start.advancedSetup.sectionTimerHeading')}
+              colors={['#fb7185', '#fb923c']}
+            />
           <LinearGradient colors={['#EA4335', '#f28b82']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
             <View style={[hsS.rowStackToggle, hsS.rowTimer, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.wheel.timerRow')}</Text>
@@ -11545,9 +11486,6 @@ function StartScreen({
               </View>
             </LinearGradient>
           )}
-          <Text style={[hsS.advHint, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-            {t('start.advancedSetup.hint.timerOptions')}
-          </Text>
           </View>
         </ScrollView>
         <View
@@ -11735,21 +11673,39 @@ function StartScreen({
             style={hsS.advancedEntryInner}
           >
             {/* שורה אחת: תמיד [תוכן | כפתור] בציר LTR הפיזי — אותו סדר כמו כותרת המודל (המשכיות כיוון) */}
-            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[hsS.advancedEntryTitle, { textAlign: isRTL ? 'right' : 'left', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
+                  <Text style={[hsS.advancedEntryTitle, { textAlign: 'center', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                     {t('start.advancedSetup.entryTitle')}
                   </Text>
                 </View>
-                <Text style={[hsS.advancedEntryTeaser, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+                <Text style={[hsS.advancedEntryTeaser, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                   {t('start.advancedSetup.entryRowTeaser')}
                 </Text>
+                <View style={[hsS.advancedEntryPreviewRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  {advancedEntryPreviewChips.map((chip) => (
+                    <AdvancedSetupPreviewChip
+                      key={chip.label}
+                      label={chip.label}
+                      value={chip.value}
+                      colors={chip.colors}
+                      compact
+                    />
+                  ))}
+                </View>
               </View>
-              <View style={[hsS.advancedEntryCtaWrap, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <Text style={hsS.advancedEntryCtaTxt}>{t('start.advancedSetup.entryOpenCta')}</Text>
-                <Text style={hsS.advancedEntryCtaArrow}>{isRTL ? '‹' : '›'}</Text>
-              </View>
+              <LinearGradient
+                colors={['#ffffff', '#fde68a', '#f9a8d4']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={hsS.advancedEntryCtaWrap}
+              >
+                <View style={[hsS.advancedEntryCtaInner, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  <Text style={hsS.advancedEntryCtaTxt}>{t('start.advancedSetup.entryOpenCta')}</Text>
+                  <Text style={hsS.advancedEntryCtaArrow}>{isRTL ? '‹' : '›'}</Text>
+                </View>
+              </LinearGradient>
             </View>
           </TouchableOpacity>
           </LinearGradient>
@@ -11945,17 +11901,22 @@ const hsS = StyleSheet.create({
   timerWheelWrap: { flex: 1, minWidth: 0, marginStart: 4 },
   /** קטעים במודאל «מתקדמים» */
   advSection: {
-    marginBottom: 14,
-    borderRadius: 14,
+    marginBottom: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
+    borderColor: 'rgba(148,163,184,0.22)',
     overflow: 'hidden',
-    backgroundColor: 'rgba(15,23,42,0.42)',
+    backgroundColor: 'rgba(15,23,42,0.56)',
+    ...Platform.select({
+      ios: { shadowColor: '#020617', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.24, shadowRadius: 20 },
+      android: { elevation: 5 },
+    }),
   },
   advSectionHdr: {
     paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 2,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(148,163,184,0.07)',
   },
   advHint: {
     fontSize: 11,
@@ -11964,6 +11925,100 @@ const hsS = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 6,
     paddingBottom: 10,
+  },
+  advancedSummaryShell: {
+    borderRadius: 22,
+    marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.18)',
+  },
+  advancedSummaryInner: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(2,6,23,0.82)',
+  },
+  advancedSummaryChipGrid: {
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  advancedPreviewChipOuter: {
+    minWidth: 120,
+    borderRadius: 14,
+    padding: 1,
+    flexGrow: 1,
+  },
+  advancedPreviewChipOuterCompact: {
+    minWidth: 0,
+    flexGrow: 1,
+    flexBasis: 0,
+  },
+  advancedPreviewChipInner: {
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(8,15,28,0.92)',
+  },
+  advancedPreviewChipInnerCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  advancedPreviewChipLabel: {
+    color: 'rgba(226,232,240,0.74)',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  advancedPreviewChipLabelCompact: {
+    fontSize: 9,
+  },
+  advancedPreviewChipValue: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  advancedPreviewChipValueCompact: {
+    fontSize: 12,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  advSectionHeaderRow: {
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  advSectionBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: { shadowColor: '#020617', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 8 },
+      android: { elevation: 3 },
+    }),
+  },
+  advSectionBadgeTxt: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  advSectionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  advSectionTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  advSectionIntro: {
+    color: 'rgba(226,232,240,0.8)',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+    marginTop: 4,
   },
   rowLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '600', flexShrink: 0 },
   rowHint: { color: 'rgba(255,255,255,0.72)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
@@ -12050,7 +12105,7 @@ const hsS = StyleSheet.create({
     borderRadius: 11,
     marginHorizontal: 2,
     marginBottom: 4,
-    paddingVertical: 14,
+    paddingVertical: 11,
     paddingHorizontal: 12,
     backgroundColor: 'rgba(15,23,42,0.58)',
     borderWidth: 1.5,
@@ -12058,7 +12113,7 @@ const hsS = StyleSheet.create({
   },
   advancedEntryTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '900',
     textShadowColor: 'rgba(0,0,0,0.45)',
     textShadowOffset: { width: 0, height: 1 },
@@ -12066,10 +12121,18 @@ const hsS = StyleSheet.create({
   },
   advancedEntryTeaser: {
     color: 'rgba(254,249,195,0.98)',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    lineHeight: 17,
-    marginTop: 8,
+    lineHeight: 15,
+    marginTop: 5,
+  },
+  advancedEntryPreviewRow: {
+    flexWrap: 'nowrap',
+    gap: 5,
+    marginTop: 6,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    width: '100%',
   },
   advancedEntryChipRow: {
     flexWrap: 'wrap',
@@ -12105,31 +12168,128 @@ const hsS = StyleSheet.create({
     color: '#FFFFFF',
   },
   advancedEntryCtaWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
     borderRadius: 999,
     alignSelf: 'flex-start',
+    padding: 1.5,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6 },
       android: { elevation: 5 },
     }),
   },
+  advancedEntryCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15,23,42,0.94)',
+  },
   advancedEntryCtaTxt: {
-    color: '#5b21b6',
+    color: '#FEF3C7',
     fontSize: 13,
     fontWeight: '900',
   },
   advancedEntryCtaArrow: {
-    color: '#7c3aed',
+    color: '#FDE68A',
     fontSize: 18,
     fontWeight: '900',
     marginTop: -1,
   },
 });
+
+function AdvancedSetupPreviewChip({
+  label,
+  value,
+  colors,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  colors: readonly [string, string, ...string[]];
+  compact?: boolean;
+}) {
+  const { isRTL } = useLocale();
+  return (
+    <LinearGradient
+      colors={colors}
+      start={{ x: isRTL ? 1 : 0, y: 0 }}
+      end={{ x: isRTL ? 0 : 1, y: 1 }}
+      style={[hsS.advancedPreviewChipOuter, compact ? hsS.advancedPreviewChipOuterCompact : null]}
+    >
+      <View style={[hsS.advancedPreviewChipInner, compact ? hsS.advancedPreviewChipInnerCompact : null]}>
+        <Text
+          style={[
+            hsS.advancedPreviewChipLabel,
+            compact ? hsS.advancedPreviewChipLabelCompact : null,
+            { textAlign: compact ? 'center' : (isRTL ? 'right' : 'left'), writingDirection: isRTL ? 'rtl' : 'ltr' },
+          ]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        <Text
+          style={[
+            hsS.advancedPreviewChipValue,
+            compact ? hsS.advancedPreviewChipValueCompact : null,
+            { textAlign: compact ? 'center' : (isRTL ? 'right' : 'left'), writingDirection: isRTL ? 'rtl' : 'ltr' },
+          ]}
+          numberOfLines={compact ? 1 : 2}
+        >
+          {value}
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+}
+
+function AdvancedSetupSectionHeading({
+  badge,
+  title,
+  intro,
+  colors,
+}: {
+  badge: string;
+  title: string;
+  intro?: string;
+  colors: readonly [string, string, ...string[]];
+}) {
+  const { isRTL } = useLocale();
+  return (
+    <View style={hsS.advSectionHdr}>
+      <View style={[hsS.advSectionHeaderRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <LinearGradient
+          colors={colors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={hsS.advSectionBadge}
+        >
+          <Text style={hsS.advSectionBadgeTxt}>{badge}</Text>
+        </LinearGradient>
+        <View style={hsS.advSectionCopy}>
+          <Text
+            style={[
+              hsS.advSectionTitle,
+              { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+            ]}
+          >
+            {title}
+          </Text>
+          {intro ? (
+            <Text
+              style={[
+                hsS.advSectionIntro,
+                { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+              ]}
+            >
+              {intro}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
 
 /** שורת מצב משחק (מול בוט / במכשיר אחד) — משותף לגלגל ולמודאל מתקדמים */
 function GameModeToggleBlock({
@@ -18943,6 +19103,33 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       {reconnectOverlay}
       {viewMode !== 'game' ? toastOverlay : null}
       {eliminatedBanner}
+      {mp?.eliminationNotice ? (
+        <TouchableOpacity
+          onPress={() => mp.clearEliminationNotice()}
+          style={[
+            StyleSheet.absoluteFillObject,
+            { zIndex: 200, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+          ]}
+        >
+          <View
+            style={{
+              backgroundColor: '#1E293B',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 320,
+              borderWidth: 1,
+              borderColor: 'rgba(248,113,113,0.6)',
+            }}
+          >
+            <Text style={{ color: '#FECACA', fontSize: 16, fontWeight: '800', textAlign: 'center' }}>
+              {mp.eliminationNotice}
+            </Text>
+            <Text style={{ color: '#94A3B8', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+              {locale === 'he' ? 'לחץ/י להמשיך' : 'Tap to continue'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
       {!isMyTurn && viewMode === 'game' && (
         <TouchableOpacity
           onPress={() => setViewMode('player')}
