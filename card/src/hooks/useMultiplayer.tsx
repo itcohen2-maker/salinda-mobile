@@ -216,6 +216,7 @@ export interface MultiplayerContextValue {
   currentTableVisibility: LobbyTableVisibility | null;
   players: LobbyPlayer[];
   tables: LobbyTableSummary[];
+  currentRoomTable: LobbyTableSummary | null;
   lobbyStatus: LobbyStatusState | null;
   isHost: boolean;
   inRoom: boolean;
@@ -247,6 +248,8 @@ export interface MultiplayerContextValue {
   /** ניתוק רשת זמני במהלך משחק — מנסים להתחבר מחדש לשרת */
   reconnectNotice: string | null;
   clearReconnectNotice: () => void;
+  eliminationNotice: string | null;
+  clearEliminationNotice: () => void;
   classroomState: ClassroomSocketState | null;
   createClassSession: (payload: CreateClassSessionPayload) => void;
   joinClassSession: (payload: JoinClassSessionPayload) => void;
@@ -542,6 +545,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [currentTableVisibility, setCurrentTableVisibility] = useState<LobbyTableVisibility | null>(null);
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [tables, setTables] = useState<LobbyTableSummary[]>([]);
+  const [currentRoomTable, setCurrentRoomTable] = useState<LobbyTableSummary | null>(null);
   const [lobbyStatus, setLobbyStatus] = useState<LobbyStatusState | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [serverState, setServerState] = useState<PlayerView | null>(null);
@@ -549,6 +553,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState<string | null>(null);
+  const [eliminationNotice, setEliminationNotice] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
   /** כתובת ה-io האחרונה — לזיהוי החלפת שרת מול socket ישן */
@@ -592,6 +597,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     setPlayerId(null);
     setCurrentInviteCode(null);
     setCurrentTableVisibility(null);
+    setCurrentRoomTable(null);
     playerIdRef.current = null;
     roomCodeSessionRef.current = null;
     setPlayers([]);
@@ -601,6 +607,11 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     prevPlayerCountRef.current = 0;
     prevHumanPlayerIdsRef.current = [];
   }, []);
+
+  const keepWaitingTablesOnly = useCallback(
+    (nextTables: LobbyTableSummary[]) => nextTables.filter((table) => table.status === 'waiting'),
+    [],
+  );
 
   const clearSessionAfterDisconnect = useCallback(() => {
     clearRoomSession();
@@ -673,7 +684,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       }
       clearSessionAfterDisconnect();
     });
-    socket.on('room_created', ({ roomCode: code, playerId: pid, inviteCode, visibility }) => {
+    socket.on('room_created', ({ roomCode: code, playerId: pid, inviteCode, visibility, roomTable }) => {
       console.log('[MP][debug] room_created received, code=', code, 'pid=', pid);
       roomCodeSessionRef.current = code;
       setRoomCode(code);
@@ -681,28 +692,38 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       playerIdRef.current = pid;
       setCurrentInviteCode(inviteCode ?? null);
       setCurrentTableVisibility(visibility ?? null);
+      setCurrentRoomTable(roomTable ?? null);
     });
     socket.on('tables_updated', ({ tables: nextTables }: { tables: LobbyTableSummary[] }) => {
-      setTables(nextTables);
+      const activeRoomCode = roomCodeSessionRef.current;
+      if (activeRoomCode) {
+        const matchingRoom = nextTables.find((table) => table.roomCode === activeRoomCode) ?? null;
+        if (matchingRoom) setCurrentRoomTable(matchingRoom);
+      }
+      setTables(keepWaitingTablesOnly(nextTables));
     });
     socket.on('table_countdown_started', ({ roomCode: code, countdownEndsAt }) => {
-      setTables((current) =>
-        current.map((table) =>
-          table.roomCode === code
-            ? { ...table, status: 'countdown', countdownEndsAt }
-            : table,
-        ),
-      );
+      setTables((current) => current.filter((table) => table.roomCode !== code));
+      setCurrentRoomTable((current) => {
+        if (!current || current.roomCode !== code) return current;
+        return { ...current, status: 'countdown', countdownEndsAt };
+      });
     });
     socket.on('table_status_changed', ({ roomCode: code, status, countdownEndsAt }) => {
-      setTables((current) =>
-        current
-          .map((table) =>
-            table.roomCode === code
-              ? { ...table, status, countdownEndsAt }
-              : table,
-          ),
-      );
+      setTables((current) => {
+        if (status !== 'waiting') {
+          return current.filter((table) => table.roomCode !== code);
+        }
+        return current.map((table) =>
+          table.roomCode === code
+            ? { ...table, status, countdownEndsAt }
+            : table,
+        );
+      });
+      setCurrentRoomTable((current) => {
+        if (!current || current.roomCode !== code) return current;
+        return { ...current, status, countdownEndsAt };
+      });
     });
     socket.on('player_joined', ({ players: p }) => {
       const mapped: LobbyPlayer[] = p.map((x: any): LobbyPlayer => ({
@@ -737,6 +758,11 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
           void playSfx('success', { cooldownMs: 400, volumeOverride: 0.26 });
         }
       }
+      setCurrentRoomTable((current) =>
+        current
+          ? { ...current, currentParticipants: currentHumanPlayers.length }
+          : current,
+      );
       prevHumanPlayerIdsRef.current = currentHumanPlayers.map((player: LobbyPlayer) => player.id);
       prevPlayerCountRef.current = curr;
     });
@@ -746,7 +772,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     socket.on('player_left', () => {
       // List will be updated by next player_joined or we could request state
     });
-    socket.on('room_closed', ({ reason }: { roomCode: string; reason?: 'eliminated' }) => {
+    socket.on('room_closed', ({ roomCode: closedRoomCode, reason }: { roomCode: string; reason?: 'eliminated' }) => {
       if (reason === 'eliminated') {
         setToast(
           localeRef.current === 'he'
@@ -754,11 +780,12 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
             : 'No way back — try another table',
         );
       }
+      setTables((current) => current.filter((table) => table.roomCode !== closedRoomCode));
       clearRoomSession();
       socket.emit('list_tables');
     });
     socket.on('player_eliminated', ({ playerName }) => {
-      setToast(
+      setEliminationNotice(
         localeRef.current === 'he'
           ? `${playerName} עזב/ה — המשחק ממשיך`
           : `${playerName} left — game continues`,
@@ -845,7 +872,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       console.warn('[MP] connect_error:', err.message, '→', want);
       setError(`${t(localeRef.current, 'mp.connectError')}\n(${want})`);
     });
-  }, [serverUrl, clearRoomSession, clearSessionAfterDisconnect]);
+  }, [serverUrl, clearRoomSession, clearSessionAfterDisconnect, keepWaitingTablesOnly]);
 
   // Cleanup socket on unmount to prevent memory leaks
   useEffect(() => {
@@ -1074,6 +1101,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     currentTableVisibility,
     players,
     tables,
+    currentRoomTable,
     lobbyStatus,
     isHost,
     inRoom,
@@ -1096,6 +1124,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     clearToast: () => setToast(null),
     reconnectNotice: reconnectNotice ?? null,
     clearReconnectNotice: () => setReconnectNotice(null),
+    eliminationNotice: eliminationNotice ?? null,
+    clearEliminationNotice: () => setEliminationNotice(null),
     classroomState,
     createClassSession,
     joinClassSession,
