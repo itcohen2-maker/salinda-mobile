@@ -313,72 +313,21 @@ git commit -m "feat: play coin sound when CoinAwardCelebrationCard mounts"
 
 ---
 
-### Task 6: "Play vs bot" navigates to local `StartScreen` (Fix 6)
+### Task 6: Verify "Play vs bot" uses online table settings (Fix 6 — no code change)
 
-**Files:**
-- Modify: `index.tsx` — `handleStartLocalBotGame` (~line 19703)
-- Modify: `src/screens/OnlineTableScreens.tsx` — `LobbyScreen` prop type and call-site
+**Files:** none
 
-- [ ] **Step 1: Simplify `handleStartLocalBotGame` in `index.tsx`**
+Fix 6 is a design clarification. The existing `handleStartLocalBotGame` (`index.tsx:19703`)
+already starts the local bot game immediately using the `difficulty` and `settings` passed
+from `LobbyScreen` — exactly the table configuration the player set up. This is the correct
+behavior. No code change is needed.
 
-Replace the entire `handleStartLocalBotGame` callback (~lines 19703-19736):
+- [ ] **Step 1: Confirm existing behavior is correct**
 
-```typescript
-  const handleStartLocalBotGame = useCallback(() => {
-    mp?.leaveRoom();
-    dispatch({ type: 'RESET_GAME' });
-    setSelectedLocalGameMode('vs-bot');
-    setPlayMode('local');
-  }, [dispatch, mp, setPlayMode, setSelectedLocalGameMode]);
-```
+Open a table online, configure difficulty + number range, press the "vs bot" button. The
+local bot game should start immediately using those settings (no setup screen detour).
 
-- [ ] **Step 2: Update the `onStartLocalBotGame` prop type in `OnlineTableScreens.tsx`**
-
-In `src/screens/OnlineTableScreens.tsx`, find the `LobbyScreen` props interface (~line 619):
-
-```typescript
-  onStartLocalBotGame: (difficulty: 'easy' | 'full', settings: HostGameSettings) => void;
-```
-
-Replace with:
-```typescript
-  onStartLocalBotGame: () => void;
-```
-
-- [ ] **Step 3: Update the call-site in `OnlineTableScreens.tsx`**
-
-Find the button press handler (~line 1152):
-```typescript
-                onPress={() => onStartLocalBotGame(difficulty, buildGameSettings())}
-```
-Replace with:
-```typescript
-                onPress={() => onStartLocalBotGame()}
-```
-
-- [ ] **Step 4: Remove unused `HostGameSettings` import if it's no longer needed**
-
-Check if `HostGameSettings` is used anywhere else in `OnlineTableScreens.tsx`:
-
-```bash
-grep -n "HostGameSettings" "C:/Users/asus/bmad/card/src/screens/OnlineTableScreens.tsx"
-```
-
-If the only occurrence was the prop type, remove the import. If it's used elsewhere, leave it.
-
-- [ ] **Step 5: Verify TypeScript compiles**
-
-```bash
-cd server && npx tsc --noEmit 2>&1 | head -20
-```
-Expected: no errors.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add index.tsx src/screens/OnlineTableScreens.tsx
-git commit -m "feat: vs-bot from online lobby navigates to local StartScreen instead of starting immediately"
-```
+Expected: game starts directly with the configured difficulty and math range.
 
 ---
 
@@ -390,4 +339,4 @@ After all tasks complete, manually verify:
 - [ ] **Fix 2**: In a 3-player online game, have player C close the app. Players A and B should see a red modal (not a toast) saying "שחקן C עזב/ה — המשחק ממשיך". Tapping the modal dismisses it.
 - [ ] **Fix 3**: After player C leaves, their player chip in the HUD should be red with "C\nמחוץ למשחק". Active player chip stays green; others stay blue.
 - [ ] **Fix 5**: Complete a game action that fills the excellence meter. The `CoinAwardCelebrationCard` should appear with a coin jingle sound.
-- [ ] **Fix 6**: From the online table lobby, press "שחק מול בוט". You should arrive at the local `StartScreen` (the settings screen with number range, tips toggle, "בואו נשחק" button). Pressing "בואו נשחק" starts a local vs-bot game.
+- [ ] **Fix 6**: Open an online table, configure 0-12 range + easy difficulty, press "vs bot". Game should start immediately in vs-bot mode with 0-12 range — no setup screen shown.

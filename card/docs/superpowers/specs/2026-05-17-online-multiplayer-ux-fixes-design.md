@@ -181,40 +181,43 @@ This plays the coin sound immediately when the card appears, independent of
 
 ---
 
-## Fix 6 — "Play vs Bot" from Online Lobby Navigates to Local Setup Screen
+## Fix 6 — "Play vs Bot" Starts Game with the Online Table's Existing Configuration
 
 ### Problem
 
-`handleStartLocalBotGame` (`index.tsx:19703`) immediately dispatches `START_GAME` when the
-user clicks "play vs bot" from the online table lobby. The user has no chance to configure
-number range, fractions, or advanced settings. The local game setup screen (`StartScreen`,
-rendered at `index.tsx:20118` when `playMode === 'local' && state.phase === 'setup'`) already
-has all the controls needed.
+When a player configures an online table (difficulty, number range, fractions, timer, etc.)
+and then presses "play vs bot" because no one joined, the game should start immediately with
+**those exact settings** — the player already expressed what game they want to play.
+
+The current `handleStartLocalBotGame` (`index.tsx:19703`) already receives `difficulty` and
+`settings: HostGameSettings` from `LobbyScreen` and dispatches `START_GAME` with them. This
+behavior is **correct and must be preserved**.
+
+The earlier proposal to navigate to `StartScreen` was wrong — it would discard the player's
+table configuration and force them to re-configure.
 
 ### Fix
 
-Replace the immediate `START_GAME` dispatch with navigation to `StartScreen`:
+**No change to `handleStartLocalBotGame`** — the existing implementation is correct:
 
 ```ts
-const handleStartLocalBotGame = useCallback(() => {
-  mp?.leaveRoom();
-  dispatch({ type: 'RESET_GAME' });          // ensures state.phase === 'setup'
-  setSelectedLocalGameMode('vs-bot');         // locks mode to vs-bot in StartScreen
-  setPlayMode('local');                       // renders StartScreen via line 20118
-}, [dispatch, mp, setPlayMode, setSelectedLocalGameMode]);
+// index.tsx:19703 — keep as-is
+const handleStartLocalBotGame = useCallback(
+  (difficulty: 'easy' | 'full', settings: HostGameSettings) => {
+    mp?.leaveRoom();
+    setPlayMode('local');
+    dispatch({ type: 'START_GAME', mode: 'vs-bot', ...settingsFromOnlineTable });
+  },
+  [dispatch, locale, mp, preferredName, setPlayMode],
+);
 ```
 
-`StartScreen` is rendered with `forcedGameMode="vs-bot"` and `lockGameMode` (already the
-pattern at line 20118), so the user sees the full settings screen and clicks "בואו נשחק"
-to start.
+**No change to `OnlineTableScreens.tsx`** — the prop signature and call-site stay as-is.
 
-The `onStartLocalBotGame` prop passed through `GameRouter` → `LobbyScreens` no longer
-needs to carry `difficulty` or `settings` — the `StartScreen` collects them. Update the
-prop signature accordingly.
+Fix 6 is a **design clarification only** (no code change). The existing behavior is the
+correct UX: online table settings → immediate bot game start.
 
-**Files changed:** `index.tsx` (simplify `handleStartLocalBotGame`),
-`src/screens/OnlineTableScreens.tsx` (update `onStartLocalBotGame` call-site — remove
-difficulty/settings args if no longer needed)
+**Files changed:** none
 
 ---
 
