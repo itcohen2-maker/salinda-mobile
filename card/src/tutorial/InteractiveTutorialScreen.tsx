@@ -1111,7 +1111,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // Only regenerate L4 dice when going BACKWARDS (engine.lessonIndex
     // went down). Going forward (lesson 3 ג†' 4) must keep the same dice
     // the user already saw in lesson 3.
-    if (engine.lessonIndex <= 3) {
+    // lessonIndex < 3 = going backward (dice/tap/fan lesson). lessonIndex === 3
+    // means arriving at the equation lesson going FORWARD — keep the dice
+    // the user already saw in the dice lesson so they match the equation.
+    if (engine.lessonIndex < 3) {
       l4DiceRef.current = rollL4Dice();
     }
     // Re-arm lesson 4 refs so BEGIN_TURN + ROLL_DICE re-fire when needed.
