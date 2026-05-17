@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   Image,
   ImageBackground,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -18,8 +17,8 @@ import type { Fraction, HostGameSettings, LobbyTableSummary, LobbyTableTheme } f
 import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { useLocale } from '../i18n/LocaleContext';
 import { getScreenSafeTop } from '../theme/screenInsets';
-
-const BG_IMAGE = require('../../assets/bg.jpg');
+import { useActiveTheme } from '../theme/ThemeContext';
+import { WEB_GAME_PLAYFIELD_MAX_WIDTH } from '../theme/webLayout';
 const LOBBY_LOGO = require('../../assets/branding/salinda-puzzle-game-logo.png');
 
 type LobbyFilter = 'all' | 'easy' | 'full' | 'open' | 'private';
@@ -31,7 +30,6 @@ interface TablesLobbyScreenProps {
   onBack?: () => void;
   onCreateTable: () => void;
   onEnterCode?: () => void;
-  onExitApp?: () => void;
   onJoinTable: (table: LobbyTableSummary) => void;
   onOpenRules: () => void;
   onPlayerNameChange: (value: string) => void;
@@ -594,7 +592,6 @@ export default function TablesLobbyScreen({
   onBack,
   onCreateTable,
   onEnterCode,
-  onExitApp,
   onJoinTable,
   onOpenRules: _onOpenRules,
   onPlayerNameChange,
@@ -608,9 +605,8 @@ export default function TablesLobbyScreen({
   const safeTop = getScreenSafeTop(insets.top);
   const responsive = useResponsiveLayout();
   const { width } = responsive;
+  const shellWidth = Platform.OS === 'web' ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, width) : width;
   const [filter, setFilter] = useState<LobbyFilter>('all');
-  const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
-
   const visibleTables = useMemo(() => applyFilter(tables, filter), [filter, tables]);
   const displayItems = useMemo(() => {
     const activeTables = visibleTables.slice(0, MAX_TABLE_SLOTS).map((table) => ({
@@ -626,12 +622,13 @@ export default function TablesLobbyScreen({
     );
     return [...activeTables, ...placeholders];
   }, [visibleTables]);
+  const { background } = useActiveTheme();
   const canAct = playerName.trim().length > 0;
   const compactVisuals = Platform.OS === 'web' || responsive.isTight;
-  const stackedActions = responsive.isSingleColumn;
-  const singleColumn = !responsive.isTablet || responsive.isSingleColumn;
-  const stackedTileHeader = responsive.isTight;
-  const twoColumnTileWidth = singleColumn ? undefined : Math.floor((Math.max(width, 320) - 36) / 2);
+  const stackedActions = Platform.OS === 'web' ? true : responsive.isSingleColumn;
+  const singleColumn = Platform.OS === 'web' ? true : !responsive.isTablet || responsive.isSingleColumn;
+  const stackedTileHeader = Platform.OS === 'web' ? true : responsive.isTight;
+  const twoColumnTileWidth = singleColumn ? undefined : Math.floor((Math.max(shellWidth, 320) - 36) / 2);
   const scrollBottomPad = Math.max(insets.bottom + 40, Platform.OS === 'web' ? 68 : 56);
 
   const filters = useMemo(
@@ -647,7 +644,7 @@ export default function TablesLobbyScreen({
 
   return (
     <ImageBackground
-      source={BG_IMAGE}
+      source={background.image}
       style={styles.root}
       imageStyle={styles.backgroundImage}
       resizeMode="cover"
@@ -669,21 +666,6 @@ export default function TablesLobbyScreen({
         </TouchableOpacity>
       ) : null}
 
-      {onExitApp ? (
-        <TouchableOpacity
-          testID="lobby-exit-app"
-          style={[
-            styles.floatingBackBtn,
-            styles.floatingExitBtnAndroid,
-            { top: Math.max(safeTop + 8, 12) },
-          ]}
-          onPress={() => setExitConfirmVisible(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.floatingExitBtnText}>X</Text>
-        </TouchableOpacity>
-      ) : null}
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -696,194 +678,164 @@ export default function TablesLobbyScreen({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View
-          style={[
-            styles.heroPanel,
-            compactVisuals ? styles.heroPanelCompactWeb : null,
-            { paddingTop: Math.max(safeTop + (compactVisuals ? 10 : 20), compactVisuals ? 14 : 30) },
-          ]}
-        >
-          {!compactVisuals ? (
-            <View style={styles.logoWrap}>
-              <Image
-                source={LOBBY_LOGO}
-                style={[styles.logoImage, compactVisuals && styles.logoImageCompactWeb]}
-                resizeMode="contain"
-              />
-            </View>
-          ) : null}
-
-          <View style={styles.sectionHead}>
-            <Text style={[styles.sectionTitle, compactVisuals && styles.sectionTitleCompactWeb, { textAlign: 'center' }]}>
-              {t('lobby.tablesTitle')}
-            </Text>
-            {!compactVisuals ? (
-              <Text style={[styles.sectionSub, compactVisuals && styles.sectionSubCompactWeb, { textAlign: 'center' }]}>
-                {t('lobby.tablesSubtitle')}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        <View style={[styles.controlCard, compactVisuals && styles.controlCardCompactWeb]}>
-          {headerAccessory ? <View style={styles.headerAccessoryWrap}>{headerAccessory}</View> : null}
-
-          {!compactVisuals ? (
-            <Text style={[styles.fieldLabel, { textAlign: isRTL ? 'right' : 'left' }]}>
-              {t('lobby.yourName')}
-            </Text>
-          ) : null}
-          <View style={[styles.nameInputShell, compactVisuals && styles.nameInputShellCompactWeb]}>
-            <TextInput
-              testID="lobby-player-name"
-              style={[styles.nameInput, compactVisuals && styles.nameInputCompactWeb]}
-              value={playerName}
-              onChangeText={(value) => onPlayerNameChange(value.slice(0, 7))}
-              placeholder={t('lobby.namePlaceholder')}
-              placeholderTextColor={TEXT_MUTE}
-              maxLength={7}
-              textAlign="center"
-            />
-          </View>
-
+        <View style={[styles.contentFrame, Platform.OS === 'web' ? { width: shellWidth } : null]}>
           <View
-            testID="lobby-action-row"
             style={[
-              styles.actionRow,
-              { flexDirection: stackedActions ? 'column' : isRTL ? 'row-reverse' : 'row' },
+              styles.heroPanel,
+              compactVisuals ? styles.heroPanelCompactWeb : null,
+              { paddingTop: Math.max(safeTop + (compactVisuals ? 10 : 20), compactVisuals ? 14 : 30) },
             ]}
           >
-            <TouchableOpacity
-              testID="lobby-quick-match"
-              style={[
-                styles.quickMatchBtn,
-                compactVisuals && styles.quickMatchBtnCompactWeb,
-                stackedActions ? styles.actionBtnStacked : null,
-                { flexDirection: isRTL ? 'row-reverse' : 'row' },
-                !canAct && styles.disabledButton,
-              ]}
-              disabled={!canAct}
-              onPress={onQuickMatch}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.quickMatchText}>{t('lobby.quickMatch')}</Text>
-            </TouchableOpacity>
+            {!compactVisuals ? (
+              <View style={styles.logoWrap}>
+                <Image
+                  source={LOBBY_LOGO}
+                  style={[styles.logoImage, compactVisuals && styles.logoImageCompactWeb]}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.sectionHead}>
+              <Text style={[styles.sectionTitle, compactVisuals && styles.sectionTitleCompactWeb, { textAlign: 'center' }]}>
+                {t('lobby.tablesTitle')}
+              </Text>
+              {!compactVisuals ? (
+                <Text style={[styles.sectionSub, compactVisuals && styles.sectionSubCompactWeb, { textAlign: 'center' }]}>
+                  {t('lobby.tablesSubtitle')}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
-          <View style={[styles.utilityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            {onEnterCode ? (
+          <View style={[styles.controlCard, compactVisuals && styles.controlCardCompactWeb]}>
+            {headerAccessory ? <View style={styles.headerAccessoryWrap}>{headerAccessory}</View> : null}
+
+            {!compactVisuals ? (
+              <Text style={[styles.fieldLabel, { textAlign: isRTL ? 'right' : 'left' }]}>
+                {t('lobby.yourName')}
+              </Text>
+            ) : null}
+            <View style={[styles.nameInputShell, compactVisuals && styles.nameInputShellCompactWeb]}>
+              <TextInput
+                testID="lobby-player-name"
+                style={[styles.nameInput, compactVisuals && styles.nameInputCompactWeb]}
+                value={playerName}
+                onChangeText={(value) => onPlayerNameChange(value.slice(0, 7))}
+                placeholder={t('lobby.namePlaceholder')}
+                placeholderTextColor={TEXT_MUTE}
+                maxLength={7}
+                textAlign="center"
+              />
+            </View>
+
+            <View
+              testID="lobby-action-row"
+              style={[
+                styles.actionRow,
+                { flexDirection: stackedActions ? 'column' : isRTL ? 'row-reverse' : 'row' },
+              ]}
+            >
               <TouchableOpacity
-                testID="lobby-enter-code"
-                style={[styles.utilityBtn, styles.utilityBtnEnterCode, compactVisuals && styles.utilityBtnCompactWeb]}
-                onPress={onEnterCode}
+                testID="lobby-quick-match"
+                style={[
+                  styles.quickMatchBtn,
+                  compactVisuals && styles.quickMatchBtnCompactWeb,
+                  stackedActions ? styles.actionBtnStacked : null,
+                  { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  !canAct && styles.disabledButton,
+                ]}
+                disabled={!canAct}
+                onPress={onQuickMatch}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.enterCode')}</Text>
+                <Text style={styles.quickMatchText}>{t('lobby.quickMatch')}</Text>
               </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              testID="lobby-refresh"
-              style={[styles.utilityBtn, styles.utilityBtnRefresh, compactVisuals && styles.utilityBtnCompactWeb]}
-              onPress={onRefresh}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.refresh')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.chips, compactVisuals && styles.chipsCompactWeb]}
-          contentContainerStyle={[styles.chipsContent, compactVisuals && styles.chipsContentCompactWeb]}
-        >
-          {filters.map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              onPress={() => setFilter(item.key)}
-              style={[styles.chip, compactVisuals && styles.chipCompactWeb, filter === item.key && styles.chipActive]}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.chipText, compactVisuals && styles.chipTextCompactWeb, filter === item.key && styles.chipTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={[styles.grid, compactVisuals && styles.gridCompactWeb]}>
-          {displayItems.map((item) =>
-            item.kind === 'table' ? (
-              <TableCard
-                key={`${item.table.roomCode}-${item.table.status}-${item.table.currentParticipants}`}
-                table={item.table}
-                onPress={onJoinTable}
-                canAct={canAct}
-                compactVisuals={compactVisuals}
-                locale={locale}
-                isRTL={isRTL}
-                singleColumn={singleColumn}
-                stackedHeader={stackedTileHeader}
-                tileWidth={twoColumnTileWidth}
-                t={t}
-              />
-            ) : (
-              <EmptyTableCard
-                key={item.key}
-                testID={`table-card-${item.key}`}
-                canAct={canAct}
-                compactVisuals={compactVisuals}
-                isRTL={isRTL}
-                onPress={onCreateTable}
-                singleColumn={singleColumn}
-                stackedHeader={stackedTileHeader}
-                tileWidth={twoColumnTileWidth}
-                t={t}
-              />
-            ),
-          )}
-        </View>
-
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={[styles.errorText, { textAlign: isRTL ? 'right' : 'left' }]}>{error}</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <Modal
-        visible={exitConfirmVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setExitConfirmVisible(false)}
-      >
-        <View style={styles.exitModalBackdrop}>
-          <View style={styles.exitModalCard}>
-            <Text style={styles.exitModalTitle}>{t('lobby.exitAppConfirmTitle')}</Text>
-            <Text style={styles.exitModalBody}>{t('lobby.exitAppConfirmBody')}</Text>
-            <View style={styles.exitModalButtons}>
+            <View style={[styles.utilityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              {onEnterCode ? (
+                <TouchableOpacity
+                  testID="lobby-enter-code"
+                  style={[styles.utilityBtn, styles.utilityBtnEnterCode, compactVisuals && styles.utilityBtnCompactWeb]}
+                  onPress={onEnterCode}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.enterCode')}</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
-                style={[styles.exitModalBtn, styles.exitModalBtnConfirm]}
-                onPress={() => {
-                  setExitConfirmVisible(false);
-                  onExitApp?.();
-                }}
-                activeOpacity={0.8}
+                testID="lobby-refresh"
+                style={[styles.utilityBtn, styles.utilityBtnRefresh, compactVisuals && styles.utilityBtnCompactWeb]}
+                onPress={onRefresh}
+                activeOpacity={0.85}
               >
-                <Text style={styles.exitModalBtnConfirmText}>{t('lobby.exitApp')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.exitModalBtn, styles.exitModalBtnCancel]}
-                onPress={() => setExitConfirmVisible(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.exitModalBtnCancelText}>{t('ui.cancel')}</Text>
+                <Text style={[styles.utilityBtnText, styles.utilityBtnTextLight]}>{t('lobby.refresh')}</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.chips, compactVisuals && styles.chipsCompactWeb]}
+            contentContainerStyle={[styles.chipsContent, compactVisuals && styles.chipsContentCompactWeb]}
+          >
+            {filters.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                onPress={() => setFilter(item.key)}
+                style={[styles.chip, compactVisuals && styles.chipCompactWeb, filter === item.key && styles.chipActive]}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.chipText, compactVisuals && styles.chipTextCompactWeb, filter === item.key && styles.chipTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={[styles.grid, compactVisuals && styles.gridCompactWeb]}>
+            {displayItems.map((item) =>
+              item.kind === 'table' ? (
+                <TableCard
+                  key={`${item.table.roomCode}-${item.table.status}-${item.table.currentParticipants}`}
+                  table={item.table}
+                  onPress={onJoinTable}
+                  canAct={canAct}
+                  compactVisuals={compactVisuals}
+                  locale={locale}
+                  isRTL={isRTL}
+                  singleColumn={singleColumn}
+                  stackedHeader={stackedTileHeader}
+                  tileWidth={twoColumnTileWidth}
+                  t={t}
+                />
+              ) : (
+                <EmptyTableCard
+                  key={item.key}
+                  testID={`table-card-${item.key}`}
+                  canAct={canAct}
+                  compactVisuals={compactVisuals}
+                  isRTL={isRTL}
+                  onPress={onCreateTable}
+                  singleColumn={singleColumn}
+                  stackedHeader={stackedTileHeader}
+                  tileWidth={twoColumnTileWidth}
+                  t={t}
+                />
+              ),
+            )}
+          </View>
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <Text style={[styles.errorText, { textAlign: isRTL ? 'right' : 'left' }]}>{error}</Text>
+            </View>
+          ) : null}
         </View>
-      </Modal>
+      </ScrollView>
+
     </ImageBackground>
   );
 }
@@ -900,7 +852,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.58)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   scroll: {
     flex: 1,
@@ -923,74 +875,6 @@ const styles = StyleSheet.create({
   floatingBackBtnAndroid: {
     right: 12,
   },
-  floatingExitBtnDefault: {
-    right: 12,
-  },
-  floatingExitBtnAndroid: {
-    left: 12,
-  },
-  floatingExitBtnText: {
-    color: GOLD,
-    fontWeight: '900',
-    fontSize: 20,
-  },
-  exitModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exitModalCard: {
-    backgroundColor: '#1a1510',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(245,210,122,0.3)',
-    padding: 24,
-    marginHorizontal: 32,
-    alignItems: 'center',
-    gap: 12,
-  },
-  exitModalTitle: {
-    color: GOLD,
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  exitModalBody: {
-    color: TEXT,
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  exitModalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  exitModalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  exitModalBtnConfirm: {
-    backgroundColor: '#c0392b',
-  },
-  exitModalBtnConfirmText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  exitModalBtnCancel: {
-    backgroundColor: 'rgba(245,210,122,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,210,122,0.3)',
-  },
-  exitModalBtnCancelText: {
-    color: GOLD,
-    fontWeight: '600',
-    fontSize: 15,
-  },
   floatingBackBtnText: {
     color: TEXT,
     fontWeight: '900',
@@ -1000,6 +884,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 88,
+    alignItems: 'center',
+  },
+  contentFrame: {
+    width: '100%',
+    alignSelf: 'center',
   },
   heroPanel: {
     paddingHorizontal: 16,
