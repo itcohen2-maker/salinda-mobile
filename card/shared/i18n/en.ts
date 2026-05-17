@@ -120,6 +120,8 @@ export const en: Record<string, string> = {
   'toast.identicalPlay': '🔄 {{name}}: played matching card ({{card}}) — skip dice',
   'identical.alertTitle': '🎉 Matching card!',
   'identical.alertBody': '{{name}} played ({{card}}) — you skip the dice. Great play!',
+  'identical.arrowTitle': '🔄 You have an identical card!',
+  'identical.arrowBody': 'Place it on the pile — skip the dice and lose a card!',
   'identical.alertCta': 'Nice!',
   'toast.fractionBlock': '⚔️ {{name}}: blocked with {{fraction}} — challenge continues!',
   'toast.msg.fractionBlocked': '{{name}} blocked with {{fraction}}!',

@@ -131,6 +131,8 @@ export const he: Record<string, string> = {
   'toast.identicalPlay': '🔄 {{name}}: הניח קלף זהה ({{card}}) — דילוג על קוביות',
   'identical.alertTitle': '🎉 קלף זהה!',
   'identical.alertBody': '{{name}} הניח ({{card}}) — דילוג על הקוביות ובשורה טובה!',
+  'identical.arrowTitle': '🔄 יש לך קלף זהה!',
+  'identical.arrowBody': 'הנח אותו על הערימה — דלג על קוביות והיפטר מקלף!',
   'identical.alertCta': 'הבנתי!',
   'toast.fractionBlock': '⚔️ {{name}}: חסם בשבר {{fraction}} — אתגר!',
   'toast.msg.fractionBlocked': '{{name}} חסם/ה בשבר {{fraction}}!',

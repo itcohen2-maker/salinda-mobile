@@ -16815,7 +16815,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           (שם המשתמש חייב לראות את הקלף שבראש הערימה כדי להבין מתי אפשר
           להניח קלף שבר). showFractions מסומן ל־true רק ב־TUTORIAL_FRACTION_SETUP. */}
       {(!state.isTutorial || state.showFractions) && (
-      <View style={{ position:'absolute', top:discardPileTop, right:discardPileRight, zIndex:3, alignItems:'center', gap:4 }}>
+      <View pointerEvents="box-none" style={{ position:'absolute', top:discardPileTop, right:discardPileRight, zIndex:3, alignItems:'center', gap:4 }}>
         <View style={{ alignItems:'center', gap:4, position:'relative', minWidth:96 }}>
           <DiscardPile />
           {identArrowVisible && (
@@ -16842,8 +16842,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 {DOWN_ARROW_GLYPH}
               </Animated.Text>
               <View style={[alertBubbleStyle.box, { maxWidth: 280, paddingVertical: 12, paddingHorizontal: 12 }]}>
-                <Text style={alertBubbleStyle.title}>{`${REPEAT_EMOJI} יש לך קלף זהה!`}</Text>
-                <Text style={alertBubbleStyle.body}>הנח אותו על הערימה — דלג על קוביות והיפטר מקלף!</Text>
+                <Text style={alertBubbleStyle.title}>{t('identical.arrowTitle')}</Text>
+                <Text style={alertBubbleStyle.body}>{t('identical.arrowBody')}</Text>
                 <IdenticalWildStarHint compact />
               </View>
             </Animated.View>
