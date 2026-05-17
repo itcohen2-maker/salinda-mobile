@@ -9,6 +9,7 @@ export const en: Record<string, string> = {
   'room.notJoinable': 'This table is not open for joining right now',
   'room.notConfigured': 'The table is still being configured',
 
+  'lobby.createTableTimeout': 'Could not connect to the server. Check your internet connection and try again.',
   'mp.reconnecting': 'Network dropped — reconnecting to the server…',
   'mp.connectingTitle': 'Connecting to table',
   'mp.connectingBody': 'Just a moment — connecting you to the table…',
@@ -172,7 +173,7 @@ export const en: Record<string, string> = {
   'lobby.suffixCaption': 'Suffix to paste after your site URL in a browser:',
   'lobby.share': 'Share',
   'lobby.copy': 'Copy',
-  'lobby.playersInRoom': 'Players in room ({{count}}/4)',
+  'lobby.playersInRoom': 'Players in room ({{count}}/{{max}})',
   'lobby.host': 'Host',
   'lobby.botBadge': 'Bot',
   'lobby.disconnected': 'Offline',
@@ -389,7 +390,8 @@ export const en: Record<string, string> = {
   'ui.previousTurnSummary': 'Last turn summary',
 
   'results.possibleTitle': 'Possible results',
-  'meter.excellenceTitle': 'How do you earn coins?',
+  'meter.excellenceTitle': 'Excellence meter',
+  'meter.excellenceSubtitle': 'The meter that grants coins',
   'meter.demoCaption': 'Demo display only (Phase 1)',
 
   'game.playersHeading': 'Players',
@@ -797,6 +799,7 @@ export const en: Record<string, string> = {
   'onb.chooseCardsAfterConfirm.body': 'Pick cards whose sum matches the equation result you built.',
   'onb.firstDiscard.title': 'Cards played!',
   'onb.firstDiscard.body': 'Discarding empties your hand faster toward a win!',
+  'onb.results.body': 'Mini cards show all possible results. Tap them to reveal the exercise.',
   'guidance.tripleDraw': '🎲 Triple! Excellence-meter bonus ⭐',
   'guidance.wildResultsTitle': 'You have a wild card',
   'guidance.wildResultsBody': 'A wild card can complete any exercise you choose.',
@@ -849,13 +852,13 @@ export const en: Record<string, string> = {
   'start.advancedSetup.sectionNumbersTitle': 'Number range & fractions',
   'start.advancedSetup.sectionNumbersIntro':
     'Choose how high numbers can go on the cards, and whether fraction cards appear in the deck.',
-  'start.advancedSetup.operatorsTitle': 'Operators in the game',
+  'start.advancedSetup.operatorsTitle': 'Operation signs',
   'start.advancedSetup.operators.plusMinus.label': '+ and -',
   'start.advancedSetup.operators.plusMinus.help': 'Addition and subtraction only.',
   'start.advancedSetup.operators.mulDiv.label': '× and ÷',
   'start.advancedSetup.operators.mulDiv.help': 'Multiplication and division only.',
   'start.advancedSetup.operators.all.label': 'All operators',
-  'start.advancedSetup.operators.all.help': 'Play with +, -, ×, and ÷ together.',
+  'start.advancedSetup.operators.all.help': 'Play with all arithmetic operations together.',
   'start.advancedSetup.negativesTitle': 'Dice targets: negatives',
   'start.advancedSetup.negatives.off.label': 'No negatives',
   'start.advancedSetup.negatives.off.help': 'Targets stay 0 or above.',
@@ -1242,9 +1245,10 @@ export const en: Record<string, string> = {
 
   // Welcome bubble — shown before the first lesson
   'tutorial.welcome.title': 'Welcome!',
-  'tutorial.welcome.headline': 'Build equations, hit the result, and win with the cards in your hand.',
-  'tutorial.welcome.tagline': 'Think beyond the equation',
-  'tutorial.welcome.body': 'A fun way to train your brain.',
+  'tutorial.welcome.headline': 'A fun way to train your brain',
+  'tutorial.welcome.headlineSub': 'For all levels',
+  'tutorial.welcome.tagline': 'Build equations',
+  'tutorial.welcome.body': 'Think beyond the equation',
   'tutorial.welcome.coreReward': 'Finish the tutorial and earn 10 coins.',
   'tutorial.welcome.coreRewardPrefix': 'Finish the tutorial and earn ',
   'tutorial.welcome.coreRewardValue': '10 coins',
@@ -1254,7 +1258,7 @@ export const en: Record<string, string> = {
   'tutorial.welcome.advancedRewardValue': '20 coins',
   'tutorial.welcome.advancedRewardSuffix': ' more!',
   'tutorial.welcome.advancedBtn': 'Advanced tutorial',
-  'tutorial.welcome.start': "Let's go! ›",
+  'tutorial.welcome.start': "Let's go",
 
   // Core tutorial complete — choice screen: fractions or real game
   'tutorial.coreComplete.title': 'Tutorial complete',

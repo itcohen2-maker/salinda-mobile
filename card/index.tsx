@@ -16016,7 +16016,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (state.identicalAlert || state.pendingFractionTarget !== null) return;
     // בשימוש השני כבר יש הודעת תשלום עם requireAck — בלי גם onb_results (שני "הבנתי" ברצף)
     if (!shouldCountUseThisOpen || nextInfoUse !== 2) {
-      showOnb('onb_results', '', '', 'לפניך מוצגות במיני קלפים את התוצאות האפשריות. אם תלחץ עליהם תוכל לגלות את התרגיל');
+      showOnb('onb_results', '', '', t('onb.results.body'));
     }
   }, [canUseActiveTurnUi, resultsOpen, midGameHintsUnlocked, tutLoaded, showOnb, state.identicalAlert, state.pendingFractionTarget, state.possibleResultsInfoUses, state.possibleResultsInfoCountedThisTurn, state.guidanceEnabled, state.isTutorial, dispatch, hasWildForResults, showGuidance, t, playMiniResultTapSound, isBotTurnAny]);
 

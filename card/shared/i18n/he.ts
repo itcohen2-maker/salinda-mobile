@@ -22,6 +22,7 @@ export const he: Record<string, string> = {
   'room.notJoinable': 'לא ניתן להצטרף לשולחן הזה כרגע',
   'room.notConfigured': 'השולחן עדיין בשלב כיוון',
 
+  'lobby.createTableTimeout': 'לא ניתן להתחבר לשרת. בדקו חיבור אינטרנט ונסו שוב.',
   'mp.reconnecting': 'החיבור לרשת נותק — מנסים להתחבר מחדש לשרת…',
   'mp.connectingTitle': 'מתחברים לשולחן',
   'mp.connectingBody': 'רק רגע — מחברים אותך לשולחן…',
@@ -183,7 +184,7 @@ export const he: Record<string, string> = {
   'lobby.suffixCaption': 'סיומת להדבקה אחרי כתובת האתר בדפדפן:',
   'lobby.share': 'שתף',
   'lobby.copy': 'העתק',
-  'lobby.playersInRoom': 'שחקנים בחדר ({{count}}/4)',
+  'lobby.playersInRoom': 'שחקנים בחדר ({{count}}/{{max}})',
   'lobby.host': 'מארח',
   'lobby.disconnected': 'מנותק',
   'lobby.difficulty': 'רמת קושי',
@@ -393,7 +394,8 @@ export const he: Record<string, string> = {
   'ui.previousTurnSummary': 'סיכום התור הקודם',
 
   'results.possibleTitle': 'תוצאות אפשריות',
-  'meter.excellenceTitle': 'איך מרוויחים מטבעות?',
+  'meter.excellenceTitle': 'מד ההצטיינות',
+  'meter.excellenceSubtitle': 'המד שמעניק מטבעות',
   'meter.demoCaption': 'תצוגת דמו בלבד (שלב 1)',
 
   'game.playersHeading': 'שחקנים',
@@ -800,6 +802,7 @@ export const he: Record<string, string> = {
   'onb.chooseCardsAfterConfirm.body': 'בחר קלפים שסכומם תוצאת התרגיל שבנית.',
   'onb.firstDiscard.title': 'השלכת קלפים!',
   'onb.firstDiscard.body': 'כשנפטרים מקלפים — היד שלך מתרוקנת מהר יותר לניצחון!',
+  'onb.results.body': 'לפניך מוצגות במיני קלפים את התוצאות האפשריות. אם תלחץ עליהם תוכל לגלות את התרגיל',
   'guidance.tripleDraw': '🎲 שלישייה! בונוס למד ההצטיינות ⭐',
   'guidance.wildResultsTitle': 'יש לך קלף פרא',
   'guidance.wildResultsBody': 'עם קלף פרא אפשר להשלים כל תרגיל שתבחר.',
@@ -852,13 +855,13 @@ export const he: Record<string, string> = {
   'start.advancedSetup.sectionNumbersTitle': 'טווח מספרים ושברים',
   'start.advancedSetup.sectionNumbersIntro':
     'בוחרים עד איזה מספר מופיעים על הקלפים, והאם קלפי שברים נכנסים לחבילה.',
-  'start.advancedSetup.operatorsTitle': 'סימנים במשחק',
+  'start.advancedSetup.operatorsTitle': 'סימני פעולה',
   'start.advancedSetup.operators.plusMinus.label': '+ ו־-',
   'start.advancedSetup.operators.plusMinus.help': 'רק חיבור וחיסור.',
   'start.advancedSetup.operators.mulDiv.label': '× ו־÷',
   'start.advancedSetup.operators.mulDiv.help': 'עם כפל וחילוק.',
   'start.advancedSetup.operators.all.label': 'כל הסימנים',
-  'start.advancedSetup.operators.all.help': 'משחק עם +, -, ×, ÷ יחד.',
+  'start.advancedSetup.operators.all.help': 'משחק עם כל פעולות החשבון יחד.',
   'start.advancedSetup.negativesTitle': 'תוצאות מהקוביות',
   'start.advancedSetup.negatives.off.label': 'בלי שלילי',
   'start.advancedSetup.negatives.off.help': 'התוצאות נשארות 0 ומעלה.',
@@ -1255,9 +1258,10 @@ export const he: Record<string, string> = {
 
   // בועת פתיחת ההדרכה — מוצגת לפני השיעור הראשון
   'tutorial.welcome.title': 'ברוכים הבאים!',
-  'tutorial.welcome.headline': 'מרכיבים תרגילים, קולעים לתוצאה ומנצחים עם הקלפים שביד.',
-  'tutorial.welcome.tagline': 'חושבים מחוץ למשוואה',
-  'tutorial.welcome.body': 'דרך מהנה לאמן את המוח.',
+  'tutorial.welcome.headline': 'דרך מהנה לאמן את המוח',
+  'tutorial.welcome.headlineSub': 'מתאים לכל הרמות',
+  'tutorial.welcome.tagline': 'מרכיבים תרגילים',
+  'tutorial.welcome.body': 'וחושבים מחוץ למשוואה',
   'tutorial.welcome.coreReward': 'בסיום ההדרכה תרוויחו 10 מטבעות.',
   'tutorial.welcome.coreRewardPrefix': 'בסיום ההדרכה תרוויחו ',
   'tutorial.welcome.coreRewardValue': '10 מטבעות',
@@ -1267,7 +1271,7 @@ export const he: Record<string, string> = {
   'tutorial.welcome.advancedRewardValue': '20 מטבעות',
   'tutorial.welcome.advancedRewardSuffix': ' נוספים!',
   'tutorial.welcome.advancedBtn': 'הדרכת מתקדמים',
-  'tutorial.welcome.start': 'בואו נתחיל! ›',
+  'tutorial.welcome.start': 'בואו נתחיל',
 
   // סיום הדרכת ליבה — מסך בחירה: שברים או משחק אמיתי
   'tutorial.coreComplete.title': 'סיימתם את ההדרכה',

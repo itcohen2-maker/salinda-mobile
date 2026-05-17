@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Animated, Easing, TouchableOpacity, Text } from 'react-native';
 import { SlindaCoin } from './SlindaCoin';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +22,7 @@ type Props = {
   isCelebrating?: boolean;
   onPress?: () => void;
   title?: string;
+  subtitle?: string;
   height?: number;
   courageCoins?: number;
 };
@@ -33,13 +34,18 @@ export default function ExcellenceMeter({
   isCelebrating = false,
   onPress,
   title,
+  subtitle,
   height,
   courageCoins,
 }: Props) {
   const H = height ?? (compact ? 80 : 110);
   const W = compact ? Math.round((45 / 80) * H) : Math.round((55 / 110) * H);
 
-  const fillPx = useRef(new Animated.Value((value / 100) * H)).current;
+  // fillPct is 0–100. We animate translateY via interpolation so the fill
+  // animation runs on the native thread (useNativeDriver: true), preventing it
+  // from being blocked by the concurrent native-driver bounce transform on the
+  // parent view (which caused the green liquid to never visually update).
+  const fillPct = useRef(new Animated.Value(value)).current;
   const scaleX = useRef(new Animated.Value(1)).current;
   const scaleY = useRef(new Animated.Value(1)).current;
   const transY = useRef(new Animated.Value(0)).current;
@@ -56,9 +62,11 @@ export default function ExcellenceMeter({
     }))
   ).current;
 
-  const prevPulse = useRef<number | undefined>(undefined);
+  const prevPulse = useRef<number | undefined>(pulseKey);
   const prevValue = useRef(value);
   const tapScale = useRef(new Animated.Value(1)).current;
+  const negHalfH = useRef(new Animated.Value(-H / 2)).current;
+  const bounceTransY = useMemo(() => Animated.add(negHalfH, transY), [negHalfH, transY]);
 
   const t = (toValue: number, duration: number) =>
     (anim: Animated.Value) =>
@@ -70,13 +78,13 @@ export default function ExcellenceMeter({
       });
 
   const animFill = useCallback((toPct: number, dur = 420) => {
-    Animated.timing(fillPx, {
-      toValue: (toPct / 100) * H,
+    Animated.timing(fillPct, {
+      toValue: toPct,
       duration: dur,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
-  }, [fillPx, H]);
+  }, [fillPct]);
 
   const playBounce = useCallback(() => {
     void playSfx('meterBounce', { cooldownMs: 0, volumeOverride: 0.5 });
@@ -225,8 +233,12 @@ export default function ExcellenceMeter({
     }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rotDeg = rot.interpolate({ inputRange: [-5, 5], outputRange: ['-5deg', '5deg'] });
-  const glowOp = glow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
+  // Memoized so the native-driver node stays stable across re-renders.
+  // Re-creating interpolations each render causes Android to lose the native
+  // animation node reference and stops the fill animation from updating.
+  const rotDeg = useMemo(() => rot.interpolate({ inputRange: [-5, 5], outputRange: ['-5deg', '5deg'] }), [rot]);
+  const glowOp = useMemo(() => glow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] }), [glow]);
+  const fillTranslateY = useMemo(() => fillPct.interpolate({ inputRange: [0, 100], outputRange: [H, 0] }), [fillPct, H]);
 
   const handlePress = useCallback(() => {
     void playSfx('meterBounce', { cooldownMs: 0, volumeOverride: 0.85 });
@@ -251,6 +263,17 @@ export default function ExcellenceMeter({
           {title}
         </Text>
       )}
+      {!!subtitle && (
+        <Text
+          style={[
+            styles.subtitle,
+            compact ? styles.subtitleCompact : null,
+          ]}
+          numberOfLines={2}
+        >
+          {subtitle}
+        </Text>
+      )}
       <TouchableOpacity activeOpacity={1} onPress={handlePress} style={{ alignItems: 'center' }}>
         <Animated.View style={{ transform: [{ scale: tapScale }], alignItems: 'center' }}>
           <Animated.View
@@ -261,7 +284,7 @@ export default function ExcellenceMeter({
                 { translateY: H / 2 },
                 { scaleX },
                 { scaleY },
-                { translateY: Animated.add(new Animated.Value(-H / 2), transY) as any },
+                { translateY: bounceTransY as any },
                 { rotate: rotDeg },
               ],
             }}
@@ -269,19 +292,23 @@ export default function ExcellenceMeter({
             <View style={[styles.glass, { width: W, height: H }]}>
               <Animated.View style={[styles.pulseGlow, { opacity: glowOp }]} />
 
-              <Animated.View style={[styles.fillWrap, { height: fillPx }]}>
-                <LinearGradient
-                  colors={['#16A34A', '#22C55E', '#7CFC00']}
-                  start={{ x: 0, y: 1 }}
-                  end={{ x: 0.65, y: 0 }}
-                  style={StyleSheet.absoluteFillObject}
-                />
-                <View style={styles.wave} />
-                <View style={styles.fillShine} />
-                <Animated.View
-                  style={[StyleSheet.absoluteFillObject, { opacity: party, backgroundColor: 'rgba(255,190,80,0.45)' }]}
-                />
-              </Animated.View>
+              {/* Clip container fills the glass; inner view slides up via native-driver
+                  translateY so the fill animation is never blocked by the bounce transform. */}
+              <View style={styles.fillClip}>
+                <Animated.View style={[styles.fillInner, { height: H, transform: [{ translateY: fillTranslateY }] }]}>
+                  <LinearGradient
+                    colors={['#16A34A', '#22C55E', '#7CFC00']}
+                    start={{ x: 0, y: 1 }}
+                    end={{ x: 0.65, y: 0 }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                  <View style={styles.wave} />
+                  <View style={styles.fillShine} />
+                  <Animated.View
+                    style={[StyleSheet.absoluteFillObject, { opacity: party, backgroundColor: 'rgba(255,190,80,0.45)' }]}
+                  />
+                </Animated.View>
+              </View>
 
               <View style={styles.gloss} />
             </View>
@@ -320,9 +347,9 @@ export default function ExcellenceMeter({
       </TouchableOpacity>
 
       {(courageCoins ?? 0) > 0 && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 2 }}>
-          <SlindaCoin size={18} pulseKey={pulseKey} />
-          <Text style={{ color: '#FCD34D', fontSize: 11, fontWeight: '700' }}>
+        <View style={{ alignItems: 'center', marginTop: 6 }}>
+          <SlindaCoin size={36} pulseKey={pulseKey} spin />
+          <Text style={{ display: 'none' }}>
             ×{courageCoins}
           </Text>
         </View>
@@ -348,6 +375,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     maxWidth: 120,
   },
+  subtitle: {
+    color: 'rgba(241,245,249,0.9)',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+    maxWidth: 220,
+  },
+  subtitleCompact: {
+    fontSize: 9,
+    marginBottom: 5,
+    maxWidth: 120,
+  },
   glass: {
     borderRadius: 12,
     overflow: 'hidden',
@@ -361,14 +401,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(134,239,172,0.25)',
   },
-  fillWrap: {
-    width: '100%',
-    justifyContent: 'flex-end',
+  fillClip: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+  },
+  fillInner: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    overflow: 'visible',
   },
   wave: {
     position: 'absolute',
