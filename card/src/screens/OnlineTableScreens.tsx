@@ -642,7 +642,8 @@ export function LobbyScreen({
     serverUrl,
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
-  const isAndroidRtlSetup = Platform.OS === 'android' && isRTL;
+  // Android's forceRTL already flips 'row'; iOS needs manual row-reverse.
+  const isRtlNeedsFlip = isRTL && Platform.OS !== 'android';
   const currentTable = currentRoomTable ?? tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
@@ -741,9 +742,9 @@ export function LobbyScreen({
     : responsive.width;
   const setupPanelStyle = isRTL ? [styles.setupPanel, styles.setupPanelRtl] : styles.setupPanel;
   const setupLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
-  const setupRowStyle = isAndroidRtlSetup ? [styles.row, styles.rowAndroidRtl] : styles.row;
+  const setupRowStyle = isRtlNeedsFlip ? [styles.row, styles.rowAndroidRtl] : styles.row;
   const setupCountRowStyle = styles.countRow;
-  const setupChipWrapStyle = isAndroidRtlSetup ? [styles.chipWrap, styles.chipWrapAndroidRtl] : styles.chipWrap;
+  const setupChipWrapStyle = isRtlNeedsFlip ? [styles.chipWrap, styles.chipWrapAndroidRtl] : styles.chipWrap;
   const minuteTimerStepper = {
     key: 'min',
     label: t('start.timerPickerMin'),
