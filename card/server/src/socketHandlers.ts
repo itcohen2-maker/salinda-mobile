@@ -815,6 +815,31 @@ function runBotStep(io: IOServer, room: Room): void {
   const player = currentPlayer(room);
   if (!player?.isBot || player.isEliminated || player.isSpectator) return;
 
+  // Pity bot surrender: after turn 4, if the bot is losing by >30%, quit with 30% chance.
+  // This simulates a frustrated human player disconnecting.
+  const pitoDiff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'medium';
+  if (pitoDiff === 'pity') {
+    const botPlayer = room.state.players.find((p) => p.isBot);
+    const humanPlayer = room.state.players.find((p) => !p.isBot && !p.isEliminated && !p.isSpectator);
+    const turnNum = room.state.roundsPlayed ?? 0;
+    if (botPlayer && humanPlayer && turnNum >= 4) {
+      const humanCoins = Number(humanPlayer.courageCoins ?? 0);
+      const botCoins = Number(botPlayer.courageCoins ?? 0);
+      if (humanCoins > 0 && botCoins <= humanCoins * 0.7 && Math.random() < 0.3) {
+        // Bot surrenders — apply technical victory for the human, same as a grace-timer expiry.
+        const tvResult = technicalVictory(room.state, botPlayer.id);
+        if (tvResult) {
+          room.state = tvResult;
+          clearBotActionTimer(room);
+          broadcastState(io, room);
+          emitRoomToasts(io, room);
+          maybeRecordMatch(room);
+        }
+        return;
+      }
+    }
+  }
+
   switch (room.state.phase) {
     case 'turn-transition':
       if (room.state.overflowSwapPending) {
