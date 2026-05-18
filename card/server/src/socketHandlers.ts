@@ -99,6 +99,8 @@ import { pickBotOverflowSwap } from '../../shared/overflowSwap';
 import { botNarrationToastText, renderBotNarration, type BotNarrationInput } from '../../shared/botNarration';
 import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_WIN, RATING_LOSS, RATING_ABANDON_PENALTY } from './supabaseAdmin';
 import { shouldAutoStartWhenRoomIsFull } from './tableAutoStart';
+import { resolveBotConfig } from './ddaService';
+import { generateDisguisedProfile } from './botDisguise';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -1278,7 +1280,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     startRoomGame(io, room, diff, normalizeGameSettingsPatch(gameSettings));
   });
 
-  socket.on('start_bot_game', ({ difficulty, gameSettings }, ack) => {
+  socket.on('start_bot_game', async ({ difficulty, gameSettings }, ack) => {
     if (rateLimited()) return;
     const diff = validateDifficulty(difficulty);
     const reply = (result: StartBotGameAck) => {
@@ -1318,9 +1320,17 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     }
 
     const normalizedSettings = normalizeGameSettingsPatch(gameSettings);
-    addBotPlayer(room, loc, normalizedSettings?.botDisplayName);
+    const requestedBotDiff = ((normalizedSettings as Record<string, unknown>)?.botDifficulty ?? 'medium') as BotDifficulty;
+    const userId = socket.data.userId ?? null;
+    const { difficulty: resolvedBotDiff, isPity } = await resolveBotConfig(userId, requestedBotDiff);
+
+    const disguise = isPity ? generateDisguisedProfile() : null;
+    const botDisplayName = disguise?.displayName ?? (normalizedSettings as Record<string, unknown>)?.botDisplayName as string | undefined;
+    addBotPlayer(room, loc, botDisplayName);
     emitRoomPlayers(io, room);
-    startRoomGame(io, room, diff, normalizedSettings);
+
+    const finalSettings = { ...normalizedSettings, botDifficulty: resolvedBotDiff };
+    startRoomGame(io, room, diff, finalSettings);
     if (!room.state) {
       const message = t(loc, 'game.notStarted');
       socket.emit('error', { message });
@@ -1331,7 +1341,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     reply({ ok: true, playerView });
   });
 
-  socket.on('continue_vs_bot', (payloadOrAck, maybeAck) => {
+  socket.on('continue_vs_bot', async (payloadOrAck, maybeAck) => {
     if (rateLimited()) return;
     const payload =
       typeof payloadOrAck === 'function' || payloadOrAck == null
@@ -1384,11 +1394,15 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
 
-    const botName = target.locale === 'he' ? 'בוט' : 'Bot';
+    const userId = socket.data.userId ?? null;
+    const { difficulty: resolvedBotDiff, isPity } = await resolveBotConfig(userId, requestedDifficulty as BotDifficulty);
+
+    const disguise = isPity ? generateDisguisedProfile() : null;
     target.isBot = true;
     target.isConnected = true;
     target.isHost = false;
-    target.name = botName;
+    target.name = disguise?.displayName ?? (target.locale === 'he' ? 'בוט' : 'Bot');
+
     // Sync room.state.players — it's a separate array created by spread in startGame,
     // so mutating room.players alone leaves isBot=false in the game engine.
     const stateTarget = room.state.players.find((p) => p.id === target.id);
@@ -1396,18 +1410,19 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       stateTarget.isBot = true;
       stateTarget.isConnected = true;
       stateTarget.isHost = false;
-      stateTarget.name = botName;
+      stateTarget.name = target.name;
     }
-    room.state = {
-      ...room.state,
-      hostGameSettings: {
-        ...room.state.hostGameSettings,
-        botDifficulty: requestedDifficulty,
-      },
-    };
+
+    // Sync bot difficulty override into live game state.
+    if (room.state) {
+      room.state = {
+        ...(room.state as any),
+        hostGameSettings: { ...room.state.hostGameSettings, botDifficulty: resolvedBotDiff },
+      };
+    }
     room.configuredGameSettings = {
       ...(room.configuredGameSettings ?? {}),
-      botDifficulty: requestedDifficulty,
+      botDifficulty: resolvedBotDiff,
     };
     promoteConnectedHumanHost(room, playerId);
     clearRoomDisconnectGrace(room);
