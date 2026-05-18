@@ -740,11 +740,16 @@ export function LobbyScreen({
   const lobbyShellWidth = Platform.OS === 'web'
     ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, responsive.width)
     : responsive.width;
-  const setupPanelStyle = isRTL ? [styles.setupPanel, styles.setupPanelRtl] : styles.setupPanel;
+  // direction:'rtl' on the panel flips ALL flex rows inside without row-reverse on each.
+  // Web skips it (document.dir handles it). iOS and Android both need it explicitly.
+  const rtlDirection = isRTL && Platform.OS !== 'web' ? ({ direction: 'rtl' } as const) : null;
+  const setupPanelStyle = isRTL
+    ? [styles.setupPanel, styles.setupPanelRtl, rtlDirection]
+    : styles.setupPanel;
   const setupLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
-  const setupRowStyle = isRtlNeedsFlip ? [styles.row, styles.rowAndroidRtl] : styles.row;
+  const setupRowStyle = styles.row;
   const setupCountRowStyle = styles.countRow;
-  const setupChipWrapStyle = isRtlNeedsFlip ? [styles.chipWrap, styles.chipWrapAndroidRtl] : styles.chipWrap;
+  const setupChipWrapStyle = styles.chipWrap;
   const minuteTimerStepper = {
     key: 'min',
     label: t('start.timerPickerMin'),

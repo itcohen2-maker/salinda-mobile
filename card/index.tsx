@@ -10184,7 +10184,7 @@ function StartScreen({
   const showPlayerCountRow = gameMode === 'pass-and-play';
   const showBotSettings = gameMode === 'vs-bot';
   // Android's forceRTL already flips 'row' direction; iOS needs manual 'row-reverse'.
-  const rtlRow = (isRTL && Platform.OS !== 'web' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
+  const rtlRow = 'row' as const;
   const advancedSetupModalWidth = Platform.OS === 'web'
     ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, viewport.width - 40))
     : Math.min(420, Math.max(320, responsive.width - 24));
@@ -11549,7 +11549,7 @@ function StartScreen({
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           scrollEventThrottle={16}
         >
-        <View style={hsS.settings}>
+        <View style={[hsS.settings, isRTL && Platform.OS !== 'web' ? { direction: 'rtl' } : null]}>
           <View style={{ alignItems: isRTL ? 'flex-end' : 'flex-start', width: '100%', marginBottom: 8 }}>
             <LanguageToggle />
           </View>
@@ -12294,7 +12294,7 @@ function AdvancedSetupSectionHeading({
   colors: readonly [string, string, ...string[]];
 }) {
   const { isRTL } = useLocale();
-  const rtlRow = (isRTL && Platform.OS !== 'web' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
+  const rtlRow = 'row' as const;
   return (
     <View style={hsS.advSectionHdr}>
       <View style={[hsS.advSectionHeaderRow, { flexDirection: rtlRow }]}>
@@ -12395,7 +12395,7 @@ function BotDifficultySettingsBlock({
   setBotDisplayName: (s: string) => void;
 }) {
   const { t, isRTL } = useLocale();
-  const rtlRow = (isRTL && Platform.OS !== 'web' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
+  const rtlRow = 'row' as const;
   return (
     <LinearGradient testID="start-bot-settings" colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
       <View style={{ paddingVertical: 10, paddingHorizontal: 4, gap: 10 }}>
