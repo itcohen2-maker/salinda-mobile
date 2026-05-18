@@ -3925,6 +3925,19 @@ function GameProvider({ children }: { children: ReactNode }) {
     localState, // covers the !override branch
   ]);
 
+  // Award coins when the excellence meter fills. Placed here (GameProvider) rather than
+  // GameScreen because applyCourageStepReward + endTurnLogic fire in the same state
+  // update — GameScreen unmounts before its effect can run when phase → turn-transition.
+  const { awardCoins: _awardCoinsForMeter } = useAuth();
+  const lastAwardSyncedPulseRef = useRef<number>(0);
+  useEffect(() => {
+    if (state.isTutorial || !state.lastCourageCoinsAwarded) return;
+    const pulseId = state.courageRewardPulseId ?? 0;
+    if (pulseId <= 0 || lastAwardSyncedPulseRef.current === pulseId) return;
+    lastAwardSyncedPulseRef.current = pulseId;
+    void _awardCoinsForMeter(EXCELLENCE_METER_FULL_REWARD_COINS, 'excellence_meter_full');
+  }, [_awardCoinsForMeter, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
+
   // dispatch reads overrideRef.current so it never needs to be recreated when override
   // changes — making it stable prevents cascading useEffect re-runs in child components.
   const dispatch = useCallback((action: GameAction) => {
@@ -14862,7 +14875,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     state.overflowSwapPending &&
     !state.isTutorial;
   const { t, isRTL } = useLocale();
-  const { awardCoins } = useAuth();
   const { table, background, activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const responsive = useResponsiveLayout();
@@ -15021,14 +15033,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     setSfxMuted(!soundOn);
     void setSfxVolume(soundOn ? 0.33 : 0);
   }, [soundOn]);
-  const lastAwardSyncedPulseRef = useRef<number>(0);
-  useEffect(() => {
-    if (state.isTutorial || !state.lastCourageCoinsAwarded) return;
-    const pulseId = state.courageRewardPulseId ?? 0;
-    if (pulseId <= 0 || lastAwardSyncedPulseRef.current === pulseId) return;
-    lastAwardSyncedPulseRef.current = pulseId;
-    void awardCoins(EXCELLENCE_METER_FULL_REWARD_COINS, 'excellence_meter_full');
-  }, [awardCoins, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
   const cp = state.players[state.currentPlayerIndex];
   const currentPlayerId = cp?.id ?? -1;
   const currentPlayerName = cp?.name ?? t('labels.player');
@@ -15267,6 +15271,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       if (state.phase === 'setup' || state.phase === 'game-over') {
         timerTurnKeyRef.current = null;
         timerConfigKeyRef.current = '';
+        setSecsLeft(0);
+      } else if (state.phase === 'pre-roll' && TIMER_TOTAL > 0) {
+        // Show the full unburned fuse during pre-roll so the player sees the
+        // timer is active before they roll. The countdown only starts in building.
+        setSecsLeft(TIMER_TOTAL);
       }
       return;
     }
