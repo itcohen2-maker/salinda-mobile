@@ -10189,6 +10189,7 @@ function StartScreen({
   let nextWheelIndex = 0;
   const modeWheelIndex = showModeRow ? nextWheelIndex++ : null;
   const playerCountWheelIndex = showPlayerCountRow ? nextWheelIndex++ : null;
+  const botSettingsWheelIndex = showBotSettings ? nextWheelIndex++ : null;
   const numberRangeWheelIndex = nextWheelIndex++;
   const guidanceWheelIndex = nextWheelIndex++;
   const advancedWheelIndex = nextWheelIndex++;
@@ -11635,7 +11636,19 @@ function StartScreen({
           </WheelRow>
           ) : null}
 
-          {/* 3. טווח מספרים */}
+          {/* 3. הגדרות בוט — מוצג רק במצב בוט */}
+          {showBotSettings && botSettingsWheelIndex != null ? (
+            <WheelRow index={botSettingsWheelIndex}>
+              <BotDifficultySettingsBlock
+                botDifficulty={botDifficulty}
+                setBotDifficulty={setBotDifficulty}
+                botDisplayName={botDisplayName}
+                setBotDisplayName={setBotDisplayName}
+              />
+            </WheelRow>
+          ) : null}
+
+          {/* 4. טווח מספרים */}
           <WheelRow index={numberRangeWheelIndex}>
           <LinearGradient colors={['#188038', '#34A853']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
           <View style={[hsS.row, hsS.startRowRange, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
