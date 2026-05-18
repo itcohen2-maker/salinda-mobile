@@ -15237,7 +15237,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       : state.timerSetting === '90'
         ? 90
         : 0;
-  const TIMER_TOTAL = rawTimerTotal > 0 ? Math.min(rawTimerTotal, START_TURN_TIMER_SECONDS) : 0;
+  const TIMER_TOTAL = rawTimerTotal > 0 ? Math.min(rawTimerTotal, 600) : 0;
   const timerTurnKeyRef = useRef<string | null>(null);
   const timerConfigKeyRef = useRef<string>('');
   const showSmallTurnTimerHint = !state.isTutorial && state.roundsPlayed < TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED;
