@@ -112,7 +112,11 @@ export function getTableInfoRowDirection(
   platformOS: string = Platform.OS,
 ): 'row' | 'row-reverse' {
   if (!isRTL) return 'row';
-  return platformOS === 'android' ? 'row' : 'row-reverse';
+  // Web: document.dir handles RTL, so 'row' flows correctly.
+  // Android: system RTL handles direction, so 'row' flows correctly.
+  // iOS: no system RTL flip — use 'row-reverse' manually.
+  if (platformOS === 'android' || platformOS === 'web') return 'row';
+  return 'row-reverse';
 }
 
 export function getTableInfoTextAlign(
@@ -301,7 +305,7 @@ function StatusPill({
           {
             borderColor: tone.border,
             backgroundColor: tone.background,
-            flexDirection: isRTL ? 'row-reverse' : 'row',
+            flexDirection: getTableInfoRowDirection(isRTL),
           },
       ]}
     >
@@ -327,7 +331,7 @@ function SeatsRow({
   accent: string;
 }) {
   return (
-    <View style={[styles.seatsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+    <View style={[styles.seatsRow, { flexDirection: getTableInfoRowDirection(isRTL) }]}>
       {Array.from({ length: max }).map((_, index) => (
         <View
           key={index}
@@ -403,7 +407,7 @@ function TableCard({
           compactVisuals && styles.tileHeaderCompactWeb,
           stackedHeader
             ? [styles.tileHeaderStacked, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]
-            : { flexDirection: isRTL ? 'row-reverse' : 'row' },
+            : { flexDirection: getTableInfoRowDirection(isRTL) },
         ]}
       >
         <View
@@ -539,7 +543,7 @@ function EmptyTableCard({
           compactVisuals && styles.tileHeaderCompactWeb,
           stackedHeader
             ? [styles.tileHeaderStacked, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]
-            : { flexDirection: isRTL ? 'row-reverse' : 'row' },
+            : { flexDirection: getTableInfoRowDirection(isRTL) },
         ]}
       >
         <View
@@ -733,7 +737,7 @@ export default function TablesLobbyScreen({
               testID="lobby-action-row"
               style={[
                 styles.actionRow,
-                { flexDirection: stackedActions ? 'column' : isRTL ? 'row-reverse' : 'row' },
+                { flexDirection: stackedActions ? 'column' : getTableInfoRowDirection(isRTL) },
               ]}
             >
               <TouchableOpacity
@@ -742,7 +746,7 @@ export default function TablesLobbyScreen({
                   styles.quickMatchBtn,
                   compactVisuals && styles.quickMatchBtnCompactWeb,
                   stackedActions ? styles.actionBtnStacked : null,
-                  { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  { flexDirection: getTableInfoRowDirection(isRTL) },
                   !canAct && styles.disabledButton,
                 ]}
                 disabled={!canAct}
@@ -753,7 +757,7 @@ export default function TablesLobbyScreen({
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.utilityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            <View style={[styles.utilityRow, { flexDirection: getTableInfoRowDirection(isRTL) }]}>
               {onEnterCode ? (
                 <TouchableOpacity
                   testID="lobby-enter-code"

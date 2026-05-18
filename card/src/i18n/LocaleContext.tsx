@@ -1,6 +1,6 @@
-import React, { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import type { AppLocale, MsgParams } from '../../shared/i18n';
@@ -39,6 +39,18 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       I18nManager.swapLeftAndRightInRTL(false);
     }
   }, []);
+
+  useEffect(() => {
+    // Reactively update text direction when locale changes.
+    // swapLeftAndRightInRTL(false) above keeps physical layout stable —
+    // forceRTL here updates only text rendering direction.
+    // On web: also set the document dir attribute directly, since RN Web's
+    // I18nManager may not propagate to the HTML root reactively.
+    I18nManager.forceRTL(locale === 'he');
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.documentElement.setAttribute('dir', locale === 'he' ? 'rtl' : 'ltr');
+    }
+  }, [locale]);
 
   const setLocale = useCallback(async (l: AppLocale) => {
     setLocaleState(l);
