@@ -10367,7 +10367,7 @@ function StartScreen({
     }
     setGuidance(on);
     setGuidancePromptOpen(false);
-    startGame();
+    startGameRef.current();
   }, [setGuidance]);
   useEffect(() => {
     void initializeSfx();
@@ -10379,6 +10379,7 @@ function StartScreen({
     setSfxMuted(gameState.soundsEnabled === false);
   }, [gameState.soundsEnabled]);
 
+  const startGameRef = useRef<() => void>(() => {});
   const startGame = () => {
     // השם מגיע קודם כל מתוך ה-prop (ChoiceScreen), ואז מ-AsyncStorage (PlayerNameModal קודם),
     // ורק לבסוף נופל לברירת המחדל "שחקן 1". מסונכרן לשני המפתחות כדי שמסכים עתידיים יקראו אותו.
@@ -10440,6 +10441,7 @@ function StartScreen({
       abVariant,
     });
   };
+  startGameRef.current = startGame;
 
   const requestStartGame = useCallback(() => {
     Keyboard.dismiss();
