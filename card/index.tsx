@@ -19712,8 +19712,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const routerWebLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const routerScreenWidth = routerWebLayout?.playfieldWidth ?? responsive.width;
   const webPresentation = useContext(WebPresentationContext);
-  // Web opens directly on the online table browser so visitors see tables immediately.
-  const [playMode, setPlayMode] = useState<ShellPlayMode>(Platform.OS === 'web' ? 'online' : 'choose');
+  // Web starts at the home/choose screen like mobile; URL-based room joins still work via the effect below.
+  const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
   // Auto-start tutorial disabled — app opens on choose screen
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
