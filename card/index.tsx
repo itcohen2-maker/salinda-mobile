@@ -12417,13 +12417,14 @@ function BotDifficultySettingsBlock({
           </View>
         </View>
         <View style={{ alignSelf: 'stretch' }}>
-          <Text style={[hsS.rowLabel, { fontSize: 12, marginBottom: 6 }]}>{t('start.botNameLabel')}</Text>
+          <Text style={[hsS.rowLabel, { fontSize: 12, marginBottom: 6, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.botNameLabel')}</Text>
           <TextInput
             value={botDisplayName}
             onChangeText={setBotDisplayName}
             placeholder={t('start.botNamePlaceholder')}
             placeholderTextColor="rgba(255,255,255,0.45)"
             maxLength={24}
+            textAlign={isRTL ? 'right' : 'left'}
             style={{
               borderWidth: 1,
               borderColor: 'rgba(255,255,255,0.28)',
