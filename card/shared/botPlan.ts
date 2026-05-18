@@ -19,7 +19,7 @@ export type BotTargetOption = {
   equation: string;
 };
 
-type InternalPlan = BotStagedPlanPick & { score: number };
+type InternalPlan = BotStagedPlanPick & { score: number; usesWild: boolean };
 
 /** Optional RNG for tests / replay; defaults to Math.random. */
 export type PickBotPlanOptions = {
@@ -48,7 +48,16 @@ function pickFromPlans(
 
   switch (difficulty) {
     case 'hard': {
-      const tier = plans.filter((p) => p.score === maxScore);
+      // Wild-penalty: using a Wild in a low-value equation is wasteful.
+      // Penalize Wild-using plans unless the equation is high-value (score >= 5).
+      const WILD_PENALTY = 3;
+      const HIGH_VALUE_THRESHOLD = 5;
+      const adjusted = plans.map((p) => ({
+        ...p,
+        adjScore: p.score - (p.usesWild && p.score < HIGH_VALUE_THRESHOLD ? WILD_PENALTY : 0),
+      }));
+      const maxAdj = Math.max(...adjusted.map((p) => p.adjScore));
+      const tier = adjusted.filter((p) => p.adjScore === maxAdj);
       return strip(tier[0]!);
     }
     case 'easy': {
@@ -75,6 +84,15 @@ function pickFromPlans(
         }
       }
       return strip(best);
+    }
+    case 'pity': {
+      // 80%: pick the plan with the LOWEST score (deliberate blunder).
+      // 20%: pick randomly (occasional accidental competence).
+      if (rng() < 0.8) {
+        const tier = plans.filter((p) => p.score === minScore);
+        return strip(tier[0]!);
+      }
+      return strip(plans[Math.floor(rng() * plans.length)]!);
     }
     default: {
       const _e: never = difficulty;
@@ -120,12 +138,14 @@ function collectPlans(
         // Multi-play: numbers/wilds only — opCard=null forces simple sum
         if (!validateStagedCards(stagedCards, null, option.result, maxWild)) continue;
         const score = stagedCards.length + equationCommits.length;
+        const usesWild = stagedCards.some((c) => c.type === 'wild');
         plans.push({
           target: option.result,
           equationDisplay: option.equation,
           stagedCardIds: [...stagedCards.map((c) => c.id)],
           equationCommits,
           score,
+          usesWild,
         });
       }
     }
@@ -181,14 +201,15 @@ export function pickBotStagedPlan(
  * Longer delays on easier levels so players can read the exercise; Hard is still the fastest tier.
  */
 export function botStepDelayRange(difficulty: BotDifficulty): { min: number; max: number } {
-  // All delays shortened by ≈⅓ for a snappier bot turn.
   switch (difficulty) {
     case 'easy':
       return { min: 1470, max: 1870 };
     case 'medium':
-      return { min: 1270, max: 1600 };
+      return { min: 1200, max: 1500 };
     case 'hard':
-      return { min: 1200, max: 1470 };
+      return { min: 900, max: 1200 };
+    case 'pity':
+      return { min: 2000, max: 3000 };
     default: {
       const _e: never = difficulty;
       void _e;
