@@ -10183,6 +10183,8 @@ function StartScreen({
   const showModeRow = !lockGameMode;
   const showPlayerCountRow = gameMode === 'pass-and-play';
   const showBotSettings = gameMode === 'vs-bot';
+  // Android's forceRTL already flips 'row' direction; iOS needs manual 'row-reverse'.
+  const rtlRow = (isRTL && Platform.OS !== 'android' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
   const advancedSetupModalWidth = Platform.OS === 'web'
     ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, viewport.width - 40))
     : Math.min(420, Math.max(320, responsive.width - 24));
@@ -10483,9 +10485,9 @@ function StartScreen({
   const topActionHeroTop = Math.max(0, topActionsBackVisualHeight + topActionsRowGap - TOP_ACTION_HERO_SIZE - 12);
   const START_MENU_TOP = TOP_ACTIONS_TOP + TOP_ACTIONS_H + (compactStartScreen ? 4 : 6);
   const placeTopBackOnRightOnAndroid = Platform.OS === 'android';
-  const topBackButtonAlignment = Platform.OS === 'android'
-    ? ('center' as const)
-    : (isRTL ? ('flex-start' as const) : ('flex-end' as const));
+  // Android: back button goes LEFT (card is always RIGHT on Android).
+  // iOS: Hebrew → left, English → right.
+  const topBackButtonAlignment = isRTL ? ('flex-start' as const) : ('flex-end' as const);
   const backButtonLabel = isRTL
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
     : `${BACK_ARROW_GLYPH} ${t('gameEntry.back')}`;
@@ -11267,7 +11269,7 @@ function StartScreen({
               >
                 {t('start.advancedSetup.modalLead')}
               </Text>
-              <View style={[hsS.advancedSummaryChipGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <View style={[hsS.advancedSummaryChipGrid, { flexDirection: rtlRow }]}>
                 {advancedSummaryChips.map((chip) => (
                   <AdvancedSetupPreviewChip
                     key={chip.label}
@@ -11651,7 +11653,7 @@ function StartScreen({
           {/* 4. טווח מספרים */}
           <WheelRow index={numberRangeWheelIndex}>
           <LinearGradient colors={['#188038', '#34A853']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowRange, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <View style={[hsS.row, hsS.startRowRange, { flexDirection: rtlRow }]}>
             <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.wheel.numberRange')}
             </Text>
@@ -11669,7 +11671,7 @@ function StartScreen({
 
           <WheelRow index={guidanceWheelIndex}>
           <LinearGradient colors={['#1A73E8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: rtlRow }]}>
             <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.wheel.guidanceRow')}
             </Text>
@@ -11710,9 +11712,9 @@ function StartScreen({
             style={hsS.advancedEntryInner}
           >
             {/* שורה אחת: תמיד [תוכן | כפתור] בציר LTR הפיזי — אותו סדר כמו כותרת המודל (המשכיות כיוון) */}
-            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <View style={{ flexDirection: rtlRow, alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
+                <View style={{ flexDirection: rtlRow, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
                   <Text style={[hsS.advancedEntryTitle, { textAlign: 'center', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                     {t('start.advancedSetup.entryTitle')}
                   </Text>
@@ -11720,7 +11722,7 @@ function StartScreen({
                 <Text style={[hsS.advancedEntryTeaser, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                   {t('start.advancedSetup.entryRowTeaser')}
                 </Text>
-                <View style={[hsS.advancedEntryPreviewRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View style={[hsS.advancedEntryPreviewRow, { flexDirection: rtlRow }]}>
                   {advancedEntryPreviewChips.map((chip) => (
                     <AdvancedSetupPreviewChip
                       key={chip.label}
@@ -11738,7 +11740,7 @@ function StartScreen({
                 end={{ x: 1, y: 1 }}
                 style={hsS.advancedEntryCtaWrap}
               >
-                <View style={[hsS.advancedEntryCtaInner, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View style={[hsS.advancedEntryCtaInner, { flexDirection: rtlRow }]}>
                   <Text style={hsS.advancedEntryCtaTxt}>{t('start.advancedSetup.entryOpenCta')}</Text>
                   <Text style={hsS.advancedEntryCtaArrow}>{isRTL ? '‹' : '›'}</Text>
                 </View>
@@ -12292,9 +12294,10 @@ function AdvancedSetupSectionHeading({
   colors: readonly [string, string, ...string[]];
 }) {
   const { isRTL } = useLocale();
+  const rtlRow = (isRTL && Platform.OS !== 'android' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
   return (
     <View style={hsS.advSectionHdr}>
-      <View style={[hsS.advSectionHeaderRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+      <View style={[hsS.advSectionHeaderRow, { flexDirection: rtlRow }]}>
         <LinearGradient
           colors={colors}
           start={{ x: 0, y: 0 }}
@@ -12392,12 +12395,13 @@ function BotDifficultySettingsBlock({
   setBotDisplayName: (s: string) => void;
 }) {
   const { t, isRTL } = useLocale();
+  const rtlRow = (isRTL && Platform.OS !== 'android' ? 'row-reverse' : 'row') as 'row' | 'row-reverse';
   return (
     <LinearGradient testID="start-bot-settings" colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
       <View style={{ paddingVertical: 10, paddingHorizontal: 4, gap: 10 }}>
-        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0, flexDirection: rtlRow }]}>
           <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.botDifficulty')}</Text>
-          <View style={[hsS.toggleGroup, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <View style={[hsS.toggleGroup, { flexDirection: rtlRow }]}>
             {(
               [
                 ['easy', t('start.botEasy')],
