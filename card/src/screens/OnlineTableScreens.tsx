@@ -643,7 +643,7 @@ export function LobbyScreen({
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
   // Android's forceRTL already flips 'row'; iOS needs manual row-reverse.
-  const isRtlNeedsFlip = isRTL && Platform.OS === 'ios';
+  const isRtlNeedsFlip = isRTL && Platform.OS !== 'web';
   const currentTable = currentRoomTable ?? tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
@@ -1191,8 +1191,8 @@ const styles = StyleSheet.create({
   backBtnAndroid: { alignSelf: 'flex-end' },
   backBtnText: { color: ACTION_GOLD, fontSize: 14, fontWeight: '600' },
   logoWrap: { alignSelf: 'center', marginBottom: 12 },
-  title: { fontSize: 30, fontWeight: '800', color: ACTION_GOLD, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
-  subtitle: { color: TEXT_DIM, fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'right' },
+  title: { fontSize: 30, fontWeight: '800', color: ACTION_GOLD, marginBottom: 8, alignSelf: 'stretch', textAlign: 'center' },
+  subtitle: { color: TEXT_DIM, fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'center' },
   label: { color: TEXT_MAIN, fontSize: 14, fontWeight: '600', alignSelf: 'stretch', marginTop: 16, marginBottom: 8 },
   labelRtl: { textAlign: 'right', writingDirection: 'rtl' },
   setupPanel: { width: '100%' },

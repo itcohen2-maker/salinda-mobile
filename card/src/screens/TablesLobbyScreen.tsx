@@ -115,7 +115,7 @@ export function getTableInfoRowDirection(
   // Web: document.dir handles RTL, so 'row' flows correctly.
   // Android: system RTL handles direction, so 'row' flows correctly.
   // iOS: no system RTL flip — use 'row-reverse' manually.
-  if (platformOS === 'android' || platformOS === 'web') return 'row';
+  if (platformOS === 'web') return 'row';
   return 'row-reverse';
 }
 

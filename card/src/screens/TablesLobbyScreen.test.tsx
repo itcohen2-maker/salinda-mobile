@@ -1,7 +1,7 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { en } from '../../shared/i18n/en';
 import { he } from '../../shared/i18n/he';
@@ -19,6 +19,7 @@ jest.mock('../hooks/useResponsiveLayout', () => ({
 
 const mockUseResponsiveLayout = useResponsiveLayout as jest.MockedFunction<typeof useResponsiveLayout>;
 const DEFAULT_FRACTION_KINDS = ['1/2', '1/3', '1/4', '1/5'] as const;
+const originalPlatformOs = Platform.OS;
 
 const sampleTable: LobbyTableSummary = {
   roomCode: '4821',
@@ -109,6 +110,7 @@ describe('TablesLobbyScreen', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     await AsyncStorage.setItem('salinda_locale_v1', 'en');
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatformOs });
     mockUseResponsiveLayout.mockReturnValue({
       width: 390,
       height: 844,
@@ -118,6 +120,10 @@ describe('TablesLobbyScreen', () => {
       isSingleColumn: true,
       isTablet: false,
     });
+  });
+
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatformOs });
   });
 
   it('updates the lobby copy when the locale changes', async () => {
@@ -155,7 +161,7 @@ describe('TablesLobbyScreen', () => {
   });
 
   it('keeps info rows on the opposite side for android rtl cards', () => {
-    expect(getTableInfoRowDirection(true, 'android')).toBe('row');
+    expect(getTableInfoRowDirection(true, 'android')).toBe('row-reverse');
     expect(getTableInfoTextAlign(true, 'label', 'android')).toBe('right');
     expect(getTableInfoTextAlign(true, 'value', 'android')).toBe('right');
   });
@@ -315,6 +321,29 @@ describe('TablesLobbyScreen', () => {
       isCompact: true,
       isSingleColumn: true,
       isTablet: false,
+    });
+
+    renderLobby();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('table-card-4821-header')).toBeTruthy();
+    });
+
+    expect(StyleSheet.flatten(screen.getByTestId('lobby-action-row').props.style).flexDirection).toBe('column');
+    expect(StyleSheet.flatten(screen.getByTestId('lobby-quick-match').props.style).width).toBe('100%');
+    expect(StyleSheet.flatten(screen.getByTestId('table-card-4821-header').props.style).flexDirection).toBe('column');
+  });
+
+  it('keeps the web room browser in a single narrow column even on wide desktop viewports', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    mockUseResponsiveLayout.mockReturnValue({
+      width: 1366,
+      height: 900,
+      fontScale: 1,
+      isTight: false,
+      isCompact: false,
+      isSingleColumn: false,
+      isTablet: true,
     });
 
     renderLobby();
