@@ -3,6 +3,7 @@ import { resolveBotConfig, onMatchEnd } from '../ddaService';
 jest.mock('../supabaseAdmin', () => ({
   supabaseAdmin: {
     from: jest.fn(),
+    rpc: jest.fn(),
   },
 }));
 
@@ -22,8 +23,6 @@ function mockUpdate() {
   const chain = {
     update: jest.fn().mockReturnThis(),
     eq: jest.fn().mockResolvedValue({ error: null }),
-    select: jest.fn().mockReturnThis(),
-    single: jest.fn().mockResolvedValue({ data: { loss_streak: 1 }, error: null }),
   };
   (supabaseAdmin!.from as jest.Mock).mockReturnValue(chain);
   return chain;
@@ -76,30 +75,17 @@ describe('onMatchEnd', () => {
     jest.clearAllMocks();
   });
 
-  it('updates with loss_streak=0 on win', async () => {
+  it('resets loss_streak to 0 on win', async () => {
     const chain = mockUpdate();
     await onMatchEnd('user-1', true);
     expect(chain.update).toHaveBeenCalledWith({ loss_streak: 0, is_first_game: false });
   });
 
-  it('increments loss_streak on loss (read then write)', async () => {
-    // The loss branch does: SELECT loss_streak, then UPDATE loss_streak + 1
-    // Both calls go through supabaseAdmin.from()
-    const selectChain = {
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: { loss_streak: 2 }, error: null }),
-    };
-    const updateChain = {
-      update: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockResolvedValue({ error: null }),
-    };
-    (supabaseAdmin!.from as jest.Mock)
-      .mockReturnValueOnce(selectChain)
-      .mockReturnValueOnce(updateChain);
-
+  it('calls increment_loss_streak RPC on loss (atomic, no race)', async () => {
+    (supabaseAdmin!.rpc as jest.Mock).mockResolvedValue({ error: null });
     await onMatchEnd('user-1', false);
-
-    expect(updateChain.update).toHaveBeenCalledWith({ loss_streak: 3, is_first_game: false });
+    expect(supabaseAdmin!.rpc).toHaveBeenCalledWith('increment_loss_streak', { uid: 'user-1' });
+    // Must NOT call .from() — no read-modify-write
+    expect(supabaseAdmin!.from).not.toHaveBeenCalled();
   });
 });

@@ -817,8 +817,10 @@ function runBotStep(io: IOServer, room: Room): void {
 
   // Pity bot surrender: after turn 4, if the bot is losing by >30%, quit with 30% chance.
   // This simulates a frustrated human player disconnecting.
-  const pitoDiff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'medium';
-  if (pitoDiff === 'pity') {
+  // Surrender only applies in 1v1 bot games. roundsPlayed increments once per full
+  // round (both players take a turn), so >= 4 means the bot has had 4 complete turns.
+  const pityDiff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'medium';
+  if (pityDiff === 'pity') {
     const botPlayer = room.state.players.find((p) => p.isBot);
     const humanPlayer = room.state.players.find((p) => !p.isBot && !p.isEliminated && !p.isSpectator);
     const turnNum = room.state.roundsPlayed ?? 0;
@@ -946,14 +948,17 @@ function maybeRecordMatch(room: Room): void {
     participants,
   }).catch((err) => console.error('[socketHandlers] maybeRecordMatch failed:', err));
 
-  // Update DDA fields for each authenticated human player.
-  for (const p of authenticatedPlayers) {
-    const isWinner = p.id === gameWinnerId;
-    const abandoned = !p.isConnected && !isWinner;
-    const didWin = isWinner && !abandoned;
-    onMatchEnd(p.supabaseUserId!, didWin).catch((err) =>
-      console.error('[socketHandlers] onMatchEnd failed:', err),
-    );
+  // Update DDA fields only for bot games — PvP losses don't affect bot difficulty.
+  const isBotGame = state.players.some((p) => p.isBot);
+  if (isBotGame) {
+    for (const p of authenticatedPlayers) {
+      const isWinner = p.id === gameWinnerId;
+      const abandoned = !p.isConnected && !isWinner;
+      const didWin = isWinner && !abandoned;
+      onMatchEnd(p.supabaseUserId!, didWin).catch((err) =>
+        console.error('[socketHandlers] onMatchEnd failed:', err),
+      );
+    }
   }
 }
 
@@ -1355,12 +1360,20 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     }
 
     const normalizedSettings = normalizeGameSettingsPatch(gameSettings);
-    const requestedBotDiff = ((normalizedSettings as Record<string, unknown>)?.botDifficulty ?? 'medium') as BotDifficulty;
+    const requestedBotDiff: BotDifficulty = normalizedSettings?.botDifficulty ?? 'medium';
     const userId = socket.data.userId ?? null;
     const { difficulty: resolvedBotDiff, isPity } = await resolveBotConfig(userId, requestedBotDiff);
 
+    // Re-validate after the Supabase await — another event could have mutated the room.
+    if (room.state || getHumanPlayers(room).length > 1) {
+      const message = t(loc, 'room.gameAlreadyStarted');
+      socket.emit('error', { message });
+      reply({ ok: false, message });
+      return;
+    }
+
     const disguise = isPity ? generateDisguisedProfile() : null;
-    const botDisplayName = disguise?.displayName ?? (normalizedSettings as Record<string, unknown>)?.botDisplayName as string | undefined;
+    const botDisplayName = disguise?.displayName ?? normalizedSettings?.botDisplayName;
     addBotPlayer(room, loc, botDisplayName);
     emitRoomPlayers(io, room);
 
@@ -1419,9 +1432,13 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
 
+    // If a previous DDA pass set botDifficulty to 'pity', normalise back to 'medium'
+    // so it passes the BOT_DIFF_LEVELS guard; resolveBotConfig will re-apply pity if needed.
+    const rawFallback = room.state.hostGameSettings.botDifficulty;
+    const safeFallback: BotDifficulty = rawFallback === 'pity' ? 'medium' : (rawFallback ?? 'medium');
     const requestedDifficulty = payload?.difficulty != null
       ? normalizeBotDifficulty(payload.difficulty)
-      : room.state.hostGameSettings.botDifficulty ?? 'medium';
+      : safeFallback;
     if (!BOT_DIFF_LEVELS.includes(requestedDifficulty)) {
       const message = t(loc, 'game.invalidBotDifficulty');
       socket.emit('error', { message });
@@ -1431,6 +1448,15 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
     const userId = socket.data.userId ?? null;
     const { difficulty: resolvedBotDiff, isPity } = await resolveBotConfig(userId, requestedDifficulty as BotDifficulty);
+
+    // Re-validate after await — the disconnected player may have reconnected.
+    const refreshedTarget = room.players.find((p) => p.id === room.disconnectedPlayerId && !p.isBot);
+    if (!refreshedTarget || refreshedTarget.isConnected) {
+      const message = loc === 'he' ? 'השחקן כבר חזר.' : 'Player already reconnected.';
+      socket.emit('error', { message });
+      reply({ ok: false, message });
+      return;
+    }
 
     const disguise = isPity ? generateDisguisedProfile() : null;
     target.isBot = true;

@@ -31,10 +31,8 @@ export async function resolveBotConfig(
       return { difficulty: requestedDifficulty, isPity: false };
     }
 
-    const shouldPity = (data as { loss_streak: number; is_first_game: boolean }).loss_streak >= 3
-      || (data as { loss_streak: number; is_first_game: boolean }).is_first_game;
-
-    if (shouldPity) {
+    const row = data as { loss_streak: number; is_first_game: boolean };
+    if (row.loss_streak >= 3 || row.is_first_game) {
       return { difficulty: 'pity', isPity: true };
     }
   } catch (err) {
@@ -45,11 +43,10 @@ export async function resolveBotConfig(
 }
 
 /**
- * Update the player's DDA fields after a match ends.
- * On win: reset loss_streak to 0. On loss: increment loss_streak.
- * Always sets is_first_game = false.
- * Uses read-then-write for increment (Supabase JS v2 lacks server-side col+1).
- * Safe: protected by room.matchRecorded idempotency guard upstream.
+ * Update the player's DDA fields after a bot game ends.
+ * Only called for bot games — PvP losses don't affect bot difficulty.
+ * On win: reset loss_streak to 0. On loss: atomically increment via RPC.
+ * Always sets is_first_game = false (regardless of win/loss).
  */
 export async function onMatchEnd(userId: string, didWin: boolean): Promise<void> {
   if (!supabaseAdmin) return;
@@ -61,16 +58,9 @@ export async function onMatchEnd(userId: string, didWin: boolean): Promise<void>
         .update({ loss_streak: 0, is_first_game: false })
         .eq('id', userId);
     } else {
-      const { data } = await supabaseAdmin
-        .from('profiles')
-        .select('loss_streak')
-        .eq('id', userId)
-        .single();
-      const current = (data as { loss_streak: number } | null)?.loss_streak ?? 0;
-      await supabaseAdmin
-        .from('profiles')
-        .update({ loss_streak: current + 1, is_first_game: false })
-        .eq('id', userId);
+      // Atomic increment via Postgres RPC — avoids read-modify-write race under concurrency.
+      // increment_loss_streak() also sets is_first_game = false.
+      await supabaseAdmin.rpc('increment_loss_streak', { uid: userId });
     }
   } catch (err) {
     console.warn('[ddaService] onMatchEnd failed:', err);
