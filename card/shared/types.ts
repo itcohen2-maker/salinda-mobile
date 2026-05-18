@@ -134,7 +134,7 @@ export interface TournamentStanding {
 }
 
 /** רמות בוט — מקומי (vs-bot) ושרת */
-export type BotDifficulty = 'easy' | 'medium' | 'hard';
+export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'pity';
 /** playerView ב־ok (שרת מעודכן) — גיבוי אם game_started נאבד; אופציונלי לתאימות לשרת ישן */
 export type StartBotGameAck =
   | { ok: true; playerView?: PlayerView }
@@ -438,6 +438,7 @@ export interface ServerToClientEvents {
     playerId: string;
     inviteCode?: string | null;
     visibility?: LobbyTableVisibility;
+    roomTable?: LobbyTableSummary | null;
   }) => void;
   player_joined: (data: { players: { id: string; name: string; isHost: boolean; isConnected: boolean; isBot: boolean }[] }) => void;
   player_left: (data: { playerId: string; playerName: string }) => void;
