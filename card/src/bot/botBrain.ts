@@ -67,7 +67,21 @@ function buildBotStagedPlan(
  * Defense priority: divisible number → wild (wildResolve=fractionPenalty)
  *                   → counter fraction → penalty.
  */
-function handleBotDefense(state: GameState): BotAction {
+function handleBotDefense(
+  state: GameState,
+  difficulty: BotDifficulty,
+  rng: () => number,
+): BotAction {
+  // Pity bot: always ignore defense — take the penalty.
+  if (difficulty === 'pity') {
+    return { kind: 'defendFractionPenalty' };
+  }
+
+  // Easy bot: 50% chance to ignore defense entirely (simulates inattentive beginner).
+  if (difficulty === 'easy' && rng() < 0.5) {
+    return { kind: 'defendFractionPenalty' };
+  }
+
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const penalty = state.fractionPenalty;
 
@@ -113,6 +127,7 @@ function handleBotDefense(state: GameState): BotAction {
 function handleBotPreRoll(
   state: GameState,
   difficulty: BotDifficulty,
+  rng: () => number,
 ): BotAction {
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const topDiscard = state.discardPile[state.discardPile.length - 1];
@@ -123,18 +138,23 @@ function handleBotPreRoll(
 
   let identicalCard: Card | undefined = allIdenticalCandidates[0];
 
-  if (difficulty !== 'easy' && identicalCard && identicalCard.type === 'wild') {
-    // Prefer a non-wild identical if one is available.
+  // Medium/Hard (not easy, not pity): prefer non-wild identical; defer wild if
+  // it can plausibly be used in an equation.
+  if (difficulty !== 'easy' && difficulty !== 'pity' && identicalCard && identicalCard.type === 'wild') {
     const nonWildIdentical = allIdenticalCandidates.find(
       (card) => card.type !== 'wild',
     );
     if (nonWildIdentical) {
       identicalCard = nonWildIdentical;
     } else if (botCanPlausiblyUseWildInEquation(hand)) {
-      // Defer spending the wild as identical — let it survive to `building`
-      // where validateStagedCards can slot it into an equation.
       identicalCard = undefined;
     }
+  }
+
+  // Medium: additional 50% probabilistic wild conservation gate.
+  // Even if a wild identical was selected above, flip a coin — defer it.
+  if (difficulty === 'medium' && identicalCard?.type === 'wild' && rng() < 0.5) {
+    identicalCard = undefined;
   }
 
   if (identicalCard) {
@@ -223,9 +243,9 @@ export function decideBotAction(
     case 'pre-roll':
     case 'roll-dice':
       if (state.pendingFractionTarget !== null) {
-        return handleBotDefense(state);
+        return handleBotDefense(state, difficulty, rng);
       }
-      return handleBotPreRoll(state, difficulty);
+      return handleBotPreRoll(state, difficulty, rng);
     case 'building':
       return handleBotBuilding(state, difficulty, rng);
     case 'solved':

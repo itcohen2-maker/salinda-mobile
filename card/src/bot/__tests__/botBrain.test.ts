@@ -371,6 +371,61 @@ describe('decideBotAction', () => {
     expect(action.stagedCardIds).not.toContain(committedMismatch.id);
   });
 
+  describe('Pity bot defense', () => {
+    it('always returns defendFractionPenalty regardless of hand', () => {
+      const divisibleCard = makeCard('number', 4); // 4 % 2 === 0, competent bot would defend
+      const botPlayer = makePlayer(0, 'Bot', [divisibleCard]);
+
+      const state = makeFixtureState({
+        phase: 'pre-roll',
+        players: [botPlayer],
+        currentPlayerIndex: 0,
+        discardPile: [makeCard('number', 4)],
+        pendingFractionTarget: 2,
+        fractionPenalty: 2,
+      });
+
+      const action = decideBotAction(state, 'pity', { rng: () => 0.99 });
+      expect(action?.kind).toBe('defendFractionPenalty');
+    });
+  });
+
+  describe('Easy bot defense', () => {
+    it('ignores defense when rng < 0.5', () => {
+      const divisibleCard = makeCard('number', 4); // 4 % 2 === 0
+      const botPlayer = makePlayer(0, 'Bot', [divisibleCard]);
+
+      const state = makeFixtureState({
+        phase: 'pre-roll',
+        players: [botPlayer],
+        currentPlayerIndex: 0,
+        discardPile: [makeCard('number', 4)],
+        pendingFractionTarget: 2,
+        fractionPenalty: 2,
+      });
+
+      const action = decideBotAction(state, 'easy', { rng: () => 0.1 });
+      expect(action?.kind).toBe('defendFractionPenalty');
+    });
+
+    it('defends optimally when rng >= 0.5', () => {
+      const divisibleCard = makeCard('number', 4); // 4 % 2 === 0
+      const botPlayer = makePlayer(0, 'Bot', [divisibleCard]);
+
+      const state = makeFixtureState({
+        phase: 'pre-roll',
+        players: [botPlayer],
+        currentPlayerIndex: 0,
+        discardPile: [makeCard('number', 4)],
+        pendingFractionTarget: 2,
+        fractionPenalty: 2,
+      });
+
+      const action = decideBotAction(state, 'easy', { rng: () => 0.9 });
+      expect(action?.kind).toBe('defendFractionSolve');
+    });
+  });
+
   test('game-over returns null', () => {
     const botPlayer = makePlayer(0, 'Bot', []);
     const state = makeFixtureState({
