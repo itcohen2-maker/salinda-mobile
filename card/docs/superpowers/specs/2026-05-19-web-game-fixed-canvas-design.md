@@ -50,18 +50,22 @@ const contentScale = clamp(viewportHeight / frameHeight, 0.5, 1);
 // 1080px → clamped to 1.0 (no upscaling)
 ```
 
-### Fix goldActionButtonTop — move INTO hand zone
+### Fix goldActionButtonTop — move BELOW the hand zone
 
-Mobile iOS 844px reference: `goldActionButtonTop = 680`, `handTop = 509` → button is **171px into** the hand zone.
+Mobile native formula: `goldActionButtonTop = Math.max(96, Math.min(680, SCREEN_H - 140))`
+- iOS 844px: `844 - 140 = 704 → clamped to 680`
+- Hand zone bottom: `844 - 195 = 649` → button at 680 is **31px BELOW** the hand zone ✓
 
-For web 900px: `handBottom = 155`, position button near the bottom of the hand zone:
+For web 900px frame, same formula (no clamping needed within valid canvas):
 ```typescript
-// Before (wrong — above the hand):
-const goldActionButtonTop = clamp(520, goldActionButtonMinTop, ...); // = 520, above handTop=605
+// Before (wrong — 520 was above hand zone which starts at 605):
+const goldActionButtonTop = clamp(520, goldActionButtonMinTop, ...);
 
-// After (correct — within hand zone like mobile):
-const goldActionButtonTop = frameHeight - handBottom - 20; // = 900 - 155 - 20 = 725
+// After (matches mobile — below hand zone which ends at 745):
+const goldActionButtonTop = frameHeight - 140; // = 900 - 140 = 760
 ```
+
+Hand zone on web 900px: 605 → 745. Button at 760 is **15px below** the hand zone. ✓
 
 Remove `goldActionButtonMinTop`, `goldActionButtonMaxTop` — no longer needed.
 
@@ -73,9 +77,10 @@ Remove `goldActionButtonMinTop`, `goldActionButtonMaxTop` — no longer needed.
 | `tableHeight` | 220 | ✓ |
 | table bottom | 405 | ✓ |
 | `timerTop` | 437 | ✓ |
-| `handTop` | 605 | ✓ |
-| `goldActionButtonTop` | **725** (within hand zone) | ✓ matches mobile proportion |
-| `handZoneTop` | 295 (from bottom) | ✓ |
+| `handTop` (from top) | 605 | ✓ |
+| hand zone bottom | 745 | ✓ |
+| `goldActionButtonTop` | **760** (BELOW hand zone) | ✓ matches mobile: button below fan |
+| `handZoneTop` (from bottom) | 295 | ✓ |
 
 ---
 
