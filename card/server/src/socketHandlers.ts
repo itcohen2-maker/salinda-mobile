@@ -53,6 +53,7 @@ import {
   clearRoomCountdown,
   syncRoomTableStatus,
   getRoomTables,
+  getRoomTableSummary,
   promoteConnectedHumanHost,
 } from './roomManager';
 import {
@@ -97,6 +98,7 @@ import { normalizeOperationToken } from '../../shared/equationOpCycle';
 import { pickBotOverflowSwap } from '../../shared/overflowSwap';
 import { botNarrationToastText, renderBotNarration, type BotNarrationInput } from '../../shared/botNarration';
 import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_WIN, RATING_LOSS, RATING_ABANDON_PENALTY } from './supabaseAdmin';
+import { shouldAutoStartWhenRoomIsFull } from './tableAutoStart';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -175,6 +177,21 @@ function emitTablesUpdated(io: IOServer, socket?: IOSocket): void {
     return;
   }
   io.emit('tables_updated', payload);
+}
+
+function emitRoomCreated(
+  socket: IOSocket,
+  room: Room,
+  playerId: string,
+  inviteCode: string | null,
+): void {
+  socket.emit('room_created', {
+    roomCode: room.code,
+    playerId,
+    inviteCode,
+    visibility: room.tableVisibility,
+    roomTable: getRoomTableSummary(room),
+  });
 }
 
 async function hydrateRoomTableTheme(io: IOServer, room: Room, userId?: string): Promise<void> {
@@ -580,6 +597,27 @@ function canPlayerAct(
 
 /** בוט משתמש לכל היותר בקלף פעולה/סלינדה אחד במשבצת 0 */
 function handleBotDefense(io: IOServer, room: Room, state: ServerGameState): void {
+  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
+
+  // Pity bot: always ignore defense — take the penalty.
+  if (diff === 'pity') {
+    emitBotStepToast(io, room, (locale, name) =>
+      botNarrationText(locale, { kind: 'defendFractionPenalty', name, penalty: String(state.fractionPenalty) }),
+    );
+    applyBotState(io, room, (currentState) => defendFractionPenalty(currentState));
+    return;
+  }
+
+  // Easy bot: 50% chance to ignore defense entirely.
+  if (diff === 'easy' && Math.random() < 0.5) {
+    emitBotStepToast(io, room, (locale, name) =>
+      botNarrationText(locale, { kind: 'defendFractionPenalty', name, penalty: String(state.fractionPenalty) }),
+    );
+    applyBotState(io, room, (currentState) => defendFractionPenalty(currentState));
+    return;
+  }
+
+  // Existing optimal logic follows unchanged...
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const divisibleCard = hand.find((card) => card.type === 'number' && (card.value ?? 0) > 0 && (card.value ?? 0) % state.fractionPenalty === 0);
   if (divisibleCard) {
@@ -631,19 +669,39 @@ function handleBotDefense(io: IOServer, room: Room, state: ServerGameState): voi
 }
 
 function handleBotPreRoll(io: IOServer, room: Room, state: ServerGameState): void {
+  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const topDiscard = state.discardPile[state.discardPile.length - 1];
 
-  const identicalCard = hand.find((card) => validateIdenticalPlay(card, topDiscard));
+  const allIdenticalCandidates = hand.filter((card) => validateIdenticalPlay(card, topDiscard));
+  let identicalCard: typeof hand[number] | undefined = allIdenticalCandidates[0];
+
+  // Medium/Hard (not easy, not pity): prefer non-wild; defer wild if it can be used in equation.
+  if (diff !== 'easy' && diff !== 'pity' && identicalCard && identicalCard.type === 'wild') {
+    const nonWildIdentical = allIdenticalCandidates.find((c) => c.type !== 'wild');
+    if (nonWildIdentical) {
+      identicalCard = nonWildIdentical;
+    } else {
+      const hasWild = hand.some((c) => c.type === 'wild');
+      const numberCount = hand.filter((c) => c.type === 'number' && typeof c.value === 'number').length;
+      if (hasWild && numberCount >= 1) identicalCard = undefined;
+    }
+  }
+
+  // Medium: probabilistic 50% wild conservation gate.
+  if (diff === 'medium' && identicalCard?.type === 'wild' && Math.random() < 0.5) {
+    identicalCard = undefined;
+  }
+
   if (identicalCard) {
     emitBotStepToast(io, room, (locale, name) =>
       botNarrationText(locale, {
         kind: 'playIdentical',
         name,
-        card: cardLabelForLocale(state, identicalCard.id, locale),
+        card: cardLabelForLocale(state, identicalCard!.id, locale),
       }),
     );
-    applyBotState(io, room, (currentState) => playIdentical(currentState, identicalCard.id));
+    applyBotState(io, room, (currentState) => playIdentical(currentState, identicalCard!.id));
     return;
   }
 
@@ -652,22 +710,15 @@ function handleBotPreRoll(io: IOServer, room: Room, state: ServerGameState): voi
     emitBotStepToast(io, room, (locale) => {
       const denom = Number(String(attackFraction.fraction ?? '').split('/')[1] ?? 0) || 1;
       const topVisibleValue =
-        topDiscard?.resolvedValue ??
-        (topDiscard?.type === 'number' ? (topDiscard.value ?? null) : null);
+        topDiscard?.resolvedValue ?? (topDiscard?.type === 'number' ? (topDiscard.value ?? null) : null);
       const divideX = topVisibleValue ?? state.pendingFractionTarget ?? denom;
-      return botNarrationText(locale, {
-        kind: 'playFractionAttack',
-        x: String(divideX),
-        y: String(Math.max(1, denom)),
-      });
+      return botNarrationText(locale, { kind: 'playFractionAttack', x: String(divideX), y: String(Math.max(1, denom)) });
     });
     applyBotState(io, room, (currentState) => playFraction(currentState, attackFraction.id));
     return;
   }
 
-  emitBotStepToast(io, room, (locale, name) =>
-    botNarrationText(locale, { kind: 'rollDice', name }),
-  );
+  emitBotStepToast(io, room, (locale, name) => botNarrationText(locale, { kind: 'rollDice', name }));
   applyBotState(io, room, (currentState) => doRollDice(currentState));
 }
 
@@ -910,6 +961,12 @@ function handleWaitingRoomRosterChange(io: IOServer, room: Room): void {
   emitTablesUpdated(io);
 }
 
+function maybeAutoStartFullTable(io: IOServer, room: Room): boolean {
+  if (!shouldAutoStartWhenRoomIsFull(room)) return false;
+  startTableCountdown(io, room);
+  return true;
+}
+
 function startTableCountdown(io: IOServer, room: Room): void {
   const difficulty = room.configuredDifficulty;
   if (!difficulty) return;
@@ -943,12 +1000,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const creatingPlayer = room.players.find((p) => p.id === playerId);
     if (creatingPlayer) creatingPlayer.supabaseUserId = socket.data.userId ?? undefined;
     socket.join(room.code);
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: room.inviteCode,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, room.inviteCode);
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
     emitTablesUpdated(io);
@@ -979,13 +1031,9 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       difficulty: diff,
       gameSettings: normalizeGameSettingsPatch(gameSettings),
     });
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: room.inviteCode,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, room.inviteCode);
     refreshLobbyStatus(io, room);
+    if (maybeAutoStartFullTable(io, room)) return;
     emitTablesUpdated(io);
   });
 
@@ -1012,14 +1060,10 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const joiningPlayer = room.players.find((p) => p.id === playerId);
     if (joiningPlayer) joiningPlayer.supabaseUserId = socket.data.userId ?? undefined;
     socket.join(room.code);
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: null,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, null);
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
+    if (maybeAutoStartFullTable(io, room)) return;
     handleWaitingRoomRosterChange(io, room);
   });
 
@@ -1046,14 +1090,10 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const joiningPlayer = room.players.find((p) => p.id === playerId);
     if (joiningPlayer) joiningPlayer.supabaseUserId = socket.data.userId ?? undefined;
     socket.join(room.code);
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: null,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, null);
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
+    if (maybeAutoStartFullTable(io, room)) return;
     handleWaitingRoomRosterChange(io, room);
   });
 
@@ -1068,6 +1108,10 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const { room, playerId } = info;
     if (!isHost(room, playerId)) {
       socket.emit('error', { message: t(loc, 'game.hostOnlyCountdown') });
+      return;
+    }
+    if (room.state) {
+      socket.emit('error', { message: t(loc, 'room.gameAlreadyStarted') });
       return;
     }
     if (room.players.filter((player) => !player.isBot).length < 2) {
@@ -1097,12 +1141,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const creatingPlayer = room.players.find((p) => p.id === playerId);
     if (creatingPlayer) creatingPlayer.supabaseUserId = socket.data.userId ?? undefined;
     socket.join(room.code);
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: room.inviteCode,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, room.inviteCode);
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
     emitTablesUpdated(io);
@@ -1130,14 +1169,10 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const joiningPlayer = room.players.find((p) => p.id === playerId);
     if (joiningPlayer) joiningPlayer.supabaseUserId = socket.data.userId ?? undefined;
     socket.join(room.code);
-    socket.emit('room_created', {
-      roomCode: room.code,
-      playerId,
-      inviteCode: null,
-      visibility: room.tableVisibility,
-    });
+    emitRoomCreated(socket, room, playerId, null);
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
+    if (maybeAutoStartFullTable(io, room)) return;
     handleWaitingRoomRosterChange(io, room);
   });
 
@@ -1208,6 +1243,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     }
     emitRoomPlayers(io, room);
     refreshLobbyStatus(io, room);
+    if (maybeAutoStartFullTable(io, room)) return;
     handleWaitingRoomRosterChange(io, room);
     scheduleBotAction(io, room);
   });
@@ -1875,6 +1911,9 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     } else if (room.players.length > 0) {
       emitRoomPlayers(io, room);
       refreshLobbyStatus(io, room);
+      handleWaitingRoomRosterChange(io, room);
+    } else {
+      emitTablesUpdated(io);
     }
   });
 }
