@@ -118,6 +118,7 @@ const gameBgImg = require('./assets/bg.jpg');
 const brandedCardBackPreviewImg = require('./assets/card-back-salinda-preview.png');
 const salindaFrontCardImg = require('./assets/salinda.jpg');
 const salindaShopCardImg = require('./assets/salinda-transparent.png');
+const salindaPuzzleGameLogoImg = require('./assets/branding/salinda-puzzle-game-logo.png');
 const cardSelectSoundAsset = require('./assets/card_select.mov');
 const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11001,6 +11002,7 @@ function StartScreen({
               alignItems: topBackButtonAlignment,
               marginTop: -topActionsBackLift,
               marginBottom: topActionsRowGap,
+              direction: 'ltr',
             }}
           >
             <LulosButton
@@ -11784,66 +11786,38 @@ function StartScreen({
         statusBarTranslucent
         onRequestClose={() => setGuidancePromptOpen(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(3,7,18,0.78)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 20,
-          }}
-        >
+        <View style={hsS.guidancePromptOverlay}>
           <LinearGradient
             colors={['#34d3c8', '#6ee7df', '#34d3c8']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{ width: '100%', maxWidth: 360, borderRadius: 30, padding: 3 }}
+            style={hsS.guidancePromptOuter}
           >
-            <View
-              style={{
-                borderRadius: 27,
-                backgroundColor: 'rgba(15,23,42,0.98)',
-                paddingVertical: 24,
-                paddingHorizontal: 20,
-              }}
-            >
-              <Text
-                style={{
-                  color: '#FDE68A',
-                  fontSize: 28,
-                  fontWeight: '900',
-                  textAlign: 'center',
-                }}
-              >
+            <View style={hsS.guidancePromptCard}>
+              <Image
+                source={salindaPuzzleGameLogoImg}
+                resizeMode="contain"
+                style={hsS.guidancePromptLogo}
+              />
+              <Text style={hsS.guidancePromptTitle}>
                 {t('guidance.welcomeTitle')}
               </Text>
               <Text
-                style={{
-                  marginTop: 18,
-                  color: '#F8FAFC',
-                  fontSize: 15,
-                  lineHeight: 26,
-                  fontWeight: '800',
-                  textAlign: 'center',
-                  writingDirection: isRTL ? 'rtl' : 'ltr',
-                }}
+                style={[
+                  hsS.guidancePromptBody,
+                  { writingDirection: isRTL ? 'rtl' : 'ltr' },
+                ]}
               >
                 {t('guidance.welcomeBody')}
               </Text>
-              <View style={{ alignSelf: 'stretch', gap: 12, marginTop: 22 }}>
+              <View style={hsS.guidancePromptActions}>
                 <TouchableOpacity
                   activeOpacity={0.92}
                   onPress={() => chooseGuidanceMode(false)}
                   testID="start-guidance-skip"
-                  style={{
-                    backgroundColor: '#F59E0B',
-                    borderRadius: 18,
-                    paddingVertical: 16,
-                    paddingHorizontal: 18,
-                    alignItems: 'center',
-                  }}
+                  style={hsS.guidancePromptPrimaryBtn}
                 >
-                  <Text style={{ color: '#111827', fontSize: 18, fontWeight: '900', textAlign: 'center' }}>
+                  <Text style={hsS.guidancePromptPrimaryTxt}>
                     {t('guidance.skip')}
                   </Text>
                 </TouchableOpacity>
@@ -11851,17 +11825,9 @@ function StartScreen({
                   activeOpacity={0.92}
                   onPress={() => chooseGuidanceMode(true)}
                   testID="start-guidance-need"
-                  style={{
-                    backgroundColor: 'rgba(51,65,85,0.9)',
-                    borderRadius: 18,
-                    borderWidth: 1.5,
-                    borderColor: 'rgba(148,163,184,0.42)',
-                    paddingVertical: 16,
-                    paddingHorizontal: 18,
-                    alignItems: 'center',
-                  }}
+                  style={hsS.guidancePromptSecondaryBtn}
                 >
-                  <Text style={{ color: '#E5E7EB', fontSize: 18, fontWeight: '800', textAlign: 'center' }}>
+                  <Text style={hsS.guidancePromptSecondaryTxt}>
                     {t('guidance.need')}
                   </Text>
                 </TouchableOpacity>
@@ -11874,6 +11840,80 @@ function StartScreen({
   );
 }
 const hsS = StyleSheet.create({
+  guidancePromptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(3,7,18,0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  guidancePromptOuter: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 30,
+    padding: 3,
+  },
+  guidancePromptCard: {
+    borderRadius: 27,
+    backgroundColor: 'rgba(15,23,42,0.98)',
+    paddingTop: 22,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+  },
+  guidancePromptLogo: {
+    alignSelf: 'center',
+    width: '72%',
+    maxWidth: 248,
+    aspectRatio: 1048 / 307,
+    marginBottom: 18,
+  },
+  guidancePromptTitle: {
+    color: '#FDE68A',
+    fontSize: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  guidancePromptBody: {
+    marginTop: 18,
+    color: '#F8FAFC',
+    fontSize: 15,
+    lineHeight: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  guidancePromptActions: {
+    alignSelf: 'stretch',
+    gap: 12,
+    marginTop: 22,
+  },
+  guidancePromptPrimaryBtn: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+  },
+  guidancePromptPrimaryTxt: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  guidancePromptSecondaryBtn: {
+    backgroundColor: 'rgba(51,65,85,0.9)',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(148,163,184,0.42)',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+  },
+  guidancePromptSecondaryTxt: {
+    color: '#E5E7EB',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   // Joker area — flex:1 fills space between top and bottom menu
   jokerArea: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
