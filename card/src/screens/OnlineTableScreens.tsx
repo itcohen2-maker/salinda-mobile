@@ -643,7 +643,7 @@ export function LobbyScreen({
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
   // Android's forceRTL already flips 'row'; iOS needs manual row-reverse.
-  const isRtlNeedsFlip = isRTL && Platform.OS !== 'android';
+  const isRtlNeedsFlip = isRTL && Platform.OS === 'ios';
   const currentTable = currentRoomTable ?? tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
