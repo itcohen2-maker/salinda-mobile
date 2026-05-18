@@ -40,15 +40,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    // Reactively update text direction when locale changes.
-    // swapLeftAndRightInRTL(false) above keeps physical layout stable —
-    // forceRTL here updates text rendering direction on native.
-    // Web: do NOT set document.dir globally — it breaks margins and layout
-    // for elements not designed for RTL. We use container-level direction:'rtl'
-    // on specific Views instead (see index.tsx settings container).
-    I18nManager.forceRTL(locale === 'he');
-  }, [locale]);
+  // No reactive forceRTL — native RTL is handled by container-level direction:'rtl'
+  // on web only. Android and iOS use their original layout (unchanged).
 
   const setLocale = useCallback(async (l: AppLocale) => {
     setLocaleState(l);

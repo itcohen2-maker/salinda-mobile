@@ -161,7 +161,7 @@ describe('TablesLobbyScreen', () => {
   });
 
   it('keeps info rows on the opposite side for android rtl cards', () => {
-    expect(getTableInfoRowDirection(true, 'android')).toBe('row-reverse');
+    expect(getTableInfoRowDirection(true, 'android')).toBe('row');
     expect(getTableInfoTextAlign(true, 'label', 'android')).toBe('right');
     expect(getTableInfoTextAlign(true, 'value', 'android')).toBe('right');
   });

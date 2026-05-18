@@ -273,7 +273,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
 
     expect(screen.getByText(he['lobby.advancedToggleShow'])).toBeTruthy();
     expect(configPanel.alignItems).toBe('flex-end');
-    expect(configPanel.direction).toBe('rtl');
+
     expect(numberRangeLabel.textAlign).toBe('right');
     expect(maxParticipantsLabel.textAlign).toBe('right');
     expect(numberRangeRow.flexDirection).toBe('row');

@@ -83,6 +83,7 @@ import {
 const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', 'welcome.title')]);
 const RESULTS_POSSIBLE_TITLES = new Set([t('he', 'results.possibleTitle'), t('en', 'results.possibleTitle')]);
 import { LocaleProvider, useLocale } from './src/i18n/LocaleContext';
+import { playCardSelectSfx } from './src/audio/cardSelect';
 import { disposeSfx, initializeSfx, playSfx, setSfxMuted, setSfxVolume } from './src/audio/sfx';
 import { SOUNDS_ENABLED_STORAGE_KEY, resolveStoredSoundsEnabled } from './src/audio/preferences';
 import { getAudioLoadStatus, getAudioReplayStatus } from './src/audio/playbackStatus';
@@ -119,7 +120,6 @@ const brandedCardBackPreviewImg = require('./assets/card-back-salinda-preview.pn
 const salindaFrontCardImg = require('./assets/salinda.jpg');
 const salindaShopCardImg = require('./assets/salinda-transparent.png');
 const salindaPuzzleGameLogoImg = require('./assets/branding/salinda-puzzle-game-logo.png');
-const cardSelectSoundAsset = require('./assets/card_select.mov');
 const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
@@ -147,68 +147,11 @@ import { useWebViewportSize } from './src/hooks/useWebViewportSize';
 import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
 import { WebGameScreenFrame } from './src/components/layout/WebGameScreenFrame';
 
-function useCardSelectSound(soundOn: boolean, logContext: string): () => void {
-  const cardSoundRef = useRef<Audio.Sound | null>(null);
-  const cardSoundLoadingRef = useRef(false);
-
-  useEffect(() => {
-    (async () => {
-      if (cardSoundRef.current) return;
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-        const { sound } = await Audio.Sound.createAsync(cardSelectSoundAsset, getAudioLoadStatus());
-        cardSoundRef.current = sound;
-      } catch (e) {
-        if (__DEV__) console.warn(`[card_select] preload failed (${logContext})`, e);
-      }
-    })();
-    return () => {
-      const sound = cardSoundRef.current;
-      if (sound) sound.unloadAsync().catch(() => {});
-      cardSoundRef.current = null;
-      cardSoundLoadingRef.current = false;
-    };
-  }, [logContext]);
-
-  useEffect(() => {
-    if (soundOn) return;
-    const sound = cardSoundRef.current;
-    if (sound) sound.stopAsync().catch(() => {});
-  }, [soundOn]);
-
+function useCardSelectSound(soundOn: boolean): () => void {
   return useCallback(() => {
     if (!soundOn) return;
-    const sound = cardSoundRef.current;
-    if (sound) {
-      sound.replayAsync(getAudioReplayStatus()).catch(() => {});
-      return;
-    }
-    if (cardSoundLoadingRef.current) return;
-    cardSoundLoadingRef.current = true;
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-        const { sound: loadedSound } = await Audio.Sound.createAsync(cardSelectSoundAsset, getAudioLoadStatus());
-        cardSoundRef.current = loadedSound;
-        if (!soundOn) return;
-        await loadedSound.replayAsync(getAudioReplayStatus());
-      } catch (e) {
-        if (__DEV__) console.warn(`[card_select] lazy load/play failed (${logContext})`, e);
-      } finally {
-        cardSoundLoadingRef.current = false;
-      }
-    })();
-  }, [logContext, soundOn]);
+    void playCardSelectSfx();
+  }, [soundOn]);
 }
 
 const { width: _SCREEN_W_RAW, height: SCREEN_H } = Dimensions.get('window');
@@ -9286,7 +9229,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     state.currentPlayerIndex,
     state.phase,
   ]);
-  const playCardSelectSound = useCardSelectSound(soundOn, 'hand');
+  const playCardSelectSound = useCardSelectSound(soundOn);
 
   const tap = (card:Card) => {
     // (L5.1 (place-op) expects the learner to pick an operation card from
@@ -10488,7 +10431,9 @@ function StartScreen({
   const placeTopBackOnRightOnAndroid = Platform.OS === 'android';
   // Android: back button goes LEFT (card is always RIGHT on Android).
   // iOS: Hebrew → left, English → right.
-  const topBackButtonAlignment = isRTL ? ('flex-start' as const) : ('flex-end' as const);
+  const topBackButtonAlignment = Platform.OS === 'android'
+    ? ('center' as const)
+    : (isRTL ? ('flex-start' as const) : ('flex-end' as const));
   const backButtonLabel = isRTL
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
     : `${BACK_ARROW_GLYPH} ${t('gameEntry.back')}`;
@@ -11551,7 +11496,7 @@ function StartScreen({
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           scrollEventThrottle={16}
         >
-        <View style={[hsS.settings, isRTL ? { direction: 'rtl' } : null]}>
+        <View style={[hsS.settings, isRTL && Platform.OS === 'web' ? { direction: 'rtl' } : null]}>
           <View style={{ alignItems: isRTL ? 'flex-end' : 'flex-start', width: '100%', marginBottom: 8 }}>
             <LanguageToggle />
           </View>
@@ -11577,7 +11522,7 @@ function StartScreen({
             <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.playerCount')}
             </Text>
-            <View style={hsS.stepper}>
+            <View style={[hsS.stepper, isRTL ? hsS.stepperRtl : null]}>
               <TouchableOpacity
                 onPress={() => {
                   const next = Math.max(2, playerCount - 1);
@@ -11861,40 +11806,40 @@ const hsS = StyleSheet.create({
   guidancePromptCard: {
     borderRadius: 27,
     backgroundColor: 'rgba(15,23,42,0.98)',
-    paddingTop: 22,
-    paddingBottom: 24,
+    paddingTop: 16,
+    paddingBottom: 18,
     paddingHorizontal: 20,
   },
   guidancePromptLogo: {
     alignSelf: 'center',
-    width: '72%',
-    maxWidth: 248,
-    aspectRatio: 1048 / 307,
-    marginBottom: 18,
+    width: '58%',
+    maxWidth: 204,
+    height: 54,
+    marginBottom: 8,
   },
   guidancePromptTitle: {
     color: '#FDE68A',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
     textAlign: 'center',
   },
   guidancePromptBody: {
-    marginTop: 18,
+    marginTop: 12,
     color: '#F8FAFC',
-    fontSize: 15,
-    lineHeight: 26,
+    fontSize: 14,
+    lineHeight: 23,
     fontWeight: '800',
     textAlign: 'center',
   },
   guidancePromptActions: {
     alignSelf: 'stretch',
     gap: 12,
-    marginTop: 22,
+    marginTop: 16,
   },
   guidancePromptPrimaryBtn: {
     backgroundColor: '#F59E0B',
     borderRadius: 18,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 18,
     alignItems: 'center',
   },
@@ -11909,7 +11854,7 @@ const hsS = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1.5,
     borderColor: 'rgba(148,163,184,0.42)',
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 18,
     alignItems: 'center',
   },
@@ -12159,7 +12104,8 @@ const hsS = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
     borderWidth: 1,
   },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, direction: 'ltr' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepperRtl: { flexDirection: 'row-reverse' },
   playerNamesHint: {
     color: 'rgba(255,255,255,0.86)',
     fontSize: 12,
@@ -13581,7 +13527,7 @@ function TurnTransition() {
     };
   }, [shouldBlinkBeginTurn, beginReadyBlinkOpacity]);
   const emptySet = useMemo(() => new Set<string>(), []);
-  const playCardSelectSound = useCardSelectSound(soundOn, 'player-screen');
+  const playCardSelectSound = useCardSelectSound(soundOn);
 
   const [editingPlayerIndex, setEditingPlayerIndex] = useState<number | null>(null);
   const handlePlayerNameConfirm = useCallback((name: string) => {
@@ -16742,9 +16688,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       top: Platform.OS === 'web' ? 0 : -(safe.insets.top || 0),
       left: Platform.OS === 'web' ? 0 : -(safe.insets.left || 0),
       right: Platform.OS === 'web' ? 0 : -(safe.insets.right || 0),
-      bottom: 0,
+      bottom: Platform.OS === 'android' ? -(safe.insets.bottom || 0) : 0,
     }),
-    [safe.insets.left, safe.insets.right, safe.insets.top],
+    [safe.insets.bottom, safe.insets.left, safe.insets.right, safe.insets.top],
   );
   useEffect(() => {
   }, [bottomPad, state.phase, state.players.length]);
@@ -20114,11 +20060,14 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   }, [SALINDA_MAX_VOLUME]);
 
   useEffect(() => {
-    salindaVolumeRef.current = 0;
-    salindaPrevVolumeRef.current = 0;
-    setSalindaVolume(0);
-    AsyncStorage.setItem(SALINDA_VOLUME_KEY, '0').catch(() => {});
-  }, []);
+    AsyncStorage.getItem(SALINDA_VOLUME_KEY).then((stored) => {
+      const restored = stored != null ? parseFloat(stored) : 0;
+      const clamped = Number.isFinite(restored) ? Math.max(0, Math.min(SALINDA_MAX_VOLUME, restored)) : 0;
+      salindaVolumeRef.current = clamped;
+      salindaPrevVolumeRef.current = clamped;
+      setSalindaVolume(clamped);
+    }).catch(() => {});
+  }, [SALINDA_MAX_VOLUME]);
   useEffect(() => {
     AsyncStorage.setItem(SALINDA_VOLUME_KEY, String(salindaVolume)).catch(() => {});
   }, [salindaVolume]);
@@ -21221,7 +21170,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
 
   const gameContent = (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="light" backgroundColor="#0a1628" />
       <AmbientBackground playMode={activePlayMode} />
       <GameRouter onPlayModeChange={setActivePlayMode} />
       <NotificationZone />
