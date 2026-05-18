@@ -4079,6 +4079,7 @@ function OnlineBotDifficultyModal({
     easy: t('start.botEasy'),
     medium: t('start.botMedium'),
     hard: t('start.botHard'),
+    pity: t('start.botEasy'), // server-only, never displayed in picker
   };
   return (
     <AppModal visible={visible} onClose={onClose} title={t('game.onlineBotDifficultyTitle')}>
