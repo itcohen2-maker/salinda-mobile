@@ -24,7 +24,10 @@ export function getNativeGameLayout(viewportHeight: number, platform: string): N
   const handBottom = Math.round(clamp(195 - compactRatio * 40, 152, 195));
   const resultsTop = Math.round(84 - compactRatio * 8);
   const parensTop = Math.round(170 - compactRatio * 14);
-  const timerTop = Math.round(tableTop + tableHeight + 32 - compactRatio * 12);
+  // Matches the pre-nativeGameLayout fallback of 400 for iOS (compactRatio=0).
+  // +32 placed the fuse at 517px — inside the hand-fan zone (starts ~509) — so
+  // we restore -45 which gives 400 on iOS and scales down with compact Android.
+  const timerTop = Math.round(tableTop + tableHeight - 45 - compactRatio * 12);
   const bottomControlClearance = isAndroid ? 14 : 10;
   const bottomControlTop = Math.max(0, safeHeight - handBottom + bottomControlClearance);
   const goldActionButtonTopBase = Math.max(96, Math.min(680, safeHeight - Math.round(140 + compactRatio * 40)));

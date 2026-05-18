@@ -10,7 +10,7 @@ describe('getNativeGameLayout', () => {
     expect(layout.tableHeight).toBe(240);
     expect(layout.resultsTop).toBe(84);
     expect(layout.parensTop).toBe(170);
-    expect(layout.timerTop).toBe(477);
+    expect(layout.timerTop).toBe(400);
     expect(layout.bottomControlTop).toBe(663);
     expect(layout.goldActionButtonTop).toBe(680);
   });
@@ -24,7 +24,7 @@ describe('getNativeGameLayout', () => {
     expect(layout.tableHeight).toBe(220);
     expect(layout.resultsTop).toBe(76);
     expect(layout.parensTop).toBe(156);
-    expect(layout.timerTop).toBe(425);
+    expect(layout.timerTop).toBe(348);
     expect(layout.bottomControlTop).toBe(579);
     expect(layout.goldActionButtonTop).toBe(579);
   });
