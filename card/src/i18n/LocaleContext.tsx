@@ -43,13 +43,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Reactively update text direction when locale changes.
     // swapLeftAndRightInRTL(false) above keeps physical layout stable —
-    // forceRTL here updates only text rendering direction.
-    // On web: also set the document dir attribute directly, since RN Web's
-    // I18nManager may not propagate to the HTML root reactively.
+    // forceRTL here updates text rendering direction on native.
+    // Web: do NOT set document.dir globally — it breaks margins and layout
+    // for elements not designed for RTL. We use container-level direction:'rtl'
+    // on specific Views instead (see index.tsx settings container).
     I18nManager.forceRTL(locale === 'he');
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      document.documentElement.setAttribute('dir', locale === 'he' ? 'rtl' : 'ltr');
-    }
   }, [locale]);
 
   const setLocale = useCallback(async (l: AppLocale) => {

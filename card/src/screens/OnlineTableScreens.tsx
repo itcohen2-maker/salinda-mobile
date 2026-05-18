@@ -643,7 +643,7 @@ export function LobbyScreen({
   } = useMultiplayer();
   const ta = isRTL ? 'right' : 'left';
   // Android's forceRTL already flips 'row'; iOS needs manual row-reverse.
-  const isRtlNeedsFlip = isRTL && Platform.OS !== 'web';
+  const isRtlNeedsFlip = isRTL;
   const currentTable = currentRoomTable ?? tables.find((table) => table.roomCode === roomCode) ?? null;
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷' as Operation]);
@@ -742,7 +742,7 @@ export function LobbyScreen({
     : responsive.width;
   // direction:'rtl' on the panel flips ALL flex rows inside without row-reverse on each.
   // Web skips it (document.dir handles it). iOS and Android both need it explicitly.
-  const rtlDirection = isRTL && Platform.OS !== 'web' ? ({ direction: 'rtl' } as const) : null;
+  const rtlDirection = isRTL ? ({ direction: 'rtl' } as const) : null;
   const setupPanelStyle = isRTL
     ? [styles.setupPanel, styles.setupPanelRtl, rtlDirection]
     : styles.setupPanel;

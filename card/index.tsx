@@ -11551,7 +11551,7 @@ function StartScreen({
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           scrollEventThrottle={16}
         >
-        <View style={[hsS.settings, isRTL && Platform.OS !== 'web' ? { direction: 'rtl' } : null]}>
+        <View style={[hsS.settings, isRTL ? { direction: 'rtl' } : null]}>
           <View style={{ alignItems: isRTL ? 'flex-end' : 'flex-start', width: '100%', marginBottom: 8 }}>
             <LanguageToggle />
           </View>
@@ -11573,8 +11573,10 @@ function StartScreen({
             end={{x:1,y:1}}
             style={hsS.rowGradientOuter}
           >
-          <View style={[hsS.row, hsS.rowPlayers]}>
-            <Text style={hsS.rowLabel}>{t('start.playerCount')}</Text>
+          <View style={[hsS.row, hsS.rowPlayers, { flexDirection: rtlRow }]}>
+            <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+              {t('start.playerCount')}
+            </Text>
             <View style={hsS.stepper}>
               <TouchableOpacity
                 onPress={() => {
@@ -11607,7 +11609,10 @@ function StartScreen({
               </TouchableOpacity>
             </View>
           </View>
-          <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 7 }}>
+          <View style={{ paddingHorizontal: 14, paddingTop: 2, paddingBottom: 14, gap: 7 }}>
+            <Text style={[hsS.playerNamesHint, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+              {t('start.fillNames')}
+            </Text>
             {Array.from({ length: playerCount }, (_, i) => (
               <TextInput
                 key={i}
@@ -12154,7 +12159,12 @@ const hsS = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
     borderWidth: 1,
   },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, direction: 'ltr' },
+  playerNamesHint: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   stepBtnWrap: {
     borderRadius: 10,
     ...Platform.select({
@@ -19465,7 +19475,7 @@ function PlayModeChoiceScreen({
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
         <View style={{ width: '100%', maxWidth: 320, alignItems: 'center' }}>
           <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginBottom: 8 }}>{t('lang.label')}</Text>
-          <View testID="lobby-language-toggle" style={{ flexDirection: 'row', gap: localeButtonGap, marginBottom: sectionGap }}>
+          <View testID="lobby-language-toggle" style={{ flexDirection: 'row', direction: 'ltr', gap: localeButtonGap, marginBottom: sectionGap }}>
             <LulosButton
               text={t('lang.he')}
               color={locale === 'he' ? 'orange' : 'blue'}
