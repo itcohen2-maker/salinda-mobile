@@ -15272,9 +15272,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         timerTurnKeyRef.current = null;
         timerConfigKeyRef.current = '';
         setSecsLeft(0);
-      } else if (state.phase === 'pre-roll' && TIMER_TOTAL > 0) {
-        // Show the full unburned fuse during pre-roll so the player sees the
-        // timer is active before they roll. The countdown only starts in building.
+      } else if ((state.phase === 'pre-roll' || state.phase === 'turn-transition') && TIMER_TOTAL > 0) {
+        // Show the full unburned fuse during pre-roll and turn-transition so
+        // the player always sees the fuse as ready. Countdown only starts in building.
         setSecsLeft(TIMER_TOTAL);
       }
       return;
@@ -17066,7 +17066,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             top: timerTop,
             left: 0,
             right: 0,
-            zIndex: 4,
+            zIndex: 55,
           }}
           pointerEvents="none"
         >
