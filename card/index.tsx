@@ -12391,13 +12391,13 @@ function BotDifficultySettingsBlock({
   botDisplayName: string;
   setBotDisplayName: (s: string) => void;
 }) {
-  const { t } = useLocale();
+  const { t, isRTL } = useLocale();
   return (
     <LinearGradient testID="start-bot-settings" colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
       <View style={{ paddingVertical: 10, paddingHorizontal: 4, gap: 10 }}>
-        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0 }]}>
-          <Text style={hsS.rowLabel}>{t('start.botDifficulty')}</Text>
-          <View style={hsS.toggleGroup}>
+        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.botDifficulty')}</Text>
+          <View style={[hsS.toggleGroup, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             {(
               [
                 ['easy', t('start.botEasy')],
