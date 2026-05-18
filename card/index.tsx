@@ -15291,21 +15291,22 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // כשהטיימר מגיע ל־0: מציגים הודעה חוסמת בתחתית, אחרי 2.5 שניות — שלוף קלף ומעבר לתור הבא
   const [timerExpiredOverlay, setTimerExpiredOverlay] = useState(false);
   const timerExpiredRef = useRef(false);
+  // Countdown tick — only decrements secsLeft. Never calls other state setters
+  // inside the updater (that's an anti-pattern that can silently break on Android).
   useEffect(() => {
-    if (!timerRunning || secsLeft <= 0) return;
+    if (!timerRunning) return;
     const id = setInterval(() => {
-      setSecsLeft(prev => {
-        if (prev <= 1 && !timerExpiredRef.current) {
-          timerExpiredRef.current = true;
-          setTimerRunning(false);
-          setTimerExpiredOverlay(true);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setSecsLeft(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(id);
-  }, [timerRunning, secsLeft <= 0]);
+  }, [timerRunning]);
+  // Expiry detection — separate effect watches secsLeft reaching 0.
+  useEffect(() => {
+    if (!timerRunning || secsLeft > 0 || timerExpiredRef.current) return;
+    timerExpiredRef.current = true;
+    setTimerRunning(false);
+    setTimerExpiredOverlay(true);
+  }, [timerRunning, secsLeft]);
   useEffect(() => {
     if (!timerExpiredOverlay) return;
     const t = setTimeout(() => {
