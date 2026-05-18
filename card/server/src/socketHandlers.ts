@@ -99,7 +99,7 @@ import { pickBotOverflowSwap } from '../../shared/overflowSwap';
 import { botNarrationToastText, renderBotNarration, type BotNarrationInput } from '../../shared/botNarration';
 import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_WIN, RATING_LOSS, RATING_ABANDON_PENALTY } from './supabaseAdmin';
 import { shouldAutoStartWhenRoomIsFull } from './tableAutoStart';
-import { resolveBotConfig } from './ddaService';
+import { resolveBotConfig, onMatchEnd } from './ddaService';
 import { generateDisguisedProfile } from './botDisguise';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -920,6 +920,16 @@ function maybeRecordMatch(room: Room): void {
     winnerId,
     participants,
   }).catch((err) => console.error('[socketHandlers] maybeRecordMatch failed:', err));
+
+  // Update DDA fields for each authenticated human player.
+  for (const p of authenticatedPlayers) {
+    const isWinner = p.id === gameWinnerId;
+    const abandoned = !p.isConnected && !isWinner;
+    const didWin = isWinner && !abandoned;
+    onMatchEnd(p.supabaseUserId!, didWin).catch((err) =>
+      console.error('[socketHandlers] onMatchEnd failed:', err),
+    );
+  }
 }
 
 function startRoomGame(
