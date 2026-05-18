@@ -4,7 +4,7 @@
 
 ## Summary
 
-The web game renders buttons at wrong positions on viewports taller than 900px because `frameHeight` grows with the viewport while `goldActionButtonTop` is hardcoded at 520px. Fix: use a fixed 900px canvas always, scale down for small viewports, center for large viewports.
+The web game renders buttons at wrong positions on all viewports: (1) `frameHeight` grew with the viewport causing gaps, (2) `goldActionButtonTop` was positioned *above* the hand fan instead of *within* it (like mobile). Fix: fixed 900px canvas + reposition gold button into the hand zone.
 
 ---
 
@@ -50,16 +50,31 @@ const contentScale = clamp(viewportHeight / frameHeight, 0.5, 1);
 // 1080px → clamped to 1.0 (no upscaling)
 ```
 
+### Fix goldActionButtonTop — move INTO hand zone
+
+Mobile iOS 844px reference: `goldActionButtonTop = 680`, `handTop = 509` → button is **171px into** the hand zone.
+
+For web 900px: `handBottom = 155`, position button near the bottom of the hand zone:
+```typescript
+// Before (wrong — above the hand):
+const goldActionButtonTop = clamp(520, goldActionButtonMinTop, ...); // = 520, above handTop=605
+
+// After (correct — within hand zone like mobile):
+const goldActionButtonTop = frameHeight - handBottom - 20; // = 900 - 155 - 20 = 725
+```
+
+Remove `goldActionButtonMinTop`, `goldActionButtonMaxTop` — no longer needed.
+
 ### Resulting positions at 900px frame
 
-| Element | Value | Correct? |
-|---------|-------|---------|
+| Element | Value | Matches mobile? |
+|---------|-------|----------------|
 | `tableTop` | 185 | ✓ |
 | `tableHeight` | 220 | ✓ |
 | table bottom | 405 | ✓ |
 | `timerTop` | 437 | ✓ |
-| `goldActionButtonTop` | 520 | ✓ between table and hand |
 | `handTop` | 605 | ✓ |
+| `goldActionButtonTop` | **725** (within hand zone) | ✓ matches mobile proportion |
 | `handZoneTop` | 295 (from bottom) | ✓ |
 
 ---
