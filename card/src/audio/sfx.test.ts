@@ -67,4 +67,13 @@ describe('sfx — initializeSfx', () => {
 
     expect(mockSetAudioModeAsync).toHaveBeenCalledTimes(1);
   });
+
+  it('does not call setAudioModeAsync when playing a sound after init', async () => {
+    await sfx.initializeSfx();
+    mockSetAudioModeAsync.mockClear();  // reset call count after init
+
+    await sfx.playSfx('tap', { cooldownMs: 0 });
+
+    expect(mockSetAudioModeAsync).not.toHaveBeenCalled();
+  });
 });
