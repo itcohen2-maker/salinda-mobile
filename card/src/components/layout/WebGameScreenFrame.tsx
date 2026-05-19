@@ -24,7 +24,7 @@ export function WebGameScreenFrame({
 }: WebGameScreenFrameProps) {
   if (Platform.OS !== 'web') {
     return (
-      <View testID={testID} style={[styles.inner, { width }, innerStyle]}>
+      <View testID={testID} style={[styles.inner, { width }, innerStyle, outerStyle]}>
         {children}
       </View>
     );
@@ -39,7 +39,7 @@ export function WebGameScreenFrame({
       ? Math.max(0.5, Math.min(1, contentScale))
       : 1;
 
-  if (safeFrameHeight != null && safeScale < 0.999) {
+  if (safeFrameHeight != null) {
     return (
       <View style={[styles.outer, outerStyle]}>
         <View
@@ -79,6 +79,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%' as any,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
