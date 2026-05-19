@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -471,12 +471,7 @@ export function LobbyEntry({
   };
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={[styles.container, { paddingTop: Math.max(safeTop + 12, 60) }]}
-      keyboardShouldPersistTaps="handled"
-    >
-      <LanguageToggle />
+    <View style={{ flex: 1 }}>
       <Modal visible={isConnecting} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.connectingCard}>
@@ -486,6 +481,12 @@ export function LobbyEntry({
           </View>
         </View>
       </Modal>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.container, { paddingTop: Math.max(safeTop + 12, 60) }]}
+        keyboardShouldPersistTaps="handled"
+      >
+      <LanguageToggle />
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       {onBackToChoice && (
         <TouchableOpacity style={[styles.backBtn, Platform.OS === 'android' ? styles.backBtnAndroid : null]} onPress={onBackToChoice}>
@@ -608,7 +609,8 @@ export function LobbyEntry({
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -740,16 +742,27 @@ export function LobbyScreen({
   const lobbyShellWidth = Platform.OS === 'web'
     ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, responsive.width)
     : responsive.width;
-  // direction:'rtl' on the panel flips ALL flex rows inside without row-reverse on each.
-  // Web skips it (document.dir handles it). iOS and Android both need it explicitly.
+  // Keep Hebrew text direction in the panel without pushing the whole setup UI to the right.
   const rtlDirection = isRTL && Platform.OS === 'web' ? ({ direction: 'rtl' } as const) : null;
-  const setupPanelStyle = isRTL
-    ? [styles.setupPanel, styles.setupPanelRtl, rtlDirection]
-    : styles.setupPanel;
-  const setupLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
-  const setupRowStyle = styles.row;
-  const setupCountRowStyle = styles.countRow;
-  const setupChipWrapStyle = styles.chipWrap;
+  const setupPanelStyle = [styles.setupPanel, isRTL ? rtlDirection : null];
+  const setupLabelStyle = [
+    styles.label,
+    styles.setupFieldLabel,
+    isRTL ? styles.setupFieldLabelRtl : null,
+  ];
+  const setupPlayersLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
+  const setupRowStyle = [styles.row, styles.setupFieldRow];
+  const setupCountRowStyle = [styles.countRow, styles.setupFieldRow];
+  const setupChipWrapStyle = [styles.chipWrap, styles.setupFieldRow];
+  const setupHintStyle = [
+    styles.hint,
+    styles.setupFieldHint,
+    isRTL ? styles.setupFieldHintRtl : null,
+  ];
+  const setupSecondaryBtnStyle = [styles.secondaryBtn, styles.setupActionBtn];
+  const setupPrimaryBtnStyle = [styles.primaryBtn, styles.setupActionBtn];
+  const setupTimerGridStyle = [styles.timerGrid, styles.setupFieldRow];
+  const setupTimerCustomRowStyle = [styles.timerCustomRow, styles.setupFieldRow];
   const minuteTimerStepper = {
     key: 'min',
     label: t('start.timerPickerMin'),
@@ -927,7 +940,7 @@ export function LobbyScreen({
               <Text style={[styles.optionBtnText, visibility === 'private_locked' && styles.optionBtnTextActive]}>{t('lobby.tablePrivate')}</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>{t('lobby.privateHint')}</Text>
+          <Text style={setupHintStyle}>{t('lobby.privateHint')}</Text>
 
           <Text testID="lobby-config-max-participants-label" style={setupLabelStyle}>{t('lobby.maxParticipants')}</Text>
           <View testID="lobby-config-max-participants-row" style={setupCountRowStyle}>
@@ -938,7 +951,7 @@ export function LobbyScreen({
             ))}
           </View>
 
-          <TouchableOpacity testID="lobby-config-advanced-toggle" style={styles.secondaryBtn} onPress={() => setShowAdvanced((value) => !value)}>
+          <TouchableOpacity testID="lobby-config-advanced-toggle" style={setupSecondaryBtnStyle} onPress={() => setShowAdvanced((value) => !value)}>
             <Text style={styles.secondaryBtnText}>{showAdvanced ? t('lobby.advancedToggleHide') : t('lobby.advancedToggleShow')}</Text>
           </TouchableOpacity>
 
@@ -997,7 +1010,7 @@ export function LobbyScreen({
               </View>
 
               <Text style={setupLabelStyle}>{t('lobby.turnTimer')}</Text>
-              <View style={styles.timerGrid}>
+              <View style={setupTimerGridStyle}>
                 {(['off', '15', '60', '90', 'custom'] as const).map((value) => (
                   <TouchableOpacity
                     key={value}
@@ -1019,7 +1032,7 @@ export function LobbyScreen({
                 ))}
               </View>
               {timerSetting === 'custom' && (
-                <View style={styles.timerCustomRow}>
+                <View style={setupTimerCustomRowStyle}>
                   {customTimerSteppers.map((stepper) => (
                     <View key={stepper.key} style={styles.timerStepper}>
                       <Text style={styles.timerStepLabel}>{stepper.label}</Text>
@@ -1039,8 +1052,10 @@ export function LobbyScreen({
             </>
           )}
 
-          <LobbySummarySection items={draftSummaryItems} isRTL={isRTL} t={t} />
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveConfiguration}>
+          <View style={styles.setupSummaryWrap}>
+            <LobbySummarySection items={draftSummaryItems} isRTL={isRTL} t={t} />
+          </View>
+          <TouchableOpacity style={setupPrimaryBtnStyle} onPress={handleSaveConfiguration}>
             <Text style={styles.primaryBtnText}>{t('lobby.continueToRoom')}</Text>
           </TouchableOpacity>
           </View>
@@ -1116,7 +1131,7 @@ export function LobbyScreen({
 
           <LobbySummarySection items={configuredSummaryItems} isRTL={isRTL} t={t} />
 
-          <Text testID="lobby-players-in-room-label" style={setupLabelStyle}>
+          <Text testID="lobby-players-in-room-label" style={setupPlayersLabelStyle}>
             {t('lobby.playersInRoom', { count: players.length, max: roomCapacity })}
           </Text>
           {players.map((player) => (
@@ -1200,8 +1215,9 @@ const styles = StyleSheet.create({
   subtitle: { color: TEXT_DIM, fontSize: 14, marginBottom: 18, alignSelf: 'stretch', textAlign: 'center' },
   label: { color: TEXT_MAIN, fontSize: 14, fontWeight: '600', alignSelf: 'stretch', marginTop: 16, marginBottom: 8 },
   labelRtl: { textAlign: 'right', writingDirection: 'rtl' },
-  setupPanel: { width: '100%' },
-  setupPanelRtl: { alignItems: 'flex-end' },
+  setupPanel: { width: '100%', alignItems: 'center' },
+  setupFieldLabel: { width: '100%', maxWidth: 420, alignSelf: 'center', textAlign: 'center' },
+  setupFieldLabelRtl: { writingDirection: 'rtl' },
   inputShell: { width: '100%', backgroundColor: ACTION_GOLD_DARK, borderRadius: 18, padding: 2, marginBottom: 8 },
   input: { width: '100%', backgroundColor: 'rgba(0,0,0,0.42)', borderWidth: 1, borderColor: 'rgba(255,240,180,0.16)', borderRadius: 15, paddingHorizontal: 16, paddingVertical: 12, color: TEXT_MAIN, fontSize: 16, fontWeight: '700' },
   primaryBtn: { backgroundColor: ACTION_GOLD, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', marginTop: 12 },
@@ -1210,6 +1226,10 @@ const styles = StyleSheet.create({
   secondaryBtn: { width: '100%', marginTop: 12, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 14, borderWidth: 2, borderColor: '#A855F7', backgroundColor: 'rgba(168,85,247,0.18)', alignItems: 'center' },
   secondaryBtnText: { color: '#DDD6FE', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   hint: { color: TEXT_MUTE, fontSize: 12, marginTop: 4, marginBottom: 8, alignSelf: 'stretch', textAlign: 'right' },
+  setupFieldHint: { width: '100%', maxWidth: 420, alignSelf: 'center', textAlign: 'center' },
+  setupFieldHintRtl: { writingDirection: 'rtl' },
+  setupFieldRow: { width: '100%', maxWidth: 420, alignSelf: 'center', justifyContent: 'center' },
+  setupActionBtn: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   sectionHeaderRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   refreshBtn: { backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
   refreshBtnText: { color: ACTION_GOLD, fontSize: 16, fontWeight: '700' },
@@ -1280,6 +1300,7 @@ const styles = StyleSheet.create({
   botDifficultyRow: { flexDirection: 'row', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 2 },
   secondaryPrimaryBtn: { backgroundColor: ACTION_AMBER, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, alignItems: 'center', width: '100%' },
   secondaryPrimaryBtnText: { color: '#F8FAFC', fontSize: 15, fontWeight: '700' },
+  setupSummaryWrap: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   summarySection: { width: '100%', marginTop: 16, marginBottom: 4 },
   summarySectionTitle: { color: TEXT_MAIN, fontSize: 14, fontWeight: '700', marginBottom: 8, alignSelf: 'stretch' },
   summarySectionTitleRtl: { writingDirection: 'rtl' },

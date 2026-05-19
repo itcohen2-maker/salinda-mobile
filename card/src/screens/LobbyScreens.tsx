@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // LobbyScreens ׳’ג‚¬ג€ Create/Join room + Lobby wait
 // ============================================================
 
@@ -190,12 +190,7 @@ export function LobbyEntry({
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <LanguageToggle />
-      {/* "Connecting to room׳’ג‚¬ֲ¦" overlay ׳’ג‚¬ג€ shown while the socket is handshaking
-          with the server and the room is being created/joined. Disappears the
-          moment the parent switches to the lobby screen (inRoom=true) or a
-          connection error surfaces. */}
+    <View style={{ flex: 1 }}>
       <Modal visible={isConnecting} transparent animationType="fade">
         <View style={styles.connectingBackdrop}>
           <View style={styles.connectingCard}>
@@ -205,6 +200,8 @@ export function LobbyEntry({
           </View>
         </View>
       </Modal>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <LanguageToggle />
       {onBackToChoice && (
         <TouchableOpacity style={styles.backBtn} onPress={onBackToChoice}>
           <Text style={styles.backBtnText}>{t('lobby.backToMode')}</Text>
@@ -312,14 +309,15 @@ export function LobbyEntry({
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMockup?: () => void } = {}) {
   const { t, isRTL } = useLocale();
   const ta = isRTL ? 'right' : 'left';
-  const { roomCode, players, lobbyStatus, isHost, connected, startGame, startBotGame, leaveRoom, error, clearError, serverUrl } = useMultiplayer();
+  const { roomCode, players, lobbyStatus, isHost, connected, startGame, startBotGame, leaveRoom, error, clearError, currentRoomTable, serverUrl } = useMultiplayer();
   const [difficulty, setDifficultyRaw] = useState<'easy' | 'full'>('full');
   const [enabledOperators, setEnabledOperators] = useState<Operation[]>(['+', '-', 'x', '÷']);
   const [showFractions, setShowFractions] = useState(true);
@@ -586,7 +584,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
       )}
       {!(isHost && !settingsConfirmed) && (
         <>
-          <Text style={styles.label}>{t('lobby.playersInRoom', { count: players.length })}</Text>
+          <Text style={styles.label}>{t('lobby.playersInRoom', { count: players.length, max: currentRoomTable?.maxParticipants ?? 4 })}</Text>
           {players.map((p) => (
             <View key={p.id} style={styles.playerRow}>
               <Text style={styles.playerName}>{p.name}</Text>
