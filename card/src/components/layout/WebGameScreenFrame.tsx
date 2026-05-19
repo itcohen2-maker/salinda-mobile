@@ -40,11 +40,22 @@ export function WebGameScreenFrame({
       : 1;
 
   if (safeFrameHeight != null) {
+    const visualHeight = safeFrameHeight * safeScale;
     return (
       <View style={[styles.outer, outerStyle]}>
         <View
           testID={testID}
-          style={[styles.scaledSlot, { width: width * safeScale, height: safeFrameHeight * safeScale }]}
+          style={[
+            styles.scaledSlot,
+            {
+              width: width * safeScale,
+              height: visualHeight,
+              // Center vertically without justifyContent on the parent
+              // (avoids ResizeObserver loop on React Native Web).
+              marginTop: 'auto' as any,
+              marginBottom: 'auto' as any,
+            },
+          ]}
         >
           <View
             style={[
@@ -79,7 +90,6 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%' as any,
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
