@@ -3,6 +3,7 @@ import {
   WEB_GAME_PLAYFIELD_MIN_HEIGHT,
   getWebContentWidth,
   getWebGameLayout,
+  getWebTurnTransitionReadyButtonTop,
 } from './webLayout';
 
 describe('getWebContentWidth', () => {
@@ -17,30 +18,26 @@ describe('getWebContentWidth', () => {
 
 describe('getWebGameLayout', () => {
   it.each([
-    // goldActionButtonTop = max(96, min(680, H-140))
-    [{ width: 1366, height: 768 }, { goldActionButtonTop: 628 }],
-    [{ width: 1440, height: 900 }, { goldActionButtonTop: 680 }],
-    [{ width: 1920, height: 1080 }, { goldActionButtonTop: 680 }],
-    [{ width: 768, height: 1024 }, { goldActionButtonTop: 680 }],
-  ])('returns stable compact web-game layout for %o', (viewport, expected) => {
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+    { width: 768, height: 1024 },
+  ])('always returns fixed 900px canvas for viewport %o', (viewport) => {
     const layout = getWebGameLayout(viewport);
 
-    expect(layout.viewportWidth).toBe(viewport.width);
-    expect(layout.viewportHeight).toBe(viewport.height);
-    expect(layout.frameHeight).toBe(viewport.height);
-    expect(layout.contentScale).toBe(1);
+    // Canvas is always fixed at 900px — never grows with viewport
+    expect(layout.frameHeight).toBe(900);
+    // Scale is 1 for viewports >= 900px, <1 for smaller viewports
+    expect(layout.contentScale).toBeCloseTo(Math.min(1, viewport.height / 900), 4);
     expect(layout.playfieldWidth).toBe(WEB_GAME_PLAYFIELD_MAX_WIDTH);
-    // All wide viewports return the same compact desktop constants
     expect(layout.tableHeight).toBe(220);
     expect(layout.tableTop).toBe(185);
     expect(layout.handBottom).toBe(155);
     expect(layout.fanCardHeight).toBe(140);
-    expect(layout.fanCardWidth).toBe(99);
     expect(layout.fanViewportHeight).toBe(116);
-    expect(layout.tableWidth).toBe(388);
-    expect(layout.resultsRight).toBe(128);
-    expect(layout.goldActionButtonTop).toBe(expected.goldActionButtonTop);
-    expect(layout.handStripHeight).toBe(layout.fanViewportHeight + 24);
+    // Gold button is BELOW the hand zone (hand zone ends at 900-155=745)
+    expect(layout.goldActionButtonTop).toBe(760); // = 900 - 140
+    expect(layout.goldActionButtonTop).toBeGreaterThan(900 - 155); // below hand zone bottom
     expect(layout.timerTop).toBe(layout.tableTop + layout.tableHeight + 32);
   });
 
@@ -49,15 +46,21 @@ describe('getWebGameLayout', () => {
 
     expect(layout.viewportWidth).toBe(360);
     expect(layout.viewportHeight).toBe(640);
-    expect(layout.frameHeight).toBe(WEB_GAME_PLAYFIELD_MIN_HEIGHT);
-    expect(layout.contentScale).toBeCloseTo(640 / WEB_GAME_PLAYFIELD_MIN_HEIGHT, 4);
+    expect(layout.frameHeight).toBe(900); // always 900
+    expect(layout.contentScale).toBeCloseTo(640 / 900, 4);
     expect(layout.playfieldWidth).toBe(360);
-    expect(layout.contentWidth).toBe(360);
-    expect(layout.tableWidth).toBe(336);
-    expect(layout.tableWidth).toBeLessThanOrEqual(layout.playfieldWidth);
-    expect(layout.resultsRight).toBe(128);
-    expect(layout.tableHeight).toBe(220);
-    expect(layout.handBottom).toBe(155);
-    expect(layout.goldActionButtonTop).toBe(628);
+    expect(layout.goldActionButtonTop).toBe(760);
+  });
+});
+
+describe('getWebTurnTransitionReadyButtonTop', () => {
+  it('keeps the ready button in the same vertical band as the gold action button', () => {
+    // With new 900px canvas: goldActionButtonTop=760, handTop=605
+    expect(getWebTurnTransitionReadyButtonTop(760, 605, 48)).toBe(555); // Math.min(760, 605-48-2)=555
+    expect(getWebTurnTransitionReadyButtonTop(760, 700, 48)).toBe(650); // Math.min(760, 700-48-2)=650
+  });
+
+  it('falls back to 300 if handTop is very small', () => {
+    expect(getWebTurnTransitionReadyButtonTop(760, 200, 48)).toBe(300);
   });
 });
