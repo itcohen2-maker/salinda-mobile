@@ -287,7 +287,6 @@ export const en: Record<string, string> = {
   'start.subtitle': 'Salinda · educational math card game',
   'start.playerCount': 'Number of players',
   'start.playerNames': 'Player names',
-  'start.fillNames': 'Enter your names',
   'start.playerPlaceholder': 'Player {{n}}',
   'start.difficulty': 'Difficulty',
   'start.diffFull': 'Full (0-25)',
@@ -1511,4 +1510,3 @@ export const en: Record<string, string> = {
   'courage.coinAward.title': '⭐ +1 Coin!',
   'courage.coinAward.body': 'Excellence meter full — you earned 1 coin!',
 };
-
