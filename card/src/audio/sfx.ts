@@ -61,6 +61,7 @@ const REGISTRY: Record<SfxKey, SfxState> = {
 
 let initialized = false;
 let appStateSubscription: NativeEventSubscription | null = null;
+let initPromise: Promise<void> | null = null;
 let muted = false;
 let volume = 0.33;
 
@@ -115,24 +116,28 @@ async function reloadSound(key: SfxKey): Promise<Audio.Sound | null> {
 }
 
 export async function initializeSfx(): Promise<void> {
-  if (initialized) {
-    return;
-  }
-  try {
-    await ensureAudioMode();
-    await Promise.all((Object.keys(SOURCES) as SfxKey[]).map((key) => ensureLoaded(key)));
-    initialized = true;
-    appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') {
-        ensureAudioMode().catch(() => {});
+  if (initialized) return;
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    try {
+      await ensureAudioMode();
+      await Promise.all((Object.keys(SOURCES) as SfxKey[]).map((key) => ensureLoaded(key)));
+      initialized = true;
+      appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
+        if (next === 'active') {
+          ensureAudioMode().catch(() => {});
+        }
+      });
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[sfx] initialize failed', error);
       }
-    });
-  } catch (error) {
-    if (__DEV__) {
-      console.warn('[sfx] initialize failed', error);
+      // initialized stays false — next call will retry
+    } finally {
+      initPromise = null;
     }
-    // initialized stays false — next call will retry
-  }
+  })();
+  return initPromise;
 }
 
 export async function playSfx(
@@ -281,5 +286,6 @@ export async function disposeSfx(): Promise<void> {
   );
   appStateSubscription?.remove();
   appStateSubscription = null;
+  initPromise = null;
   initialized = false;
 }

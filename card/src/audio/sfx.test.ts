@@ -76,6 +76,11 @@ describe('sfx — initializeSfx', () => {
 
     expect(mockSetAudioModeAsync).not.toHaveBeenCalled();
   });
+
+  it('does not run initialization twice on concurrent calls', async () => {
+    await Promise.all([sfx.initializeSfx(), sfx.initializeSfx()]);
+    expect(mockSetAudioModeAsync).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('sfx — AppState recovery', () => {
