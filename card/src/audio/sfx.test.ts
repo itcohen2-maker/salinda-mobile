@@ -78,8 +78,13 @@ describe('sfx — initializeSfx', () => {
   });
 
   it('does not run initialization twice on concurrent calls', async () => {
+    const { AppState } = require('react-native');
+    const addEventListenerSpy = jest.spyOn(AppState, 'addEventListener');
+
     await Promise.all([sfx.initializeSfx(), sfx.initializeSfx()]);
+
     expect(mockSetAudioModeAsync).toHaveBeenCalledTimes(1);
+    expect(addEventListenerSpy).toHaveBeenCalledTimes(1);
   });
 });
 

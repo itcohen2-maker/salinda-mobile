@@ -268,6 +268,8 @@ export function setSfxMuted(nextMuted: boolean): void {
 }
 
 export async function disposeSfx(): Promise<void> {
+  appStateSubscription?.remove();
+  appStateSubscription = null;
   await Promise.all(
     (Object.keys(REGISTRY) as SfxKey[]).map(async (key) => {
       const sound = REGISTRY[key].sound;
@@ -284,8 +286,6 @@ export async function disposeSfx(): Promise<void> {
       }
     })
   );
-  appStateSubscription?.remove();
-  appStateSubscription = null;
   initPromise = null;
   initialized = false;
 }
