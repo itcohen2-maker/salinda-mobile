@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  BackHandler,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useAuth, syncTutorialCoins } from '../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import type { LobbyTableSummary } from '../../shared/types';
 import { useLocale } from '../i18n/LocaleContext';
@@ -65,6 +64,7 @@ export function OnlineTablesEntryScreen({
   const [codeJoinInviteCode, setCodeJoinInviteCode] = useState('');
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [timeoutError, setTimeoutError] = useState<string | null>(null);
 
   useEffect(() => {
     refreshTables();
@@ -80,16 +80,26 @@ export function OnlineTablesEntryScreen({
   useEffect(() => {
     if (error) {
       setIsCreatingTable(false);
+      setTimeoutError(null);
       const timer = setTimeout(clearError, 4000);
       return () => clearTimeout(timer);
     }
   }, [error, clearError]);
 
   useEffect(() => {
-    if (!isCreatingTable) return;
-    const timer = setTimeout(() => setIsCreatingTable(false), 15000);
+    if (!timeoutError) return;
+    const timer = setTimeout(() => setTimeoutError(null), 5000);
     return () => clearTimeout(timer);
-  }, [isCreatingTable]);
+  }, [timeoutError]);
+
+  useEffect(() => {
+    if (!isCreatingTable) return;
+    const timer = setTimeout(() => {
+      setIsCreatingTable(false);
+      setTimeoutError(t('lobby.createTableTimeout'));
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [isCreatingTable, t]);
 
   useEffect(() => {
     const { roomCode, inviteCode, serverUrl, name } = parseJoinParamsFromUrl();
@@ -146,32 +156,29 @@ export function OnlineTablesEntryScreen({
 
   const hasPartialInviteCode = codeJoinInviteCode.length > 0 && codeJoinInviteCode.length < 6;
 
-  const handleExitApp = () => {
-    void syncTutorialCoins().then(() => BackHandler.exitApp());
-  };
-
   return (
     <>
-      <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
-      <Modal visible={isCreatingTable} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View testID="creating-table-card" style={styles.waitingCard}>
-            <View style={styles.waitingSpinnerWrap}>
-              <ActivityIndicator size="large" color="#FDE68A" />
+      {rulesOpen && <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />}
+      {isCreatingTable && (
+        <Modal visible={isCreatingTable} transparent animationType="fade">
+          <View style={styles.modalBackdrop}>
+            <View testID="creating-table-card" style={styles.waitingCard}>
+              <View style={styles.waitingSpinnerWrap}>
+                <ActivityIndicator size="large" color="#FDE68A" />
+              </View>
+              <Text style={styles.waitingTitle}>{t('lobby.creatingTableTitle')}</Text>
+              <Text style={styles.waitingBody}>{t('lobby.creatingTableBody')}</Text>
             </View>
-            <Text style={styles.waitingTitle}>{t('lobby.creatingTableTitle')}</Text>
-            <Text style={styles.waitingBody}>{t('lobby.creatingTableBody')}</Text>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
       <TablesLobbyScreen
         balance={profile?.total_coins ?? 0}
-        error={error}
+        error={error ?? timeoutError}
         headerAccessory={<LanguageToggle />}
         onBack={onBackToChoice}
         onCreateTable={handleCreateTable}
         onEnterCode={() => setCodeJoinOpen(true)}
-        onExitApp={handleExitApp}
         onJoinTable={handleJoinTable}
         onOpenRules={() => setRulesOpen(true)}
         onPlayerNameChange={setPlayerName}
@@ -180,7 +187,7 @@ export function OnlineTablesEntryScreen({
         playerName={playerName}
         tables={tables}
       />
-      <Modal
+      {codeJoinOpen && <Modal
         visible={codeJoinOpen}
         transparent
         animationType="fade"
@@ -235,7 +242,7 @@ export function OnlineTablesEntryScreen({
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </Modal>}
     </>
   );
 }

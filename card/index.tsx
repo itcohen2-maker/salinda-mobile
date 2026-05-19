@@ -34,7 +34,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid } from 'expo-av';
 import * as NavigationBar from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -84,6 +84,7 @@ const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', '
 const RESULTS_POSSIBLE_TITLES = new Set([t('he', 'results.possibleTitle'), t('en', 'results.possibleTitle')]);
 import { LocaleProvider, useLocale } from './src/i18n/LocaleContext';
 import { playCardSelectSfx } from './src/audio/cardSelect';
+import { resolveRestoredSalindaVolume, resolveStoredSalindaVolume } from './src/audio/musicPreferences';
 import { disposeSfx, initializeSfx, playSfx, setSfxMuted, setSfxVolume } from './src/audio/sfx';
 import { SOUNDS_ENABLED_STORAGE_KEY, resolveStoredSoundsEnabled } from './src/audio/preferences';
 import { getAudioLoadStatus, getAudioReplayStatus } from './src/audio/playbackStatus';
@@ -739,6 +740,10 @@ interface GameState {
   lastCourageCoinsAwarded: boolean;
   /** Set to true in ROLL_DICE when isTriple; cleared by endTurnLogic. */
   rolledTripleThisTurn: boolean;
+  /** Local-only: block turn advancement until the meter animation finishes. */
+  meterAnimationPending: boolean;
+  /** Frozen turn-transition state to apply after the pending meter animation ends. */
+  pendingTurnState: GameState | null;
   identicalAlert: { playerName: string; cardDisplay: string; consecutive: number } | null;
   jokerModalOpen: boolean;
   /** משבצות 0/1 — קלפים מהיד בתרגיל הקוביות */
@@ -1141,6 +1146,7 @@ type GameAction =
   | { type: 'PLAY_AGAIN' }
   | { type: 'NEXT_TURN' }
   | { type: 'BEGIN_TURN' }
+  | { type: 'METER_ANIMATION_DONE' }
   | { type: 'ROLL_DICE'; values?: DiceResult }
   | { type: 'CONFIRM_EQUATION'; result: number; equationDisplay: string; equationOps: Operation[]; equationCommits?: EquationCommitPayload[] }
   | { type: 'RECORD_EQUATION_ATTEMPT' }
@@ -1614,6 +1620,7 @@ const initialState: GameState = {
   courageMeterPercent: 0, courageMeterStep: 0, courageDiscardSuccessStreak: 0, courageRewardPulseId: 0, courageCoins: 0,
   turnCoinsEarned: 0,
   lastCourageRewardReason: null, lastCourageCoinsAwarded: false, rolledTripleThisTurn: false,
+  meterAnimationPending: false, pendingTurnState: null,
   lastMoveMessage: null, lastDiscardCount: 0, lastEquationDisplay: null,
   difficulty: 'full', mode: 'pass-and-play', diceMode: '3', showFractions: true, fractionKinds: [...ALL_FRACTION_KINDS],
   showPossibleResults: true, showSolveExercise: true,
@@ -1875,7 +1882,7 @@ function resolveOverflowSwapAndBeginTurn(
       overflowSwapStage: null, overflowSwapSelectedPileChoice: null, overflowSwapSelectedHandCardId: null,
     };
     if (isMidTurnSwap) {
-      if (cleared.hasDrawnCard) return endTurnLogic(cleared, tf);
+      if (cleared.hasDrawnCard) return endTurnWithMeterCheck(cleared, tf);
       return cleared;
     }
     return gameReducer(cleared, { type: 'BEGIN_TURN' }, tf);
@@ -1924,7 +1931,7 @@ function resolveOverflowSwapAndBeginTurn(
     overflowSwapSelectedHandCardId: null,
   };
   if (isMidTurnSwap) {
-    if (cleared.hasDrawnCard) return endTurnLogic(cleared, tf);
+    if (cleared.hasDrawnCard) return endTurnWithMeterCheck(cleared, tf);
     return cleared;
   }
   return gameReducer(cleared, { type: 'BEGIN_TURN' }, tf);
@@ -1962,6 +1969,8 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
   return withOverflowSwapTurnTransition({
     ...s,
     rolledTripleThisTurn: false,
+    meterAnimationPending: false,
+    pendingTurnState: null,
     notifications: nextNotifications,
     players: s.players.map(p => ({ ...p, calledLolos: false, lastCourageCoinsAwarded: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
@@ -1990,6 +1999,35 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     lastTurnPlayedCards: s.currentTurnPlayedCards,
     currentTurnPlayedCards: [],
   });
+}
+
+function endTurnWithMeterCheck(
+  st: GameState,
+  tf: (key: string, params?: MsgParams) => string,
+  opts: { originalPulse?: number } = {},
+): GameState {
+  const originalPulse = opts.originalPulse ?? (st.courageRewardPulseId ?? 0);
+  const baseResult = endTurnLogic(st, tf);
+  const currentPlayer = st.players[st.currentPlayerIndex];
+  const meterAdvanced = (baseResult.courageRewardPulseId ?? 0) > originalPulse;
+
+  if (meterAdvanced && !currentPlayer?.isBot) {
+    return {
+      ...st,
+      meterAnimationPending: true,
+      pendingTurnState: {
+        ...baseResult,
+        meterAnimationPending: false,
+        pendingTurnState: null,
+      },
+    };
+  }
+
+  return {
+    ...baseResult,
+    meterAnimationPending: false,
+    pendingTurnState: null,
+  };
 }
 
 const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
@@ -2266,6 +2304,8 @@ function gameReducer(
         botConfirmDemoShownThisTurn: false,
         botPostEquationPauseTicks: 0,
         rolledTripleThisTurn: false,
+        meterAnimationPending: false,
+        pendingTurnState: null,
       });
     }
     case 'BEGIN_TURN': {
@@ -2312,6 +2352,14 @@ function gameReducer(
       // It is cleared on the player's first real action (ROLL_DICE, DRAW_CARD, PLAY_FRACTION).
       const fracChainEnded = st.fractionAttackResolved && topDiscard?.type === 'fraction';
       return { ...st, phase: 'pre-roll', fractionAttackResolved: st.fractionAttackResolved, pendingFractionTarget: null, fractionPenalty: 0, message: fracChainEnded ? tf('local.fractionRoundEndedRoll') : '', lastDiscardCount: 0, lastEquationDisplay: null, turnCoinsEarned: 0, lastCourageRewardReason: null, lastCourageCoinsAwarded: false, turnStartedAt: Date.now(), botFractionDefenseTicks: 0, botPresentation: { action: null, candidateCardId: null, ticks: 0, notification: null }, botPostEquationPauseTicks: 0, notifications: clearedNotifs };
+    }
+    case 'METER_ANIMATION_DONE': {
+      if (!st.meterAnimationPending || !st.pendingTurnState) return st;
+      return {
+        ...st.pendingTurnState,
+        meterAnimationPending: false,
+        pendingTurnState: null,
+      };
     }
     case 'ROLL_DICE': {
       // In tutorial mode, allow ROLL_DICE from any phase so the lesson can
@@ -2454,6 +2502,7 @@ function gameReducer(
     }
     case 'CONFIRM_STAGED': {
       if (st.phase !== 'solved' || st.hasPlayedCards) return st;
+      const originalPulse = st.courageRewardPulseId ?? 0;
       const stNumbers = st.stagedCards.filter(c => c.type === 'number' || c.type === 'wild');
       const stOpCards = st.stagedCards.filter(c => c.type === 'operation');
       const stOpCard = stOpCards.length === 1 ? stOpCards[0] : null;
@@ -2482,7 +2531,7 @@ function gameReducer(
         for (const slot of st.equationHandSlots) if (slot) stIdsWild.add(slot.card.id);
         const stCpWild = st.players[st.currentPlayerIndex];
         const stNpWild = st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hand: stCpWild.hand.filter(c => !stIdsWild.has(c.id)) } : p);
-        return endTurnLogic({
+        return endTurnWithMeterCheck({
           ...st,
           players: stNpWild,
           stagedCards: [],
@@ -2492,7 +2541,7 @@ function gameReducer(
           lastTurnPlayedCards: resolvedStaged,
           currentTurnPlayedCards: [...st.currentTurnPlayedCards, ...resolvedStaged],
           message: '',
-        }, tf);
+        }, tf, { originalPulse });
       }
       if (st.isTutorial && !st.showPossibleResults && (st.lastEquationDisplay?.includes('(') ?? false) && stNumbers.length < 2) {
         return { ...st, message: 'בחרו לפחות שני קלפים' };
@@ -2557,7 +2606,7 @@ function gameReducer(
       stNs = checkWin(stNs);
       if (stNs.phase === 'game-over') return stNs;
       // Discard celebration is shown on TurnTransition only (not NotificationZone in GameScreen).
-      return { ...endTurnLogic(stNs, tf), lastDiscardCount: stIds.size };
+      return endTurnWithMeterCheck(stNs, tf, { originalPulse });
     }
     case 'CONFIRM_TRAP_ONLY': {
       return { ...st, message: tf('operation.onlyInEquation') };
@@ -2600,7 +2649,7 @@ function gameReducer(
         name: st.identicalAlert.playerName,
         card: st.identicalAlert.cardDisplay,
       });
-      return endTurnLogic(
+      return endTurnWithMeterCheck(
         {
           ...st,
           identicalAlert: null,
@@ -2816,7 +2865,7 @@ function gameReducer(
       };
       ns = checkWin(ns);
       if (ns.phase === 'game-over') return ns;
-      return endTurnLogic(ns, tf);
+      return endTurnWithMeterCheck(ns, tf);
     }
     case 'DEFEND_FRACTION_PENALTY': {
       if (st.pendingFractionTarget === null) return st;
@@ -2833,7 +2882,7 @@ function gameReducer(
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: penMsg }],
         notifications: (s.notifications ?? []).filter((n) => !n.id.startsWith('frac-')),
       };
-      return endTurnLogic(s, tf);
+      return endTurnWithMeterCheck(s, tf);
     }
     case 'OPEN_JOKER_MODAL': return { ...st, jokerModalOpen: true, selectedCards: [action.card] };
     case 'CLOSE_JOKER_MODAL': return { ...st, jokerModalOpen: false, selectedCards: [] };
@@ -2926,7 +2975,7 @@ function gameReducer(
       }
       let s = reshuffleDiscard(st);
       if (s.drawPile.length === 0) {
-        return endTurnLogic(
+        return endTurnWithMeterCheck(
           {
             ...s,
             message: '',
@@ -2965,7 +3014,7 @@ function gameReducer(
           : s.soloSessionStats,
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: drawMsg }],
       };
-      return endTurnLogic(s, tf);
+      return endTurnWithMeterCheck(s, tf);
     }
     case 'CALL_LOLOS': {
       const cp = st.players[st.currentPlayerIndex];
@@ -2978,7 +3027,7 @@ function gameReducer(
         moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: lolosMsg }],
       };
     }
-    case 'END_TURN': return endTurnLogic(st, tf);
+    case 'END_TURN': return endTurnWithMeterCheck(st, tf);
     case 'SET_MESSAGE': return { ...st, message: action.message };
     case 'PUSH_NOTIFICATION': {
       const payload = action.payload;
@@ -3875,12 +3924,17 @@ function GameProvider({ children }: { children: ReactNode }) {
   const { awardCoins: _awardCoinsForMeter } = useAuth();
   const lastAwardSyncedPulseRef = useRef<number>(0);
   useEffect(() => {
-    if (state.isTutorial || !state.lastCourageCoinsAwarded) return;
+    if ((state.courageRewardPulseId ?? 0) === 0) {
+      lastAwardSyncedPulseRef.current = 0;
+    }
+  }, [state.courageRewardPulseId]);
+  useEffect(() => {
+    if (override || state.isTutorial || !state.lastCourageCoinsAwarded) return;
     const pulseId = state.courageRewardPulseId ?? 0;
     if (pulseId <= 0 || lastAwardSyncedPulseRef.current === pulseId) return;
     lastAwardSyncedPulseRef.current = pulseId;
     void _awardCoinsForMeter(EXCELLENCE_METER_FULL_REWARD_COINS, 'excellence_meter_full');
-  }, [_awardCoinsForMeter, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
+  }, [override, _awardCoinsForMeter, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
 
   // dispatch reads overrideRef.current so it never needs to be recreated when override
   // changes — making it stable prevents cascading useEffect re-runs in child components.
@@ -6233,8 +6287,9 @@ async function _playDiceRollOneShot(): Promise<void> {
   try {
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       staysActiveInBackground: false,
-      shouldDuckAndroid: true,
+      shouldDuckAndroid: false,
       playThroughEarpieceAndroid: false,
     });
     const { sound } = await Audio.Sound.createAsync(require('./assets/dice_roll.mp3'), getAudioLoadStatus());
@@ -9555,7 +9610,7 @@ function BottomControlsBar() {
     (async () => {
       if (placeMultipleSoundRef.current) return;
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(require('./assets/card_place_multiple.mp3'), getAudioLoadStatus());
         placeMultipleSoundRef.current = sound;
       } catch (e) {
@@ -9579,7 +9634,7 @@ function BottomControlsBar() {
     placeMultipleLoadingRef.current = true;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(require('./assets/card_place_multiple.mp3'), getAudioLoadStatus());
         placeMultipleSoundRef.current = sound;
         if (!soundOn) return;
@@ -10276,7 +10331,7 @@ function StartScreen({
     if (!src) return;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(src, getAudioLoadStatus());
         await sound.replayAsync(getAudioReplayStatus());
         sound.setOnPlaybackStatusUpdate((s: any) => { if (s?.didJustFinish || s?.didJustFinishNotify) sound.unloadAsync().catch(() => {}); });
@@ -15087,6 +15142,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       state.phase !== 'game-over'
     );
   const lockUiForBotTurn = isLocalBotTurn && !state.isTutorial;
+  const lockUiForMeterAnimation = state.meterAnimationPending === true;
   const onlineBotPlayer =
     isOnlineGame ? state.players.find((p: any) => p?.isBot) ?? null : null;
   // Is the ONLINE bot currently playing? Used for showing demo visuals
@@ -15099,7 +15155,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const canRenderBotMissionStrip = false;
   const isOnlineWaiting =
     isOnlineGame && typeof gameScreenMyIndex === 'number' && state.currentPlayerIndex !== gameScreenMyIndex;
-  const canUseActiveTurnUi = !isOnlineWaiting && !isLocalBotTurn;
+  const canUseActiveTurnUi = !isOnlineWaiting && !isLocalBotTurn && !lockUiForMeterAnimation;
   const showOnlineBotDifficultyBtn = isOnlineGame && state.hostBotDifficulty != null;
   const [localGameTurnDeadlineAt, setLocalGameTurnDeadlineAt] = useState<number | null>(null);
   const [gameTurnNowMs, setGameTurnNowMs] = useState(() => Date.now());
@@ -15347,7 +15403,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     let mounted = true;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: false, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const [midRes, endRes, final7Res] = await Promise.all([
           Audio.Sound.createAsync(require('./assets/sounds/bubble_mid.wav'), getAudioLoadStatus()),
           Audio.Sound.createAsync(require('./assets/sounds/bubble_end.wav'), getAudioLoadStatus()),
@@ -15445,7 +15501,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     (async () => {
       if (diceSoundRef.current) return;
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(require('./assets/dice_roll.mp3'), getAudioLoadStatus());
         diceSoundRef.current = sound;
       } catch (e) {
@@ -15473,7 +15529,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     diceSoundLoadingRef.current = true;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound: s } = await Audio.Sound.createAsync(require('./assets/dice_roll.mp3'), getAudioLoadStatus());
         diceSoundRef.current = s;
         // Re-check mute: the learner might have tapped mute while the sound
@@ -15580,7 +15636,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     drawForfeitLoadingRef.current = true;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(require('./assets/button_forfeit.mp3'), getAudioLoadStatus());
         drawForfeitSoundRef.current = sound;
         await sound.replayAsync(getAudioReplayStatus());
@@ -15605,7 +15661,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     miniResultTapLoadingRef.current = true;
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, staysActiveInBackground: false, shouldDuckAndroid: false, playThroughEarpieceAndroid: false });
         const { sound } = await Audio.Sound.createAsync(require('./assets/mini_result_button_red.mp3'), getAudioLoadStatus());
         miniResultTapSoundRef.current = sound;
         await sound.replayAsync(getAudioReplayStatus());
@@ -16744,7 +16800,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           </>
         ) : null}
       </View>
-      {lockUiForBotTurn ? (
+      {lockUiForBotTurn || lockUiForMeterAnimation ? (
         <View
           pointerEvents="auto"
           style={[StyleSheet.absoluteFillObject, { zIndex: 300, backgroundColor: 'transparent' }]}
@@ -16805,6 +16861,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                     value={meterPlayer.courageMeterPercent ?? 0}
                     pulseKey={meterPlayer.courageRewardPulseId ?? 0}
                     isCelebrating={state.lastCourageCoinsAwarded}
+                    onAnimationComplete={
+                      state.meterAnimationPending
+                        ? () => dispatch({ type: 'METER_ANIMATION_DONE' })
+                        : undefined
+                    }
                     courageCoins={meterPlayer.courageCoins ?? 0}
                     compact
                   />
@@ -17363,7 +17424,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               >
                 {/* Tutorial arrow for "בחרתי" is drawn from the side in
                     InteractiveTutorialScreen via the reported layout rect —
-                    no inline ? here so the button stays at its normal spot. */}
+                    no inline → here so the button stays at its normal spot. */}
                 <LulosButton
                   text={t('game.placeCards')}
                   color="orange"
@@ -19678,11 +19739,6 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   // showTutorial removed — replaced by playMode === 'tutorial'
   const welcomeMusicRef = useRef<Audio.Sound | null>(null);
   const soundOn = state.soundsEnabled !== false;
-  const [salindaVolume, setSalindaVolume] = useState(0);
-  const salindaVolumeRef = useRef(0);
-  const salindaPrevVolumeRef = useRef(0);
-  const [showSalindaPanel, setShowSalindaPanel] = useState(false);
-  const [preferredName, setPreferredName] = useState('');
   const [tutorialMeter, setTutorialMeter] = useState(INITIAL_TUTORIAL_METER_STATE);
   const classroomPracticeStartedAtRef = useRef<number | null>(null);
   const classroomPracticeReportedRef = useRef(false);
@@ -19693,12 +19749,19 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const trackWindowRef = useRef<{ y: number; h: number }>({ y: 0, h: 140 });
   const isAndroidPlatform = Platform.OS === 'android';
   const SALINDA_MAX_VOLUME = isAndroidPlatform ? 0.55 : 0.4;
+  const initialSalindaVolume = resolveStoredSalindaVolume(null, SALINDA_MAX_VOLUME);
+  const [salindaVolume, setSalindaVolume] = useState(initialSalindaVolume);
+  const salindaVolumeRef = useRef(initialSalindaVolume);
+  const salindaPrevVolumeRef = useRef(initialSalindaVolume);
+  const [showSalindaPanel, setShowSalindaPanel] = useState(false);
+  const [preferredName, setPreferredName] = useState('');
   const SALINDA_PANEL_H = isAndroidPlatform ? 188 : 160;
   const SALINDA_TRACK_H = isAndroidPlatform ? 164 : 140;
   const SALINDA_TRACK_W = isAndroidPlatform ? 8 : 6;
   const SALINDA_THUMB_SIZE = isAndroidPlatform ? 22 : 18;
   const SALINDA_THUMB_RADIUS = SALINDA_THUMB_SIZE / 2;
   const SALINDA_VOLUME_KEY = 'lulos_salinda_volume';
+  const SALINDA_VOLUME_TOUCHED_KEY = 'lulos_salinda_volume_touched';
   const PREFERRED_NAME_KEY = 'lolos_preferred_name';
 
   // ?? Keep sfx loaded for the lifetime of the router (StartScreen's dispose
@@ -19949,14 +20012,15 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       }
       try {
         await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: false,
+          playsInSilentModeIOS: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
           staysActiveInBackground: false,
-          shouldDuckAndroid: true,
+          shouldDuckAndroid: false,
           playThroughEarpieceAndroid: false,
         });
         const { sound } = await Audio.Sound.createAsync(
           require('./assets/sounds/salinda_song.mp3'),
-          { isLooping: true, volume: 0, shouldPlay: true }
+          { ...getAudioLoadStatus(0), isLooping: true, volume: 0, shouldPlay: true }
         );
         if (disposed) {
           await sound.unloadAsync();
@@ -20044,13 +20108,17 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     dispatch({ type: 'SET_SOUNDS_ENABLED', enabled: !soundOn });
   }, [dispatch, soundOn]);
   const openSalindaPanel = useCallback(() => setShowSalindaPanel((v) => !v), []);
+  const markSalindaVolumeTouched = useCallback(() => {
+    AsyncStorage.setItem(SALINDA_VOLUME_TOUCHED_KEY, 'true').catch(() => {});
+  }, [SALINDA_VOLUME_TOUCHED_KEY]);
   const applySalindaRatio = useCallback((ratio: number) => {
     const normalized = Math.max(0, Math.min(1, ratio));
     const next = Math.round((SALINDA_MAX_VOLUME * normalized) * 100) / 100;
     salindaVolumeRef.current = next;
     if (next > 0) salindaPrevVolumeRef.current = next;
     setSalindaVolume(next);
-  }, [SALINDA_MAX_VOLUME]);
+    markSalindaVolumeTouched();
+  }, [SALINDA_MAX_VOLUME, markSalindaVolumeTouched]);
 
   const setSalindaVolumeClamped = useCallback((next: number) => {
     const clamped = Math.max(0, Math.min(SALINDA_MAX_VOLUME, next));
@@ -20060,14 +20128,16 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   }, [SALINDA_MAX_VOLUME]);
 
   useEffect(() => {
-    AsyncStorage.getItem(SALINDA_VOLUME_KEY).then((stored) => {
-      const restored = stored != null ? parseFloat(stored) : 0;
-      const clamped = Number.isFinite(restored) ? Math.max(0, Math.min(SALINDA_MAX_VOLUME, restored)) : 0;
+    Promise.all([
+      AsyncStorage.getItem(SALINDA_VOLUME_KEY),
+      AsyncStorage.getItem(SALINDA_VOLUME_TOUCHED_KEY),
+    ]).then(([stored, touched]) => {
+      const clamped = resolveRestoredSalindaVolume(stored, SALINDA_MAX_VOLUME, touched === 'true');
       salindaVolumeRef.current = clamped;
       salindaPrevVolumeRef.current = clamped;
       setSalindaVolume(clamped);
     }).catch(() => {});
-  }, [SALINDA_MAX_VOLUME]);
+  }, [SALINDA_MAX_VOLUME, SALINDA_VOLUME_KEY, SALINDA_VOLUME_TOUCHED_KEY]);
   useEffect(() => {
     AsyncStorage.setItem(SALINDA_VOLUME_KEY, String(salindaVolume)).catch(() => {});
   }, [salindaVolume]);
@@ -20347,7 +20417,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   return (
     <View style={{ flex: 1, backgroundColor: '#0a1628' }}>
       {screen}
-      <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+      {showShop && <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />}
       {playMode === 'classroom-game' && state.phase === 'game-over' && (
         <View style={{ position: 'absolute', top: 18, left: 18, zIndex: 20001 }}>
           <LulosButton
@@ -20611,69 +20681,6 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   isCelebrating={tutorialMeter.isCelebrating}
                   testID="tutorial-header-meter"
                 />
-                <View
-                  style={{
-                    marginTop: 6,
-                    gap: 4,
-                    minWidth: 74,
-                    alignItems: 'center',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: '100%',
-                      paddingVertical: 4,
-                      paddingHorizontal: 8,
-                      borderRadius: 10,
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(8, 22, 44, 0.94)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(148, 163, 184, 0.4)',
-                    }}
-                  >
-                    <Text style={{ color: '#93C5FD', fontSize: 9, fontWeight: '800', lineHeight: 11 }}>
-                      {locale === 'he' ? 'שכבה' : 'Layer'}
-                    </Text>
-                    <Text
-                      style={{
-                        color: '#F8FAFC',
-                        fontSize: 13,
-                        fontWeight: '900',
-                        lineHeight: 15,
-                        writingDirection: 'ltr',
-                      }}
-                    >
-                      {tutorialMeter.layerNumber}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      width: '100%',
-                      paddingVertical: 4,
-                      paddingHorizontal: 8,
-                      borderRadius: 10,
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(8, 22, 44, 0.94)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(74, 222, 128, 0.35)',
-                    }}
-                  >
-                    <Text style={{ color: '#86EFAC', fontSize: 9, fontWeight: '800', lineHeight: 11 }}>
-                      {locale === 'he' ? 'שלב' : 'Step'}
-                    </Text>
-                    <Text
-                      style={{
-                        color: '#F8FAFC',
-                        fontSize: 13,
-                        fontWeight: '900',
-                        lineHeight: 15,
-                        writingDirection: 'ltr',
-                      }}
-                    >
-                      {tutorialMeter.stepNumber}
-                    </Text>
-                  </View>
-                </View>
               </View>
             </View>
           </View>
