@@ -32,7 +32,12 @@ export function useWebViewportSize(): { width: number; height: number } {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
     const update = () => {
-      setDims(readInnerSize());
+      const next = readInnerSize();
+      // Only update state if values actually changed — avoids infinite loops from
+      // ResizeObserver firing after our own layout changes (e.g. fixed-height game canvas).
+      setDims((prev) =>
+        prev && prev.width === next.width && prev.height === next.height ? prev : next,
+      );
     };
 
     update();
@@ -61,7 +66,10 @@ export function useWebViewportSize(): { width: number; height: number } {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    setDims(readInnerSize());
+    const next = readInnerSize();
+    setDims((prev) =>
+      prev && prev.width === next.width && prev.height === next.height ? prev : next,
+    );
   }, [w, h]);
 
   if (Platform.OS !== 'web') return { width: w, height: h };
