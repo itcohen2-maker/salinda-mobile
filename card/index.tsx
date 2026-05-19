@@ -16554,10 +16554,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // G4. סלינדה/קלף סימן — ההודעה מוצגת רק כשעומדים על הקלף (מרכז המניפה), בחלק התחתון של המסך, חד־פעמי (ראה BottomCardHint)
 
   // G5. Triple dice — all 3 dice show the same number
-  const prevDiceForTriple = useRef<typeof state.dice>(null);
+  const prevDiceForTriple = useRef<{ die1: number; die2: number; die3: number } | null>(null);
   useEffect(() => {
-    if (!state.dice || state.dice === prevDiceForTriple.current) { prevDiceForTriple.current = state.dice; return; }
-    prevDiceForTriple.current = state.dice;
+    if (!state.dice) { prevDiceForTriple.current = null; return; }
+    const prev = prevDiceForTriple.current;
+    const sameValues = prev != null
+      && prev.die1 === state.dice.die1
+      && prev.die2 === state.dice.die2
+      && prev.die3 === state.dice.die3;
+    prevDiceForTriple.current = { die1: state.dice.die1, die2: state.dice.die2, die3: state.dice.die3 };
+    if (sameValues) return;
     if (state.dice.die1 === state.dice.die2 && state.dice.die2 === state.dice.die3) {
       const val = state.dice.die1;
       const tripleMsg = t('guidance.tripleDraw', { n: String(val) });
