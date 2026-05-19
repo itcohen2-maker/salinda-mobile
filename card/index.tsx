@@ -16357,7 +16357,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [state.guidanceEnabled, state.pendingFractionTarget, state.fractionAttackResolved, state.fractionPenalty, state.currentPlayerIndex, state.players, state.notifications, state.botConfig, state.roundsPlayed, isOnlineGame, myPerspIdx, dispatch, t]);
   const hasIdentical = state.phase === 'pre-roll' && !state.hasPlayedCards
     && state.consecutiveIdenticalPlays < 2 && cp && td
-    && cp.hand.some(c => c.type !== 'wild' && validateIdenticalPlay(c, td));
+    && cp.hand.some(c => c.type !== 'wild' && validateIdenticalPlay(c, td))
+    && (!isOnlineGame || myPerspIdx === state.currentPlayerIndex);
   const identicalGuidanceGameKey =
     state.openingDrawId ?? `${state.mode}-${state.players.map((player) => String(player.id)).join('|')}`;
   const identicalGuidanceNotificationId = `card-hint-identical-${identicalGuidanceGameKey}`;
@@ -16888,10 +16889,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               style={{
                 alignItems: 'center',
                 marginTop: 4,
-                maxWidth: 280,
+                maxWidth: 260,
                 transform: [{ translateX: identArrowX }, { translateY: -56 }],
               }}
-              pointerEvents="none"
             >
               <Animated.Text
                 style={{
@@ -16903,13 +16903,21 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }}
+                pointerEvents="none"
               >
                 {DOWN_ARROW_GLYPH}
               </Animated.Text>
-              <View style={[alertBubbleStyle.box, { maxWidth: 280, paddingVertical: 12, paddingHorizontal: 12 }]}>
+              <View style={[alertBubbleStyle.box, { maxWidth: 260, paddingVertical: 10, paddingHorizontal: 12 }]}>
                 <Text style={alertBubbleStyle.title}>{t('identical.arrowTitle')}</Text>
                 <Text style={alertBubbleStyle.body}>{t('identical.arrowBody')}</Text>
                 <IdenticalWildStarHint compact />
+                <TouchableOpacity
+                  onPress={() => { identArrowLoop.current?.stop(); setIdentArrowVisible(false); }}
+                  style={{ marginTop: 10, paddingVertical: 6, paddingHorizontal: 16, backgroundColor: 'rgba(250,204,21,0.18)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(250,204,21,0.4)' }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ color: '#FACC15', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>{t('ui.gotIt')}</Text>
+                </TouchableOpacity>
               </View>
             </Animated.View>
           )}
