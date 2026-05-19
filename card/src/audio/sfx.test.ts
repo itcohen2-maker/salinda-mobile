@@ -77,3 +77,85 @@ describe('sfx — initializeSfx', () => {
     expect(mockSetAudioModeAsync).not.toHaveBeenCalled();
   });
 });
+
+describe('sfx — AppState recovery', () => {
+  let sfx: typeof import('./sfx');
+  let mockSetAudioModeAsync: jest.Mock;
+  let mockAddEventListener: jest.Mock;
+  let capturedHandler: ((state: string) => void) | null = null;
+
+  beforeEach(() => {
+    jest.resetModules();
+    capturedHandler = null;
+
+    mockSetAudioModeAsync = jest.fn().mockResolvedValue(undefined);
+
+    mockAddEventListener = jest.fn().mockImplementation((_event, handler) => {
+      capturedHandler = handler;
+      return { remove: jest.fn() };
+    });
+
+    jest.doMock('expo-av', () => ({
+      Audio: {
+        Sound: {
+          createAsync: jest.fn().mockResolvedValue({
+            sound: {
+              replayAsync: jest.fn(),
+              stopAsync: jest.fn(),
+              unloadAsync: jest.fn(),
+              setVolumeAsync: jest.fn(),
+              setOnPlaybackStatusUpdate: jest.fn(),
+            },
+          }),
+        },
+        setAudioModeAsync: mockSetAudioModeAsync,
+        setIsEnabledAsync: undefined,
+      },
+      InterruptionModeIOS: { MixWithOthers: 'MixWithOthers' },
+      InterruptionModeAndroid: { DoNotMix: 'DoNotMix', DuckOthers: 'DuckOthers' },
+    }));
+
+    jest.doMock('react-native', () => ({
+      AppState: {
+        addEventListener: mockAddEventListener,
+        currentState: 'background',
+      },
+      Platform: { OS: 'android' },
+    }));
+
+    sfx = require('./sfx');
+  });
+
+  afterEach(async () => {
+    try {
+      await sfx.disposeSfx();
+    } finally {
+      jest.resetAllMocks();
+    }
+  });
+
+  it('registers an AppState listener on init', async () => {
+    await sfx.initializeSfx();
+    expect(mockAddEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+  });
+
+  it('calls setAudioModeAsync again when app returns to foreground', async () => {
+    await sfx.initializeSfx();
+    mockSetAudioModeAsync.mockClear();
+
+    capturedHandler!('active');
+    await Promise.resolve();  // flush microtasks
+
+    expect(mockSetAudioModeAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the AppState listener on dispose', async () => {
+    const removeMock = jest.fn();
+    mockAddEventListener.mockReturnValue({ remove: removeMock });
+
+    await sfx.initializeSfx();
+    await sfx.disposeSfx();
+
+    expect(removeMock).toHaveBeenCalled();
+  });
+});
