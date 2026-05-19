@@ -200,26 +200,6 @@ export function LobbyEntry({
           </View>
         </View>
       </Modal>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <LanguageToggle />
-      {onBackToChoice && (
-        <TouchableOpacity style={styles.backBtn} onPress={onBackToChoice}>
-          <Text style={styles.backBtnText}>{t('lobby.backToMode')}</Text>
-        </TouchableOpacity>
-      )}
-      {onOpenCelebrationMockup && (
-        <TouchableOpacity style={styles.mockupLinkBtn} onPress={onOpenCelebrationMockup}>
-          <Text style={styles.mockupLinkText}>חדר מוקאפ חגיגה</Text>
-        </TouchableOpacity>
-      )}
-      <View style={styles.logoWrap}>
-        <SalindaPuzzleGameLogo width={260} />
-      </View>
-      <Text style={styles.title}>{t('lobby.connectTitle')}</Text>
-      <Text style={styles.subtitle}>{t('lobby.connectSubtitle')}</Text>
-      <TouchableOpacity style={styles.rulesLinkBtn} onPress={() => setRulesOpen(true)} accessibilityRole="button">
-        <Text style={styles.rulesLinkText}>הדרכה | {t('start.showRules')}</Text>
-      </TouchableOpacity>
       <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
         <View style={styles.rulesModalBackdrop}>
           <View style={styles.rulesModalCard}>
@@ -247,6 +227,26 @@ export function LobbyEntry({
           </View>
         </View>
       </Modal>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <LanguageToggle />
+      {onBackToChoice && (
+        <TouchableOpacity style={styles.backBtn} onPress={onBackToChoice}>
+          <Text style={styles.backBtnText}>{t('lobby.backToMode')}</Text>
+        </TouchableOpacity>
+      )}
+      {onOpenCelebrationMockup && (
+        <TouchableOpacity style={styles.mockupLinkBtn} onPress={onOpenCelebrationMockup}>
+          <Text style={styles.mockupLinkText}>חדר מוקאפ חגיגה</Text>
+        </TouchableOpacity>
+      )}
+      <View style={styles.logoWrap}>
+        <SalindaPuzzleGameLogo width={260} />
+      </View>
+      <Text style={styles.title}>{t('lobby.connectTitle')}</Text>
+      <Text style={styles.subtitle}>{t('lobby.connectSubtitle')}</Text>
+      <TouchableOpacity style={styles.rulesLinkBtn} onPress={() => setRulesOpen(true)} accessibilityRole="button">
+        <Text style={styles.rulesLinkText}>הדרכה | {t('start.showRules')}</Text>
+      </TouchableOpacity>
       {joinFromLinkReady && (
         <View style={styles.infoBox}>
           <Text style={[styles.infoText, { textAlign: ta }]}>{t('lobby.inviteLinkHint')}</Text>
