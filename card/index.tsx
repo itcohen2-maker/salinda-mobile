@@ -83,7 +83,7 @@ import {
 const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', 'welcome.title')]);
 const RESULTS_POSSIBLE_TITLES = new Set([t('he', 'results.possibleTitle'), t('en', 'results.possibleTitle')]);
 import { LocaleProvider, useLocale } from './src/i18n/LocaleContext';
-import { playCardSelectSfx } from './src/audio/cardSelect';
+import { playCardSelectSfx, playTutorialCardSelectSfx } from './src/audio/cardSelect';
 import { resolveRestoredSalindaVolume, resolveStoredSalindaVolume } from './src/audio/musicPreferences';
 import { disposeSfx, initializeSfx, playSfx, setSfxMuted, setSfxVolume } from './src/audio/sfx';
 import { SOUNDS_ENABLED_STORAGE_KEY, resolveStoredSoundsEnabled } from './src/audio/preferences';
@@ -4124,7 +4124,7 @@ function getTipOfTheTurn(st: GameState, tf: (key: string, params?: MsgParams) =>
   if (st.phase === 'pre-roll') {
     if (st.pendingFractionTarget !== null)
       return tf('gameTip.fractionDefend', { d: st.fractionPenalty });
-    if (!st.fractionAttackResolved && !st.hasPlayedCards && st.consecutiveIdenticalPlays < 2 && td && cp.hand.some(c => validateIdenticalPlay(c, td)))
+    if (!st.fractionAttackResolved && !st.hasPlayedCards && st.consecutiveIdenticalPlays < 2 && td && cp.hand.some(c => c.type !== 'wild' && validateIdenticalPlay(c, td)))
       return tf('gameTip.identical');
     return tf('gameTip.rollOrMatch');
   }
@@ -9298,7 +9298,13 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     if (state.hasPlayedCards) {
       console.log('BLOCKED: hasPlayedCards'); return;
     }
-    if (soundOn) playCardSelectSound();
+    if (soundOn) {
+      if (state.isTutorial) {
+        void playTutorialCardSelectSfx();
+      } else {
+        playCardSelectSound();
+      }
+    }
 
     if (card.type === 'fraction' && !hasFracDefense) onFractionTapForOnb?.();
 
@@ -13178,55 +13184,26 @@ function OverflowSwapOverlay({
   );
 }
 
-/** רמז פרא כקלף זהה — כוכב מודגש + טקסט (Sheet C, בועת חץ, ברוכים) */
-function IdenticalWildStarHint({ compact }: { compact?: boolean }) {
+/** רמז פרא כקלף זהה — שורת טקסט קטנה ועדינה בלבד */
+function IdenticalWildStarHint({ compact: _compact }: { compact?: boolean }) {
   const { t, isRTL } = useLocale();
   const { state } = useGame();
   const cp = state.players[state.currentPlayerIndex];
   const hasWildInHand = !!cp?.hand?.some((card) => card.type === 'wild');
   if (!hasWildInHand) return null;
-  const starSize = compact ? 30 : 44;
   return (
-    <View
+    <Text
       style={{
-        marginTop: compact ? 8 : 12,
-        alignItems: 'center',
-        alignSelf: 'stretch',
-        backgroundColor: 'rgba(88,28,135,0.38)',
-        borderRadius: 14,
-        paddingVertical: compact ? 8 : 12,
-        paddingHorizontal: compact ? 8 : 12,
-        borderWidth: 2,
-        borderColor: 'rgba(250,204,21,0.7)',
+        marginTop: 6,
+        color: 'rgba(253,224,71,0.75)',
+        fontSize: 11,
+        fontWeight: '600',
+        textAlign: 'center',
+        writingDirection: isRTL ? 'rtl' : 'ltr',
       }}
     >
-      <Text
-        style={{
-          fontSize: starSize,
-          lineHeight: starSize + 4,
-          color: '#FDE047',
-          fontWeight: '900',
-          textShadowColor: '#A855F7',
-          textShadowOffset: { width: 0, height: 1 },
-          textShadowRadius: compact ? 6 : 10,
-          marginBottom: compact ? 4 : 8,
-        }}
-      >
-        ?
-      </Text>
-      <Text
-        style={{
-          color: '#FEF9C3',
-          fontSize: compact ? 11 : 13,
-          fontWeight: '700',
-          textAlign: 'center',
-          lineHeight: compact ? 16 : 21,
-          writingDirection: isRTL ? 'rtl' : 'ltr',
-        }}
-      >
-        {t('ui.wildIdenticalHint')}
-      </Text>
-    </View>
+      {'✦ '}{t('ui.wildIdenticalHint')}
+    </Text>
   );
 }
 
@@ -16380,7 +16357,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [state.guidanceEnabled, state.pendingFractionTarget, state.fractionAttackResolved, state.fractionPenalty, state.currentPlayerIndex, state.players, state.notifications, state.botConfig, state.roundsPlayed, isOnlineGame, myPerspIdx, dispatch, t]);
   const hasIdentical = state.phase === 'pre-roll' && !state.hasPlayedCards
     && state.consecutiveIdenticalPlays < 2 && cp && td
-    && cp.hand.some(c => validateIdenticalPlay(c, td));
+    && cp.hand.some(c => c.type !== 'wild' && validateIdenticalPlay(c, td));
   const identicalGuidanceGameKey =
     state.openingDrawId ?? `${state.mode}-${state.players.map((player) => String(player.id)).join('|')}`;
   const identicalGuidanceNotificationId = `card-hint-identical-${identicalGuidanceGameKey}`;
