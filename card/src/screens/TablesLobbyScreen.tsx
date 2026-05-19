@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Image,
   ImageBackground,
@@ -354,6 +354,7 @@ function TableCard({
   isRTL,
   locale,
   onPress,
+  onRequireName,
   singleColumn,
   stackedHeader,
   table,
@@ -365,6 +366,7 @@ function TableCard({
   isRTL: boolean;
   locale: AppLocale;
   onPress: (table: LobbyTableSummary) => void;
+  onRequireName: () => void;
   singleColumn: boolean;
   stackedHeader: boolean;
   table: LobbyTableSummary;
@@ -388,11 +390,11 @@ function TableCard({
         styles.tile,
         singleColumn ? styles.tileSingleColumn : [styles.tileTwoColumn, tileWidth ? { width: tileWidth } : null],
         compactVisuals && styles.tileCompactWeb,
-        !joinable && styles.tileDisabled,
-        pressed && joinable && styles.tilePressed,
+        !isTableJoinable(table) && styles.tileDisabled,
+        pressed && isTableJoinable(table) && styles.tilePressed,
       ]}
-      onPress={() => onPress(table)}
-      disabled={!joinable}
+      onPress={canAct ? () => onPress(table) : onRequireName}
+      disabled={!isTableJoinable(table)}
     >
       <View style={styles.tileBaseLayer} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: bgBottom }]} />
@@ -501,6 +503,7 @@ function EmptyTableCard({
   compactVisuals,
   isRTL,
   onPress,
+  onRequireName,
   singleColumn,
   stackedHeader,
   t,
@@ -511,6 +514,7 @@ function EmptyTableCard({
   compactVisuals: boolean;
   isRTL: boolean;
   onPress: () => void;
+  onRequireName: () => void;
   singleColumn: boolean;
   stackedHeader: boolean;
   t: TranslateFn;
@@ -524,11 +528,9 @@ function EmptyTableCard({
         styles.tile,
         singleColumn ? styles.tileSingleColumn : [styles.tileTwoColumn, tileWidth ? { width: tileWidth } : null],
         compactVisuals && styles.tileCompactWeb,
-        !canAct && styles.tileDisabled,
-        pressed && canAct && styles.tilePressed,
+        pressed && styles.tilePressed,
       ]}
-      onPress={onPress}
-      disabled={!canAct}
+      onPress={canAct ? onPress : onRequireName}
     >
       <View style={styles.tileBaseLayer} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: '#10131d' }]} />
@@ -628,6 +630,18 @@ export default function TablesLobbyScreen({
   }, [visibleTables]);
   const { background } = useActiveTheme();
   const canAct = playerName.trim().length > 0;
+  const nameInputRef = useRef<import('react-native').TextInput>(null);
+  const [nameError, setNameError] = useState(false);
+
+  const requireName = (action: () => void) => {
+    if (!canAct) {
+      setNameError(true);
+      nameInputRef.current?.focus();
+      setTimeout(() => setNameError(false), 2500);
+      return;
+    }
+    action();
+  };
   const compactVisuals = Platform.OS === 'web' || responsive.isTight;
   const stackedActions = Platform.OS === 'web' ? true : responsive.isSingleColumn;
   const singleColumn = Platform.OS === 'web' ? true : !responsive.isTablet || responsive.isSingleColumn;
@@ -645,6 +659,18 @@ export default function TablesLobbyScreen({
     ],
     [t],
   );
+  const filterMenuContent = filters.map((item) => (
+    <TouchableOpacity
+      key={item.key}
+      onPress={() => setFilter(item.key)}
+      style={[styles.chip, compactVisuals && styles.chipCompactWeb, filter === item.key && styles.chipActive]}
+      activeOpacity={0.85}
+    >
+      <Text style={[styles.chipText, compactVisuals && styles.chipTextCompactWeb, filter === item.key && styles.chipTextActive]}>
+        {item.label}
+      </Text>
+    </TouchableOpacity>
+  ));
 
   return (
     <ImageBackground
@@ -720,18 +746,22 @@ export default function TablesLobbyScreen({
                 {t('lobby.yourName')}
               </Text>
             ) : null}
-            <View style={[styles.nameInputShell, compactVisuals && styles.nameInputShellCompactWeb]}>
+            <View style={[styles.nameInputShell, compactVisuals && styles.nameInputShellCompactWeb, nameError && styles.nameInputShellError]}>
               <TextInput
+                ref={nameInputRef}
                 testID="lobby-player-name"
                 style={[styles.nameInput, compactVisuals && styles.nameInputCompactWeb]}
                 value={playerName}
-                onChangeText={(value) => onPlayerNameChange(value.slice(0, 7))}
+                onChangeText={(value) => { setNameError(false); onPlayerNameChange(value.slice(0, 7)); }}
                 placeholder={t('lobby.namePlaceholder')}
                 placeholderTextColor={TEXT_MUTE}
                 maxLength={7}
                 textAlign="center"
               />
             </View>
+            {nameError && (
+              <Text style={styles.nameErrorText}>{t('lobby.nameRequired')}</Text>
+            )}
 
             <View
               testID="lobby-action-row"
@@ -747,10 +777,8 @@ export default function TablesLobbyScreen({
                   compactVisuals && styles.quickMatchBtnCompactWeb,
                   stackedActions ? styles.actionBtnStacked : null,
                   { flexDirection: getTableInfoRowDirection(isRTL) },
-                  !canAct && styles.disabledButton,
                 ]}
-                disabled={!canAct}
-                onPress={onQuickMatch}
+                onPress={() => requireName(onQuickMatch)}
                 activeOpacity={0.85}
               >
                 <Text style={styles.quickMatchText}>{t('lobby.quickMatch')}</Text>
@@ -779,25 +807,24 @@ export default function TablesLobbyScreen({
             </View>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[styles.chips, compactVisuals && styles.chipsCompactWeb]}
-            contentContainerStyle={[styles.chipsContent, compactVisuals && styles.chipsContentCompactWeb]}
-          >
-            {filters.map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                onPress={() => setFilter(item.key)}
-                style={[styles.chip, compactVisuals && styles.chipCompactWeb, filter === item.key && styles.chipActive]}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.chipText, compactVisuals && styles.chipTextCompactWeb, filter === item.key && styles.chipTextActive]}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {Platform.OS === 'web' ? (
+            <View
+              testID="lobby-filter-menu"
+              style={[styles.chipsWrap, compactVisuals && styles.chipsWrapCompactWeb]}
+            >
+              {filterMenuContent}
+            </View>
+          ) : (
+            <ScrollView
+              testID="lobby-filter-menu"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={[styles.chips, compactVisuals && styles.chipsCompactWeb]}
+              contentContainerStyle={[styles.chipsContent, compactVisuals && styles.chipsContentCompactWeb]}
+            >
+              {filterMenuContent}
+            </ScrollView>
+          )}
 
           <View style={[styles.grid, compactVisuals && styles.gridCompactWeb]}>
             {displayItems.map((item) =>
@@ -806,6 +833,7 @@ export default function TablesLobbyScreen({
                   key={`${item.table.roomCode}-${item.table.status}-${item.table.currentParticipants}`}
                   table={item.table}
                   onPress={onJoinTable}
+                  onRequireName={() => requireName(() => {})}
                   canAct={canAct}
                   compactVisuals={compactVisuals}
                   locale={locale}
@@ -823,6 +851,7 @@ export default function TablesLobbyScreen({
                   compactVisuals={compactVisuals}
                   isRTL={isRTL}
                   onPress={onCreateTable}
+                  onRequireName={() => requireName(() => {})}
                   singleColumn={singleColumn}
                   stackedHeader={stackedTileHeader}
                   tileWidth={twoColumnTileWidth}
@@ -969,6 +998,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.38)',
   },
+  nameInputShellError: {
+    borderColor: '#f87171',
+  },
+  nameErrorText: {
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 4,
+  },
   nameInputShellCompactWeb: {
     borderRadius: 14,
   },
@@ -1080,6 +1119,21 @@ const styles = StyleSheet.create({
   },
   chipsCompactWeb: {
     marginBottom: 6,
+  },
+  chipsWrap: {
+    width: '100%',
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+  },
+  chipsWrapCompactWeb: {
+    marginBottom: 6,
+    gap: 6,
   },
   chipsContent: {
     gap: 8,

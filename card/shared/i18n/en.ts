@@ -152,6 +152,7 @@ export const en: Record<string, string> = {
   'lobby.exitAppConfirmTitle': 'Exit App',
   'lobby.exitAppConfirmBody': 'Are you sure you want to exit?',
   'lobby.namePlaceholder': 'My name (up to 7 characters)',
+  'lobby.nameRequired': 'Please enter your name first',
   'lobby.createRoom': 'Create room',
   'lobby.roomCode': 'Room code (4 digits)',
   'lobby.joinRoom': 'Join room',
@@ -286,6 +287,7 @@ export const en: Record<string, string> = {
   'start.subtitle': 'Salinda · educational math card game',
   'start.playerCount': 'Number of players',
   'start.playerNames': 'Player names',
+  'start.fillNames': 'Enter your names',
   'start.playerPlaceholder': 'Player {{n}}',
   'start.difficulty': 'Difficulty',
   'start.diffFull': 'Full (0-25)',
@@ -1509,3 +1511,4 @@ export const en: Record<string, string> = {
   'courage.coinAward.title': '⭐ +1 Coin!',
   'courage.coinAward.body': 'Excellence meter full — you earned 1 coin!',
 };
+
