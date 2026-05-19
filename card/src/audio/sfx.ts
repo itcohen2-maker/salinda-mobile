@@ -1,4 +1,5 @@
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 
 import { getAudioLoadStatus, getAudioReplayStatus } from './playbackStatus';
 
@@ -59,12 +60,18 @@ const REGISTRY: Record<SfxKey, SfxState> = {
 };
 
 let initialized = false;
+let appStateSubscription: NativeEventSubscription | null = null;
 let muted = false;
 let volume = 0.33;
 
 async function ensureAudioMode(): Promise<void> {
+  if (typeof Audio.setIsEnabledAsync === 'function') {
+    await Audio.setIsEnabledAsync(true);
+  }
   await Audio.setAudioModeAsync({
     playsInSilentModeIOS: true,
+    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
     staysActiveInBackground: false,
     shouldDuckAndroid: true,
     playThroughEarpieceAndroid: false,
@@ -92,18 +99,39 @@ async function ensureLoaded(key: SfxKey): Promise<Audio.Sound | null> {
   }
 }
 
+async function reloadSound(key: SfxKey): Promise<Audio.Sound | null> {
+  const slot = REGISTRY[key];
+  const staleSound = slot.sound;
+  slot.sound = null;
+  slot.loading = false;
+  if (staleSound) {
+    try {
+      await staleSound.unloadAsync();
+    } catch {
+      // ignore stale unload failures
+    }
+  }
+  return ensureLoaded(key);
+}
+
 export async function initializeSfx(): Promise<void> {
   if (initialized) {
     return;
   }
-  initialized = true;
   try {
     await ensureAudioMode();
     await Promise.all((Object.keys(SOURCES) as SfxKey[]).map((key) => ensureLoaded(key)));
+    initialized = true;
+    appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') {
+        ensureAudioMode().catch(() => {});
+      }
+    });
   } catch (error) {
     if (__DEV__) {
       console.warn('[sfx] initialize failed', error);
     }
+    // initialized stays false — next call will retry
   }
 }
 
@@ -123,13 +151,20 @@ export async function playSfx(
   slot.lastPlayedAt = now;
 
   try {
-    await ensureAudioMode();
     const sound = await ensureLoaded(key);
     if (!sound) {
       return;
     }
     const nextVolume = options?.volumeOverride ?? volume;
-    await sound.replayAsync(getAudioReplayStatus(nextVolume));
+    try {
+      await sound.replayAsync(getAudioReplayStatus(nextVolume));
+    } catch {
+      const recoveredSound = await reloadSound(key);
+      if (!recoveredSound) {
+        return;
+      }
+      await recoveredSound.replayAsync(getAudioReplayStatus(nextVolume));
+    }
   } catch (error) {
     if (__DEV__) console.warn('[sfx] play failed', key, error);
   }
@@ -170,7 +205,6 @@ export async function playMeterCelebrateSequence(options?: { cooldownMs?: number
   REGISTRY.meterCelebrateCoins.lastPlayedAt = now;
 
   try {
-    await ensureAudioMode();
     const sequenceKeys: SfxKey[] = ['meterCelebrateIntro', 'meterCelebrateCoins'];
     const nextVolume = options?.volumeOverride ?? volume;
     for (const key of sequenceKeys) {
@@ -245,5 +279,7 @@ export async function disposeSfx(): Promise<void> {
       }
     })
   );
+  appStateSubscription?.remove();
+  appStateSubscription = null;
   initialized = false;
 }
