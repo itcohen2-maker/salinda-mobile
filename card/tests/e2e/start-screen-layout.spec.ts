@@ -76,4 +76,24 @@ test.describe('Start screen layout', () => {
     await backButton.click({ force: true });
     await expect(lobby.playPassAndPlay).toBeVisible({ timeout: 15_000 });
   });
+
+  test('keeps the online room browser centered inside the narrow web shell', async ({ page, lobby }) => {
+    const shell = page.getByTestId('app-web-shell');
+    await lobby.goto();
+    await expect(shell).toBeVisible({ timeout: 30_000 });
+
+    await lobby.joinRoom.click();
+    await expect(page.getByTestId('table-card-empty-1')).toBeVisible({ timeout: 15_000 });
+
+    const shellBox = await shell.boundingBox();
+    const cardBox = await page.getByTestId('table-card-empty-1').boundingBox();
+
+    expect(shellBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+
+    if (shellBox && cardBox) {
+      expect(cardBox.x).toBeGreaterThanOrEqual(shellBox.x - 1);
+      expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(shellBox.x + shellBox.width + 1);
+    }
+  });
 });

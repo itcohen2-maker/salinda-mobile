@@ -48,4 +48,10 @@ describe('ExcellenceMeter', () => {
 
     expect(playMeterCelebrateSequence).not.toHaveBeenCalled();
   });
+
+  it('shows the earned coin count below the meter', () => {
+    const { getByText } = render(<ExcellenceMeter value={66} courageCoins={3} compact />);
+
+    expect(getByText('×3')).toBeTruthy();
+  });
 });

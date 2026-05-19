@@ -990,15 +990,16 @@ export function confirmStaged(st: ServerGameState): ServerGameState | { error: L
     equationCommits: [],
     message: '',
   };
-  // Condition 1: full equation — both operator positions committed (all 3 dice used)
-  const hasPos0 = st.equationCommits.some(ec => ec.position === 0);
-  const hasPos1 = st.equationCommits.some(ec => ec.position === 1);
-  if (hasPos0 && hasPos1) {
-    stNs = applyCourageStepReward(stNs);
-  }
-  // Track consecutive success streak for human (non-bot) players
   const currentIsBot = st.players[st.currentPlayerIndex]?.isBot === true;
   if (!currentIsBot) {
+    // Condition 1: full equation — all 3 dice used (equation display has 2+ operators).
+    // Previously checked equationCommits positions, which missed equations built without
+    // operation cards from hand (equationCommits empty → no reward even on full 3-dice eq).
+    const eqOps = extractEquationOperators(st.lastEquationDisplay ?? '');
+    if (eqOps.length >= 2) {
+      stNs = applyCourageStepReward(stNs);
+    }
+    // Track consecutive success streak for human (non-bot) players
     stNs = { ...stNs, courageDiscardSuccessStreak: (st.courageDiscardSuccessStreak ?? 0) + 1 };
   }
   stNs = checkWin(stNs);

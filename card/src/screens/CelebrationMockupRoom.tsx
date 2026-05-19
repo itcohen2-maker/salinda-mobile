@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocale } from '../i18n/LocaleContext';
 import { initializeSfx, playMeterCelebrateSequence, playSfx } from '../audio/sfx';
 import { CoinAwardCelebrationCard } from '../components/CoinAwardCelebrationCard';
 import { getScreenSafeTop } from '../theme/screenInsets';
@@ -109,7 +108,6 @@ export function CelebrationMockupRoom({ onBack }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const safeTop = getScreenSafeTop(insets.top);
-  const { isRTL } = useLocale();
   const [fillStep, setFillStep] = useState(0);
   const [rewardCoins, setRewardCoins] = useState(25);
   const [totalCoins, setTotalCoins] = useState(128);
@@ -184,10 +182,10 @@ export function CelebrationMockupRoom({ onBack }: Props) {
           </View>
         </View>
 
-        <Text style={[styles.title, { textAlign: isRTL ? 'right' : 'left' }]}>
+        <Text style={styles.title}>
           מוקאפ חגיגת מד הצטיינות
         </Text>
-        <Text style={[styles.subtitle, { textAlign: isRTL ? 'right' : 'left' }]}>
+        <Text style={styles.subtitle}>
           כאן אני מציג את האנימציה שחולצה מהקובץ שהבאת, בתוך החדר, כדי שתוכל לראות אותה לפני החיבור למשחק.
         </Text>
 
@@ -315,11 +313,13 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 28,
     fontWeight: '900',
+    textAlign: 'center',
   },
   subtitle: {
     color: '#cbd5e1',
     fontSize: 15,
     lineHeight: 22,
+    textAlign: 'center',
   },
   phoneFrame: {
     borderRadius: 30,

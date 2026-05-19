@@ -20,7 +20,7 @@ import {
 } from '../roomManager';
 
 describe('roomManager', () => {
-  it('keeps active tables visible in the lobby as in_game entries', () => {
+  it('hides occupied tables from the lobby list', () => {
     const { room } = createRoom('Host', 'socket-host', 'he');
     try {
       configureRoomTable(room, {
@@ -31,14 +31,7 @@ describe('roomManager', () => {
       room.state = { phase: 'building' } as any;
       syncRoomTableStatus(room);
 
-      expect(getRoomTables()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            roomCode: room.code,
-            status: 'in_game',
-          }),
-        ]),
-      );
+      expect(getRoomTables()).toEqual([]);
     } finally {
       destroyRoom(room.code);
     }

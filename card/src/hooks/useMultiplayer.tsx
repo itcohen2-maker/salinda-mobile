@@ -406,6 +406,8 @@ function playerViewToGameState(view: PlayerView): any {
     turnCoinsEarned: view.turnCoinsEarned ?? 0,
     lastCourageRewardReason: view.lastCourageRewardReason ?? null,
     lastCourageCoinsAwarded: view.lastCourageCoinsAwarded ?? false,
+    meterAnimationPending: false,
+    pendingTurnState: null,
     identicalAlert: view.identicalCelebration ?? null,
     jokerModalOpen: false,
     equationHandSlots,

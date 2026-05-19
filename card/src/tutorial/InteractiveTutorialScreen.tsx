@@ -14,7 +14,7 @@ import { getWebGameLayout } from '../theme/webLayout';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import { WebGameScreenFrame } from '../components/layout/WebGameScreenFrame';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { HappyBubble } from '../components/HappyBubble';
@@ -33,11 +33,12 @@ async function playDiceRollSound() {
   if (isSfxMuted()) return;
   try {
     await Audio.setAudioModeAsync({
-      playsInSilentMode: false,
+      playsInSilentModeIOS: true,
+      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       staysActiveInBackground: false,
-      shouldDuckAndroid: true,
+      shouldDuckAndroid: false,
       playThroughEarpieceAndroid: false,
-    } as Parameters<typeof Audio.setAudioModeAsync>[0]);
+    });
     const { sound } = await Audio.Sound.createAsync(diceRollSound, getAudioLoadStatus());
     // Re-check mute AFTER the async load ג€” the learner might have hit the
     // mute button while createAsync was in flight. Without this second
@@ -639,13 +640,13 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // Drives the dynamic speech bubble + arrow position during the learner's
   // solo run of a full equation. Transitions:
   //   build  ג†'  confirm   ג€” user has added 2 dice + op (eqReadyToConfirm)
-  //   confirm ג†'  pick      ג€” user tapped "׳׳©׳¨ ׳׳× ׳”׳×׳¨׳'׳™׳" (eqConfirmedByUser)
+  //   confirm ג†'  pick      ג€” user tapped "אשר את התרגיל" (eqConfirmedByUser)
   //   pick   ג†'  play      ג€” user tapped any card (first cardTapped in solved)
-  //   play   ג†'  (step ends)ג€” user tapped "׳'׳—׳¨׳×׳™" (userPlayedCards ג†' outcome)
+  //   play   ג†'  (step ends)ג€” user tapped "בחרתי" (userPlayedCards ג†' outcome)
   type L4Step3Phase = 'build' | 'confirm' | 'pick' | 'play';
   const [l4Step3Phase, setL4Step3Phase] = useState<L4Step3Phase>('build');
   const [l4BuildProgress, setL4BuildProgress] = useState(false);
-  // Measured rects of the "׳׳©׳¨ ׳׳× ׳”׳×׳¨׳'׳™׳" / "׳'׳—׳¨׳×׳™" buttons ג€” updated by the
+  // Measured rects of the "אשר את התרגיל" / "בחרתי" buttons ג€” updated by the
   // real game UI via tutorialBus.setLayout.
   const [confirmBtnRect, setConfirmBtnRect] = useState<LayoutRect | null>(null);
   const [playCardsBtnRect, setPlayCardsBtnRect] = useState<LayoutRect | null>(null);
@@ -1686,8 +1687,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         setL4Step3Phase('pick');
       } else if (evt.kind === 'cardTapped') {
         // First tap after confirming enters the 'play' sub-phase: arrow moves
-        // from fan to the "׳'׳—׳¨׳×׳™" button. Subsequent stage/unstage taps keep
-        // the arrow on "׳'׳—׳¨׳×׳™".
+        // from fan to the "בחרתי" button. Subsequent stage/unstage taps keep
+        // the arrow on "בחרתי".
         setL4Step3Phase((p) => (p === 'pick' ? 'play' : p));
       }
     });

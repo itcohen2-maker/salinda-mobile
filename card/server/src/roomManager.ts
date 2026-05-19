@@ -473,31 +473,38 @@ export function syncRoomTableStatus(room: Room): void {
   room.tableStatus = room.players.length >= room.maxParticipants ? 'full' : 'waiting';
 }
 
+export function getRoomTableSummary(room: Room): LobbyTableSummary {
+  syncRoomTableStatus(room);
+  const host =
+    room.players.find((player) => player.isHost && !player.isBot)
+    ?? room.players.find((player) => !player.isBot);
+  return {
+    roomCode: room.code,
+    hostName: host?.name ?? 'Host',
+    visibility: room.tableVisibility,
+    status: room.tableStatus,
+    currentParticipants: room.players.filter((player) => !player.isBot).length,
+    maxParticipants: room.maxParticipants,
+    countdownEndsAt: room.countdownEndsAt,
+    hasRandomJoiner: room.hasRandomJoiner,
+    tableTheme: room.tableTheme,
+    configuredDifficulty: room.configuredDifficulty,
+    showFractions: room.configuredGameSettings?.showFractions ?? null,
+    fractionKinds: room.configuredGameSettings?.fractionKinds ?? null,
+    showPossibleResults: room.configuredGameSettings?.showPossibleResults ?? null,
+    showSolveExercise: room.configuredGameSettings?.showSolveExercise ?? null,
+    timerSetting: room.configuredGameSettings?.timerSetting ?? null,
+    timerCustomSeconds: room.configuredGameSettings?.timerCustomSeconds ?? null,
+    enabledOperators: room.configuredGameSettings?.enabledOperators ?? null,
+  };
+}
+
 export function getRoomTables(): LobbyTableSummary[] {
   const summaries: LobbyTableSummary[] = [];
   for (const room of rooms.values()) {
-    syncRoomTableStatus(room);
-    if (room.tableStatus === 'configuring') continue;
-    const host = room.players.find((player) => player.isHost && !player.isBot) ?? room.players.find((player) => !player.isBot);
-    summaries.push({
-      roomCode: room.code,
-      hostName: host?.name ?? 'Host',
-      visibility: room.tableVisibility,
-      status: room.tableStatus,
-      currentParticipants: room.players.filter((player) => !player.isBot).length,
-      maxParticipants: room.maxParticipants,
-      countdownEndsAt: room.countdownEndsAt,
-      hasRandomJoiner: room.hasRandomJoiner,
-      tableTheme: room.tableTheme,
-      configuredDifficulty: room.configuredDifficulty,
-      showFractions: room.configuredGameSettings?.showFractions ?? null,
-      fractionKinds: room.configuredGameSettings?.fractionKinds ?? null,
-      showPossibleResults: room.configuredGameSettings?.showPossibleResults ?? null,
-      showSolveExercise: room.configuredGameSettings?.showSolveExercise ?? null,
-      timerSetting: room.configuredGameSettings?.timerSetting ?? null,
-      timerCustomSeconds: room.configuredGameSettings?.timerCustomSeconds ?? null,
-      enabledOperators: room.configuredGameSettings?.enabledOperators ?? null,
-    });
+    const summary = getRoomTableSummary(room);
+    if (summary.status !== 'waiting') continue;
+    summaries.push(summary);
   }
   return summaries.sort((a, b) => {
     const statusRank = (value: LobbyTableStatus) => {

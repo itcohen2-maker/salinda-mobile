@@ -15,7 +15,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cardgame.app",
+      "jsEngine": "hermes",
       "userInterfaceStyle": "light",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "splash": {
         "image": "./assets/splash-launch-logo.png",
         "resizeMode": "contain",
@@ -23,7 +27,9 @@
       }
     },
     "android": {
-      "package": "com.cardgame.app",
+      "package": "com.salinda.game",
+      "jsEngine": "hermes",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111827"
@@ -47,8 +53,12 @@
       }
     },
     "updates": {
-      "checkAutomatically": "ON_ERROR_RECOVERY",
-      "fallbackToCacheTimeout": 0
+      "url": "https://u.expo.dev/f6cd3cc8-5684-43de-bf3b-98b137c8d1a9",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 3000
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     },
     "extra": {
       "eas": {

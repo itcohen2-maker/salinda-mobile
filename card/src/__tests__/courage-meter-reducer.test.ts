@@ -218,6 +218,50 @@ describe('courage meter reducer rules', () => {
     expect(next.courageRewardPulseId).toBe(5);
   });
 
+  it('holds turn advancement until the meter animation completes', () => {
+    const staged = { id: 'n5', type: 'number' as const, value: 5 };
+    const opA = { id: 'op-plus', type: 'operation' as const, operation: '+' as const };
+    const opB = { id: 'op-minus', type: 'operation' as const, operation: '-' as const };
+    const st: GameState = {
+      ...initialState,
+      phase: 'solved',
+      players: [
+        {
+          ...basePlayer([staged, opA, opB, { id: 'extra-1', type: 'number', value: 9 }, { id: 'extra-2', type: 'number', value: 8 }, { id: 'extra-3', type: 'number', value: 7 }]),
+          courageMeterStep: 1,
+          courageMeterPercent: 33,
+        },
+        { ...basePlayer([{ id: 'other', type: 'number', value: 4 }]), id: 1, name: 'P2' },
+      ],
+      currentPlayerIndex: 0,
+      discardPile: [{ id: 'top3', type: 'number', value: 3 }],
+      stagedCards: [staged],
+      equationResult: 5,
+      lastEquationDisplay: '1+2+2',
+      equationHandSlots: [null, null],
+      equationCommits: [
+        { cardId: opA.id, position: 0, jokerAs: null },
+        { cardId: opB.id, position: 1, jokerAs: null },
+      ],
+      hasPlayedCards: false,
+    };
+
+    const pending = gameReducer(st, { type: 'CONFIRM_STAGED' } as GameAction, tf);
+
+    expect(pending.meterAnimationPending).toBe(true);
+    expect(pending.phase).toBe('solved');
+    expect(pending.currentPlayerIndex).toBe(0);
+    expect(pending.pendingTurnState?.phase).toBe('turn-transition');
+    expect(pending.pendingTurnState?.currentPlayerIndex).toBe(1);
+
+    const settled = gameReducer(pending, { type: 'METER_ANIMATION_DONE' } as GameAction, tf);
+
+    expect(settled.meterAnimationPending).toBe(false);
+    expect(settled.pendingTurnState).toBeNull();
+    expect(settled.phase).toBe('turn-transition');
+    expect(settled.currentPlayerIndex).toBe(1);
+  });
+
   it('clears turnCoinsEarned when the next turn begins', () => {
     const st: GameState = {
       ...initialState,

@@ -356,4 +356,31 @@ describe('TablesLobbyScreen', () => {
     expect(StyleSheet.flatten(screen.getByTestId('lobby-quick-match').props.style).width).toBe('100%');
     expect(StyleSheet.flatten(screen.getByTestId('table-card-4821-header').props.style).flexDirection).toBe('column');
   });
+
+  it('centers the table lobby filter menu on web', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    mockUseResponsiveLayout.mockReturnValue({
+      width: 1366,
+      height: 900,
+      fontScale: 1,
+      isTight: false,
+      isCompact: false,
+      isSingleColumn: false,
+      isTablet: true,
+    });
+
+    renderLobby();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('lobby-filter-menu')).toBeTruthy();
+      expect(screen.getByText(en['lobby.filterAll'])).toBeTruthy();
+    });
+
+    const filterMenu = StyleSheet.flatten(screen.getByTestId('lobby-filter-menu').props.style);
+
+    expect(filterMenu.flexDirection).toBe('row');
+    expect(filterMenu.flexWrap).toBe('wrap');
+    expect(filterMenu.justifyContent).toBe('center');
+    expect(filterMenu.alignSelf).toBe('center');
+  });
 });

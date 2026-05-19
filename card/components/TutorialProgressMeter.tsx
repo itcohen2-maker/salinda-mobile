@@ -98,17 +98,6 @@ export default function TutorialProgressMeter({
     outputRange: [0, 0.5],
   });
 
-  const stepMarkers = [
-    { step: 1, pct: 33 },
-    { step: 2, pct: 66 },
-    { step: 3, pct: 100 },
-  ];
-
-  const wrapWidth = 52;
-  const wrapHeight = 116;
-  const shellTop = (wrapHeight - height) / 2;
-  const markerLeft = (wrapWidth - width) / 2 + width + 3;
-
   return (
     <View style={{ alignItems: 'center' }}>
       <Animated.View testID={testID} style={[styles.wrap, { transform: [{ scale }] }]}>
@@ -128,23 +117,6 @@ export default function TutorialProgressMeter({
             <View style={styles.glossTrack} />
           </View>
         </View>
-        {stepMarkers.map(({ step, pct }) => (
-          <View
-            key={step}
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: markerLeft,
-              bottom: shellTop + (pct / 100) * height - 7,
-              alignItems: 'center',
-              flexDirection: 'row',
-              gap: 2,
-            }}
-          >
-            <View style={styles.stepTick} />
-            <Text style={styles.stepLabel}>{step}</Text>
-          </View>
-        ))}
       </Animated.View>
       <Text style={styles.valueLabel}>{Math.round(value)}</Text>
     </View>
@@ -153,7 +125,7 @@ export default function TutorialProgressMeter({
 
 const styles = StyleSheet.create({
   wrap: {
-    width: 52,
+    width: 44,
     height: 116,
     alignItems: 'center',
     justifyContent: 'center',
@@ -217,18 +189,6 @@ const styles = StyleSheet.create({
     height: '70%',
     borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  stepTick: {
-    width: 8,
-    height: 1.5,
-    backgroundColor: 'rgba(255,220,80,0.9)',
-    marginTop: 6,
-  },
-  stepLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#FFD700',
-    lineHeight: 14,
   },
   valueLabel: {
     marginTop: 4,

@@ -21,6 +21,7 @@ type Props = {
   pulseKey?: number;
   isCelebrating?: boolean;
   onPress?: () => void;
+  onAnimationComplete?: () => void;
   title?: string;
   subtitle?: string;
   height?: number;
@@ -33,6 +34,7 @@ export default function ExcellenceMeter({
   pulseKey,
   isCelebrating = false,
   onPress,
+  onAnimationComplete,
   title,
   subtitle,
   height,
@@ -86,7 +88,7 @@ export default function ExcellenceMeter({
     }).start();
   }, [fillPct]);
 
-  const playBounce = useCallback(() => {
+  const playBounce = useCallback((onDone?: () => void) => {
     void playSfx('meterBounce', { cooldownMs: 0, volumeOverride: 0.5 });
     [scaleX, scaleY, transY, glow].forEach((a) => a.stopAnimation());
     scaleX.setValue(1);
@@ -99,7 +101,9 @@ export default function ExcellenceMeter({
       Animated.parallel([t(0.96, 220)(scaleX), t(1.1, 220)(scaleY), t(-14, 220)(transY), t(1, 220)(glow)]),
       Animated.parallel([t(1.03, 220)(scaleX), t(0.97, 220)(scaleY), t(0, 220)(transY), t(0, 220)(glow)]),
       Animated.parallel([t(1, 180)(scaleX), t(1, 180)(scaleY)]),
-    ]).start();
+    ]).start(() => {
+      onDone?.();
+    });
   }, [glow, scaleX, scaleY, transY]);
 
   const fireCoinBurst = useCallback((extraDelay: number) => {
@@ -181,7 +185,7 @@ export default function ExcellenceMeter({
     });
   }, [burstCoins]);
 
-  const playCelebrate = useCallback(() => {
+  const playCelebrate = useCallback((onDone?: () => void) => {
     void playMeterCelebrateSequence({ cooldownMs: 0, volumeOverride: 0.8 });
     [scaleX, scaleY, transY, rot, glow, party].forEach((a) => a.stopAnimation());
     scaleX.setValue(1);
@@ -204,12 +208,19 @@ export default function ExcellenceMeter({
         Animated.timing(party, { toValue: 0, duration: 420, useNativeDriver: true, easing: Easing.linear }),
       ]),
     ]).start(() => {
-      animFill(0, 600);
+      Animated.timing(fillPct, {
+        toValue: 0,
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        onDone?.();
+      });
     });
 
     setTimeout(() => animFill(100, 360), 140);
     setTimeout(() => fireCoinBurst(0), 760);
-  }, [animFill, fireCoinBurst, glow, party, rot, scaleX, scaleY, transY]);
+  }, [animFill, fillPct, fireCoinBurst, glow, party, rot, scaleX, scaleY, transY]);
 
   useEffect(() => {
     if (pulseKey === undefined || pulseKey === prevPulse.current) {
@@ -220,10 +231,10 @@ export default function ExcellenceMeter({
     const celebrate = isCelebrating || (prevValue.current === 66 && value === 0);
     prevValue.current = value;
     if (celebrate) {
-      playCelebrate();
+      playCelebrate(onAnimationComplete);
     } else {
       animFill(value, 420);
-      playBounce();
+      playBounce(onAnimationComplete);
     }
   }, [pulseKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -347,9 +358,9 @@ export default function ExcellenceMeter({
       </TouchableOpacity>
 
       {(courageCoins ?? 0) > 0 && (
-        <View style={{ alignItems: 'center', marginTop: 6 }}>
-          <SlindaCoin size={36} pulseKey={pulseKey} spin />
-          <Text style={{ display: 'none' }}>
+        <View style={[styles.courageCoinRow, compact ? styles.courageCoinRowCompact : null]}>
+          <SlindaCoin size={compact ? 20 : 26} pulseKey={pulseKey} spin />
+          <Text style={[styles.courageCoinText, compact ? styles.courageCoinTextCompact : null]}>
             ×{courageCoins}
           </Text>
         </View>
@@ -448,5 +459,23 @@ const styles = StyleSheet.create({
   burstCoin: {
     position: 'absolute',
     resizeMode: 'contain',
+  },
+  courageCoinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  courageCoinRowCompact: {
+    marginTop: 4,
+  },
+  courageCoinText: {
+    color: '#FCD34D',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  courageCoinTextCompact: {
+    fontSize: 11,
   },
 });

@@ -9,6 +9,7 @@ const NEW_TUTORIAL_KEYS = [
   'tutorial.fractions.no',
   'tutorial.welcome.title',
   'tutorial.welcome.headline',
+  'tutorial.welcome.headlineSub',
   'tutorial.welcome.tagline',
   'tutorial.welcome.body',
   'tutorial.welcome.coreReward',

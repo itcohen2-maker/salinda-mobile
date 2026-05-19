@@ -259,7 +259,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(screen.getByText('Start vs bot')).toBeTruthy();
   });
 
-  it('right aligns the configuration menu only on Android RTL', () => {
+  it('centers the configuration menu blocks on Android RTL', () => {
     mockGetLocales.mockReturnValue([{ languageCode: 'he' }]);
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     renderLobbyScreen();
@@ -272,14 +272,16 @@ describe('OnlineTableScreens LobbyScreen', () => {
     const advancedToggle = StyleSheet.flatten(screen.getByTestId('lobby-config-advanced-toggle').props.style);
 
     expect(screen.getByText(he['lobby.advancedToggleShow'])).toBeTruthy();
-    expect(configPanel.alignItems).toBe('flex-end');
+    expect(configPanel.alignItems).toBe('center');
 
-    expect(numberRangeLabel.textAlign).toBe('right');
-    expect(maxParticipantsLabel.textAlign).toBe('right');
+    expect(numberRangeLabel.textAlign).toBe('center');
+    expect(maxParticipantsLabel.textAlign).toBe('center');
     expect(numberRangeRow.flexDirection).toBe('row');
     expect(maxParticipantsRow.flexDirection).toBe('row');
     expect(maxParticipantsRow.justifyContent).toBe('center');
     expect(advancedToggle.width).toBe('100%');
+    expect(advancedToggle.maxWidth).toBe(420);
+    expect(advancedToggle.alignSelf).toBe('center');
     expect(advancedToggle.alignItems).toBe('center');
   });
 

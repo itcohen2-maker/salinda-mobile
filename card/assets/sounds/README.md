@@ -8,6 +8,10 @@ node scripts/generate-ui-sfx.mjs
 
 Outputs `sfx_ui_*.wav` in this folder (referenced from `src/audio/sfx.ts`).
 
+Current runtime note:
+- Card selection now uses the shared tap SFX path (`src/audio/cardSelect.ts` -> `sfx_ui_tap.wav`) for Android-safe playback.
+- Tutorial bot demos still use `card/assets/card_select.mov` so onboarding keeps its original card-pick cue.
+
 Place your sound files here or in `card/assets/` as used by the app:
 
 - `shake.mp3` — dice rattling in hand

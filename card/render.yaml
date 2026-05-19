@@ -1,0 +1,31 @@
+services:
+  # ── Backend game server (Socket.IO) ──
+  - type: web
+    name: salinda-server
+    env: node
+    buildCommand: cd server && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://salinda-web.onrender.com
+
+  # ── Web frontend (Expo static export) ──
+  - type: static
+    name: salinda-web
+    buildCommand: npm install && npx expo export --platform web
+    staticPublishPath: dist
+    envVars:
+      - key: EXPO_PUBLIC_SERVER_URL
+        value: https://lolos-mobile.onrender.com
+      - key: EXPO_PUBLIC_WEB_APP_URL
+        value: https://salinda-web.onrender.com
+      - key: EXPO_PUBLIC_LOCAL_SOCKET_SERVER
+        value: "0"
+      - key: EXPO_PUBLIC_LOCK_ADVANCED_STAGES
+        value: "0"
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-store

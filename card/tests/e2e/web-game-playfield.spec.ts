@@ -171,6 +171,16 @@ test.describe('Desktop Gameplay Playfield', () => {
       await expectCenteredPlayfield(page, 'game-screen-playfield', 412);
       await expect(game.playerHand).toBeVisible();
       await expect(game.diceArea).toBeVisible();
+
+      const rollButtonBox = await game.rollDiceButton.boundingBox();
+      const handBox = await game.playerHand.boundingBox();
+
+      expect(rollButtonBox).not.toBeNull();
+      expect(handBox).not.toBeNull();
+
+      if (rollButtonBox && handBox) {
+        expect(rollButtonBox.y + rollButtonBox.height).toBeLessThanOrEqual(handBox.y);
+      }
     });
   });
 

@@ -146,7 +146,7 @@ describe('useMultiplayer room close flow', () => {
     await AsyncStorage.clear();
   });
 
-  it('preserves occupied tables and returns the player to the tables list when the room closes', async () => {
+  it('filters non-waiting tables out of the lobby list immediately', async () => {
     render(
       <LocaleProvider>
         <MultiplayerProvider>
@@ -177,7 +177,68 @@ describe('useMultiplayer room close flow', () => {
             roomCode: '4821',
             hostName: 'Alice',
             visibility: 'public',
-            status: 'in_game',
+            status: 'waiting',
+            currentParticipants: 2,
+            maxParticipants: 4,
+            countdownEndsAt: null,
+            hasRandomJoiner: false,
+            tableTheme: 'classic',
+            configuredDifficulty: 'full',
+            timerSetting: '60',
+            timerCustomSeconds: 60,
+          },
+        ],
+      });
+    });
+
+    expect(multiplayerCtx!.tables).toHaveLength(1);
+
+    act(() => {
+      const tableStatusChanged = socketHandler<
+        (data: { roomCode: string; status: 'configuring' | 'waiting' | 'countdown' | 'full' | 'in_game'; countdownEndsAt: number | null }) => void
+      >('table_status_changed');
+      tableStatusChanged({
+        roomCode: '4821',
+        status: 'in_game',
+        countdownEndsAt: null,
+      });
+    });
+
+    expect(multiplayerCtx!.tables).toEqual([]);
+  });
+
+  it('removes the closed room from the local tables list immediately', async () => {
+    render(
+      <LocaleProvider>
+        <MultiplayerProvider>
+          <CaptureContext />
+        </MultiplayerProvider>
+      </LocaleProvider>,
+    );
+
+    await waitFor(() => {
+      expect(multiplayerCtx).not.toBeNull();
+    });
+
+    act(() => {
+      multiplayerCtx!.createTable('Alice');
+    });
+
+    act(() => {
+      const roomCreated = socketHandler<(data: { roomCode: string; playerId: string; visibility?: 'public' | 'private_locked' }) => void>('room_created');
+      const tablesUpdated = socketHandler<(data: { tables: any[] }) => void>('tables_updated');
+      roomCreated({
+        roomCode: '4821',
+        playerId: 'player-1',
+        visibility: 'public',
+      });
+      tablesUpdated({
+        tables: [
+          {
+            roomCode: '4821',
+            hostName: 'Alice',
+            visibility: 'public',
+            status: 'waiting',
             currentParticipants: 2,
             maxParticipants: 4,
             countdownEndsAt: null,
@@ -192,7 +253,7 @@ describe('useMultiplayer room close flow', () => {
     });
 
     expect(multiplayerCtx!.inRoom).toBe(true);
-    expect(multiplayerCtx!.tables[0]?.status).toBe('in_game');
+    expect(multiplayerCtx!.tables).toHaveLength(1);
 
     act(() => {
       const roomClosed = socketHandler<(data: { roomCode: string }) => void>('room_closed');
@@ -200,7 +261,7 @@ describe('useMultiplayer room close flow', () => {
     });
 
     expect(multiplayerCtx!.inRoom).toBe(false);
-    expect(multiplayerCtx!.tables[0]?.status).toBe('in_game');
+    expect(multiplayerCtx!.tables).toEqual([]);
     expect(mockSocket.emit).toHaveBeenCalledWith('list_tables');
   });
 
