@@ -24,7 +24,7 @@ export function WebGameScreenFrame({
 }: WebGameScreenFrameProps) {
   if (Platform.OS !== 'web') {
     return (
-      <View testID={testID} style={[styles.inner, { width }, innerStyle, outerStyle]}>
+      <View testID={testID} style={[styles.inner, { width }, innerStyle]}>
         {children}
       </View>
     );
