@@ -3,6 +3,9 @@
 // LinearGradient cards, 3D shadows, rotated deck, thick edges
 // ============================================================
 
+import * as Sentry from '@sentry/react-native';
+Sentry.init({ dsn: 'YOUR_SENTRY_DSN' });
+
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
@@ -65,6 +68,7 @@ import TutorialProgressMeter from './components/TutorialProgressMeter';
 import { SlindaCoin } from './components/SlindaCoin';
 import { HorizontalOptionWheel, type HorizontalWheelOption } from './components/HorizontalOptionWheel';
 import { AdSlot } from './src/components/AdSlot';
+import { FeedbackMailCard } from './src/components/feedback/FeedbackMailCard';
 import * as Localization from 'expo-localization';
 import { t, type MsgParams } from './shared/i18n';
 import {
@@ -130,11 +134,26 @@ import { LobbyScreen, LanguageToggle, parseJoinParamsFromUrl } from './src/scree
 import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
 import { CelebrationMockupRoom } from './src/screens/CelebrationMockupRoom';
 import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
+import { AdminCoinGiftsScreen } from './src/screens/AdminCoinGiftsScreen';
+import { FeedbackInboxScreen } from './src/screens/FeedbackInboxScreen';
 import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } from './shared/gameConstants';
 import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
 import { resolveGameTableSurface } from './src/theme/gameTableSurface';
 import { resolveTurnTransitionBackdrop } from './src/theme/turnTransitionBackdrop';
+import {
+  canOfferFeedbackPrompt,
+  DEFAULT_FEEDBACK_PROMPT_STATE,
+  FEEDBACK_PROMPT_STORAGE_KEY,
+  markFeedbackPromptHandled,
+  normalizeFeedbackPromptState,
+  recordCompletedFeedbackSession,
+  type FeedbackExperienceKind,
+  type FeedbackPromptHandledType,
+  type FeedbackPromptState,
+} from './src/feedback/promptState';
+import { submitFeedback, type FeedbackSubmitResult } from './src/feedback/submitFeedback';
+import { useFeedbackAdmin } from './src/feedback/useFeedbackAdmin';
 import {
   clamp,
   getWebGameLayout,
@@ -2088,6 +2107,19 @@ function shouldShowTurnCoinCelebration(
   const lastPlayerIndex = (st.currentPlayerIndex - 1 + playerCount) % playerCount;
   return (
     getTurnCoinsEarned(st) > 0 &&
+    !st.players[lastPlayerIndex]?.isBot &&
+    !st.isTutorial
+  );
+}
+
+function shouldShowSingleDiscardCelebration(
+  st: Pick<GameState, 'lastDiscardCount' | 'pendingFractionTarget' | 'players' | 'currentPlayerIndex' | 'isTutorial'>,
+): boolean {
+  const playerCount = Math.max(st.players.length, 1);
+  const lastPlayerIndex = (st.currentPlayerIndex - 1 + playerCount) % playerCount;
+  return (
+    st.lastDiscardCount === 1 &&
+    st.pendingFractionTarget === null &&
     !st.players[lastPlayerIndex]?.isBot &&
     !st.isTutorial
   );
@@ -9964,7 +9996,7 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game';
+type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins';
 
 type WebBackdropTone = 'black' | 'white';
 
@@ -9982,7 +10014,7 @@ const WebPresentationContext = createContext<WebPresentationContextValue | null>
 
 function shouldShowAmbientBackground(playMode: ShellPlayMode, phase: GameState['phase']) {
   if (playMode === 'tutorial') return false;
-  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom') return true;
+  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom' || playMode === 'feedback-inbox' || playMode === 'admin-coins') return true;
   return (playMode === 'local' || playMode === 'classroom-game') && (phase === 'turn-transition' || phase === 'game-over');
 }
 
@@ -10059,6 +10091,9 @@ const FUTURE_LAB_SPECS: { id: FutureLabId; detailCount: number }[] = [
 ];
 
 type LocalGameMode = 'pass-and-play' | 'vs-bot' | 'solo';
+type PendingFeedbackPrompt = {
+  kind: FeedbackExperienceKind;
+};
 
 function StartScreen({
   onBackToChoice,
@@ -10067,6 +10102,9 @@ function StartScreen({
   preferredName,
   forcedGameMode,
   lockGameMode = false,
+  feedbackPrompt,
+  onFeedbackDismiss,
+  onFeedbackSubmit,
 }: {
   onBackToChoice?: () => void;
   onHowToPlay?: () => void;
@@ -10074,8 +10112,11 @@ function StartScreen({
   preferredName?: string;
   forcedGameMode?: LocalGameMode;
   lockGameMode?: boolean;
+  feedbackPrompt?: PendingFeedbackPrompt | null;
+  onFeedbackDismiss?: () => void;
+  onFeedbackSubmit?: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
 }) {
-  const { t, isRTL } = useLocale();
+  const { t, isRTL, locale } = useLocale();
   const { dispatch, state: gameState } = useGame();
   const safe = useGameSafeArea();
   const viewport = useWebViewportSize();
@@ -10190,6 +10231,7 @@ function StartScreen({
   const showBotSettings = gameMode === 'vs-bot';
   // Android's forceRTL already flips 'row' direction; iOS needs manual 'row-reverse'.
   const rtlRow = 'row' as const;
+  const iosRtlLabelRow = isRTL && Platform.OS === 'ios' ? 'row-reverse' : rtlRow;
   const advancedSetupModalWidth = Platform.OS === 'web'
     ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(320, viewport.width - 40))
     : Math.min(420, Math.max(320, responsive.width - 24));
@@ -11666,7 +11708,7 @@ function StartScreen({
           {/* 4. טווח מספרים */}
           <WheelRow index={numberRangeWheelIndex}>
           <LinearGradient colors={['#188038', '#34A853']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowRange, { flexDirection: rtlRow }]}>
+          <View style={[hsS.row, hsS.startRowRange, { flexDirection: iosRtlLabelRow }]}>
             <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.wheel.numberRange')}
             </Text>
@@ -11684,7 +11726,7 @@ function StartScreen({
 
           <WheelRow index={guidanceWheelIndex}>
           <LinearGradient colors={['#1A73E8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: rtlRow }]}>
+          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: iosRtlLabelRow }]}>
             <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.wheel.guidanceRow')}
             </Text>
@@ -11777,6 +11819,19 @@ function StartScreen({
             style={letsPlayGlowStyle}
           />
         </View>
+        {feedbackPrompt && onFeedbackDismiss && onFeedbackSubmit ? (
+          <View style={{ alignItems: 'center', paddingHorizontal: 4 }}>
+            <FeedbackMailCard
+              isRTL={isRTL}
+              locale={locale}
+              promptKind={feedbackPrompt.kind}
+              onDismiss={onFeedbackDismiss}
+              onSubmit={({ rating, comment }) =>
+                onFeedbackSubmit({ kind: feedbackPrompt.kind, rating, comment })
+              }
+            />
+          </View>
+        ) : null}
         <TouchableOpacity
           onLongPress={() => {
             void clearAllLulosOnboardingKeys().then(() => {
@@ -12453,10 +12508,11 @@ function BotDifficultySettingsBlock({
 }) {
   const { t, isRTL } = useLocale();
   const rtlRow = 'row' as const;
+  const iosRtlLabelRow = isRTL && Platform.OS === 'ios' ? 'row-reverse' : rtlRow;
   return (
     <LinearGradient testID="start-bot-settings" colors={['#1a73e8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
       <View style={{ paddingVertical: 10, paddingHorizontal: 4, gap: 10 }}>
-        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0, flexDirection: rtlRow }]}>
+        <View style={[hsS.row, hsS.rowRange, { paddingVertical: 0, marginBottom: 0, flexDirection: iosRtlLabelRow }]}>
           <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.botDifficulty')}</Text>
           <View style={[hsS.toggleGroup, { flexDirection: rtlRow }]}>
             {(
@@ -13262,6 +13318,7 @@ function TurnTransition() {
   const hudCoinIconSize = compactWebHud ? 28 : 30;
   const hudCoinFontSize = compactWebHud ? 14 : 16;
   const turnPlayerChipWidth = compactWebHud ? clamp(Math.round(turnScreenWidth * 0.08), 102, 114) : 124;
+  const turnPlayerChipBlueWidth = compactWebHud ? turnPlayerChipWidth + 10 : 140;
   const turnPlayerChipHeight = compactWebHud ? 58 : 64;
   const turnPlayerChipFontSize = compactWebHud ? 13 : 14;
   const turnMoreButtonSize = compactWebHud ? 48 : 56;
@@ -13314,6 +13371,8 @@ function TurnTransition() {
   const PLAYER_BUBBLE_BORDER_COLORS = ['rgba(74,222,128,0.7)', 'rgba(129,140,248,0.7)', 'rgba(248,113,113,0.7)', 'rgba(156,163,175,0.7)'] as const;
   const lastPlayerBubbleColor = PLAYER_BUBBLE_COLORS[lastPlayerIndex % PLAYER_BUBBLE_COLORS.length];
   const lastPlayerBorderColor = PLAYER_BUBBLE_BORDER_COLORS[lastPlayerIndex % PLAYER_BUBBLE_BORDER_COLORS.length];
+  const showTurnTransitionSingleDiscardCelebration =
+    shouldShowSingleDiscardCelebration(state) && !mp?.gameOverride;
   const lastTurnPlayedCardsForDisplay = useMemo(
     () =>
       swapTurnHeaderSidesOnAndroid
@@ -14039,7 +14098,11 @@ function TurnTransition() {
               {!state.isTutorial && displayPlayers.map((p) => {
                 const isCurrent = cp?.id === p.id;
                 const isEliminated = (p as any).isEliminated === true;
-                const shortName = (p.name || 'שחקן').length > 5 ? (p.name || 'שחקן').slice(0, 4) + '…' : (p.name || 'שחקן');
+                const baseName = p.name || 'שחקן';
+                const showExtendedBlueChip = !isCurrent && !isEliminated;
+                const shortName = baseName.length > (showExtendedBlueChip ? 7 : 5)
+                  ? baseName.slice(0, showExtendedBlueChip ? 7 : 4) + '…'
+                  : baseName;
                 const chipColor = isEliminated ? 'red' : (isCurrent ? 'green' : 'blue');
                 const btnText = isEliminated
                   ? `${shortName}\nמחוץ למשחק`
@@ -14050,7 +14113,7 @@ function TurnTransition() {
                   <LulosButton
                     text={btnText}
                     color={chipColor}
-                    width={turnPlayerChipWidth}
+                    width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
                     height={turnPlayerChipHeight}
                     fontSize={turnPlayerChipFontSize}
                     onPress={() => {
@@ -14151,7 +14214,11 @@ function TurnTransition() {
             {!state.isTutorial && displayPlayers.map((p) => {
               const isCurrent = cp?.id === p.id;
               const isEliminated = (p as any).isEliminated === true;
-              const shortName = (p.name || 'שחקן').length > 5 ? (p.name || 'שחקן').slice(0, 4) + '…' : (p.name || 'שחקן');
+              const baseName = p.name || 'שחקן';
+              const showExtendedBlueChip = !isCurrent && !isEliminated;
+              const shortName = baseName.length > (showExtendedBlueChip ? 7 : 5)
+                ? baseName.slice(0, showExtendedBlueChip ? 7 : 4) + '…'
+                : baseName;
               const chipColor = isEliminated ? 'red' : (isCurrent ? 'green' : 'blue');
               const btnText = isEliminated
                 ? `${shortName}\nמחוץ למשחק`
@@ -14162,7 +14229,7 @@ function TurnTransition() {
                 <LulosButton
                   text={btnText}
                   color={chipColor}
-                  width={turnPlayerChipWidth}
+                  width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
                   height={turnPlayerChipHeight}
                   fontSize={turnPlayerChipFontSize}
                   onPress={() => {
@@ -14277,7 +14344,7 @@ function TurnTransition() {
             </View>
           )
         )}
-        {state.lastDiscardCount === 1 && state.pendingFractionTarget === null && !state.players[lastPlayerIndex]?.isBot && !state.isTutorial && (
+        {showTurnTransitionSingleDiscardCelebration && (
           <View style={{ alignSelf: 'center', marginBottom: 4, maxWidth: 340, width: '100%', alignItems: 'center' }}>
             <View style={[alertBubbleStyle.box, { paddingVertical: 6, paddingHorizontal: 14, maxWidth: 320, backgroundColor: '#0F766E', borderColor: 'rgba(94,234,212,0.95)', borderWidth: 2 }]}>
               <Text style={[alertBubbleStyle.title, { fontSize: 14, color: '#ECFEFF' }]}>
@@ -18970,6 +19037,7 @@ function PlayerWaitingScreen({
   waitingStatusText,
   onBack,
   lastMoveMessage,
+  showSingleDiscardCelebration,
   pendingFractionTarget,
   lastMoveBubbleBg,
   lastMoveBubbleBorder,
@@ -18979,6 +19047,7 @@ function PlayerWaitingScreen({
   waitingStatusText: string;
   onBack: () => void;
   lastMoveMessage: string | null;
+  showSingleDiscardCelebration: boolean;
   pendingFractionTarget: number | null;
   lastMoveBubbleBg: string;
   lastMoveBubbleBorder: string;
@@ -19033,6 +19102,15 @@ function PlayerWaitingScreen({
             </View>
           </View>
         )}
+        {showSingleDiscardCelebration && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 8, alignItems: 'center' }}>
+            <View style={[alertBubbleStyle.box, { paddingVertical: 6, paddingHorizontal: 14, maxWidth: 320, backgroundColor: '#0F766E', borderColor: 'rgba(94,234,212,0.95)', borderWidth: 2 }]}>
+              <Text style={[alertBubbleStyle.title, { fontSize: 14, color: '#ECFEFF' }]}>
+                ?? איזה יופי — יש לנו קלף פחות!
+              </Text>
+            </View>
+          </View>
+        )}
         <View style={{ flex: 1, minHeight: 60, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center' }}>
           <View style={{ backgroundColor: 'rgba(122,140,165,0.2)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(147,197,253,0.45)', paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text style={{ color: '#DBEAFE', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>מניפה במצב המתנה</Text>
@@ -19080,14 +19158,6 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const mpRef = useRef(mp);
   mpRef.current = mp;
 
-  useEffect(() => {
-    if (isMyTurn && !prevMyTurn.current) {
-      setViewMode('game');
-      mpRef.current?.clearToast?.();
-    }
-    prevMyTurn.current = isMyTurn;
-  }, [isMyTurn]);
-
   const mpToast = mp?.toast ?? null;
   useEffect(() => {
     if (!mpToast) return;
@@ -19117,6 +19187,17 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const lastMoveBubbleBg = ONLINE_WAIT_BUBBLE_COLORS[lastPlayerIndex % ONLINE_WAIT_BUBBLE_COLORS.length];
   const lastMoveBubbleBorder = ONLINE_WAIT_BUBBLE_BORDERS[lastPlayerIndex % ONLINE_WAIT_BUBBLE_BORDERS.length];
   const lastMoveForWaiting = state.lastMoveMessage;
+  const showWaitingSingleDiscardCelebration = shouldShowSingleDiscardCelebration(state) && amILastPlayer;
+
+  useEffect(() => {
+    if (isMyTurn && !prevMyTurn.current) {
+      setViewMode('game');
+      mpRef.current?.clearToast?.();
+    } else if (!isMyTurn && prevMyTurn.current && showWaitingSingleDiscardCelebration) {
+      setViewMode('player');
+    }
+    prevMyTurn.current = isMyTurn;
+  }, [isMyTurn, showWaitingSingleDiscardCelebration]);
 
   const toastOverlay =
     mp?.toast != null && mp.toast !== '' ? (
@@ -19193,6 +19274,7 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           waitingStatusText={waitingStatusText}
           onBack={() => setViewMode('game')}
           lastMoveMessage={amILastPlayer ? lastMoveForWaiting : null}
+          showSingleDiscardCelebration={showWaitingSingleDiscardCelebration}
           pendingFractionTarget={state.pendingFractionTarget}
           lastMoveBubbleBg={lastMoveBubbleBg}
           lastMoveBubbleBorder={lastMoveBubbleBorder}
@@ -19409,20 +19491,28 @@ function PlayModeChoiceScreen({
   onPlay,
   onHowToPlay,
   onShop,
+  onOpenFeedbackInbox,
+  onOpenAdminCoinGifts,
   preferredName,
   onPreferredNameChange,
+  onFeedbackSubmit,
 }: {
   onPlay: () => void;
   onHowToPlay: () => void;
   onShop: () => void;
+  onOpenFeedbackInbox: () => void;
+  onOpenAdminCoinGifts: () => void;
   preferredName: string;
   onPreferredNameChange: (name: string) => void;
+  onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
 }) {
   const { t, locale, setLocale } = useLocale();
   const { profile } = useAuth();
+  const { isFeedbackAdmin } = useFeedbackAdmin();
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const preferredNameSeededRef = useRef(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 18 : 24;
   const localeButtonGap = compactMainMenu ? 10 : 12;
@@ -19436,6 +19526,11 @@ function PlayModeChoiceScreen({
   const shopToPrimaryContentGap = 100;
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
+  const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
+  const feedbackToggleLabel = locale === 'he'
+    ? (feedbackOpen ? 'סגור פידבק' : 'שלח פידבק')
+    : (feedbackOpen ? 'Close feedback' : 'Send feedback');
+  const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
 
   useEffect(() => {
@@ -19578,6 +19673,62 @@ function PlayModeChoiceScreen({
               style={{ marginBottom: primaryStackGap, alignSelf: 'center' }}
             />
             <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
+            {isFeedbackAdmin ? (
+              <>
+                <LulosButton
+                  text={t('feedbackInbox.open')}
+                  color="orange"
+                  width={220}
+                  height={42}
+                  fontSize={14}
+                  testID="home-feedback-inbox"
+                  onPress={onOpenFeedbackInbox}
+                  style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
+                />
+                <LulosButton
+                  text={adminCoinsLabel}
+                  color="blue"
+                  width={220}
+                  height={42}
+                  fontSize={14}
+                  testID="home-admin-coins"
+                  onPress={onOpenAdminCoinGifts}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
+                />
+              </>
+            ) : null}
+            <LulosButton
+              text={feedbackToggleLabel}
+              color={feedbackOpen ? 'purple' : 'blue'}
+              width={220}
+              height={42}
+              fontSize={14}
+              testID="home-feedback-toggle"
+              onPress={() => setFeedbackOpen((prev) => !prev)}
+              style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
+            />
+            {feedbackOpen ? (
+              <View style={{ width: '100%', alignItems: 'center' }}>
+                <FeedbackMailCard
+                  isRTL={locale === 'he'}
+                  locale={locale}
+                  promptKind="general"
+                  dismissLabel={closeFeedbackLabel}
+                  onDismiss={() => setFeedbackOpen(false)}
+                  onSubmit={async ({ rating, comment }) => {
+                    const result = await onFeedbackSubmit({
+                      kind: 'general',
+                      rating,
+                      comment,
+                    });
+                    if (result === 'submitted') {
+                      setFeedbackOpen(false);
+                    }
+                    return result;
+                  }}
+                />
+              </View>
+            ) : null}
           </View>
         </View>
         </View>
@@ -19713,6 +19864,7 @@ function GameEntryChoiceScreen({
 function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellPlayMode) => void }) {
   const mp = useMultiplayerOptional();
   const { state, dispatch } = useGame();
+  const { profile, user } = useAuth();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
@@ -19754,12 +19906,107 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const SALINDA_VOLUME_KEY = 'lulos_salinda_volume';
   const SALINDA_VOLUME_TOUCHED_KEY = 'lulos_salinda_volume_touched';
   const PREFERRED_NAME_KEY = 'lolos_preferred_name';
+  const feedbackStateRef = useRef<FeedbackPromptState>(DEFAULT_FEEDBACK_PROMPT_STATE);
+  const [feedbackPrompt, setFeedbackPrompt] = useState<PendingFeedbackPrompt | null>(null);
+  const feedbackStateLoadedRef = useRef(false);
+
+  const persistFeedbackState = useCallback(async (nextState: FeedbackPromptState) => {
+    feedbackStateRef.current = nextState;
+    try {
+      await AsyncStorage.setItem(
+        FEEDBACK_PROMPT_STORAGE_KEY,
+        JSON.stringify(nextState),
+      );
+    } catch (_) {
+      // Ignore feedback persistence failures so they never block gameplay.
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(FEEDBACK_PROMPT_STORAGE_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        if (!raw) {
+          feedbackStateLoadedRef.current = true;
+          feedbackStateRef.current = DEFAULT_FEEDBACK_PROMPT_STATE;
+          return;
+        }
+        const parsed = normalizeFeedbackPromptState(JSON.parse(raw));
+        feedbackStateLoadedRef.current = true;
+        feedbackStateRef.current = parsed;
+      })
+      .catch(() => {
+        if (cancelled) return;
+        feedbackStateLoadedRef.current = true;
+        feedbackStateRef.current = DEFAULT_FEEDBACK_PROMPT_STATE;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ?? Keep sfx loaded for the lifetime of the router (StartScreen's dispose
   //    clears sounds when it unmounts; re-init here ensures they reload).
   useEffect(() => {
     void initializeSfx();
   }, []);
+
+  const recordCompletedSessionForFeedback = useCallback(
+    async (kind: FeedbackExperienceKind) => {
+      const now = Date.now();
+      const currentState = feedbackStateLoadedRef.current
+        ? feedbackStateRef.current
+        : DEFAULT_FEEDBACK_PROMPT_STATE;
+      const nextState = recordCompletedFeedbackSession(currentState);
+      await persistFeedbackState(nextState);
+      if (canOfferFeedbackPrompt(nextState, now)) {
+        setFeedbackPrompt({ kind });
+      }
+    },
+    [persistFeedbackState],
+  );
+
+  const handleFeedbackPromptHandled = useCallback(
+    async (handledType: FeedbackPromptHandledType) => {
+      const nextState = markFeedbackPromptHandled(
+        feedbackStateRef.current,
+        handledType,
+        Date.now(),
+      );
+      await persistFeedbackState(nextState);
+      setFeedbackPrompt(null);
+    },
+    [persistFeedbackState],
+  );
+
+  const submitFeedbackFromPrompt = useCallback(
+    async ({
+      kind,
+      rating,
+      comment,
+    }: {
+      kind: FeedbackExperienceKind;
+      rating: number;
+      comment: string;
+    }): Promise<FeedbackSubmitResult> => {
+      const result = await submitFeedback({
+        comment,
+        kind,
+        locale,
+        profile,
+        rating,
+        user,
+      });
+
+      if (result === 'submitted') {
+        await handleFeedbackPromptHandled('submitted');
+      }
+
+      return result;
+    },
+    [handleFeedbackPromptHandled, locale, profile, user],
+  );
 
   const preVictoryCoinAwardSignature = shouldShowPreVictoryCoinAward(state)
     ? `${playMode}:${state.courageRewardPulseId}:${state.roundsPlayed}:${state.currentPlayerIndex}:${state.winner?.name ?? ''}`
@@ -19823,6 +20070,19 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   useEffect(() => {
     onPlayModeChange?.(playMode);
   }, [onPlayModeChange, playMode]);
+
+  const previousPhaseRef = useRef(state.phase);
+  useEffect(() => {
+    const previousPhase = previousPhaseRef.current;
+    if (
+      previousPhase !== 'game-over' &&
+      state.phase === 'game-over' &&
+      playMode === 'local'
+    ) {
+      void recordCompletedSessionForFeedback('game');
+    }
+    previousPhaseRef.current = state.phase;
+  }, [playMode, recordCompletedSessionForFeedback, state.phase]);
 
   const openCelebrationMockupRoom = useCallback(() => {
     setMockupReturnMode(playMode === 'online' ? 'online' : 'choose');
@@ -20074,11 +20334,18 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   }, []);
 
   const tutorialExit = useCallback(() => {
+    const tutorialCompleted = tutorialMeter.percent >= 100;
     dispatch({ type: 'RESET_GAME' });
     setTutorialMeter(INITIAL_TUTORIAL_METER_STATE);
     AsyncStorage.setItem('lulos_tutorial_done', 'true').catch(() => {});
+    if (tutorialCompleted) {
+      void recordCompletedSessionForFeedback('tutorial');
+      setSelectedLocalGameMode('vs-bot');
+      setPlayMode('local');
+      return;
+    }
     setPlayMode('choose');
-  }, [dispatch]);
+  }, [dispatch, recordCompletedSessionForFeedback, tutorialMeter.percent]);
   const tutorialBack = useCallback(() => {
     tutorialBus.emitRequestBack();
   }, []);
@@ -20173,6 +20440,14 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       setPlayMode('choose');
       return;
     }
+    if (playMode === 'feedback-inbox') {
+      setPlayMode('choose');
+      return;
+    }
+    if (playMode === 'admin-coins') {
+      setPlayMode('choose');
+      return;
+    }
     if (playMode === 'classroom-game') {
       dispatch({ type: 'RESET_GAME' });
       setClassroomLaunchConfig(null);
@@ -20218,8 +20493,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           onPlay={openGameEntry}
           onHowToPlay={() => setPlayMode('tutorial')}
           onShop={() => setShowShop(true)}
+          onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
+          onOpenAdminCoinGifts={() => setPlayMode('admin-coins')}
           preferredName={preferredName}
           onPreferredNameChange={setPreferredName}
+          onFeedbackSubmit={submitFeedbackFromPrompt}
         />
       );
   } else if (playMode === 'game-entry') {
@@ -20253,8 +20531,28 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         onLaunchPractice={launchClassroomPractice}
       />
     );
+  } else if (playMode === 'feedback-inbox') {
+    screen = <FeedbackInboxScreen onBack={() => setPlayMode('choose')} />;
+  } else if (playMode === 'admin-coins') {
+    screen = <AdminCoinGiftsScreen onBack={() => setPlayMode('choose')} />;
   } else if (playMode === 'local') {
-    if (state.phase === 'setup') screen = <StartScreen onBackToChoice={() => setPlayMode('game-entry')} onHowToPlay={() => setPlayMode('tutorial')} onShop={() => setShowShop(true)} preferredName={preferredName} forcedGameMode={selectedLocalGameMode} lockGameMode />;
+    if (state.phase === 'setup') {
+      screen = (
+        <StartScreen
+          onBackToChoice={() => setPlayMode('game-entry')}
+          onHowToPlay={() => setPlayMode('tutorial')}
+          onShop={() => setShowShop(true)}
+          preferredName={preferredName}
+          forcedGameMode={selectedLocalGameMode}
+          lockGameMode
+          feedbackPrompt={feedbackPrompt}
+          onFeedbackDismiss={() => {
+            void handleFeedbackPromptHandled('dismissed');
+          }}
+          onFeedbackSubmit={submitFeedbackFromPrompt}
+        />
+      );
+    }
     else {
       switch (state.phase) {
         case 'turn-transition': screen = <TurnTransition />; break;
@@ -20270,7 +20568,21 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
             : <GameOver />;
           break;
         default:
-          screen = <StartScreen onBackToChoice={() => setPlayMode('game-entry')} onHowToPlay={() => setPlayMode('tutorial')} onShop={() => setShowShop(true)} preferredName={preferredName} forcedGameMode={selectedLocalGameMode} lockGameMode />;
+          screen = (
+            <StartScreen
+              onBackToChoice={() => setPlayMode('game-entry')}
+              onHowToPlay={() => setPlayMode('tutorial')}
+              onShop={() => setShowShop(true)}
+              preferredName={preferredName}
+              forcedGameMode={selectedLocalGameMode}
+              lockGameMode
+              feedbackPrompt={feedbackPrompt}
+              onFeedbackDismiss={() => {
+                void handleFeedbackPromptHandled('dismissed');
+              }}
+              onFeedbackSubmit={submitFeedbackFromPrompt}
+            />
+          );
       }
     }
   } else if (playMode === 'classroom-game') {
