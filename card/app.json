@@ -85,8 +85,8 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "YOUR_ORG_SLUG",
-          "project": "YOUR_PROJECT_SLUG"
+          "organization": "itzikcohen",
+          "project": "react-native"
         }
       ]
     ]
