@@ -4,7 +4,7 @@
 // ============================================================
 
 import * as Sentry from '@sentry/react-native';
-Sentry.init({ dsn: 'YOUR_SENTRY_DSN' });
+Sentry.init({ dsn: 'https://2e289fe194f1d2fbbb13515d0b011dc6@o4511423830228992.ingest.de.sentry.io/4511423832064080' });
 
 import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
