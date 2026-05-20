@@ -24,8 +24,14 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 
 const corsOriginCheck = ALLOWED_ORIGINS
   ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Mobile / non-browser clients send no Origin → allow.
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      // Native mobile clients (Expo Go, standalone APK/IPA) send no Origin,
+      // the string "null", "file://" (Android bundle), or other non-https
+      // schemes. Only treat something as a browser origin if it starts with
+      // https:// or http://, and even then only block it if it's not in the
+      // allowlist. This lets all native app connections through while still
+      // restricting browser-based web origins.
+      const isBrowserOrigin = !!origin && origin !== 'null' && origin.startsWith('http');
+      if (!isBrowserOrigin || ALLOWED_ORIGINS.includes(origin!)) {
         callback(null, true);
       } else {
         console.warn(`[CORS] Rejected origin: ${origin}`);

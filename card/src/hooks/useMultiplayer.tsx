@@ -656,12 +656,16 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     const socket = io(want, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 15,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      timeout: 20000,
       auth: { token: sessionTokenRef.current },
     });
     socketRef.current = socket;
     socket.on('connect', () => {
       console.log('[MP][debug] socket connected →', want);
+      connectAttempts = 0;
       setConnected(true);
       socket.emit('list_tables');
       if (awaitingReconnectSyncRef.current) {
@@ -870,9 +874,15 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
         clearSessionAfterDisconnect();
       }
     });
+    let connectAttempts = 0;
     socket.on('connect_error', (err: Error) => {
-      console.warn('[MP] connect_error:', err.message, '→', want);
-      setError(`${t(localeRef.current, 'mp.connectError')}\n(${want})`);
+      connectAttempts += 1;
+      console.warn(`[MP] connect_error (attempt ${connectAttempts}):`, err.message, '→', want);
+      // Only show the hard error after several failed attempts so a slow
+      // server cold-start doesn't immediately surface as a failure.
+      if (connectAttempts >= 4) {
+        setError(`${t(localeRef.current, 'mp.connectError')}\n(${want})`);
+      }
     });
   }, [serverUrl, clearRoomSession, clearSessionAfterDisconnect, keepWaitingTablesOnly]);
 
@@ -985,8 +995,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
         if (settled || requestId !== startBotGameReqRef.current) return;
         settled = true;
         const message = locale === 'he'
-          ? 'השרת לא הגיב לבקשה להתחלת משחק מול בוט. נסו שוב.'
-          : 'Server did not respond to start-vs-bot request. Please try again.';
+          ? 'השרת לא הגיב לבקשה להתחלת דו-קרב מול סלינדה. נסו שוב.'
+          : 'Server did not respond to the duel-vs-Salinda request. Please try again.';
         setError(message);
         resolve(false);
       }, 7000);
@@ -996,7 +1006,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
         settled = true;
         clearTimeout(timeout);
         if (!ack?.ok) {
-          setError(ack?.message || (locale === 'he' ? 'לא ניתן להתחיל משחק מול בוט.' : 'Unable to start vs bot game.'));
+          setError(ack?.message || (locale === 'he' ? 'לא ניתן להתחיל דו-קרב מול סלינדה.' : 'Unable to start the duel vs Salinda.'));
           resolve(false);
           return;
         }
