@@ -181,8 +181,7 @@ function getServerUrl(): string {
     const inferred = inferDevMachineSocketUrl();
     if (inferred) return inferred;
   }
-  if (Platform.OS === 'android') return `http://10.0.2.2:${DEFAULT_SOCKET_PORT}`;
-  return `http://localhost:${DEFAULT_SOCKET_PORT}`;
+  return 'https://lolos-mobile.onrender.com';
 }
 
 export type PlayMode = 'choose' | 'local' | 'online';

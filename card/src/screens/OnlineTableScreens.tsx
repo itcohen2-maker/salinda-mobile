@@ -303,7 +303,7 @@ function getInviteWebBaseUrl(): string {
     const cleanPath = pathname === '/' ? '' : pathname.replace(/\/$/, '');
     return `${window.location.origin}${cleanPath}`;
   }
-  return '';
+  return 'https://salinda-web.onrender.com';
 }
 
 function isLocalServerUrl(url: string): boolean {
@@ -315,7 +315,7 @@ function guestInviteSearchParams(roomCode: string, serverUrl: string, inviteCode
   const fallbackPublicServer =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
-      : '';
+      : 'https://lolos-mobile.onrender.com';
   const safeServerUrl = isLocalServerUrl(serverUrl) ? fallbackPublicServer : serverUrl.trim();
   const params = new URLSearchParams({ room: roomCode });
   if (inviteCode?.trim()) params.set('invite', inviteCode.trim());
@@ -1296,7 +1296,7 @@ const styles = StyleSheet.create({
   disconnectedBadge: { color: '#EF4444', fontSize: 10 },
   botStartBox: { width: '100%', marginTop: 8 },
   botOfferInlineText: { color: '#DDD6FE', fontSize: 13, lineHeight: 20, marginBottom: 10 },
-  botDifficultyLabel: { marginTop: 0, marginBottom: 8, textAlign: 'right' },
+  botDifficultyLabel: { marginTop: 0, marginBottom: 8, textAlign: 'center', alignSelf: 'center', width: '100%' },
   botDifficultyRow: { flexDirection: 'row', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 2 },
   secondaryPrimaryBtn: { backgroundColor: ACTION_AMBER, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, alignItems: 'center', width: '100%' },
   secondaryPrimaryBtnText: { color: '#F8FAFC', fontSize: 15, fontWeight: '700' },

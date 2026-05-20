@@ -74,7 +74,7 @@ function getInviteWebBaseUrl(): string {
     const cleanPath = pathname === '/' ? '' : pathname.replace(/\/$/, '');
     return `${window.location.origin}${cleanPath}`;
   }
-  return '';
+  return 'https://salinda-web.onrender.com';
 }
 
 function isLocalServerUrl(url: string): boolean {
@@ -91,7 +91,7 @@ function guestInviteSearchParams(roomCode: string, serverUrl: string, inviteCode
   const fallbackPublicServer =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
-      : '';
+      : 'https://lolos-mobile.onrender.com';
   const safeServerUrl = isLocalServerUrl(serverUrl) ? fallbackPublicServer : serverUrl.trim();
   const params = new URLSearchParams({ room: roomCode });
   if (inviteCode?.trim()) params.set('invite', inviteCode.trim());
