@@ -1,0 +1,7 @@
+{
+  "buildCommand": "npx expo export --platform web && node scripts/inject-og-tags.js",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
