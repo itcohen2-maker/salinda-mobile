@@ -158,6 +158,7 @@ import {
   clamp,
   getWebGameLayout,
   getWebTurnTransitionReadyButtonTop,
+  isWebMobileViewport,
   WEB_GAME_PLAYFIELD_MAX_WIDTH,
 } from './src/theme/webLayout';
 import { getNativeHandFanMetrics } from './src/theme/nativeHandFan';
@@ -175,7 +176,9 @@ function useCardSelectSound(soundOn: boolean): () => void {
 }
 
 const { width: _SCREEN_W_RAW, height: SCREEN_H } = Dimensions.get('window');
-const SCREEN_W = Platform.OS === 'web' ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_RAW) : _SCREEN_W_RAW;
+const SCREEN_W = Platform.OS === 'web' && !isWebMobileViewport(_SCREEN_W_RAW, SCREEN_H)
+  ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_RAW)
+  : _SCREEN_W_RAW;
 const NATIVE_HAND_FAN = getNativeHandFanMetrics(Platform.OS);
 
 /** אותו top לכפתור הקוביות המוזהב (GameScreen) ולכפתור «אני מוכן» (TurnTransition).
@@ -6070,7 +6073,9 @@ function SolveExerciseChip({ equation, onPress, pulseKey = 0, loopPulse = false 
 const DICE_BODY = 40;
 const DICE_PAD = 40;
 const { width: _SCREEN_W_DICE_RAW, height: SCREEN_H_DICE } = Dimensions.get('window');
-const SCREEN_W_DICE = Platform.OS === 'web' ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_DICE_RAW) : _SCREEN_W_DICE_RAW;
+const SCREEN_W_DICE = Platform.OS === 'web' && !isWebMobileViewport(_SCREEN_W_DICE_RAW, SCREEN_H_DICE)
+  ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, _SCREEN_W_DICE_RAW)
+  : _SCREEN_W_DICE_RAW;
 const ROAM_MAX_Y = SCREEN_H_DICE * 0.45;
 const PIP_R = 3.5;
 
@@ -8091,7 +8096,9 @@ const FAN_MIN_SPACING = 0.4;
 const FAN_MAX_SPACING = 1.6;
 const FAN_DEFAULT_SPACING = 1.0;
 const PINCH_CARD_THRESHOLD = 8;
-const FAN_DRAG_START_DX = 6;
+const FAN_MOUSE_DRAG_START_DX = 6;
+const FAN_TOUCH_DRAG_START_DX = 20;
+const FAN_CARD_PRESS_RETENTION = { top: 24, bottom: 24, left: 24, right: 24 } as const;
 const SIMPLE_HAND_FAN_TEST_ID = 'simple-hand-fan';
 
 function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium', interactionLocked = false, centerCardId = null, tutorialFocusCardId = null }: {
@@ -8495,6 +8502,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     return typeof activeTouches === 'number' ? activeTouches : 0;
   }, [getResponderTouches]);
 
+  const getFanTouchDragThreshold = useCallback((evt: any) => {
+    return getResponderTouchCount(evt) > 0 ? FAN_TOUCH_DRAG_START_DX : FAN_MOUSE_DRAG_START_DX;
+  }, [getResponderTouchCount]);
+
   const beginFanGesture = useCallback(() => {
     if (interactionLockedRef.current) return;
     if (rafRef.current) {
@@ -8594,7 +8605,13 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     if (!fanRootEl || typeof fanRootEl.contains !== 'function') return;
     const fanContains = fanRootEl.contains.bind(fanRootEl);
 
-    const isInsideFan = (target: EventTarget | null) => {
+    const isInsideFan = (target: EventTarget | null, clientX?: number, clientY?: number) => {
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        const rect = fanRootEl.getBoundingClientRect();
+        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+          return true;
+        }
+      }
       if (!target || !(target instanceof Node)) return false;
       return fanContains(target);
     };
@@ -8605,7 +8622,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleMouseDownLike = (evt: MouseEvent | PointerEvent) => {
-      if (!isInsideFan(evt.target)) return;
+      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
       if (interactionLockedRef.current) return;
       if ('pointerType' in evt && evt.pointerType !== 'mouse') return;
       if (evt.button !== 0) return;
@@ -8641,7 +8658,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleClickCapture = (evt: MouseEvent) => {
-      if (!isInsideFan(evt.target)) return;
+      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
       if (Date.now() < suppressClickUntilRef.current) {
         evt.preventDefault();
         evt.stopPropagation();
@@ -8649,7 +8666,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleWheel = (evt: WheelEvent) => {
-      if (!isInsideFan(evt.target)) return;
+      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
       if (interactionLockedRef.current) return;
       const dominantDelta = Math.abs(evt.deltaX) > Math.abs(evt.deltaY) ? evt.deltaX : evt.deltaY;
       if (Math.abs(dominantDelta) < 1) return;
@@ -8685,7 +8702,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       const totalDx = evt.clientX - dragState.startClientX;
 
       if (!dragState.dragging) {
-        if (Math.abs(totalDx) <= FAN_DRAG_START_DX) return;
+        if (Math.abs(totalDx) <= FAN_MOUSE_DRAG_START_DX) return;
         dragState.dragging = true;
         beginFanGesture();
       }
@@ -8788,10 +8805,11 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         if (getResponderTouchCount(evt) >= 2) {
           return true;
         }
+        const dragThreshold = getFanTouchDragThreshold(evt);
         // Only activate on a clear horizontal swipe.
         // This prevents taps (with small finger jitter) from being captured,
         // which breaks mini-card press animations and onPress handlers.
-        const shouldSet = Math.abs(gs.dx) > FAN_DRAG_START_DX && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
+        const shouldSet = Math.abs(gs.dx) > dragThreshold && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
         const now = Date.now();
         if (now - lastPanDecisionLogAt.current > 250) {
           lastPanDecisionLogAt.current = now;
@@ -8802,7 +8820,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       onMoveShouldSetPanResponderCapture: (evt, gs) => {
         if (interactionLockedRef.current) return false;
         if (getResponderTouchCount(evt) >= 2) return true;
-        return Math.abs(gs.dx) > FAN_DRAG_START_DX && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
+        const dragThreshold = getFanTouchDragThreshold(evt);
+        return Math.abs(gs.dx) > dragThreshold && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
       },
       onPanResponderGrant: () => {
         beginFanGesture();
@@ -9169,6 +9188,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
             <TouchableOpacity
               activeOpacity={0.8}
               hitSlop={edgeHitSlop}
+              pressRetentionOffset={FAN_CARD_PRESS_RETENTION}
               testID={`hand-card-${card.id}`}
               onPressIn={() => { if (!isDefenseInvalid && !waitingMode && !interactionLocked) setPressedCardId(card.id); }}
               onPressOut={() => setPressedCardId(null)}
@@ -13298,6 +13318,7 @@ function TurnTransition() {
   const { activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const responsive = useResponsiveLayout();
+  const mobileWebViewport = Platform.OS === 'web' && isWebMobileViewport(viewport.width, viewport.height);
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const nativeGameLayout = Platform.OS === 'web' ? null : getNativeGameLayout(responsive.height, Platform.OS);
   const turnScreenWidth = webGameLayout?.playfieldWidth ?? responsive.width;
@@ -13330,10 +13351,10 @@ function TurnTransition() {
   const readyButtonTimerSize = compactAndroidReadyButton ? 52 : compactIosReadyButton ? 56 : 58;
   const readyButtonGap = compactAndroidReadyButton ? 8 : compactIosReadyButton ? 9 : 10;
   const readyButtonTimerSide = 'left';
-  const readyButtonTop = Platform.OS === 'web'
+  const readyButtonTop = Platform.OS === 'web' && !mobileWebViewport
     ? getWebTurnTransitionReadyButtonTop(goldActionButtonTop, handTop, readyButtonHeight)
     : goldActionButtonTop;
-  const compactWebHud = Platform.OS === 'web';
+  const compactWebHud = Platform.OS === 'web' && !mobileWebViewport;
   const hudButtonWidth = compactWebHud ? clamp(Math.round(turnScreenWidth * 0.05), 64, 70) : 72;
   const hudButtonHeight = compactWebHud ? 30 : 32;
   const hudButtonFontSize = compactWebHud ? 10 : 11;
@@ -15022,6 +15043,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { table, background, activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const responsive = useResponsiveLayout();
+  const mobileWebViewport = Platform.OS === 'web' && isWebMobileViewport(viewport.width, viewport.height);
   const webGameLayout = Platform.OS === 'web' ? getWebGameLayout(viewport) : null;
   const nativeGameLayout = Platform.OS === 'web' ? null : getNativeGameLayout(responsive.height, Platform.OS);
   const gameScreenWidth = webGameLayout?.playfieldWidth ?? responsive.width;
@@ -15039,7 +15061,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const parensTop = webGameLayout?.parensTop ?? nativeGameLayout?.parensTop ?? 170;
   const timerTop = webGameLayout?.timerTop ?? nativeGameLayout?.timerTop ?? 400;
   const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, responsive.height - 140));
-  const compactWebHud = Platform.OS === 'web';
+  const compactWebHud = Platform.OS === 'web' && !mobileWebViewport;
   const hudButtonWidth = compactWebHud ? clamp(Math.round(gameScreenWidth * 0.05), 64, 70) : 72;
   const hudButtonHeight = compactWebHud ? 30 : 32;
   const hudButtonFontSize = compactWebHud ? 10 : 11;
@@ -16789,7 +16811,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const nativeActionCompaction = nativeGameLayout?.compactRatio ?? 0;
   const handTop = playfieldFrameHeight - handBottomOffset - handStripHeight;
   const floatingActionMinTop = tableTop + tableHeight + 12;
-  const floatingActionOverlapAllowance = Platform.OS === 'web'
+  const floatingActionOverlapAllowance = Platform.OS === 'web' && !mobileWebViewport
     ? -18
     : Math.round(36 + nativeActionCompaction * 18);
   const clampFloatingActionTop = (preferredTop: number, contentHeight: number) => {
@@ -17569,7 +17591,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               paddingHorizontal: 20,
               paddingTop: 12,
               paddingBottom: barPaddingBottom,
-              ...(Platform.OS === 'web'
+              ...(Platform.OS === 'web' && !mobileWebViewport
                 ? { top: webBottomActionTop ?? floatingActionMinTop, height: webBottomActionZoneHeight }
                 : isAndroid
                 ? { top: bottomActionTop ?? 0, bottom: bottomActionInset }
@@ -21457,10 +21479,6 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     setWebBackdropTone((prev) => (prev === 'black' ? 'white' : 'black'));
   }, []);
 
-  const toggleWebFocusMode = useCallback(() => {
-    setWebFocusMode((prev) => !prev);
-  }, []);
-
   const toggleWebFullscreen = useCallback(async () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     try {
@@ -21535,9 +21553,10 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     );
   }
 
-  const webShellMaxWidth = WEB_GAME_PLAYFIELD_MAX_WIDTH;
-  const webShellWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewport.width);
-  const webSideGutter = Math.max(0, (viewport.width - webShellWidth) / 2);
+  const mobileWebViewport = isWebMobileViewport(viewport.width, viewport.height);
+  const webShellMaxWidth = mobileWebViewport ? viewport.width : WEB_GAME_PLAYFIELD_MAX_WIDTH;
+  const webShellWidth = mobileWebViewport ? viewport.width : Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewport.width);
+  const webSideGutter = mobileWebViewport ? 0 : Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
   const showWebChromeControls = dockedControls;
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
@@ -21571,9 +21590,6 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     borderColor: webBackdropTone === 'white' ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.08)',
   };
   const backLabel = locale === 'he' ? 'חזרה' : 'Back';
-  const focusLabel = locale === 'he'
-    ? (webFocusMode ? 'בטל מיקוד' : 'מיקוד')
-    : (webFocusMode ? 'Exit Focus' : 'Focus');
   const fullscreenLabel = locale === 'he'
     ? (webFullscreenActive ? 'צא ממסך מלא' : 'מסך מלא')
     : (webFullscreenActive ? 'Exit Fullscreen' : 'Fullscreen');
@@ -21610,13 +21626,6 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
                 lightBackdrop={webBackdropTone === 'white'}
                 fullWidth={dockedControls}
                 disabled={!webBackAction && !webFocusMode && !webFullscreenActive && !canUseBrowserHistoryBack}
-              />
-              <WebChromeActionButton
-                label={focusLabel}
-                onPress={toggleWebFocusMode}
-                selected={webFocusMode}
-                lightBackdrop={webBackdropTone === 'white'}
-                fullWidth={dockedControls}
               />
               <WebChromeActionButton
                 label={fullscreenLabel}

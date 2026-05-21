@@ -1,9 +1,12 @@
 import {
   WEB_GAME_PLAYFIELD_MAX_WIDTH,
-  WEB_GAME_PLAYFIELD_MIN_HEIGHT,
+  WEB_MOBILE_GAME_FRAME_HEIGHT,
+  WEB_MOBILE_LANDSCAPE_MAX_HEIGHT,
+  WEB_MOBILE_LANDSCAPE_MAX_WIDTH,
   getWebContentWidth,
   getWebGameLayout,
   getWebTurnTransitionReadyButtonTop,
+  isWebMobileViewport,
 } from './webLayout';
 
 describe('getWebContentWidth', () => {
@@ -46,10 +49,34 @@ describe('getWebGameLayout', () => {
 
     expect(layout.viewportWidth).toBe(360);
     expect(layout.viewportHeight).toBe(640);
-    expect(layout.frameHeight).toBe(900); // always 900
-    expect(layout.contentScale).toBeCloseTo(640 / 900, 4);
+    expect(layout.frameHeight).toBe(WEB_MOBILE_GAME_FRAME_HEIGHT);
+    expect(layout.contentScale).toBeCloseTo(640 / WEB_MOBILE_GAME_FRAME_HEIGHT, 4);
     expect(layout.playfieldWidth).toBe(360);
-    expect(layout.goldActionButtonTop).toBe(760);
+    expect(layout.tableTop).toBe(205);
+    expect(layout.tableHeight).toBe(240);
+    expect(layout.handBottom).toBe(195);
+    expect(layout.tableWidth).toBe(336);
+    expect(layout.resultsTop).toBe(84);
+    expect(layout.parensTop).toBe(170);
+    expect(layout.goldActionButtonTop).toBe(680);
+  });
+});
+
+describe('isWebMobileViewport', () => {
+  it('treats phone widths as mobile web', () => {
+    expect(isWebMobileViewport(360)).toBe(true);
+    expect(isWebMobileViewport(430)).toBe(true);
+  });
+
+  it('treats short-wide phone-sized viewports as mobile web too', () => {
+    expect(isWebMobileViewport(WEB_MOBILE_LANDSCAPE_MAX_WIDTH, WEB_MOBILE_LANDSCAPE_MAX_HEIGHT)).toBe(true);
+    expect(isWebMobileViewport(767, 391)).toBe(true);
+  });
+
+  it('keeps wider viewports on the desktop web path', () => {
+    expect(isWebMobileViewport(481)).toBe(false);
+    expect(isWebMobileViewport(768)).toBe(false);
+    expect(isWebMobileViewport(960, 400)).toBe(false);
   });
 });
 
