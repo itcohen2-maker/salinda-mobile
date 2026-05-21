@@ -251,12 +251,15 @@ describe('OnlineTableScreens LobbyScreen', () => {
       tables: [{ ...baseTable, currentParticipants: 1 }],
     });
 
-    expect(screen.getByText('If no players are available, you can play with the bot.')).toBeTruthy();
-    expect(screen.getByText('Bot level (vs bot)')).toBeTruthy();
+    expect(screen.getByText('If no players are available, you can play against Salinda.')).toBeTruthy();
+    expect(screen.getByText('Choose difficulty')).toBeTruthy();
     expect(screen.getByText('Easy')).toBeTruthy();
     expect(screen.getByText('Medium')).toBeTruthy();
     expect(screen.getByText('Hard')).toBeTruthy();
-    expect(screen.getByText('Start vs bot')).toBeTruthy();
+    expect(screen.getByText('Duel vs Salinda')).toBeTruthy();
+
+    const difficultyLabelStyle = StyleSheet.flatten(screen.getByText('Choose difficulty').props.style);
+    expect(difficultyLabelStyle.textAlign).toBe('center');
   });
 
   it('centers the configuration menu blocks on Android RTL', () => {
@@ -358,7 +361,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(screen.getByTestId('lobby-summary-card-timer')).toBeTruthy();
   });
 
-  it('calls onStartLocalBotGame with difficulty and settings when Start vs bot is pressed', () => {
+  it('calls onStartLocalBotGame with difficulty and settings when Duel vs Salinda is pressed', () => {
     const onStartLocalBotGame = jest.fn();
 
     renderLobbyScreen(
@@ -370,7 +373,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
       onStartLocalBotGame,
     );
 
-    fireEvent.press(screen.getByText('Start vs bot'));
+    fireEvent.press(screen.getByText('Duel vs Salinda'));
 
     expect(onStartLocalBotGame).toHaveBeenCalledTimes(1);
     expect(onStartLocalBotGame).toHaveBeenCalledWith(

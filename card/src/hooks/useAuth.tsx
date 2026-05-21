@@ -63,49 +63,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const TUTORIAL_COINS_KEY = 'lulos_tutorial_coins_earned_count';
 const TUTORIAL_COINS_SYNCED_KEY = 'lulos_tutorial_coins_synced';
 const LOCAL_WILD_OWNED_KEY_PREFIX = 'lulos_local_wild_owned:';
-const MIN_PROFILE_COINS = 10000;
-const LOCAL_MIN_PROFILE_COINS_SEEDED_KEY_PREFIX = `lulos_local_min_profile_coins_seeded:${MIN_PROFILE_COINS}:`;
 
 function localWildOwnedKey(userId: string): string {
   return `${LOCAL_WILD_OWNED_KEY_PREFIX}${userId}`;
 }
 
-function localMinProfileCoinsSeededKey(userId: string): string {
-  return `${LOCAL_MIN_PROFILE_COINS_SEEDED_KEY_PREFIX}${userId}`;
-}
-
-export async function ensureMinimumProfileCoins(userId: string, currentCoins: number): Promise<number> {
-  const safeCoins = Math.max(0, Math.floor(Number(currentCoins) || 0));
-  const seededKey = localMinProfileCoinsSeededKey(userId);
-
-  try {
-    const alreadySeeded = await AsyncStorage.getItem(seededKey);
-    if (alreadySeeded === 'true') {
-      return safeCoins;
-    }
-
-    if (safeCoins >= MIN_PROFILE_COINS) {
-      await AsyncStorage.setItem(seededKey, 'true');
-      return safeCoins;
-    }
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ total_coins: MIN_PROFILE_COINS })
-      .eq('id', userId)
-      .lt('total_coins', MIN_PROFILE_COINS);
-
-    if (error) {
-      console.warn('[auth] ensureMinimumProfileCoins error:', error.message);
-      return safeCoins;
-    }
-
-    await AsyncStorage.setItem(seededKey, 'true');
-    return MIN_PROFILE_COINS;
-  } catch (err) {
-    console.warn('[auth] ensureMinimumProfileCoins exception:', err);
-    return safeCoins;
-  }
+export async function ensureMinimumProfileCoins(_userId: string, currentCoins: number): Promise<number> {
+  const normalizedCoins = Number(currentCoins);
+  if (!Number.isFinite(normalizedCoins)) return 0;
+  return Math.max(0, Math.floor(normalizedCoins));
 }
 
 /** Migrate tutorial coins from AsyncStorage to Supabase. One-time, idempotent. */

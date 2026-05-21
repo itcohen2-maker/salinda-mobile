@@ -55,3 +55,4 @@ yarn-error.*
 # Superpowers brainstorm sessions (local-only mockups)
 .superpowers/
 
+.mcp.json

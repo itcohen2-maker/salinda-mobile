@@ -88,7 +88,8 @@
           "organization": "itzikcohen",
           "project": "react-native"
         }
-      ]
+      ],
+      "expo-updates"
     ]
   }
 }

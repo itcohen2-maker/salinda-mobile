@@ -6,7 +6,7 @@
 // ============================================================
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Text, View } from 'react-native';
+import { Animated, Easing, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 export type HappyBubbleTone = 'demo' | 'turn' | 'celebrate' | 'welcome' | 'buttonRed' | 'buttonOrange';
 
@@ -37,6 +37,8 @@ type Props = {
   maxWidth?: number | string;
   /** `compact` shrinks padding, font, and border for a less intrusive bubble. */
   size?: 'normal' | 'compact';
+  /** Optional style override for the body text only. */
+  textStyleOverride?: StyleProp<TextStyle>;
 };
 
 export function HappyBubble({
@@ -48,6 +50,7 @@ export function HappyBubble({
   tailTop = false,
   maxWidth = '88%',
   size = 'normal',
+  textStyleOverride,
 }: Props): React.ReactElement {
   const compact = size === 'compact';
   const scale = useRef(new Animated.Value(0)).current;
@@ -86,7 +89,20 @@ export function HappyBubble({
             {title}
           </Text>
         ) : null}
-        <Text style={{ color: palette.text, fontSize: compact ? 14 : 18, lineHeight: compact ? 18 : undefined, fontWeight: '800', textAlign: 'center' }}>{text}</Text>
+        <Text
+          style={[
+            {
+              color: palette.text,
+              fontSize: compact ? 14 : 18,
+              lineHeight: compact ? 18 : undefined,
+              fontWeight: '800',
+              textAlign: 'center',
+            },
+            textStyleOverride,
+          ]}
+        >
+          {text}
+        </Text>
       </Animated.View>
       {withTail && !tailTop ? (
         arrowSize === 'big' ? (

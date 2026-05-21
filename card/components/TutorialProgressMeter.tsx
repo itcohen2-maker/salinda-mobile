@@ -7,6 +7,7 @@ type Props = {
   pulseKey?: number;
   isCelebrating?: boolean;
   testID?: string;
+  layerNumber?: number;
 };
 
 export default function TutorialProgressMeter({
@@ -14,9 +15,19 @@ export default function TutorialProgressMeter({
   pulseKey,
   isCelebrating = false,
   testID,
+  layerNumber,
 }: Props) {
   const width = 34;
   const height = 104;
+  const stepMarkers = [
+    { step: 1, pct: 33 },
+    { step: 2, pct: 66 },
+    { step: 3, pct: 100 },
+  ];
+  const wrapWidth = 52;
+  const wrapHeight = 116;
+  const shellTop = (wrapHeight - height) / 2;
+  const markerLeft = (wrapWidth - width) / 2 + width + 3;
   const fillHeight = useRef(new Animated.Value((Math.max(0, Math.min(100, value)) / 100) * height)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -117,15 +128,34 @@ export default function TutorialProgressMeter({
             <View style={styles.glossTrack} />
           </View>
         </View>
+        {stepMarkers.map(({ step, pct }) => (
+          <View
+            key={step}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: markerLeft,
+              bottom: shellTop + (pct / 100) * height - 7,
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: 2,
+            }}
+          >
+            <View style={styles.stepTick} />
+            <Text style={styles.stepLabel}>{step}</Text>
+          </View>
+        ))}
       </Animated.View>
-      <Text style={styles.valueLabel}>{Math.round(value)}</Text>
+      {layerNumber !== undefined && (
+        <Text style={styles.layerLabel}>{layerNumber}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    width: 44,
+    width: 52,
     height: 116,
     alignItems: 'center',
     justifyContent: 'center',
@@ -190,11 +220,23 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
-  valueLabel: {
-    marginTop: 4,
+  stepTick: {
+    width: 8,
+    height: 1.5,
+    backgroundColor: 'rgba(255,220,80,0.9)',
+    marginTop: 6,
+  },
+  stepLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(200,220,255,0.85)',
+    fontWeight: '800',
+    color: '#FFD700',
+    lineHeight: 14,
+  },
+  layerLabel: {
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFD700',
     textAlign: 'center',
   },
 });

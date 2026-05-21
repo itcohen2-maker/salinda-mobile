@@ -1,0 +1,368 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+
+import { useFeedbackAdmin } from '../feedback/useFeedbackAdmin';
+import { useAuth } from '../hooks/useAuth';
+import { useLocale } from '../i18n/LocaleContext';
+import { supabase } from '../lib/supabase';
+
+type FeedbackSubmissionStatus = 'new' | 'reviewed' | 'archived';
+type FeedbackSubmissionKind = 'game' | 'tutorial' | 'general';
+
+interface FeedbackSubmissionRow {
+  id: string;
+  username_snapshot: string | null;
+  is_anonymous: boolean;
+  locale: string;
+  experience_kind: FeedbackSubmissionKind;
+  rating: number;
+  comment: string;
+  platform: string;
+  app_version: string | null;
+  status: FeedbackSubmissionStatus;
+  created_at: string;
+}
+
+function formatTimestamp(value: string, locale: 'he' | 'en'): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(locale === 'he' ? 'he-IL' : 'en-US');
+}
+
+function stars(rating: number): string {
+  const safeRating = Math.max(1, Math.min(5, Math.round(rating)));
+  return '★'.repeat(safeRating);
+}
+
+function statusColor(status: FeedbackSubmissionStatus): string {
+  if (status === 'reviewed') return '#93C5FD';
+  if (status === 'archived') return '#CBD5E1';
+  return '#FCD34D';
+}
+
+export function FeedbackInboxScreen({ onBack }: { onBack: () => void }) {
+  const { locale, t, isRTL } = useLocale();
+  const { user } = useAuth();
+  const { isFeedbackAdmin, loading: adminLoading } = useFeedbackAdmin();
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackSubmissionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [copiedFeedbackId, setCopiedFeedbackId] = useState<string | null>(null);
+  const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadFeedbackItems = useCallback(async () => {
+    if (!user?.id || !isFeedbackAdmin) {
+      setFeedbackItems([]);
+      setHasError(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setHasError(false);
+    try {
+      const { data, error: queryError } = await supabase
+        .from('feedback_submissions')
+        .select(
+          'id, username_snapshot, is_anonymous, locale, experience_kind, rating, comment, platform, app_version, status, created_at',
+        )
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (queryError) {
+        setFeedbackItems([]);
+        setHasError(true);
+        return;
+      }
+
+      setFeedbackItems(Array.isArray(data) ? (data as FeedbackSubmissionRow[]) : []);
+    } catch {
+      setFeedbackItems([]);
+      setHasError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [isFeedbackAdmin, user?.id]);
+
+  useEffect(() => {
+    void loadFeedbackItems();
+  }, [loadFeedbackItems]);
+
+  useEffect(() => () => {
+    if (copiedResetTimerRef.current) {
+      clearTimeout(copiedResetTimerRef.current);
+      copiedResetTimerRef.current = null;
+    }
+  }, []);
+
+  const cardDirection = isRTL ? 'rtl' : 'ltr';
+  const labelAlign = isRTL ? 'right' : 'left';
+  const emptyMessage = hasError ? t('feedbackInbox.error') : t('feedbackInbox.empty');
+  const copyHint = locale === 'he' ? 'לחצו על השם להעתקה' : 'Tap username to copy';
+  const copiedLabel = locale === 'he' ? 'הועתק' : 'Copied';
+
+  const handleCopyUsername = useCallback(async (feedbackId: string, username: string) => {
+    const safeUsername = username.trim();
+    if (!safeUsername) return;
+
+    await Clipboard.setStringAsync(safeUsername);
+    setCopiedFeedbackId(feedbackId);
+
+    if (copiedResetTimerRef.current) {
+      clearTimeout(copiedResetTimerRef.current);
+    }
+
+    copiedResetTimerRef.current = setTimeout(() => {
+      setCopiedFeedbackId((currentId) => (currentId === feedbackId ? null : currentId));
+      copiedResetTimerRef.current = null;
+    }, 1600);
+  }, []);
+
+  if (adminLoading) {
+    return (
+      <View style={styles.loadingShell}>
+        <ActivityIndicator size="large" color="#FACC15" />
+      </View>
+    );
+  }
+
+  if (!isFeedbackAdmin) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={onBack} style={styles.headerButton}>
+            <Text style={styles.headerButtonText}>{t('feedbackInbox.back')}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centerCard}>
+          <Text style={styles.centerTitle}>{t('feedbackInbox.noAccessTitle')}</Text>
+          <Text style={styles.centerBody}>{t('feedbackInbox.noAccessBody')}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={onBack} style={styles.headerButton}>
+          <Text style={styles.headerButtonText}>{t('feedbackInbox.back')}</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{t('feedbackInbox.title')}</Text>
+        <TouchableOpacity onPress={() => void loadFeedbackItems()} style={styles.headerButton}>
+          <Text style={styles.headerButtonText}>{t('feedbackInbox.refresh')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.subtitle}>{t('feedbackInbox.subtitle')}</Text>
+
+      {loading ? (
+        <View style={styles.loadingShell}>
+          <ActivityIndicator size="large" color="#FACC15" />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={feedbackItems.length > 0 ? styles.scrollContent : styles.emptyContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {feedbackItems.length === 0 ? (
+            <View style={styles.centerCard}>
+              <Text style={styles.centerBody}>{emptyMessage}</Text>
+            </View>
+          ) : (
+            feedbackItems.map((item) => (
+              <View key={item.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderMain}>
+                    {item.username_snapshot?.trim() ? (
+                      <TouchableOpacity
+                        onPress={() => void handleCopyUsername(item.id, item.username_snapshot ?? '')}
+                        style={styles.senderButton}
+                        activeOpacity={0.82}
+                        testID={`feedback-copy-username-${item.id}`}
+                      >
+                        <Text style={styles.senderText}>{item.username_snapshot.trim()}</Text>
+                        <Text style={styles.copyHintText}>
+                          {copiedFeedbackId === item.id ? copiedLabel : copyHint}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.senderText}>
+                        {item.is_anonymous ? t('feedbackInbox.senderAnonymous') : t('feedbackInbox.senderUnknown')}
+                      </Text>
+                    )}
+                    <Text style={styles.timestampText}>{formatTimestamp(item.created_at, locale)}</Text>
+                  </View>
+                  <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
+                    {t(`feedbackInbox.status.${item.status}`)}
+                  </Text>
+                </View>
+
+                <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                  {`${t(`feedbackInbox.kind.${item.experience_kind}`)} · ${stars(item.rating)} · ${item.platform}`}
+                </Text>
+                <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                  {`${t('feedbackInbox.locale')}: ${item.locale}${item.app_version ? ` · ${t('feedbackInbox.version')}: ${item.app_version}` : ''}`}
+                </Text>
+                <Text style={[styles.commentText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                  {item.comment.trim() || t('feedbackInbox.noComment')}
+                </Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#0A1628',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 24,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  headerButton: {
+    minWidth: 92,
+    minHeight: 40,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37,99,235,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.34)',
+  },
+  headerButtonText: {
+    color: '#BFDBFE',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  headerTitle: {
+    flex: 1,
+    color: '#F8FAFC',
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  subtitle: {
+    marginTop: 12,
+    color: '#CBD5E1',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  scroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  scrollContent: {
+    gap: 12,
+    paddingBottom: 12,
+  },
+  emptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  loadingShell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerCard: {
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    backgroundColor: 'rgba(15,23,42,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerTitle: {
+    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  centerBody: {
+    color: '#CBD5E1',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  card: {
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(9,23,43,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,252,0.24)',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cardHeaderMain: {
+    flex: 1,
+  },
+  senderButton: {
+    alignSelf: 'flex-start',
+  },
+  senderText: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  copyHintText: {
+    color: '#7DD3FC',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
+    textDecorationLine: 'underline',
+  },
+  timestampText: {
+    color: '#93C5FD',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  metaText: {
+    color: '#BFDBFE',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  commentText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+});

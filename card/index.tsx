@@ -1366,6 +1366,29 @@ function parseEquationDisplayForUi(
   return { numbers, operators, parensRight };
 }
 
+function resolveEquationDiceIndicesForUi(
+  equationDisplay: string | null | undefined,
+  diceValues: readonly number[],
+): { parsed: { numbers: number[]; operators: Operation[]; parensRight: boolean }; indices: [number, number, number | null] } | null {
+  const parsed = parseEquationDisplayForUi(equationDisplay);
+  if (!parsed) return null;
+  const used = diceValues.map(() => false);
+  const pickIndexForValue = (value: number): number | null => {
+    let idx = diceValues.findIndex((v, i) => v === value && !used[i]);
+    if (idx === -1) idx = diceValues.findIndex((v) => v === value);
+    if (idx === -1) return null;
+    used[idx] = true;
+    return idx;
+  };
+  const idx0 = pickIndexForValue(parsed.numbers[0] ?? Number.NaN);
+  const idx1 = pickIndexForValue(parsed.numbers[1] ?? Number.NaN);
+  const idx2 = parsed.numbers.length >= 3
+    ? pickIndexForValue(parsed.numbers[2] ?? Number.NaN)
+    : null;
+  if (idx0 === null || idx1 === null) return null;
+  return { parsed, indices: [idx0, idx1, idx2] };
+}
+
 function isOperationAllowedForStage(s: string | Operation | null, allowed: readonly Operation[]): boolean {
   const t = displayOrOperationToToken(s);
   if (!t) return true;
@@ -6754,6 +6777,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
         seen.add(normalized);
         if (seen.size === 4) tutorialBus.emitUserEvent({ kind: 'l5AllSignsCycled' });
       }
+    } else if (state.isTutorial && tutorialBus.getL4GuidedEqValidationMode()) {
+      const normalized = normalizeOperationToken(next);
+      if (!normalized) return;
+      tutorialBus.emitUserEvent({ kind: 'opSelected', op: normalized, via: 'cycle' });
     } else if (state.isTutorial && tutorialBus.getL7GuidedMode()) {
       const normalized = normalizeOperationToken(next);
       if (!normalized) return;
@@ -6802,24 +6829,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       botAutofillKeyRef.current = null;
       return;
     }
-    const parsed = parseEquationDisplayForUi(state.lastEquationDisplay);
-    if (!parsed) return;
+    const resolved = resolveEquationDiceIndicesForUi(state.lastEquationDisplay, diceValues);
+    if (!resolved) return;
+    const { parsed, indices: [idx0, idx1, idx2] } = resolved;
     const runKey = `${state.currentPlayerIndex}|${state.lastEquationDisplay}|${state.equationResult ?? 'x'}`;
     if (botAutofillKeyRef.current === runKey) return;
-    const used = [false, false, false];
-    const pickIndexForValue = (value: number): number | null => {
-      let idx = diceValues.findIndex((v, i) => v === value && !used[i]);
-      if (idx === -1) idx = diceValues.findIndex((v) => v === value);
-      if (idx === -1) return null;
-      used[idx] = true;
-      return idx;
-    };
-    const idx0 = pickIndexForValue(parsed.numbers[0] ?? Number.NaN);
-    const idx1 = pickIndexForValue(parsed.numbers[1] ?? Number.NaN);
-    const idx2 =
-      parsed.numbers.length >= 3
-        ? pickIndexForValue(parsed.numbers[2] ?? Number.NaN)
-        : null;
     if (idx0 !== null && idx1 !== null) {
       botAutofillKeyRef.current = runKey;
       const stepMs = 1000;
@@ -6872,23 +6886,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       tutorialSolvedAutofillKeyRef.current = null;
       return;
     }
-    const parsed = parseEquationDisplayForUi(state.lastEquationDisplay);
-    if (!parsed) return;
+    const resolved = resolveEquationDiceIndicesForUi(state.lastEquationDisplay, diceValues);
+    if (!resolved) return;
+    const { parsed, indices: [idx0, idx1, idx2] } = resolved;
     const runKey = `${state.currentPlayerIndex}|${state.lastEquationDisplay}|${state.equationResult ?? 'x'}`;
-    const used = [false, false, false];
-    const pickIndexForValue = (value: number): number | null => {
-      let idx = diceValues.findIndex((v, i) => v === value && !used[i]);
-      if (idx === -1) idx = diceValues.findIndex((v) => v === value);
-      if (idx === -1) return null;
-      used[idx] = true;
-      return idx;
-    };
-    const idx0 = pickIndexForValue(parsed.numbers[0] ?? Number.NaN);
-    const idx1 = pickIndexForValue(parsed.numbers[1] ?? Number.NaN);
-    const idx2 =
-      parsed.numbers.length >= 3
-        ? pickIndexForValue(parsed.numbers[2] ?? Number.NaN)
-        : null;
     if (idx0 === null || idx1 === null) return;
     const alreadyFilled =
       tutorialSolvedAutofillKeyRef.current === runKey &&
@@ -7083,11 +7084,16 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       // L5.1 target phase — animate the halo around the target number, but
       // DON'T auto-confirm or fire eqReadyToConfirm (the learner hasn't
       // placed a card yet).
-    } else if (tutorialBus.getL4Step3Mode()) {
-      // Lesson-4 step-3 guided full build: hand control over to the learner
-      // — no auto-confirm, and let the tutorial know the equation is ready
-      // so it can advance its "press the confirm button" sub-phase + arrow.
-      if (!isSolved) tutorialBus.emitUserEvent({ kind: 'eqReadyToConfirm' });
+    } else if (tutorialBus.getL4GuidedEqValidationMode()) {
+      // Lesson-4 step-3 guided full build: the exercise itself is still
+      // step-driven, but the learner should move straight from "valid
+      // equation" to "pick the matching card" without a separate confirm tap.
+      if (!tutorialAutoConfirmedRef.current && !isSolved) {
+        tutorialAutoConfirmedRef.current = true;
+        tutorialBus.setLastEquationResult(finalResult);
+        tutorialBus.emitUserEvent({ kind: 'eqReadyToConfirm' });
+        setTimeout(() => confirmRef.current?.(), 420);
+      }
     } else if (tutorialBus.getL5GuidedMode()) {
       // Lesson 5: sandbox for dice + operation signs (+ joker placement) —
       // never auto-confirm into solved / card-pick flow.
@@ -7607,21 +7613,45 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // the whole wrap, so the result box can keep full opacity and pulse
   // without fighting a parent opacity multiplier.
   const solvedDimStyle = isSolved && !state.isTutorial ? { opacity: 0.5 } : null;
+  const tutorialSolvedDiceResolution =
+    !state.isTutorial || !isSolved || state.hasPlayedCards || state.showPossibleResults
+      ? null
+      : resolveEquationDiceIndicesForUi(state.lastEquationDisplay, diceValues);
+  const tutorialSolvedUsedDice = tutorialSolvedDiceResolution
+    ? new Set(tutorialSolvedDiceResolution.indices.filter((index): index is number => index !== null))
+    : null;
+  const shouldHideUnusedSolvedTutorialDice =
+    state.isTutorial &&
+    isSolved &&
+    !state.hasPlayedCards &&
+    !state.showPossibleResults &&
+    tutorialSolvedUsedDice !== null &&
+    tutorialSolvedUsedDice.size > 0;
+  const visibleDiceSet: Set<number> = shouldHideUnusedSolvedTutorialDice
+    ? (tutorialSolvedUsedDice ?? usedDice)
+    : usedDice;
+  const visibleDiceEntries = shouldHideUnusedSolvedTutorialDice
+    ? diceValues
+        .map((value, index) => ({ value, index }))
+        .filter(({ index }) => tutorialSolvedUsedDice?.has(index))
+    : diceValues.map((value, index) => ({ value, index }));
 
   return (
     <View style={[
       eqS.wrap,
       { transform: [{ translateX: EQUATION_BUILDER_FINE_OFFSET_X }, { translateY: EQUATION_BUILDER_FINE_OFFSET_Y }] },
     ]} testID="equation-area">
-      {/* Dice pool — בטוטוריאל נשאר גלוי גם אחרי האישור כדי שהשחקן
-          יראה שמתוך שלוש הקוביות בחרנו שתיים בלבד (השלישית עדיין זמינה).
-          חריג: בשיעור 6 (possible-results; מזוהה לפי state.showPossibleResults
-          שמופעל רק שם בתוך הדרכה) מסתירים את שורת הקוביות כי התרגיל כולו
-          מלא מראש והקוביות רק מסיחות את הדעת מהמיני־קלפים. */}
+      {/* Dice pool. In tutorial solved states that lead into card-picking,
+          keep only the dice that actually participated in the confirmed
+          equation so unused dice do not compete with the next action.
+          Exception: in lesson 6 (possible-results; identified by
+          state.showPossibleResults in tutorial mode) the whole dice row is
+          hidden because the prefilled reference equation should not compete
+          with the mini-cards. */}
       {(!isSolved || state.isTutorial) && !(state.isTutorial && state.showPossibleResults && !tutorialBus.getL7GuidedMode() && !tutorialBus.getL9ParensFilter()) && (
         <View style={eqS.diceRow}>
-          {diceValues.map((dv, dIdx) => {
-            const isUsed = usedDice.has(dIdx);
+          {visibleDiceEntries.map(({ value: dv, index: dIdx }) => {
+            const isUsed = visibleDiceSet.has(dIdx);
             const dropAnim = dropAnims[dIdx];
             const flipAnim = flipAnims[dIdx];
             const isFace = showingFace[dIdx];
@@ -7664,7 +7694,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                     isUsed && eqS.diceBtnUsed,
                     // Tutorial hint: unused dice glow when the equation is
                     // partially filled, nudging the learner to tap one.
-                    state.isTutorial && !isUsed && !isFace && usedDice.size > 0 && !l4bDicePulseOn && {
+                    state.isTutorial && !isUsed && !isFace && visibleDiceSet.size > 0 && !l4bDicePulseOn && {
                       borderColor: '#FCD34D',
                       borderWidth: 3,
                       backgroundColor: 'rgba(252,211,77,0.15)',
@@ -7725,7 +7755,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 {char}
               </Text>
             );
-            const midEqVisible = !parensRight && show3rd;
             return (
               <>
                 {/* outer left bracket — visible only in LEFT mode. Hidden in
@@ -7744,24 +7773,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 <View>{renderDiceSlot(dice2, 2)}</View>
                 {/* mid-close bracket — visible only in LEFT mode (after d2) */}
                 {show3rd && !isL5aSimple ? renderBracket(')', !parensRight) : null}
-                {/* = + subResultBox — visible only in LEFT mode. Also hidden
-                    during lesson 5a so the learner sees just `[a] [?] [b]`. */}
-                {show3rd && !isL5aSimple ? (
-                  <>
-                    <Text
-                      style={[eqS.equalsSmall, (!midEqVisible || subResult === null) && eqS.hiddenMiddle]}
-                      allowFontScaling={false}
-                    >=</Text>
-                    <View style={[eqS.subResultBox, !midEqVisible && eqS.hiddenMiddle]} pointerEvents={midEqVisible ? 'auto' : 'none'}>
-                      <Text
-                        style={[eqS.subResultVal, (!midEqVisible || subResult === null) && eqS.hiddenMiddle]}
-                        allowFontScaling={false}
-                      >
-                        {midEqVisible && subResult !== null ? String(subResult) : '0'}
-                      </Text>
-                    </View>
-                  </>
-                ) : null}
                 {/* op2 + d3 (kept as a chunk for inner gap). Lesson 5a hides
                     the whole chunk — the third slot + second op belong to the
                     advanced equation and would confuse the sign-cycle lesson. */}
@@ -7939,19 +7950,6 @@ const eqS = StyleSheet.create({
   /** קבוצה שלמה של סלוטים+סימנים — לא נשברת באמצע */
   eqChunk: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
   bracket: { fontSize: 36, lineHeight: 44, fontWeight: '900', color: '#F97316', marginHorizontal: 1, textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  equalsSmall: { fontSize: 14, fontWeight: '800', color: 'rgba(0,0,0,0.5)', marginHorizontal: 1 },
-  subResultBox: {
-    minWidth: 30,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  subResultVal: { fontSize: 14, fontWeight: '800', color: '#1a1a2e' },
   hiddenMiddle: { display: 'none' as any },
   // סלוטים למספרים — 44×44 לנוחות
   slot: { width: 44, height: 44, minWidth: 44, minHeight: 44, flexShrink: 0, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' as const },
@@ -9440,6 +9438,36 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       return;
     }
     if (so) {
+      const isL4Step3SingleCardMode =
+        state.isTutorial &&
+        tutorialBus.getL4GuidedEqValidationMode() &&
+        state.equationResult != null;
+      if (isL4Step3SingleCardMode) {
+        const stagedCorrectCard = state.stagedCards.find(
+          (stagedCard) =>
+            stagedCard.type === 'number' &&
+            stagedCard.value === state.equationResult,
+        );
+        const isMatchingNumber =
+          card.type === 'number' &&
+          card.value === state.equationResult;
+        if (!isMatchingNumber) {
+          tutorialBus.emitUserEvent({ kind: 'l4Step3WrongCard', cardId: card.id });
+          return;
+        }
+        if (stagedCorrectCard && stagedCorrectCard.id !== card.id) {
+          tutorialBus.emitUserEvent({ kind: 'l4Step3WrongCard', cardId: card.id });
+          return;
+        }
+        state.stagedCards.forEach((stagedCard) => {
+          if (stagedCard.id !== card.id) dispatch({ type: 'UNSTAGE_CARD', card: stagedCard });
+        });
+        if (!stagedCorrectCard) {
+          dispatch({ type: 'STAGE_CARD', card });
+        }
+        tutorialBus.emitUserEvent({ kind: 'l4Step3CardAccepted', cardId: card.id });
+        return;
+      }
       // Solved phase: number + operation + wild ? stage/unstage, fraction, joker
       if(card.type==='number' || card.type==='operation' || card.type==='wild') {
         // During bot-demo in tutorial, block user staging so mid-demo taps don't corrupt state
@@ -17298,10 +17326,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         </View>
       ) : null}
 
-      {/* בחר קלפים — מיקום קבוע שלא יסתיר את המניפה. בטוטוריאל: בדרך כלל
-          אישור אוטומטי, אבל בשיעור 4 שלב 3 (guided full build) הכפתור חוזר
-          כדי שהלומד ילחץ עליו בעצמו והטוטוריאל יצייר עליו חץ. */}
-      {canUseActiveTurnUi && state.phase === 'building' && !state.hasPlayedCards && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getManualEqConfirm()) && (
+      {/* בחר קלפים — מיקום קבוע שלא יסתיר את המניפה. בטוטוריאל: ברירת
+          המחדל היא אישור אוטומטי; רק שלבי manual-confirm מפעילים שוב את
+          הכפתור האמיתי. */}
+      {canUseActiveTurnUi && state.phase === 'building' && !state.hasPlayedCards && (!state.isTutorial || tutorialBus.getManualEqConfirm()) && (
         <View
           style={{
             position: 'absolute',
@@ -17314,7 +17342,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           pointerEvents="auto"
         >
           {(() => {
-            const showTutorialConfirm = state.isTutorial && (tutorialBus.getL4Step3Mode() || tutorialBus.getManualEqConfirm());
+            const showTutorialConfirm = state.isTutorial && tutorialBus.getManualEqConfirm();
             const showBuildPlaceholder =
               !state.isTutorial &&
               state.mode === 'solo' &&
@@ -17322,7 +17350,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             if (showBuildPlaceholder) return null;
             const confirmLabel = t('game.buildingEquationNext');
             const confirmDisabled = !eqConfirm;
-            const showTutorialPulse = state.isTutorial && tutorialBus.getL4Step3Mode();
+            const showTutorialPulse = state.isTutorial && tutorialBus.getManualEqConfirm();
             const showTutorialConfirmArrow = showTutorialPulse && !tutorialBus.getL7Step1Mode();
             const showConfirmAttentionPulse = showTutorialPulse || showSoloBuildConfirmHint;
             const showConfirmAttentionArrow = showTutorialConfirmArrow;
@@ -17332,7 +17360,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               <Animated.View
                 ref={confirmBtnWrapperRef}
                 onLayout={() => {
-                  if (!state.isTutorial || !tutorialBus.getL4Step3Mode()) return;
+                  if (!state.isTutorial || !tutorialBus.getManualEqConfirm()) return;
                   confirmBtnWrapperRef.current?.measureInWindow?.((x, y, w, h) => {
                     tutorialBus.setLayout('confirmEqBtn', { top: y, left: x, width: w, height: h });
                   });
@@ -20983,6 +21011,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   pulseKey={tutorialMeter.pulseKey}
                   isCelebrating={tutorialMeter.isCelebrating}
                   testID="tutorial-header-meter"
+                  layerNumber={tutorialMeter.layerNumber}
                 />
               </View>
             </View>

@@ -1,0 +1,38 @@
+# Dev tool output / screenshots
+_bmad-output/
+.codex-*
+30%
+
+# Large dev assets not needed for build
+capsules-assets.zip
+celebration-mockup.html
+check-app.js
+check2.js
+
+# Planning / docs
+PLAN_*.md
+docs/
+
+# IDE / tool configs
+.cursor/
+.superpowers/
+.claude/
+
+# Test artifacts
+.expo-export-test/
+playwright-report/
+test-results/
+tests/results/
+
+# Logs
+*.log
+*.err.log
+
+# Git
+.git/
+
+# Already in .gitignore (belt + suspenders)
+node_modules/
+.expo/
+dist/
+web-build/

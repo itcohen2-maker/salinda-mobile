@@ -1,7 +1,6 @@
 import {
   FEEDBACK_PROMPT_COOLDOWN_MS,
   FEEDBACK_PROMPT_SESSION_INTERVAL,
-  buildFeedbackMailtoUrl,
   canOfferFeedbackPrompt,
   DEFAULT_FEEDBACK_PROMPT_STATE,
   markFeedbackPromptHandled,
@@ -78,34 +77,5 @@ describe('feedback prompt rules', () => {
       lastPromptAt: null,
       lastHandledType: null,
     });
-  });
-});
-
-describe('buildFeedbackMailtoUrl', () => {
-  it('includes localized subject, kind, rating and comment', () => {
-    const url = buildFeedbackMailtoUrl({
-      locale: 'he',
-      kind: 'tutorial',
-      rating: 4,
-      comment: 'היה ברור ונעים',
-    });
-    const decoded = decodeURIComponent(url);
-
-    expect(decoded).toContain('mailto:salindagame@gmail.com?subject=פידבק על Salinda');
-    expect(decoded).toContain('סוג חוויה: הדרכה');
-    expect(decoded).toContain('דירוג: ★★★★ (4/5)');
-    expect(decoded).toContain('הערה:\nהיה ברור ונעים');
-  });
-
-  it('supports general feedback from the home screen', () => {
-    const url = buildFeedbackMailtoUrl({
-      locale: 'en',
-      kind: 'general',
-      rating: 5,
-    });
-    const decoded = decodeURIComponent(url);
-
-    expect(decoded).toContain('Experience: General');
-    expect(decoded).toContain('Rating: ★★★★★ (5/5)');
   });
 });

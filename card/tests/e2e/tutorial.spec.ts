@@ -42,8 +42,8 @@ test.describe('Tutorial entry flow', () => {
     await expectCenteredShell(412);
     await page.getByTestId('lobby-tutorial').click({ timeout: 30_000 });
 
-    await expect(page.getByText(/welcome!/i)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/let's go!/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/welcome to selinda/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/let's go/i)).toBeVisible({ timeout: 30_000 });
     await expectCenteredShell(412);
     assertNoErrors();
   });

@@ -1,4 +1,3 @@
-export const FEEDBACK_EMAIL = 'salindagame@gmail.com';
 export const FEEDBACK_PROMPT_STORAGE_KEY = 'salinda_feedback_prompt_state_v1';
 export const FEEDBACK_PROMPT_SESSION_INTERVAL = 10;
 export const FEEDBACK_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -11,19 +10,6 @@ export interface FeedbackPromptState {
   lastPromptSessionCount: number;
   lastPromptAt: number | null;
   lastHandledType: FeedbackPromptHandledType | null;
-}
-
-export interface FeedbackMailtoOptions {
-  email?: string;
-  locale: string;
-  kind: FeedbackExperienceKind;
-  rating: number;
-  comment?: string;
-}
-
-interface FeedbackDraft {
-  subject: string;
-  body: string;
 }
 
 export const DEFAULT_FEEDBACK_PROMPT_STATE: FeedbackPromptState = {
@@ -92,67 +78,5 @@ export function markFeedbackPromptHandled(
     lastPromptSessionCount: state.completedSessionsCount,
     lastPromptAt: now,
     lastHandledType: handledType,
-  };
-}
-
-export function buildFeedbackMailtoUrl({
-  email = FEEDBACK_EMAIL,
-  locale,
-  kind,
-  rating,
-  comment,
-}: FeedbackMailtoOptions): string {
-  const draft = buildFeedbackDraft({ locale, kind, rating, comment });
-
-  return `mailto:${email}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
-}
-
-export function buildFeedbackGmailComposeUrl({
-  email = FEEDBACK_EMAIL,
-  locale,
-  kind,
-  rating,
-  comment,
-}: FeedbackMailtoOptions): string {
-  const draft = buildFeedbackDraft({ locale, kind, rating, comment });
-
-  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
-}
-
-function buildFeedbackDraft({
-  locale,
-  kind,
-  rating,
-  comment,
-}: Omit<FeedbackMailtoOptions, 'email'>): FeedbackDraft {
-  const isHebrew = locale === 'he';
-  const subject = isHebrew ? 'פידבק על Salinda' : 'Feedback for Salinda';
-  const experienceLabel = isHebrew
-    ? kind === 'tutorial'
-      ? 'הדרכה'
-      : kind === 'game'
-        ? 'משחק'
-        : 'כללי'
-    : kind === 'tutorial'
-      ? 'Tutorial'
-      : kind === 'game'
-        ? 'Game'
-        : 'General';
-  const lines = [
-    isHebrew ? 'פידבק חדש מ-Salinda' : 'New Salinda feedback',
-    '',
-    `${isHebrew ? 'סוג חוויה' : 'Experience'}: ${experienceLabel}`,
-    `${isHebrew ? 'דירוג' : 'Rating'}: ${'★'.repeat(Math.max(1, Math.min(5, Math.round(rating))))} (${rating}/5)`,
-  ];
-  const trimmedComment = (comment ?? '').trim();
-  if (trimmedComment) {
-    lines.push('');
-    lines.push(`${isHebrew ? 'הערה' : 'Comment'}:`);
-    lines.push(trimmedComment);
-  }
-
-  return {
-    subject,
-    body: lines.join('\n'),
   };
 }

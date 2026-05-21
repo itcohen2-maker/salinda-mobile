@@ -8,18 +8,15 @@ import {
   View,
 } from 'react-native';
 
+import type { FeedbackSubmitResult } from '../../feedback/submitFeedback';
 import type { FeedbackExperienceKind } from '../../feedback/promptState';
 
-type SubmitResult = 'opened' | 'fallback';
-
 interface FeedbackMailCardProps {
-  email: string;
   isRTL: boolean;
   locale: string;
   promptKind: FeedbackExperienceKind;
-  onCopyEmail: () => Promise<void> | void;
   onDismiss: () => void;
-  onSubmit: (payload: { rating: number; comment: string }) => Promise<SubmitResult> | SubmitResult;
+  onSubmit: (payload: { rating: number; comment: string }) => Promise<FeedbackSubmitResult> | FeedbackSubmitResult;
   dismissLabel?: string;
 }
 
@@ -30,26 +27,24 @@ function isHebrewLocale(locale: string): boolean {
 }
 
 export function FeedbackMailCard({
-  email,
   isRTL,
   locale,
   promptKind,
-  onCopyEmail,
   onDismiss,
   onSubmit,
   dismissLabel,
 }: FeedbackMailCardProps) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
-  const [showFallback, setShowFallback] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const isHebrew = isHebrewLocale(locale);
 
   useEffect(() => {
     setRating(0);
     setComment('');
-    setShowFallback(false);
     setSubmitting(false);
+    setSubmitError(null);
   }, [promptKind]);
 
   const copy = useMemo(() => {
@@ -72,9 +67,7 @@ export function FeedbackMailCard({
         commentPlaceholder: 'רוצה להוסיף משהו קצר?',
         send: 'שלח',
         skip: 'דלג',
-        fallbackTitle: 'לא הצלחנו לפתוח טיוטת מייל',
-        fallbackBody: 'אפשר להעתיק את הכתובת ולשלוח כשתרצה/י.',
-        copyEmail: 'העתק מייל',
+        submitError: 'שליחת הפידבק נכשלה. נסה/י שוב.',
       };
     }
 
@@ -96,19 +89,18 @@ export function FeedbackMailCard({
       commentPlaceholder: 'Want to add a short note?',
       send: 'Send',
       skip: 'Skip',
-      fallbackTitle: 'We could not open your mail app',
-      fallbackBody: 'You can copy the address and send feedback later.',
-      copyEmail: 'Copy email',
+      submitError: 'Could not send feedback. Try again.',
     };
   }, [isHebrew, promptKind]);
 
   const handleSubmit = async () => {
     if (rating < 1 || submitting) return;
+    setSubmitError(null);
     setSubmitting(true);
     try {
       const result = await onSubmit({ rating, comment: comment.trim() });
-      if (result === 'fallback') {
-        setShowFallback(true);
+      if (result === 'error') {
+        setSubmitError(copy.submitError);
       }
     } finally {
       setSubmitting(false);
@@ -116,7 +108,13 @@ export function FeedbackMailCard({
   };
 
   return (
-    <View testID="feedback-mail-card" style={styles.shell}>
+    <View
+      testID="feedback-mail-card"
+      style={[
+        styles.shell,
+        Platform.OS === 'android' && isRTL ? styles.shellAndroidRtl : null,
+      ]}
+    >
       <View style={styles.badgeRow}>
         <Text style={styles.badgeText}>{copy.badge}</Text>
       </View>
@@ -164,6 +162,7 @@ export function FeedbackMailCard({
             value={comment}
             onChangeText={setComment}
             textAlignVertical="top"
+            testID="feedback-comment-input"
             style={[
               styles.input,
               {
@@ -176,39 +175,22 @@ export function FeedbackMailCard({
             activeOpacity={0.9}
             disabled={submitting}
             onPress={handleSubmit}
+            testID="feedback-send-button"
             style={[styles.sendButton, submitting ? styles.sendButtonDisabled : null]}
           >
             <Text style={styles.sendButtonText}>{copy.send}</Text>
           </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {showFallback ? (
-        <View style={styles.fallbackBox}>
-          <Text
-            style={[
-              styles.fallbackTitle,
-              { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-            ]}
-          >
-            {copy.fallbackTitle}
-          </Text>
-          <Text
-            style={[
-              styles.fallbackBody,
-              { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-            ]}
-          >
-            {copy.fallbackBody}
-          </Text>
-          <View style={styles.emailRow}>
-            <Text selectable style={styles.emailText}>
-              {email}
+          {submitError ? (
+            <Text
+              testID="feedback-submit-error"
+              style={[
+                styles.errorText,
+                { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+              ]}
+            >
+              {submitError}
             </Text>
-            <TouchableOpacity activeOpacity={0.88} onPress={onCopyEmail} style={styles.copyButton}>
-              <Text style={styles.copyButtonText}>{copy.copyEmail}</Text>
-            </TouchableOpacity>
-          </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -241,6 +223,9 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
     }),
+  },
+  shellAndroidRtl: {
+    alignSelf: 'flex-end',
   },
   badgeRow: {
     alignSelf: 'flex-start',
@@ -329,49 +314,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
-  fallbackBox: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 18,
-    backgroundColor: 'rgba(30,41,59,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
-  },
-  fallbackTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  fallbackBody: {
-    color: 'rgba(226,232,240,0.86)',
+  errorText: {
+    color: '#FCA5A5',
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  emailRow: {
-    marginTop: 12,
-    gap: 10,
-    alignItems: 'stretch',
-  },
-  emailText: {
-    color: '#FDE68A',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  copyButton: {
-    minHeight: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(37,99,235,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(96,165,250,0.32)',
-  },
-  copyButtonText: {
-    color: '#BFDBFE',
-    fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   skipLink: {
     alignSelf: 'center',

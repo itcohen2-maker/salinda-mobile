@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
-import { HappyBubble } from '../components/HappyBubble';
+import { HappyBubble, type HappyBubbleTone } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
 import { GoldDiceButton } from '../../components/GoldDiceButton';
 import { initializeSfx, isSfxMuted, setSfxMuted } from '../audio/sfx';
@@ -637,15 +637,28 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // around card placement ג€” fan taps are now the correct first action.)
 
   // ג”€ג”€ Lesson 4 step 3 (guided full build) sub-phase ג”€ג”€
-  // Drives the dynamic speech bubble + arrow position during the learner's
-  // solo run of a full equation. Transitions:
-  //   build  ג†'  confirm   ג€” user has added 2 dice + op (eqReadyToConfirm)
-  //   confirm ג†'  pick      ג€” user tapped "אשר את התרגיל" (eqConfirmedByUser)
-  //   pick   ג†'  play      ג€” user tapped any card (first cardTapped in solved)
-  //   play   ג†'  (step ends)ג€” user tapped "בחרתי" (userPlayedCards ג†' outcome)
-  type L4Step3Phase = 'build' | 'confirm' | 'pick' | 'play';
-  const [l4Step3Phase, setL4Step3Phase] = useState<L4Step3Phase>('build');
-  const [l4BuildProgress, setL4BuildProgress] = useState(false);
+  // Flow:
+  //   intro -> pickFirstDie -> pickSecondDie -> pickOperator
+  //        -> pickCard -> pressPlay
+  // Wrong card taps briefly detour into `wrongCard` and then bounce back to
+  // `pickCard`, keeping the learner on the happy path.
+  type L4Step3Phase =
+    | 'intro'
+    | 'pickFirstDie'
+    | 'pickSecondDie'
+    | 'pickOperator'
+    | 'pickCard'
+    | 'wrongCard'
+    | 'pressPlay';
+  type L4bHintPhase = 'pickDie' | 'pickCard';
+  const l4Step1RiggedRef = useRef(false);
+  const [l4bHintPhase, setL4bHintPhase] = useState<L4bHintPhase>('pickDie');
+  const [l4Step3Phase, setL4Step3Phase] = useState<L4Step3Phase>('intro');
+  const [l4Step3IntroApproved, setL4Step3IntroApproved] = useState(false);
+  const [l4Step3FinishApproved, setL4Step3FinishApproved] = useState(false);
+  const l4Step3DicePickCountRef = useRef(0);
+  const l4Step3OperatorPickedRef = useRef(false);
+  const l4Step3WrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Measured rects of the "אשר את התרגיל" / "בחרתי" buttons ג€” updated by the
   // real game UI via tutorialBus.setLayout.
   const [confirmBtnRect, setConfirmBtnRect] = useState<LayoutRect | null>(null);
@@ -1272,6 +1285,57 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     gameDispatch({ type: 'DISMISS_IDENTICAL_ALERT' });
   }, [gameState?.identicalAlert, engine.lessonIndex, engine.stepIndex, gameDispatch]);
 
+  // Lesson 4 step 2 (fill-missing-die) needs its own fresh exercise so the
+  // learner doesn't inherit the prior step's hand/target. Rig it before the
+  // bot demo starts so the demo and the await-mimic phase both read the same
+  // fresh config.
+  useEffect(() => {
+    const isL4Step1 = engine.lessonIndex === 3 && engine.stepIndex === 1;
+    if (!isL4Step1) {
+      l4Step1RiggedRef.current = false;
+      return;
+    }
+    if (engine.phase === 'intro' || engine.phase === 'idle') {
+      l4Step1RiggedRef.current = false;
+      return;
+    }
+    if (engine.phase !== 'bot-demo' && engine.phase !== 'await-mimic') return;
+    if (!gameState?.players || gameState.players.length < 2) return;
+    if (l4Step1RiggedRef.current) return;
+
+    l4Step1RiggedRef.current = true;
+    const l4 = rollL4Dice();
+    l4DiceRef.current = l4;
+    tutorialBus.setLastEquationResult(null);
+    tutorialBus.emitFanDemo({ kind: 'clearCardFrame' });
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
+    gameDispatch({ type: 'CLEAR_EQ_HAND' });
+    if (gameState.phase === 'solved') {
+      gameDispatch({ type: 'REVERT_TO_BUILDING' });
+    }
+
+    const { d1, d2, d3, pickA, pickB, target, hand, validSums } = l4;
+    tutorialBus.setL4Config({ pickA, pickB, target, hand, validSums });
+
+    const ts = Date.now();
+    const handCards = hand.map((value) => ({
+      id: `tut-l4-card-${value}-${ts}`,
+      type: 'number' as const,
+      value,
+    }));
+    const botCards = hand.map((value) => ({
+      id: `tut-l4-bot-card-${value}-${ts}`,
+      type: 'number' as const,
+      value,
+    }));
+    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [botCards, handCards] });
+    if (gameState.phase === 'pre-roll') {
+      gameDispatch({ type: 'ROLL_DICE', values: { die1: d1, die2: d2, die3: d3 } });
+    } else {
+      gameDispatch({ type: 'TUTORIAL_SET_DICE', values: { die1: d1, die2: d2, die3: d3 } });
+    }
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
+
   // ג”€ג”€ Run bot demo when phase=bot-demo. The scripted async chain advances
   //    naturally; a 6s safety timer also fires BOT_DEMO_DONE in case the
   //    chain stalls (e.g. WebView/Audio init holding the JS thread). ג”€ג”€
@@ -1370,6 +1434,20 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
   }, [engine.phase, engine.lessonIndex, engine.stepIndex]);
 
+  useEffect(() => {
+    const isL4bAwait = engine.lessonIndex === 3 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
+    if (!isL4bAwait) {
+      setL4bHintPhase('pickDie');
+      return;
+    }
+    setL4bHintPhase('pickDie');
+    return tutorialBus.subscribeUserEvent((evt) => {
+      if (evt.kind === 'eqUserPickedDice') {
+        setL4bHintPhase('pickCard');
+      }
+    });
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
   // ג”€ג”€ Lesson 4 step 2 (fill-missing-die): pulse unplaced dice during await-mimic. ג”€ג”€
   useEffect(() => {
     const isL4b = engine.lessonIndex === 3 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
@@ -1377,21 +1455,31 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => tutorialBus.setL4bDicePulse(false);
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
-  // ג”€ג”€ Lesson 4 step 3 (guided full build): enable l4Step3Mode while active
-  //    so the EquationBuilder shows its confirm button + skips auto-confirm,
-  //    and both buttons report their layout via bus. Also reset the sub-phase
-  //    every time the step re-enters (e.g. after GO_BACK). ג”€ג”€
+  // ג”€ג”€ Lesson 4 step 3 (guided full build): keep the real game UI live,
+  //    but reset the local orchestration each time the step re-enters
+  //    (e.g. after GO_BACK). The equation itself reuses the same rigged hand. ג”€ג”€
   useEffect(() => {
     const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
     if (isL4Step3) {
       tutorialBus.emitFanDemo({ kind: 'eqReset' });
       tutorialBus.setL4Step3Mode(true);
       tutorialBus.setL4GuidedEqValidationMode(true);
-      setL4Step3Phase('build');
-      setL4BuildProgress(false);
+      setL4Step3Phase('intro');
+      setL4Step3IntroApproved(false);
+      setL4Step3FinishApproved(false);
+      l4Step3DicePickCountRef.current = 0;
+      l4Step3OperatorPickedRef.current = false;
+      if (l4Step3WrongTimerRef.current) {
+        clearTimeout(l4Step3WrongTimerRef.current);
+        l4Step3WrongTimerRef.current = null;
+      }
       return () => {
         tutorialBus.setL4Step3Mode(false);
         tutorialBus.setL4GuidedEqValidationMode(false);
+        if (l4Step3WrongTimerRef.current) {
+          clearTimeout(l4Step3WrongTimerRef.current);
+          l4Step3WrongTimerRef.current = null;
+        }
       };
     }
     tutorialBus.setL4Step3Mode(false);
@@ -1677,22 +1765,55 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // ג”€ג”€ Lesson 4 step 3 sub-phase transitions driven by user events. ג”€ג”€
   useEffect(() => {
     const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
-    if (!isL4Step3) return;
+    if (!isL4Step3 || !l4Step3IntroApproved) return;
     return tutorialBus.subscribeUserEvent((evt) => {
       if (evt.kind === 'eqUserPickedDice') {
-        setL4BuildProgress(true);
-      } else if (evt.kind === 'eqReadyToConfirm') {
-        setL4Step3Phase((p) => (p === 'build' ? 'confirm' : p));
-      } else if (evt.kind === 'eqConfirmedByUser') {
-        setL4Step3Phase('pick');
-      } else if (evt.kind === 'cardTapped') {
-        // First tap after confirming enters the 'play' sub-phase: arrow moves
-        // from fan to the "בחרתי" button. Subsequent stage/unstage taps keep
-        // the arrow on "בחרתי".
-        setL4Step3Phase((p) => (p === 'pick' ? 'play' : p));
+        const nextCount = Math.min(2, l4Step3DicePickCountRef.current + 1);
+        l4Step3DicePickCountRef.current = nextCount;
+        setL4Step3Phase(
+          nextCount >= 2 && l4Step3OperatorPickedRef.current
+            ? 'pickCard'
+            : nextCount >= 2
+              ? 'pickOperator'
+              : 'pickSecondDie',
+        );
+        return;
+      }
+      if (evt.kind === 'opSelected') {
+        l4Step3OperatorPickedRef.current = true;
+        if (l4Step3DicePickCountRef.current >= 2) {
+          setL4Step3Phase('pickCard');
+        }
+        return;
+      }
+      if (evt.kind === 'eqReadyToConfirm') {
+        setL4Step3Phase('pickCard');
+        return;
+      }
+      if (evt.kind === 'l4Step3CardAccepted') {
+        if (l4Step3WrongTimerRef.current) {
+          clearTimeout(l4Step3WrongTimerRef.current);
+          l4Step3WrongTimerRef.current = null;
+        }
+        setL4Step3Phase('pressPlay');
+        return;
+      }
+      if (evt.kind === 'l4Step3WrongCard') {
+        const hasCorrectCardSelected = (gameState?.stagedCards ?? []).some(
+          (card) =>
+            card.type === 'number' &&
+            card.value != null &&
+            card.value === gameState?.equationResult,
+        );
+        if (l4Step3WrongTimerRef.current) clearTimeout(l4Step3WrongTimerRef.current);
+        setL4Step3Phase('wrongCard');
+        l4Step3WrongTimerRef.current = setTimeout(() => {
+          setL4Step3Phase(hasCorrectCardSelected ? 'pressPlay' : 'pickCard');
+          l4Step3WrongTimerRef.current = null;
+        }, 900);
       }
     });
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.equationResult, gameState?.stagedCards, l4Step3IntroApproved]);
 
   // Run the shake + auto-clear whenever wrongAttemptTick increments.
   useEffect(() => {
@@ -3224,6 +3345,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase !== 'celebrate') return;
     // Dice step 0 (roll-dice): wait for user to tap "׳”׳'׳ ׳×׳™" ג€” no auto-advance.
     if (engine.lessonIndex === 2 && engine.stepIndex === 0) return;
+    // Lesson 4 step 3 ends with a blocking success modal; the learner moves
+    // on only after explicitly acknowledging it.
+    if (engine.lessonIndex === 3 && engine.stepIndex === 3) return;
     // L6 step 0 (open-chip): skip celebrate instantly ג€” no fanfare.
     if (engine.lessonIndex === 5 && engine.stepIndex === 0) {
       dispatchEngine({ type: 'CELEBRATE_DONE' });
@@ -3383,13 +3507,22 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // ג”€ג”€ Pick the bubble copy for the current phase. ג”€ג”€
   const currentLesson = LESSONS[engine.lessonIndex];
   const currentStep = currentLesson?.steps[engine.stepIndex];
+  const isL4bAwait = engine.lessonIndex === 3 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
+  const l4bHintKey: string | null = isL4bAwait
+    ? (l4bHintPhase === 'pickCard' ? 'tutorial.l4b.hintPickCard' : 'tutorial.l4b.hintFillDie')
+    : null;
   const isL4Step3Await = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
-  // Lesson 4 step 3 uses a dynamic bubble: build ג†' confirm ג†' pick ג†' play.
+  const isL4Step3Celebrate = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'celebrate';
+  const showL4Step3IntroModal = isL4Step3Await && !l4Step3IntroApproved;
+  const showL4Step3FinishModal = isL4Step3Celebrate && !l4Step3FinishApproved;
+  // Lesson 4 step 3 uses a dynamic bubble: die 1 -> die 2 -> operator -> card -> play.
   const l4Step3HintKey: string | null = isL4Step3Await
-    ? (l4Step3Phase === 'build'
-        ? (l4BuildProgress ? 'tutorial.l4c.hintBuildProgress' : 'tutorial.l4c.hintFull')
-       : l4Step3Phase === 'confirm' ? 'tutorial.l4c.hintPressConfirm'
-       : l4Step3Phase === 'pick' ? 'tutorial.l4c.hintPickCards'
+    ? (l4Step3Phase === 'pickFirstDie' ? 'tutorial.l4c.hintFull'
+       : l4Step3Phase === 'pickSecondDie' ? 'tutorial.l4c.hintPickSecondDie'
+       : l4Step3Phase === 'pickOperator' ? 'tutorial.l4c.hintPickOperator'
+       : l4Step3Phase === 'pickCard' ? 'tutorial.l4c.hintBuildProgress'
+       : l4Step3Phase === 'wrongCard' ? 'tutorial.l4c.tryAgain'
+       : l4Step3Phase === 'pressPlay' ? 'tutorial.l4c.hintPressPlay'
        : null)
     : null;
   // Lesson 5 step 5b (joker-place, now stepIndex 1) dynamic bubble:
@@ -3485,6 +3618,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : isFracDefenseActive ? null
     : (isFracAttackActive && engine.phase === 'bot-demo') ? null
     : (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && (engine.stepIndex === 0 || engine.stepIndex === 1) && engine.phase === 'await-mimic') ? null
+    : showL4Step3IntroModal || showL4Step3FinishModal ? null
     : engine.phase === 'post-signs-choice' || engine.phase === 'core-complete' ? null
     : isL7Step1Phase ? null
     : isL6WildIntro ? (isL6WildMockupOpen ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
@@ -3493,14 +3627,46 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : isL6WildCelebrate ? 'אתם מוכנים למשחק האמיתי!\nסיימתם את ההדרכה הבסיסית.'
     : engine.phase === 'bot-demo' ? (isL9Lesson ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
     : engine.phase === 'await-mimic'
-      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
+      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
     : engine.phase === 'celebrate' ? (currentStep?.celebrateKey ? t(currentStep.celebrateKey) : t('tutorial.engine.celebrate'))
     // lesson-done has no bubble ג€” celebrate already said its piece, and a
     // generic "you finished the lesson" right after every action is noise.
     : engine.phase === 'all-done' ? t('tutorial.engine.allDone')
     : null;
-  const bubbleTone: 'demo' | 'turn' | 'celebrate' =
-    engine.phase === 'celebrate' || engine.phase === 'lesson-done' || engine.phase === 'all-done' ? 'celebrate'
+  const bubbleTextStyleOverride =
+    l4bHintKey === 'tutorial.l4b.hintPickCard'
+      ? {
+          color: '#9A3412',
+          fontSize: 16,
+          lineHeight: 20,
+          fontWeight: '900' as const,
+        }
+      : l4Step3HintKey === 'tutorial.l4c.hintBuildProgress'
+        ? {
+            color: '#7C2D12',
+            fontSize: 18,
+            lineHeight: 22,
+            fontWeight: '900' as const,
+          }
+        : l4Step3HintKey === 'tutorial.l4c.hintPressPlay'
+          ? {
+              color: '#9A3412',
+              fontSize: 19,
+              lineHeight: 24,
+              fontWeight: '900' as const,
+            }
+          : l4Step3HintKey === 'tutorial.l4c.tryAgain'
+            ? {
+                color: '#991B1B',
+                fontSize: 17,
+                lineHeight: 21,
+                fontWeight: '900' as const,
+              }
+      : undefined;
+  const bubbleTone: HappyBubbleTone =
+    l4Step3HintKey === 'tutorial.l4c.hintPressPlay' ? 'buttonOrange'
+    : l4Step3HintKey === 'tutorial.l4c.tryAgain' ? 'buttonRed'
+    : engine.phase === 'celebrate' || engine.phase === 'lesson-done' || engine.phase === 'all-done' ? 'celebrate'
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
 
@@ -4487,7 +4653,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             >
               {/* ׳›׳•׳×׳¨׳× */}
               <Text style={{ color: '#FCD34D', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
-                {t('tutorial.l5a.signCardTitle')}
+                {t('tutorial.signCard.title')}
               </Text>
               {/* Mini operation-card visual */}
               <View style={{
@@ -4505,7 +4671,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               </View>
               {/* Body */}
               <Text style={{ color: '#F8FAFC', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 26 }}>
-                {t('tutorial.l5a.didYouKnowBody')}
+                {t('tutorial.signCard.body')}
               </Text>
             </View>
           </View>
@@ -4526,13 +4692,172 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 }),
               }}>
                 <Text style={{ color: '#EDE9FE', fontSize: 17, fontWeight: '900' }}>
-                  {t('tutorial.gotIt')}
+                  {t('tutorial.signCard.button')}
                 </Text>
               </View>
             </TouchableOpacity>
           ) : null}
         </>
       )}
+
+      {showL4Step3IntroModal ? (
+        <>
+          <View
+            pointerEvents="auto"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(5,10,22,0.90)',
+              zIndex: 9250,
+            }}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 24,
+              zIndex: 9260,
+            }}
+          >
+            <View
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                borderRadius: 24,
+                backgroundColor: 'rgba(15,23,42,0.96)',
+                borderWidth: 2.5,
+                borderColor: '#F59E0B',
+                paddingVertical: 24,
+                paddingHorizontal: 20,
+                gap: 14,
+                ...Platform.select({
+                  ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 18 },
+                  android: { elevation: 14 },
+                }),
+              }}
+            >
+              <Text style={{ color: '#FCD34D', fontSize: 22, fontWeight: '900', textAlign: 'center', lineHeight: 30 }}>
+                {t('tutorial.l4c.botFull')}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              setL4Step3IntroApproved(true);
+              setL4Step3Phase('pickFirstDie');
+            }}
+            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+          >
+            <View style={{
+              backgroundColor: '#F59E0B',
+              borderRadius: 20,
+              paddingVertical: 15,
+              paddingHorizontal: 42,
+              borderWidth: 2,
+              borderColor: '#FCD34D',
+              ...Platform.select({
+                ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+                android: { elevation: 12 },
+              }),
+            }}>
+              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900' }}>
+                {t('tutorial.l4c.gotIt')}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+      {showL4Step3FinishModal ? (
+        <>
+          <View
+            pointerEvents="auto"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(5,10,22,0.90)',
+              zIndex: 9250,
+            }}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 24,
+              zIndex: 9260,
+            }}
+          >
+            <View
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                borderRadius: 24,
+                backgroundColor: 'rgba(15,23,42,0.96)',
+                borderWidth: 2.5,
+                borderColor: '#F59E0B',
+                paddingVertical: 24,
+                paddingHorizontal: 20,
+                gap: 12,
+                ...Platform.select({
+                  ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 18 },
+                  android: { elevation: 14 },
+                }),
+              }}
+            >
+              <Text style={{ color: '#FCD34D', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                {t('tutorial.l4c.finishTitle')}
+              </Text>
+              <Text style={{ color: '#F8FAFC', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 26 }}>
+                {t('tutorial.l4c.finishBody')}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              setL4Step3FinishApproved(true);
+              dispatchEngine({ type: 'CELEBRATE_DONE' });
+            }}
+            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+          >
+            <View style={{
+              backgroundColor: '#F59E0B',
+              borderRadius: 20,
+              paddingVertical: 15,
+              paddingHorizontal: 42,
+              borderWidth: 2,
+              borderColor: '#FCD34D',
+              ...Platform.select({
+                ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+                android: { elevation: 12 },
+              }),
+            }}>
+              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900' }}>
+                {t('tutorial.l4c.gotIt')}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      ) : null}
 
       {engine.lessonIndex === 5 &&
        engine.stepIndex === 1 &&
@@ -5174,6 +5499,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               size={isCompact ? 'compact' : 'normal'}
               maxWidth={isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
               tailTop={false}
+              textStyleOverride={bubbleTextStyleOverride}
             />
           </View>
         );

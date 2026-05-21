@@ -106,56 +106,24 @@ describe('syncTutorialCoins', () => {
 });
 
 describe('ensureMinimumProfileCoins', () => {
-  it('tops up balances below 10000', async () => {
+  it('keeps the stored wallet balance without auto-top-up', async () => {
     const nextCoins = await ensureMinimumProfileCoins('u1', 125);
 
-    expect(nextCoins).toBe(10000);
-    expect(mockFrom).toHaveBeenCalledWith('profiles');
-    const query = mockFrom.mock.results[0]?.value as {
-      update: jest.Mock;
-    };
-    expect(query.update).toHaveBeenCalledWith({ total_coins: 10000 });
-    const eqStage = query.update.mock.results[0]?.value as { eq: jest.Mock };
-    expect(eqStage.eq).toHaveBeenCalledWith('id', 'u1');
-    const ltStage = eqStage.eq.mock.results[0]?.value as { lt: jest.Mock };
-    expect(ltStage.lt).toHaveBeenCalledWith('total_coins', 10000);
+    expect(nextCoins).toBe(125);
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it('does not update balances already at or above 10000', async () => {
-    const nextCoins = await ensureMinimumProfileCoins('u1', 12000);
+  it('normalizes negative and invalid values to zero', async () => {
+    expect(await ensureMinimumProfileCoins('u1', -50)).toBe(0);
+    expect(await ensureMinimumProfileCoins('u1', Number.NaN)).toBe(0);
+    expect(await ensureMinimumProfileCoins('u1', Number.POSITIVE_INFINITY)).toBe(0);
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('rounds down fractional balances', async () => {
+    const nextCoins = await ensureMinimumProfileCoins('u1', 12000.9);
 
     expect(nextCoins).toBe(12000);
     expect(mockFrom).not.toHaveBeenCalled();
-  });
-
-  it('does not top up again after the wallet has already been seeded once', async () => {
-    expect(await ensureMinimumProfileCoins('u1', 125)).toBe(10000);
-
-    mockFrom.mockClear();
-
-    const nextCoins = await ensureMinimumProfileCoins('u1', 9850);
-
-    expect(nextCoins).toBe(9850);
-    expect(mockFrom).not.toHaveBeenCalled();
-  });
-
-  it('remembers profiles that already started above the threshold', async () => {
-    expect(await ensureMinimumProfileCoins('u1', 12000)).toBe(12000);
-
-    mockFrom.mockClear();
-
-    const nextCoins = await ensureMinimumProfileCoins('u1', 9800);
-
-    expect(nextCoins).toBe(9800);
-    expect(mockFrom).not.toHaveBeenCalled();
-  });
-
-  it('ignores the old 7000 seed marker and tops up to the new minimum', async () => {
-    await AsyncStorage.setItem('lulos_local_min_profile_coins_seeded:7000:u1', 'true');
-
-    const nextCoins = await ensureMinimumProfileCoins('u1', 7000);
-
-    expect(nextCoins).toBe(10000);
-    expect(mockFrom).toHaveBeenCalledWith('profiles');
   });
 });

@@ -69,6 +69,8 @@ export type UserEvent =
    *  taps the two key buttons. */
   | { kind: 'eqReadyToConfirm' }
   | { kind: 'eqConfirmedByUser' }
+  | { kind: 'l4Step3CardAccepted'; cardId: string }
+  | { kind: 'l4Step3WrongCard'; cardId: string }
   | { kind: 'userPlayedCards'; count?: number; hasZero?: boolean; hasWild?: boolean; positiveNumberCount?: number }
   /** Lesson 5 (operation signs) progress signals. `l5AllSignsCycled` fires
    *  once the learner has cycled the `?` slot through all four operation
