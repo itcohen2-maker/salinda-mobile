@@ -21539,6 +21539,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const webShellWidth = Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewport.width);
   const webSideGutter = Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
+  const showWebChromeControls = dockedControls;
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
   const webControlsAnchorStyle = dockedControls
     ? {
@@ -21597,40 +21598,42 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
             {gameContent}
           </View>
         </View>
-        <View
-          pointerEvents="box-none"
-          style={webControlsAnchorStyle}
-        >
-          <View style={webControlsPanelStyle}>
-            <WebChromeActionButton
-              label={backLabel}
-              onPress={handleWebBackPress}
-              lightBackdrop={webBackdropTone === 'white'}
-              fullWidth={dockedControls}
-              disabled={!webBackAction && !webFocusMode && !webFullscreenActive && !canUseBrowserHistoryBack}
-            />
-            <WebChromeActionButton
-              label={focusLabel}
-              onPress={toggleWebFocusMode}
-              selected={webFocusMode}
-              lightBackdrop={webBackdropTone === 'white'}
-              fullWidth={dockedControls}
-            />
-            <WebChromeActionButton
-              label={fullscreenLabel}
-              onPress={() => { void toggleWebFullscreen(); }}
-              selected={webFullscreenActive}
-              lightBackdrop={webBackdropTone === 'white'}
-              fullWidth={dockedControls}
-            />
-            <WebChromeActionButton
-              label={backdropLabel}
-              onPress={toggleWebBackdropTone}
-              lightBackdrop={webBackdropTone === 'white'}
-              fullWidth={dockedControls}
-            />
+        {showWebChromeControls ? (
+          <View
+            pointerEvents="box-none"
+            style={webControlsAnchorStyle}
+          >
+            <View style={webControlsPanelStyle}>
+              <WebChromeActionButton
+                label={backLabel}
+                onPress={handleWebBackPress}
+                lightBackdrop={webBackdropTone === 'white'}
+                fullWidth={dockedControls}
+                disabled={!webBackAction && !webFocusMode && !webFullscreenActive && !canUseBrowserHistoryBack}
+              />
+              <WebChromeActionButton
+                label={focusLabel}
+                onPress={toggleWebFocusMode}
+                selected={webFocusMode}
+                lightBackdrop={webBackdropTone === 'white'}
+                fullWidth={dockedControls}
+              />
+              <WebChromeActionButton
+                label={fullscreenLabel}
+                onPress={() => { void toggleWebFullscreen(); }}
+                selected={webFullscreenActive}
+                lightBackdrop={webBackdropTone === 'white'}
+                fullWidth={dockedControls}
+              />
+              <WebChromeActionButton
+                label={backdropLabel}
+                onPress={toggleWebBackdropTone}
+                lightBackdrop={webBackdropTone === 'white'}
+                fullWidth={dockedControls}
+              />
+            </View>
           </View>
-        </View>
+        ) : null}
         {showAds ? (
           <View
             pointerEvents="box-none"
