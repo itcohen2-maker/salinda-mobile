@@ -34,7 +34,7 @@ import {
   I18nManager, View, Text, TextInput, ScrollView, TouchableOpacity, Image, ImageBackground, BackHandler,
   StyleSheet, Animated, Easing, Dimensions, Modal as RNModal, Platform, PanResponder, Alert,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, NativeModules, AppState, Vibration,
-  StatusBar as RNStatusBar,
+  StatusBar as RNStatusBar, Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
@@ -14717,7 +14717,7 @@ function TurnTransition() {
           ) : (
             <View style={{alignSelf:'center',marginBottom:4,maxWidth:340,width:'100%',alignItems:'center'}}>
               <View style={[alertBubbleStyle.box, { backgroundColor: lastPlayerBubbleColor, borderColor: lastPlayerBorderColor, paddingVertical: 6, paddingHorizontal: 12 }]}>
-                <Text style={[alertBubbleStyle.title, { textAlign: 'center', writingDirection: 'rtl', fontSize: 13 }]}>{state.lastMoveMessage}</Text>
+                <Text accessibilityLiveRegion="polite" style={[alertBubbleStyle.title, { textAlign: 'center', writingDirection: 'rtl', fontSize: 13 }]}>{state.lastMoveMessage}</Text>
               </View>
             </View>
           )
@@ -17476,7 +17476,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               tutorialBus.emitUserEvent({ kind: 'parensToggled', parensRight: next });
             }}
             activeOpacity={0.9}
-            accessibilityLabel="שינוי מיקום הסוגריים"
+            accessibilityLabel={t('game.swapBrackets')}
           >
             <Animated.View
               style={{
@@ -17515,7 +17515,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 )}
               </View>
               <Text allowFontScaling={false} style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>
-                {'שינוי מיקום הסוגריים'}
+                {t('game.swapBrackets')}
               </Text>
             </Animated.View>
           </TouchableOpacity>
@@ -19920,9 +19920,11 @@ export function PlayModeChoiceScreen({
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
-  const authHomeButtonLabel = isAnonymous ? t('auth.homeButton') : t('auth.switchUserButton');
+  const authHomeButtonLabel = isAnonymous
+    ? (locale === 'he' ? 'התחברות' : t('auth.homeButton'))
+    : t('auth.switchUserButton');
   const authHomeHelper = locale === 'he'
-    ? 'היכנסו כדי לטעון את ההיסטוריה, הבנק וההגדרות שלכם.'
+    ? 'אל תאבדו את הקופה שלכם! התחברו כדי לשמור הגדרות ונתונים.'
     : t('auth.homeHelper');
   const feedbackToggleLabel = locale === 'he'
     ? (feedbackOpen ? 'סגור פידבק' : 'שלח פידבק')
@@ -19985,46 +19987,94 @@ export function PlayModeChoiceScreen({
               onPress={() => void setLocale('en')}
             />
           </View>
-          <MenuCapsuleButton
-            text={t('mode.play')}
-            color="green"
-            fontSize={primaryButtonFontSize}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('mode.play')}
             testID="lobby-single-player"
             onPress={onPlay}
-            style={{
+            android_disableSound
+            style={({ pressed }) => ({
+              width: '85%',
+              height: 65,
+              backgroundColor: '#1B4D3E',
+              borderRadius: 32.5,
+              borderWidth: 2,
+              borderColor: '#A3E635',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingTop: 0,
+              paddingBottom: 0,
+              marginBottom: 25,
               shadowColor: '#FF4FD8',
-              shadowOpacity: 0.9,
-              shadowRadius: 16,
+              shadowOpacity: 0.72,
+              shadowRadius: 14,
               shadowOffset: { width: 0, height: 0 },
               elevation: 14,
-              borderRadius: 999,
-              backgroundColor: 'rgba(255,90,180,0.16)',
-            }}
-          />
-          <LulosButton
-            text={authHomeButtonLabel}
-            color="blue"
-            width={localeButtonWidth}
-            height={localeButtonHeight}
-            fontSize={localeButtonFontSize}
-            testID="home-auth-button"
-            onPress={onOpenAuth}
-            style={{ marginTop: 12, alignSelf: 'center' }}
-          />
-          {isAnonymous ? (
+              opacity: pressed ? 0.88 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            })}
+          >
             <Text
               style={{
-                marginTop: 8,
-                maxWidth: 260,
-                color: '#D1D5DB',
-                fontSize: 12,
-                lineHeight: 17,
+                color: '#FFFFFF',
+                fontSize: primaryButtonFontSize,
+                fontWeight: 'bold',
                 textAlign: 'center',
+                includeFontPadding: false,
+                textAlignVertical: 'center',
               }}
             >
-              {authHomeHelper}
+              {t('mode.play')}
             </Text>
-          ) : null}
+          </Pressable>
+          <View style={{ alignItems: 'center', width: '80%', marginVertical: 15 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={authHomeButtonLabel}
+              testID="home-auth-button"
+              onPress={onOpenAuth}
+              android_disableSound
+              style={({ pressed }) => ({
+                backgroundColor: '#1E293B',
+                paddingHorizontal: 20,
+                paddingVertical: 8,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: '#38BDF8',
+                marginBottom: isAnonymous ? 10 : 0,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.82 : 1,
+              })}
+            >
+              <Text
+                style={{
+                  color: '#38BDF8',
+                  fontSize: 14,
+                  fontWeight: '600',
+                  includeFontPadding: false,
+                  textAlign: 'center',
+                  textAlignVertical: 'center',
+                }}
+              >
+                {authHomeButtonLabel}
+              </Text>
+            </Pressable>
+            {isAnonymous ? (
+              <Text
+                style={{
+                  color: '#94A3B8',
+                  fontSize: 14,
+                  textAlign: 'center',
+                  lineHeight: 20,
+                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+                }}
+              >
+                {authHomeHelper}
+              </Text>
+            ) : null}
+          </View>
         </View>
         <View style={{ flex: 1, width: '100%', justifyContent: 'flex-start', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: shopToPrimaryContentGap }}>

@@ -19,6 +19,7 @@ export interface LulosButtonProps {
   /** Hide the built-in canvas text when using a custom overlay icon. */
   hideText?: boolean;
   style?: any;
+  accessibilityLabel?: string;
 }
 
 const PALETTES = {
@@ -275,6 +276,7 @@ export function LulosButton({
   overlayContent,
   hideText = false,
   style,
+  accessibilityLabel,
 }: LulosButtonProps) {
   const fs = fontSize ?? Math.round(height * 0.38);
   const w = width ?? Math.max(140, Math.min(300, text.length * fs * 0.6 + 80));
@@ -300,6 +302,7 @@ export function LulosButton({
         activeOpacity={0.8}
         touchSoundDisabled
         accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? text}
         accessibilityState={{ disabled: !!disabled }}
         disabled={!!disabled}
         onPress={disabled ? undefined : onPress}

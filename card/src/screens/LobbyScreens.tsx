@@ -555,7 +555,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
               value={manualWebInviteBase}
               onChangeText={setManualWebInviteBase}
               placeholder={configuredWebBase ? t('lobby.baseDefault', { base: configuredWebBase }) : t('lobby.basePlaceholder')}
-              placeholderTextColor="#6B7280"
+              placeholderTextColor="#9CA3AF"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"

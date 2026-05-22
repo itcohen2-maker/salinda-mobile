@@ -162,7 +162,7 @@ export default function StartScreen({
         <TextInput
           key={i}
           placeholder={t('start.playerPlaceholder', { n: String(i + 1) })}
-          placeholderTextColor="#6B7280"
+          placeholderTextColor="#9CA3AF"
           value={names[i]}
           onChangeText={(text) => {
             const newNames = [...names];

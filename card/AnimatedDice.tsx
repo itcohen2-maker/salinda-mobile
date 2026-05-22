@@ -46,12 +46,12 @@ const DOT_POS: Record<number, [number, number][]> = {
 // ═══════════════════════════════════════
 // GOLD DIE FACE — exported for static display
 // ═══════════════════════════════════════
-export function GoldDieFace({ value, size = DICE_SIZE }: { value: number; size?: number }) {
+export function GoldDieFace({ value, size = DICE_SIZE, accessibilityLabel }: { value: number; size?: number; accessibilityLabel?: string }) {
   const dots = DOT_POS[value] || DOT_POS[1];
   const dotR = size * 0.075;
 
   return (
-    <View style={[{
+    <View accessibilityLabel={accessibilityLabel ?? `Die showing ${value}`} style={[{
       width: size, borderRadius: size * 0.18,
       borderBottomWidth: 4, borderBottomColor: C.diceShadow,
       overflow: 'hidden',

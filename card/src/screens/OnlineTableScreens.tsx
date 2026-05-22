@@ -1085,7 +1085,7 @@ export function LobbyScreen({
                   value={manualWebInviteBase}
                   onChangeText={setManualWebInviteBase}
                   placeholder={configuredWebBase || 'https://your-site...'}
-                  placeholderTextColor="#6B7280"
+                  placeholderTextColor="#9CA3AF"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />

@@ -173,6 +173,8 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               onPress={() => void handleSwitchUser()}
               disabled={loading}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.switchUserButton')}
               testID="auth-switch-user-button"
             >
               {loading ? (
@@ -187,12 +189,14 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               onPress={() => void handleLogout()}
               disabled={loading}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.signOutButton')}
               testID="auth-sign-out-button"
             >
               <Text style={styles.emailFallbackText}>{t('auth.signOutButton')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('auth.back')}>
               <Text style={styles.backText}>{t('auth.back')}</Text>
             </TouchableOpacity>
           </>
@@ -217,6 +221,8 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               onPress={() => void handleSocialSignIn()}
               disabled={loading}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={chooserCopy.google}
               testID="auth-social-google-button"
             >
               {loading ? (
@@ -234,12 +240,14 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               }}
               disabled={loading}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={chooserCopy.email}
               testID="auth-email-fallback-button"
             >
               <Text style={styles.emailFallbackText}>{chooserCopy.email}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('auth.back')}>
               <Text style={styles.backText}>{t('auth.back')}</Text>
             </TouchableOpacity>
           </>
@@ -260,33 +268,36 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               <TextInput
                 style={styles.input}
                 placeholder={t('auth.usernamePlaceholder')}
-                placeholderTextColor="#6B7280"
+                placeholderTextColor="#9CA3AF"
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
                 maxLength={15}
+                accessibilityLabel="Username"
               />
             ) : null}
 
             <TextInput
               style={styles.input}
               placeholder={t('auth.emailPlaceholder')}
-              placeholderTextColor="#6B7280"
+              placeholderTextColor="#9CA3AF"
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
               textContentType="emailAddress"
+              accessibilityLabel="Email address"
             />
 
             <TextInput
               style={styles.input}
               placeholder={t('auth.passwordPlaceholder')}
-              placeholderTextColor="#6B7280"
+              placeholderTextColor="#9CA3AF"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
               textContentType="password"
+              accessibilityLabel="Password"
             />
 
             {error ? (
@@ -300,6 +311,8 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               onPress={() => void handleSubmit()}
               disabled={loading}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={mode === 'link' ? t('auth.linkBtn') : t('auth.signInBtn')}
             >
               {loading ? (
                 <ActivityIndicator color="#FFF" />
@@ -316,6 +329,8 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
                 setError(null);
               }}
               style={styles.toggle}
+              accessibilityRole="button"
+              accessibilityLabel={mode === 'link' ? t('auth.haveAccount') : t('auth.noAccount')}
             >
               <Text style={styles.toggleText}>
                 {mode === 'link' ? t('auth.haveAccount') : t('auth.noAccount')}
@@ -329,13 +344,15 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
                   setShowEmailForm(false);
                 }}
                 style={styles.toggle}
+                accessibilityRole="button"
+                accessibilityLabel={chooserCopy.backToOptions}
                 testID="auth-back-to-options-button"
               >
                 <Text style={styles.toggleText}>{chooserCopy.backToOptions}</Text>
               </TouchableOpacity>
             ) : null}
 
-            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('auth.back')}>
               <Text style={styles.backText}>{t('auth.back')}</Text>
             </TouchableOpacity>
           </>

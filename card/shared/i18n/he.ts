@@ -1570,5 +1570,11 @@ export const he: Record<string, string> = {
   'courage.coinAward.title': '⭐ +1 מטבע!',
   'courage.coinAward.body': 'מד ההצטיינות התמלא — הרווחת מטבע אחד!',
 
+  // Accessibility labels (E.3, E.4)
+  'game.swapBrackets': 'שינוי מיקום הסוגריים',
+  'a11y.card': 'קלף {{value}}',
+  'a11y.die': 'קוביה מראה {{value}}',
+  'a11y.joker': 'קלף סלינדה',
+
   ...heLateOverrides,
 };

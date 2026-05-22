@@ -13,6 +13,7 @@ interface GoldDiceButtonProps {
   width?: number;
   style?: any;
   testID?: string;
+  accessibilityLabel?: string;
 }
 
 function buildDiceHTML(w: number, h: number): string {
@@ -202,7 +203,7 @@ setTimeout(loop,100);
 const BTN_W = 160;
 const BTN_H = 58;
 
-export function GoldDiceButton({ onPress, disabled = false, width, size, style, testID }: GoldDiceButtonProps) {
+export function GoldDiceButton({ onPress, disabled = false, width, size, style, testID, accessibilityLabel }: GoldDiceButtonProps) {
   const w = width ?? BTN_W;
   const h = size ?? BTN_H;
   const [webViewReady, setWebViewReady] = useState(false);
@@ -247,6 +248,9 @@ export function GoldDiceButton({ onPress, disabled = false, width, size, style, 
       />
       <Pressable
         testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? 'Roll dice'}
+        accessibilityState={{ disabled: !!disabled }}
         onPress={disabled ? undefined : onPress}
         onPressIn={disabled ? undefined : handlePressIn}
         onPressOut={disabled ? undefined : handlePressOut}

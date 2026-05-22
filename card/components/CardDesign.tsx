@@ -172,6 +172,7 @@ export function BaseCard({
   onPress,
   faceDown = false,
   small = false,
+  accessibilityLabel,
 }: {
   children: React.ReactNode;
   borderColor?: string;
@@ -180,6 +181,7 @@ export function BaseCard({
   onPress?: () => void;
   faceDown?: boolean;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const w = small ? 100 : 110;
   const h = small ? 140 : 158;
@@ -190,7 +192,7 @@ export function BaseCard({
 
   if (faceDown)
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} accessibilityLabel={accessibilityLabel} accessibilityRole={onPress ? 'button' : undefined}>
         <View style={[{ width: w, borderRadius: 12, borderBottomWidth: 6, borderBottomColor: '#1E1B4B' }, shadow3D('#000')]}>
           <LinearGradient
             colors={['#4338CA', '#312E81']}
@@ -217,7 +219,7 @@ export function BaseCard({
 
   return (
     <Animated.View style={{ opacity: fade }}>
-      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress}>
+      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress} accessibilityLabel={accessibilityLabel} accessibilityRole={onPress ? 'button' : undefined}>
         <View
           style={[
             {
@@ -293,19 +295,21 @@ export function NumberCard({
   active,
   onPress,
   small,
+  accessibilityLabel,
 }: {
   card: Card;
   selected?: boolean;
   active?: boolean;
   onPress?: () => void;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const v = card.value ?? 0;
   const cl = getNumColors(v);
   const fs = small ? 52 : 58;
   const maxOff = small ? 10 : 12;
   return (
-    <BaseCard borderColor={cl.border} selected={selected} active={active} onPress={onPress} small={small}>
+    <BaseCard borderColor={cl.border} selected={selected} active={active} onPress={onPress} small={small} accessibilityLabel={accessibilityLabel ?? `Card ${v}`}>
       <Text3D text={String(v)} fontSize={fs} faceColor={cl.face} darkColor={cl.dark} lightColor={cl.light} maxOffset={maxOff} />
     </BaseCard>
   );
@@ -398,11 +402,13 @@ export function FractionCard({
   selected,
   onPress,
   small,
+  accessibilityLabel,
 }: {
   card: Card;
   selected?: boolean;
   onPress?: () => void;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const f = card.fraction ?? '1/2';
   const [num, den] = f.split('/');
@@ -412,7 +418,7 @@ export function FractionCard({
   const lineW = small ? 38 : 44;
   const lineH = small ? 5 : 6;
   return (
-    <BaseCard borderColor={denCl.face} selected={selected} onPress={onPress} small={small}>
+    <BaseCard borderColor={denCl.face} selected={selected} onPress={onPress} small={small} accessibilityLabel={accessibilityLabel ?? `Fraction ${num}/${den}`}>
       <View style={{ alignItems: 'center' }}>
         <Text3D text={num} fontSize={fs} faceColor={numRed.face} darkColor={numRed.dark} lightColor={numRed.light} maxOffset={maxOff} />
         <View style={{ marginVertical: small ? 2 : 3 }}>
@@ -450,11 +456,13 @@ export function OperationCardComp({
   selected,
   onPress,
   small,
+  accessibilityLabel,
 }: {
   card: Card;
   selected?: boolean;
   onPress?: () => void;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const op = card.operation ?? '+';
   const cl = opColors[op] ?? opColors['+'];
@@ -462,7 +470,7 @@ export function OperationCardComp({
   const fs = small ? 46 : 52;
   const maxOff = small ? 10 : 12;
   return (
-    <BaseCard borderColor={cl.face} selected={selected} onPress={onPress} small={small}>
+    <BaseCard borderColor={cl.face} selected={selected} onPress={onPress} small={small} accessibilityLabel={accessibilityLabel ?? `Operation ${display}`}>
       <Text3D text={display} fontSize={fs} faceColor={cl.face} darkColor={cl.dark} lightColor={cl.light} maxOffset={maxOff} />
     </BaseCard>
   );
@@ -475,11 +483,13 @@ export function JokerCard({
   selected,
   onPress,
   small,
+  accessibilityLabel,
 }: {
   card: Card;
   selected?: boolean;
   onPress?: () => void;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const w = small ? 100 : 110;
   const h = small ? 140 : 158;
@@ -501,7 +511,7 @@ export function JokerCard({
 
   return (
     <Animated.View style={{ opacity: fade }}>
-      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress}>
+      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress} accessibilityLabel={accessibilityLabel ?? 'Joker card'} accessibilityRole={onPress ? 'button' : undefined}>
         <View
           style={[
             {

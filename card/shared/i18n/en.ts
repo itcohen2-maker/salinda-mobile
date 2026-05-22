@@ -1558,4 +1558,10 @@ export const en: Record<string, string> = {
   // Coin award notification (1 coin)
   'courage.coinAward.title': '⭐ +1 Coin!',
   'courage.coinAward.body': 'Excellence meter full — you earned 1 coin!',
+
+  // Accessibility labels (E.3, E.4)
+  'game.swapBrackets': 'Swap brackets position',
+  'a11y.card': 'Card {{value}}',
+  'a11y.die': 'Die showing {{value}}',
+  'a11y.joker': 'Joker card',
 };
