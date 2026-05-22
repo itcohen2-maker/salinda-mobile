@@ -20146,44 +20146,37 @@ export function PlayModeChoiceScreen({
               <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
             </View>
 
-            {/* ── 3. FOOTER LINKS ── */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 4,
-                marginBottom: sectionGap,
-              }}
-            >
-              <TouchableOpacity
-                accessibilityRole="button"
-                testID="lobby-tutorial"
-                onPress={onHowToPlay}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.howToPlay')}</Text>
-              </TouchableOpacity>
-              <Text style={{ color: '#4B5563', fontSize: 14 }}> · </Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                testID="home-feedback-toggle"
-                onPress={() => setFeedbackOpen((prev) => !prev)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.sendFeedback')}</Text>
-              </TouchableOpacity>
-              <Text style={{ color: '#4B5563', fontSize: 14 }}> · </Text>
-              <TouchableOpacity
-                accessibilityRole="button"
-                testID="home-auth-button"
-                onPress={onOpenAuth}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.account')}</Text>
-              </TouchableOpacity>
-            </View>
+            {/* ── 3. ACTION BUTTONS: guide / feedback / auth ── */}
+            <LulosButton
+              text={t('lobby.guideButton')}
+              color="orange"
+              width={220}
+              height={42}
+              fontSize={15}
+              testID="lobby-tutorial"
+              onPress={onHowToPlay}
+              style={{ marginBottom: 12, alignSelf: 'center' }}
+            />
+            <LulosButton
+              text={t('lobby.sendFeedback')}
+              color="blue"
+              width={220}
+              height={42}
+              fontSize={15}
+              testID="home-feedback-toggle"
+              onPress={() => setFeedbackOpen((prev) => !prev)}
+              style={{ marginBottom: 12, alignSelf: 'center' }}
+            />
+            <LulosButton
+              text={t('auth.homeButton')}
+              color="blue"
+              width={220}
+              height={42}
+              fontSize={15}
+              testID="home-auth-button"
+              onPress={onOpenAuth}
+              style={{ marginBottom: sectionGap, alignSelf: 'center' }}
+            />
 
             {/* Feedback card — inline expansion */}
             {feedbackOpen ? (
