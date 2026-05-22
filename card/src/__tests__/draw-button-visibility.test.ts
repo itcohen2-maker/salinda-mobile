@@ -1,4 +1,4 @@
-import { initialState, shouldShowDrawForfeitButton } from '../../index';
+import { initialState, shouldShowConfirmEquationButton, shouldShowDrawForfeitButton } from '../../index';
 import type { GameState } from '../../index';
 
 function makeState(overrides: Partial<GameState> = {}): GameState {
@@ -42,5 +42,43 @@ describe('shouldShowDrawForfeitButton', () => {
     });
 
     expect(shouldShowDrawForfeitButton(state, false)).toBe(false);
+  });
+});
+
+describe('shouldShowConfirmEquationButton', () => {
+  it('hides the confirm button before the equation is ready in a normal game', () => {
+    const state = makeState({ mode: 'solo' });
+
+    expect(
+      shouldShowConfirmEquationButton(state, {
+        canUseActiveTurnUi: true,
+        confirmReady: false,
+        manualTutorialConfirm: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('shows the confirm button once the equation is ready in a normal game', () => {
+    const state = makeState({ mode: 'solo' });
+
+    expect(
+      shouldShowConfirmEquationButton(state, {
+        canUseActiveTurnUi: true,
+        confirmReady: true,
+        manualTutorialConfirm: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps the button hidden in tutorial until manual confirm is active and ready', () => {
+    const state = makeState({ isTutorial: true });
+
+    expect(
+      shouldShowConfirmEquationButton(state, {
+        canUseActiveTurnUi: true,
+        confirmReady: true,
+        manualTutorialConfirm: false,
+      }),
+    ).toBe(false);
   });
 });

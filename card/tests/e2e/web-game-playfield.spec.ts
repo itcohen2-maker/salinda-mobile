@@ -123,7 +123,7 @@ test.describe('Desktop Gameplay Playfield', () => {
       await expect(game.resetEquationButton).toBeVisible();
     });
 
-    test('keeps the confirm button above the hand and allows clicking a hand card', async ({ page, lobby, game }, testInfo) => {
+    test('keeps the hand clickable before the confirm button appears', async ({ page, lobby, game }, testInfo) => {
       test.skip(testInfo.project.name.includes('mobile'), 'Mobile projects use touch interactions.');
 
       const consoleLogs: string[] = [];
@@ -136,18 +136,8 @@ test.describe('Desktop Gameplay Playfield', () => {
       await game.waitReady();
 
       await game.rollDiceButton.click();
-      await expect(page.getByTestId('confirm-equation')).toBeVisible();
+      await expect(page.getByTestId('confirm-equation')).toHaveCount(0);
       await expect(game.playerHand).toBeVisible();
-
-      const confirmBox = await page.getByTestId('confirm-equation').boundingBox();
-      const handBox = await game.playerHand.boundingBox();
-
-      expect(confirmBox).not.toBeNull();
-      expect(handBox).not.toBeNull();
-
-      if (!confirmBox || !handBox) return;
-
-      expect(confirmBox.y + confirmBox.height).toBeLessThanOrEqual(handBox.y);
 
       await page.locator('[data-testid^="hand-card-"]').nth(2).click({ force: true });
       await page.waitForTimeout(400);

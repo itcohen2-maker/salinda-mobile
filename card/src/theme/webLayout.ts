@@ -43,6 +43,10 @@ export const WEB_MOBILE_GAME_FRAME_HEIGHT = 844;
 export const WEB_MOBILE_LANDSCAPE_MAX_HEIGHT = 430;
 export const WEB_MOBILE_LANDSCAPE_MAX_WIDTH = 900;
 
+function isPortraitMobileViewport(viewportWidth: number, viewportHeight: number): boolean {
+  return isWebMobileViewport(viewportWidth, viewportHeight) && viewportHeight >= viewportWidth;
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -71,13 +75,24 @@ export function getWebContentWidth(
 }
 
 export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
-  const viewportWidth = Math.max(320, Math.round(viewport.width || 0));
-  const viewportHeight = Math.max(568, Math.round(viewport.height || 0));
-  const mobileWebViewport = isWebMobileViewport(viewportWidth, viewportHeight);
+  const rawViewportWidth = Math.max(0, Math.round(viewport.width || 0));
+  const rawViewportHeight = Math.max(0, Math.round(viewport.height || 0));
+  const viewportWidth = Math.max(320, rawViewportWidth);
+  const viewportHeight = rawViewportHeight > 0 ? rawViewportHeight : 568;
+  const mobileWebViewport = isWebMobileViewport(rawViewportWidth, rawViewportHeight);
+  const portraitMobileWebViewport = isPortraitMobileViewport(rawViewportWidth, rawViewportHeight);
   // Phone-width web mirrors the native app frame; wider web keeps the fixed
   // desktop canvas. Neither path grows with the live viewport height.
-  const frameHeight = mobileWebViewport ? WEB_MOBILE_GAME_FRAME_HEIGHT : WEB_GAME_PLAYFIELD_MIN_HEIGHT;
-  const contentScale = clamp(viewportHeight / frameHeight, 0.5, 1);
+  const frameHeight = portraitMobileWebViewport
+    ? viewportHeight
+    : mobileWebViewport
+      ? WEB_MOBILE_GAME_FRAME_HEIGHT
+      : WEB_GAME_PLAYFIELD_MIN_HEIGHT;
+  const contentScale = portraitMobileWebViewport
+    ? 1
+    : mobileWebViewport
+      ? Math.min(1, viewportHeight / frameHeight)
+      : clamp(viewportHeight / frameHeight, 0.5, 1);
   const playfieldWidth = mobileWebViewport
     ? viewportWidth
     : Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, viewportWidth);

@@ -44,13 +44,13 @@ describe('getWebGameLayout', () => {
     expect(layout.timerTop).toBe(layout.tableTop + layout.tableHeight + 32);
   });
 
-  it('shrinks the playfield on narrow web viewports without overflowing', () => {
+  it('uses the live viewport height for portrait mobile web so the playfield stays full-width', () => {
     const layout = getWebGameLayout({ width: 360, height: 640 });
 
     expect(layout.viewportWidth).toBe(360);
     expect(layout.viewportHeight).toBe(640);
-    expect(layout.frameHeight).toBe(WEB_MOBILE_GAME_FRAME_HEIGHT);
-    expect(layout.contentScale).toBeCloseTo(640 / WEB_MOBILE_GAME_FRAME_HEIGHT, 4);
+    expect(layout.frameHeight).toBe(640);
+    expect(layout.contentScale).toBe(1);
     expect(layout.playfieldWidth).toBe(360);
     expect(layout.tableTop).toBe(205);
     expect(layout.tableHeight).toBe(240);
@@ -58,7 +58,16 @@ describe('getWebGameLayout', () => {
     expect(layout.tableWidth).toBe(336);
     expect(layout.resultsTop).toBe(84);
     expect(layout.parensTop).toBe(170);
-    expect(layout.goldActionButtonTop).toBe(680);
+    expect(layout.goldActionButtonTop).toBe(500);
+  });
+
+  it('keeps the scaled native frame for short-wide mobile web viewports', () => {
+    const layout = getWebGameLayout({ width: 767, height: 391 });
+
+    expect(layout.frameHeight).toBe(WEB_MOBILE_GAME_FRAME_HEIGHT);
+    expect(layout.contentScale).toBeCloseTo(391 / WEB_MOBILE_GAME_FRAME_HEIGHT, 4);
+    expect(layout.playfieldWidth).toBe(767);
+    expect(layout.tableWidth).toBe(743);
   });
 });
 

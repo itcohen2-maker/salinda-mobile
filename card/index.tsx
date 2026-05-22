@@ -135,6 +135,7 @@ import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
 import { CelebrationMockupRoom } from './src/screens/CelebrationMockupRoom';
 import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
 import { AdminCoinGiftsScreen } from './src/screens/AdminCoinGiftsScreen';
+import { AuthScreen } from './src/screens/AuthScreen';
 import { FeedbackInboxScreen } from './src/screens/FeedbackInboxScreen';
 import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } from './shared/gameConstants';
 import { displayFontFamily } from './src/theme/fonts';
@@ -1741,6 +1742,27 @@ function shouldShowDrawForfeitButton(
   const totalBtns = btnCount + (abEndTurn ? 1 : 0);
   const showFallback = totalBtns === 0 && (pr || bl || so) && !st.isTutorial && !actionLocked;
   return showDraw || showFracDraw || showFallback;
+}
+
+function shouldShowConfirmEquationButton(
+  st: Pick<GameState, 'phase' | 'hasPlayedCards' | 'isTutorial'>,
+  options: {
+    canUseActiveTurnUi: boolean;
+    confirmReady: boolean;
+    manualTutorialConfirm: boolean;
+  },
+): boolean {
+  if (!options.canUseActiveTurnUi) return false;
+  if (st.phase !== 'building' || st.hasPlayedCards) return false;
+  if (st.isTutorial) return options.manualTutorialConfirm && options.confirmReady;
+  return options.confirmReady;
+}
+
+function shouldShowSolvedPromptInlineBackButton(options: {
+  showSolvedPickCardsPrompt: boolean;
+  isTutorial: boolean;
+}): boolean {
+  return options.showSolvedPickCardsPrompt && !options.isTutorial;
 }
 
 function incrementSoloSessionCounter(
@@ -5335,15 +5357,23 @@ const PICK_CARDS_ACTION_BTN_W = 80;
 const PICK_CARDS_ACTION_BTN_H = 84;
 const PICK_CARDS_PROMPT_BTN_W = 176;
 const PICK_CARDS_PROMPT_BTN_H = 48;
+const PICK_CARDS_INLINE_BACK_BTN_W = 108;
+const PICK_CARDS_INLINE_BACK_BTN_H = 40;
 
 function PickCardsActionButton({
   color,
   onPress,
   width = PICK_CARDS_ACTION_BTN_W,
+  height = PICK_CARDS_ACTION_BTN_H,
+  fontSize = 16,
+  testID,
 }: {
   color: 'blue' | 'orange';
   onPress: () => void;
   width?: number;
+  height?: number;
+  fontSize?: number;
+  testID?: string;
 }) {
   const { t } = useLocale();
 
@@ -5354,8 +5384,9 @@ function PickCardsActionButton({
         color={color}
         textColor="#FFFFFF"
         width={width}
-        height={PICK_CARDS_ACTION_BTN_H}
-        fontSize={16}
+        height={height}
+        fontSize={fontSize}
+        testID={testID}
         onPress={onPress}
       />
     </View>
@@ -6397,7 +6428,17 @@ function timerProgressColor(progress: number): string {
 export type EquationBuilderRef = { resetAll: () => void } | null;
 // ??? Exports for src/bot/ (single-player vs bot feature) ??????????????????
 // See docs/superpowers/plans/2026-04-11-single-player-vs-bot.md
-export { gameReducer, initialState, validateFractionPlay, validateIdenticalPlay, validateStagedCards, fractionDenominator, shouldShowDrawForfeitButton };
+export {
+  gameReducer,
+  initialState,
+  validateFractionPlay,
+  validateIdenticalPlay,
+  validateStagedCards,
+  fractionDenominator,
+  shouldShowDrawForfeitButton,
+  shouldShowConfirmEquationButton,
+  shouldShowSolvedPromptInlineBackButton,
+};
 export { GameProvider, useGame };
 export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType, GamePhase, DiceResult, EquationOption };
 // EquationCommitPayload is exported above, near the GameAction union definition.
@@ -7254,11 +7295,22 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     backgroundColor: withAlpha(timerColor, 0.16),
   } : null;
   const equalsColor = timerColor ?? '#FFD700';
+  const neutralResultBorderColor = '#9A3412';
+  const neutralResultBackgroundColor = '#FFF1D6';
+  const neutralResultTextColor = '#7A1F15';
   const resultBoxDynamic = (!hasError && !ok && timerColor) ? {
-    borderColor: withAlpha(timerColor, 0.82),
-    backgroundColor: withAlpha(timerColor, 0.3),
+    borderColor: withAlpha(timerColor, 0.92),
+    ...Platform.select({
+      ios: {
+        shadowColor: withAlpha(timerColor, 0.35),
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+    }),
   } : null;
-  const resultTextColor = ok ? '#FFF' : (timerColor ?? (state.isTutorial ? '#FFD700' : '#7C3AED'));
+  const resultTextColor = ok ? '#FFF' : (state.isTutorial ? '#FFD700' : neutralResultTextColor);
   const needsOp1Pulse = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
   const needsOp2Pulse = !isSolved && !state.isTutorial && show3rd && dice3 !== null && !effectiveOp2;
 
@@ -7488,6 +7540,28 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     const useVectorGlyph = Platform.OS === 'android' && displayOpKey !== null;
     const isDivision = displayOpKey === '/';
     const divCl = getOperatorColors('/');
+    const isL4bFixedOperator =
+      state.isTutorial &&
+      tutorialBus.getL4bDicePulse() &&
+      which === 1 &&
+      !!displayOp &&
+      !isHandPlaced &&
+      !isWaitingPlacement;
+    if (isL4bFixedOperator) {
+      return (
+        <View
+          pointerEvents="none"
+          style={{ width: 28, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text
+            allowFontScaling={false}
+            style={{ fontSize: 28, fontWeight: '900', color: '#F9A825', textAlign: 'center' as const }}
+          >
+            {normalizedDisplayOp}
+          </Text>
+        </View>
+      );
+    }
     return (
       <TouchableOpacity
         onPress={onPress}
@@ -7625,6 +7699,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   const tutorialSolvedUsedDice = tutorialSolvedDiceResolution
     ? new Set(tutorialSolvedDiceResolution.indices.filter((index): index is number => index !== null))
     : null;
+  const l4bTargetDieIndex =
+    state.isTutorial && !isSolved && tutorialBus.getL4bDicePulse()
+      ? tutorialBus.getL4Config()?.pickB ?? null
+      : null;
   const shouldHideUnusedSolvedTutorialDice =
     state.isTutorial &&
     isSolved &&
@@ -7639,6 +7717,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     ? diceValues
         .map((value, index) => ({ value, index }))
         .filter(({ index }) => tutorialSolvedUsedDice?.has(index))
+    : l4bTargetDieIndex != null
+      ? diceValues
+          .map((value, index) => ({ value, index }))
+          .filter(({ index }) => index === l4bTargetDieIndex)
     : diceValues.map((value, index) => ({ value, index }));
 
   return (
@@ -7856,8 +7938,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                     // faded into the background; reusing the solved palette
                     // keeps the number visually prominent so it reads as
                     // "the goal", not as a disabled hint.
-                    borderColor: hasError ? '#B91C1C' : ok ? '#15803D' : showL5aTarget ? '#15803D' : (state.isTutorial ? 'rgba(124,58,237,0.95)' : '#A16207'),
-                    backgroundColor: hasError ? '#DC2626' : ok ? '#166534' : showL5aTarget ? '#166534' : (state.isTutorial ? 'rgba(124,58,237,0.45)' : '#854D0E'),
+                    borderColor: hasError ? '#B91C1C' : ok ? '#15803D' : showL5aTarget ? '#15803D' : (state.isTutorial ? 'rgba(124,58,237,0.95)' : neutralResultBorderColor),
+                    backgroundColor: hasError ? '#DC2626' : ok ? '#166534' : showL5aTarget ? '#166534' : (state.isTutorial ? 'rgba(124,58,237,0.45)' : neutralResultBackgroundColor),
                     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16,
                   },
                   resultBoxDynamic,
@@ -7969,8 +8051,8 @@ const eqS = StyleSheet.create({
   opBtnEmptyTxt: { fontSize: 26, fontWeight: '800', color: '#F9A825', textAlign: 'center' as const, writingDirection: 'ltr' as const },
   opBtnFilledTxt: { fontSize: 28, fontWeight: '900', color: Platform.OS === 'android' ? '#1a1a2e' : '#FFFFFF', textAlign: 'center' as const, writingDirection: 'ltr' as const },
   eqEquals: { fontSize: 24, fontWeight: '800', color: '#FFD700', marginHorizontal: 2 },
-  resultBox: { minWidth: 48, height: 52, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(124,58,237,0.95)', backgroundColor: 'rgba(124,58,237,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  resultVal: { fontSize: 26, fontWeight: '800', color: '#FFD700' },
+  resultBox: { minWidth: 48, height: 52, borderRadius: 12, borderWidth: 2, borderColor: '#9A3412', backgroundColor: '#FFF1D6', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  resultVal: { fontSize: 26, fontWeight: '800', color: '#7A1F15' },
   resultPlaceholder: { fontSize: 26, fontWeight: '800', color: 'rgba(255,215,0,0.4)' },
   resultError: { fontSize: 20, fontWeight: '900', color: '#EA4335' },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
@@ -10044,7 +10126,7 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins';
+type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth';
 
 type WebBackdropTone = 'black' | 'white';
 
@@ -16764,6 +16846,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     state.stagedCards.length > 0 &&
     !placeCardsDisabled;
   const showSoloOrangeButtonHint = showSoloBuildConfirmHint || showSoloPlaceCardsHint;
+  const showConfirmEquationButton = shouldShowConfirmEquationButton(state, {
+    canUseActiveTurnUi,
+    confirmReady: !!eqConfirm,
+    manualTutorialConfirm: tutorialBus.getManualEqConfirm(),
+  });
   useEffect(() => {
     if (!showSoloOrangeButtonHint) {
       soloActionPulse.stopAnimation();
@@ -17291,7 +17378,17 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           point: it's how the player discovers the feature. */}
       {showSolvedPickCardsPrompt ? (
         <View style={{ position: 'absolute', top: belowTableStripTop, left: 0, right: 0, minHeight: 50, zIndex: 30, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }} pointerEvents="box-none">
-          <ChooseCardsPromptButton />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', paddingHorizontal: 12 }}>
+            <ChooseCardsPromptButton />
+            <PickCardsActionButton
+              color="blue"
+              width={PICK_CARDS_INLINE_BACK_BTN_W}
+              height={PICK_CARDS_INLINE_BACK_BTN_H}
+              fontSize={15}
+              testID="pick-cards-back-inline"
+              onPress={() => dispatch({ type: 'REVERT_TO_BUILDING' })}
+            />
+          </View>
         </View>
       ) : showBelowTablePossibleResults ? (
         <View style={{ position: 'absolute', top: belowTableStripTop, left: 0, right: 0, minHeight: 50, zIndex: 30, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }} pointerEvents="box-none">
@@ -17348,10 +17445,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         </View>
       ) : null}
 
-      {/* בחר קלפים — מיקום קבוע שלא יסתיר את המניפה. בטוטוריאל: ברירת
-          המחדל היא אישור אוטומטי; רק שלבי manual-confirm מפעילים שוב את
-          הכפתור האמיתי. */}
-      {canUseActiveTurnUi && state.phase === 'building' && !state.hasPlayedCards && (!state.isTutorial || tutorialBus.getManualEqConfirm()) && (
+      {/* אשר את התרגיל — מוצג רק כשבאמת אפשר לאשר, כדי לא לבלבל עם כפתור מוחלש. */}
+      {showConfirmEquationButton && (
         <View
           style={{
             position: 'absolute',
@@ -17364,20 +17459,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           pointerEvents="auto"
         >
           {(() => {
+            if (!eqConfirm) return null;
             const showTutorialConfirm = state.isTutorial && tutorialBus.getManualEqConfirm();
-            const showBuildPlaceholder =
-              !state.isTutorial &&
-              state.mode === 'solo' &&
-              (!equationBuildStarted || !eqConfirm);
-            if (showBuildPlaceholder) return null;
             const confirmLabel = t('game.buildingEquationNext');
-            const confirmDisabled = !eqConfirm;
             const showTutorialPulse = state.isTutorial && tutorialBus.getManualEqConfirm();
             const showTutorialConfirmArrow = showTutorialPulse && !tutorialBus.getL7Step1Mode();
             const showConfirmAttentionPulse = showTutorialPulse || showSoloBuildConfirmHint;
             const showConfirmAttentionArrow = showTutorialConfirmArrow;
             const confirmPulseAnim = showTutorialPulse ? tutorialResultPulse : soloActionPulse;
-            const confirmShadowColor = showBuildPlaceholder ? '#16A34A' : '#FF6B00';
+            const confirmShadowColor = '#FF6B00';
             return (
               <Animated.View
                 ref={confirmBtnWrapperRef}
@@ -17435,15 +17525,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 )}
                 <LulosButton
                   text={confirmLabel}
-                  color={showBuildPlaceholder ? 'green' : 'orange'}
+                  color="orange"
                   width={220}
                   height={48}
                   fontSize={17}
                   textColor="#FFFFFF"
                   testID="confirm-equation"
-                  disabled={confirmDisabled}
                   onPress={() => {
-                    if (confirmDisabled || !eqConfirm) return;
                     if (showTutorialConfirm && tutorialBus.getL4Step3Mode()) {
                       tutorialBus.emitUserEvent({ kind: 'eqConfirmedByUser' });
                     }
@@ -17786,7 +17874,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       )}
 
       {/* בחר קלפים — בעיגון התחתון המקורי כדי לא להסתיר את תוצאת התרגיל */}
-      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !l5GuidedTutorial && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getL9ParensFilter()) && (
+      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !showSolvedPickCardsPrompt && !l5GuidedTutorial && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getL9ParensFilter()) && (
         <View
           style={[
             StyleSheet.absoluteFillObject,
@@ -19537,8 +19625,9 @@ function MenuCoinButton({
   );
 }
 
-function PlayModeChoiceScreen({
+export function PlayModeChoiceScreen({
   onPlay,
+  onOpenAuth,
   onHowToPlay,
   onShop,
   onOpenFeedbackInbox,
@@ -19548,6 +19637,7 @@ function PlayModeChoiceScreen({
   onFeedbackSubmit,
 }: {
   onPlay: () => void;
+  onOpenAuth: () => void;
   onHowToPlay: () => void;
   onShop: () => void;
   onOpenFeedbackInbox: () => void;
@@ -19557,7 +19647,7 @@ function PlayModeChoiceScreen({
   onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
 }) {
   const { t, locale, setLocale } = useLocale();
-  const { profile } = useAuth();
+  const { profile, isAnonymous } = useAuth();
   const { isFeedbackAdmin } = useFeedbackAdmin();
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
@@ -19577,6 +19667,8 @@ function PlayModeChoiceScreen({
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
+  const authHomeButtonLabel = t('auth.homeButton');
+  const authHomeHelper = t('auth.homeHelper');
   const feedbackToggleLabel = locale === 'he'
     ? (feedbackOpen ? 'סגור פידבק' : 'שלח פידבק')
     : (feedbackOpen ? 'Close feedback' : 'Send feedback');
@@ -19654,6 +19746,32 @@ function PlayModeChoiceScreen({
               backgroundColor: 'rgba(255,90,180,0.16)',
             }}
           />
+          {isAnonymous ? (
+            <>
+              <LulosButton
+                text={authHomeButtonLabel}
+                color="blue"
+                width={localeButtonWidth}
+                height={localeButtonHeight}
+                fontSize={localeButtonFontSize}
+                testID="home-auth-button"
+                onPress={onOpenAuth}
+                style={{ marginTop: 12, alignSelf: 'center' }}
+              />
+              <Text
+                style={{
+                  marginTop: 8,
+                  maxWidth: 260,
+                  color: '#D1D5DB',
+                  fontSize: 12,
+                  lineHeight: 17,
+                  textAlign: 'center',
+                }}
+              >
+                {authHomeHelper}
+              </Text>
+            </>
+          ) : null}
         </View>
         <View style={{ flex: 1, width: '100%', justifyContent: 'flex-start', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: shopToPrimaryContentGap }}>
@@ -19948,6 +20066,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const salindaPrevVolumeRef = useRef(initialSalindaVolume);
   const [showSalindaPanel, setShowSalindaPanel] = useState(false);
   const [preferredName, setPreferredName] = useState('');
+  const [adminCoinGiftUsername, setAdminCoinGiftUsername] = useState<string | null>(null);
   const SALINDA_PANEL_H = isAndroidPlatform ? 188 : 160;
   const SALINDA_TRACK_H = isAndroidPlatform ? 164 : 140;
   const SALINDA_TRACK_W = isAndroidPlatform ? 8 : 6;
@@ -20177,6 +20296,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const openGameEntry = useCallback(() => {
     setPlayMode('game-entry');
     AsyncStorage.setItem(WELCOME_PLAYER_SCREEN_KEY, 'true').catch(() => {});
+  }, []);
+
+  const openAdminCoinGifts = useCallback((username?: string) => {
+    const normalizedUsername = username?.trim();
+    setAdminCoinGiftUsername(normalizedUsername ? normalizedUsername : null);
+    setPlayMode('admin-coins');
   }, []);
 
   const closeCelebrationMockupRoom = useCallback(() => {
@@ -20495,6 +20620,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       return;
     }
     if (playMode === 'admin-coins') {
+      setAdminCoinGiftUsername(null);
+      setPlayMode('choose');
+      return;
+    }
+    if (playMode === 'auth') {
       setPlayMode('choose');
       return;
     }
@@ -20541,10 +20671,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     screen = (
         <PlayModeChoiceScreen
           onPlay={openGameEntry}
+          onOpenAuth={() => setPlayMode('auth')}
           onHowToPlay={() => setPlayMode('tutorial')}
           onShop={() => setShowShop(true)}
           onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
-          onOpenAdminCoinGifts={() => setPlayMode('admin-coins')}
+          onOpenAdminCoinGifts={() => openAdminCoinGifts()}
           preferredName={preferredName}
           onPreferredNameChange={setPreferredName}
           onFeedbackSubmit={submitFeedbackFromPrompt}
@@ -20569,6 +20700,13 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         onOnline={() => setPlayMode('online')}
       />
     );
+  } else if (playMode === 'auth') {
+    screen = (
+      <AuthScreen
+        onBack={() => setPlayMode('choose')}
+        onSuccess={() => setPlayMode('choose')}
+      />
+    );
   } else if (playMode === 'classroom') {
     screen = (
       <ClassroomModeScreen
@@ -20582,9 +20720,22 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       />
     );
   } else if (playMode === 'feedback-inbox') {
-    screen = <FeedbackInboxScreen onBack={() => setPlayMode('choose')} />;
+    screen = (
+      <FeedbackInboxScreen
+        onBack={() => setPlayMode('choose')}
+        onOpenAdminCoinGifts={openAdminCoinGifts}
+      />
+    );
   } else if (playMode === 'admin-coins') {
-    screen = <AdminCoinGiftsScreen onBack={() => setPlayMode('choose')} />;
+    screen = (
+      <AdminCoinGiftsScreen
+        initialUsername={adminCoinGiftUsername ?? undefined}
+        onBack={() => {
+          setAdminCoinGiftUsername(null);
+          setPlayMode('choose');
+        }}
+      />
+    );
   } else if (playMode === 'local') {
     if (state.phase === 'setup') {
       screen = (

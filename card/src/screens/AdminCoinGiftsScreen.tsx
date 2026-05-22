@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -16,7 +16,12 @@ import { useLocale } from '../i18n/LocaleContext';
 
 type BannerTone = 'success' | 'error';
 
-export function AdminCoinGiftsScreen({ onBack }: { onBack: () => void }) {
+interface AdminCoinGiftsScreenProps {
+  initialUsername?: string;
+  onBack: () => void;
+}
+
+export function AdminCoinGiftsScreen({ onBack, initialUsername }: AdminCoinGiftsScreenProps) {
   const { locale, isRTL } = useLocale();
   const { isAdmin, loading } = useAdminAccess();
   const [username, setUsername] = useState('');
@@ -26,6 +31,7 @@ export function AdminCoinGiftsScreen({ onBack }: { onBack: () => void }) {
   const [lookupBusy, setLookupBusy] = useState(false);
   const [submitBusy, setSubmitBusy] = useState(false);
   const [banner, setBanner] = useState<{ text: string; tone: BannerTone } | null>(null);
+  const autoLookupUsernameRef = useRef<string | null>(null);
 
   const copy = useMemo(() => {
     if (locale === 'he') {
@@ -93,13 +99,13 @@ export function AdminCoinGiftsScreen({ onBack }: { onBack: () => void }) {
     writingDirection: isRTL ? 'rtl' : 'ltr',
   };
 
-  const clearBanner = () => setBanner(null);
+  const clearBanner = useCallback(() => setBanner(null), []);
 
-  const handleLookup = async () => {
-    clearBanner();
+  const handleLookupByUsername = useCallback(async (rawUsername: string) => {
+    setBanner(null);
     setTarget(null);
 
-    const normalizedUsername = username.trim();
+    const normalizedUsername = rawUsername.trim();
     if (!normalizedUsername) {
       setBanner({ text: copy.notFound, tone: 'error' });
       return;
@@ -119,7 +125,20 @@ export function AdminCoinGiftsScreen({ onBack }: { onBack: () => void }) {
     }
 
     setTarget(result);
-  };
+  }, [copy.findPlayerError, copy.notFound]);
+
+  const handleLookup = useCallback(async () => {
+    await handleLookupByUsername(username);
+  }, [handleLookupByUsername, username]);
+
+  useEffect(() => {
+    const normalizedUsername = initialUsername?.trim();
+    if (!normalizedUsername || autoLookupUsernameRef.current === normalizedUsername) return;
+
+    autoLookupUsernameRef.current = normalizedUsername;
+    setUsername(normalizedUsername);
+    void handleLookupByUsername(normalizedUsername);
+  }, [handleLookupByUsername, initialUsername]);
 
   const handleSubmit = async () => {
     clearBanner();

@@ -31,6 +31,11 @@ interface FeedbackSubmissionRow {
   created_at: string;
 }
 
+interface FeedbackInboxScreenProps {
+  onBack: () => void;
+  onOpenAdminCoinGifts: (username?: string) => void;
+}
+
 function formatTimestamp(value: string, locale: 'he' | 'en'): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -48,7 +53,7 @@ function statusColor(status: FeedbackSubmissionStatus): string {
   return '#FCD34D';
 }
 
-export function FeedbackInboxScreen({ onBack }: { onBack: () => void }) {
+export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackInboxScreenProps) {
   const { locale, t, isRTL } = useLocale();
   const { user } = useAuth();
   const { isFeedbackAdmin, loading: adminLoading } = useFeedbackAdmin();
@@ -179,45 +184,74 @@ export function FeedbackInboxScreen({ onBack }: { onBack: () => void }) {
               <Text style={styles.centerBody}>{emptyMessage}</Text>
             </View>
           ) : (
-            feedbackItems.map((item) => (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderMain}>
-                    {item.username_snapshot?.trim() ? (
-                      <TouchableOpacity
-                        onPress={() => void handleCopyUsername(item.id, item.username_snapshot ?? '')}
-                        style={styles.senderButton}
-                        activeOpacity={0.82}
-                        testID={`feedback-copy-username-${item.id}`}
-                      >
-                        <Text style={styles.senderText}>{item.username_snapshot.trim()}</Text>
-                        <Text style={styles.copyHintText}>
-                          {copiedFeedbackId === item.id ? copiedLabel : copyHint}
+            feedbackItems.map((item) => {
+              const senderUsername = item.username_snapshot?.trim() ?? '';
+              const hasSenderUsername = senderUsername.length > 0;
+              const senderTypeLabel = item.is_anonymous
+                ? t('feedbackInbox.senderTypeGuest')
+                : t('feedbackInbox.senderTypeRegistered');
+
+              return (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.cardHeaderMain}>
+                      {hasSenderUsername ? (
+                        <TouchableOpacity
+                          onPress={() => void handleCopyUsername(item.id, senderUsername)}
+                          style={styles.senderButton}
+                          activeOpacity={0.82}
+                          testID={`feedback-copy-username-${item.id}`}
+                        >
+                          <Text style={styles.senderText}>{senderUsername}</Text>
+                          <Text style={styles.copyHintText}>
+                            {copiedFeedbackId === item.id ? copiedLabel : copyHint}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.senderText}>
+                          {item.is_anonymous ? t('feedbackInbox.senderAnonymous') : t('feedbackInbox.senderUnknown')}
                         </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={styles.senderText}>
-                        {item.is_anonymous ? t('feedbackInbox.senderAnonymous') : t('feedbackInbox.senderUnknown')}
-                      </Text>
-                    )}
-                    <Text style={styles.timestampText}>{formatTimestamp(item.created_at, locale)}</Text>
+                      )}
+                      <Text style={styles.timestampText}>{formatTimestamp(item.created_at, locale)}</Text>
+                    </View>
+                    <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
+                      {t(`feedbackInbox.status.${item.status}`)}
+                    </Text>
                   </View>
-                  <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
-                    {t(`feedbackInbox.status.${item.status}`)}
+
+                  <View style={[styles.senderMetaRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                    <View
+                      style={[
+                        styles.senderTypeBadge,
+                        item.is_anonymous ? styles.senderTypeGuestBadge : styles.senderTypeRegisteredBadge,
+                      ]}
+                    >
+                      <Text style={styles.senderTypeText}>{senderTypeLabel}</Text>
+                    </View>
+                    {hasSenderUsername ? (
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => onOpenAdminCoinGifts(senderUsername)}
+                        style={styles.giftShortcutButton}
+                        testID={`feedback-open-gift-${item.id}`}
+                      >
+                        <Text style={styles.giftShortcutButtonText}>{t('feedbackInbox.openGift')}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                    {`${t(`feedbackInbox.kind.${item.experience_kind}`)} · ${stars(item.rating)} · ${item.platform}`}
+                  </Text>
+                  <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                    {`${t('feedbackInbox.locale')}: ${item.locale}${item.app_version ? ` · ${t('feedbackInbox.version')}: ${item.app_version}` : ''}`}
+                  </Text>
+                  <Text style={[styles.commentText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
+                    {item.comment.trim() || t('feedbackInbox.noComment')}
                   </Text>
                 </View>
-
-                <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
-                  {`${t(`feedbackInbox.kind.${item.experience_kind}`)} · ${stars(item.rating)} · ${item.platform}`}
-                </Text>
-                <Text style={[styles.metaText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
-                  {`${t('feedbackInbox.locale')}: ${item.locale}${item.app_version ? ` · ${t('feedbackInbox.version')}: ${item.app_version}` : ''}`}
-                </Text>
-                <Text style={[styles.commentText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
-                  {item.comment.trim() || t('feedbackInbox.noComment')}
-                </Text>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -329,6 +363,32 @@ const styles = StyleSheet.create({
   senderButton: {
     alignSelf: 'flex-start',
   },
+  senderMetaRow: {
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  senderTypeBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  senderTypeGuestBadge: {
+    backgroundColor: 'rgba(59,130,246,0.14)',
+    borderColor: 'rgba(96,165,250,0.34)',
+  },
+  senderTypeRegisteredBadge: {
+    backgroundColor: 'rgba(16,185,129,0.14)',
+    borderColor: 'rgba(52,211,153,0.34)',
+  },
+  senderTypeText: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   senderText: {
     color: '#F8FAFC',
     fontSize: 16,
@@ -350,6 +410,21 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '900',
+  },
+  giftShortcutButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37,99,235,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.34)',
+  },
+  giftShortcutButtonText: {
+    color: '#BFDBFE',
+    fontSize: 12,
+    fontWeight: '800',
   },
   metaText: {
     color: '#BFDBFE',

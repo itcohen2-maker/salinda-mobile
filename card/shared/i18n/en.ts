@@ -167,11 +167,14 @@ export const en: Record<string, string> = {
   'feedbackInbox.noAccessBody': 'This screen is only available to allowlisted admins.',
   'feedbackInbox.senderAnonymous': 'Anonymous player',
   'feedbackInbox.senderUnknown': 'Unknown player',
+  'feedbackInbox.senderTypeGuest': 'Guest',
+  'feedbackInbox.senderTypeRegistered': 'Registered',
   'feedbackInbox.locale': 'Locale',
   'feedbackInbox.version': 'Version',
   'feedbackInbox.email': 'Email',
   'feedbackInbox.noEmail': 'No email',
   'feedbackInbox.noComment': 'No comment',
+  'feedbackInbox.openGift': 'Gift coins',
   'feedbackInbox.kind.general': 'General',
   'feedbackInbox.kind.game': 'Game',
   'feedbackInbox.kind.tutorial': 'Tutorial',
@@ -1424,6 +1427,8 @@ export const en: Record<string, string> = {
   'auth.haveAccount': 'Already have an account? Sign in',
   'auth.back': '← Back',
   'auth.usernameMinLength': 'Username must be at least 2 characters',
+  'auth.homeButton': 'Registered user',
+  'auth.homeHelper': 'Sign in to keep your bank and settings.',
 
   // ── Table Browser ──
   'browse.title': 'Find a Table',
