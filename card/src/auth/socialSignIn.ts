@@ -6,9 +6,13 @@ import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 export type SocialAuthProvider = 'google' | 'apple';
+export interface SocialSignInOptions {
+  forceAccountPicker?: boolean;
+}
 
 export const SOCIAL_AUTH_SCHEME = 'salinda';
 export const SOCIAL_AUTH_CALLBACK_PATH = 'auth/callback';
+export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -17,10 +21,9 @@ export function buildSocialAuthRedirectUri(): string {
     return makeRedirectUri({ path: SOCIAL_AUTH_CALLBACK_PATH });
   }
 
-  return makeRedirectUri({
-    scheme: SOCIAL_AUTH_SCHEME,
-    path: SOCIAL_AUTH_CALLBACK_PATH,
-  });
+  // In development builds, makeRedirectUri() may resolve to the dev-client launcher URL.
+  // Supabase must receive the exact native deep link URI that is allow-listed in Auth > Redirect URLs.
+  return SOCIAL_AUTH_NATIVE_REDIRECT_URI;
 }
 
 export async function createSessionFromUrl(url: string): Promise<void> {
@@ -57,18 +60,25 @@ export async function createSessionFromUrl(url: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function performSocialSignIn(provider: SocialAuthProvider): Promise<{ error: string | null }> {
+export async function performSocialSignIn(
+  provider: SocialAuthProvider,
+  options: SocialSignInOptions = {},
+): Promise<{ error: string | null }> {
   if (Platform.OS === 'web') {
     return { error: 'Social sign-in is not available in the web flow.' };
   }
 
   try {
     const redirectTo = buildSocialAuthRedirectUri();
+    const queryParams = provider === 'google' && options.forceAccountPicker
+      ? { prompt: 'select_account' }
+      : undefined;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo,
         skipBrowserRedirect: true,
+        ...(queryParams ? { queryParams } : {}),
       },
     });
 

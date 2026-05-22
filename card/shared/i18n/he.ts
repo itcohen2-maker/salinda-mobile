@@ -1248,8 +1248,8 @@ export const he: Record<string, string> = {
   'tutorial.l4c.hintPickCards': 'בחרו קלף אחד, או שני קלפים שסכומם שווה לתוצאה.',
   'tutorial.l4c.hintPressPlay': 'לחץ שגר',
   'tutorial.l4c.tryAgain': 'נסה שוב',
-  'tutorial.l4c.finishTitle': 'כל הכבוד',
-  'tutorial.l4c.finishBody': 'נפטרת מקלף ועכשיו נעבור לקלפים המיוחדים',
+  'tutorial.l4c.finishTitle': 'כל הכבוד, נפטרת מקלף',
+  'tutorial.l4c.finishBody': 'ועכשיו נעבור לקלפים המיוחדים',
   'tutorial.l4c.celebrate': 'כל הכבוד — סיימתם לבד',
 
   // שיעור 5 — קלפי פעולה וסלינדה
@@ -1278,7 +1278,7 @@ export const he: Record<string, string> = {
   'tutorial.l5b.hintTapJoker': 'לחצו על הסלינדה',
   'tutorial.l5b.hintPickInModal': 'בחרו סימן',
   'tutorial.l5b.hintPlaceSign': 'עכשיו לחצו על המיקום בתרגיל',
-  'tutorial.l5b.wrongSign': 'לא הסימן הנכון — לחצו שוב על הסלינדה',
+  'tutorial.l5b.wrongSign': 'נסה שנית',
   'tutorial.l5b.celebrate': 'כל הכבוד — הכרתם את הסלינדה',
   'tutorial.l5c.botIntro': 'עכשיו נתרגל — לפעמים נותנים תרגיל עם תוצאה ואתם בוחרים את הסימן',
   'tutorial.l5c.hintSolve': 'בחרו את הסימן שמשלים את התרגיל ולחצו אשר',
@@ -1295,7 +1295,7 @@ export const he: Record<string, string> = {
   // בועת פתיחת ההדרכה — מוצגת לפני השיעור הראשון
   'tutorial.welcome.title': 'ברוכים הבאים לסלינדה',
   'tutorial.welcome.headline': 'מתחילים עם 7 קלפים',
-  'tutorial.welcome.headlineSub': 'ומנצחים כשנשארים עם 2!',
+  'tutorial.welcome.headlineSub': 'ומנצחים עם 2!',
   'tutorial.welcome.tagline': 'בכל תור בונים תרגיל מ-2 או 3 קוביות',
   'tutorial.welcome.body': 'התוצאה שווה לקלף ביד או לחיבור של שני קלפים? נפטרים מהם!',
   'tutorial.welcome.coreReward': 'בסיום ההדרכה תרוויחו 10 מטבעות.',
@@ -1439,6 +1439,20 @@ export const he: Record<string, string> = {
   'auth.usernameMinLength': 'שם משתמש חייב להכיל לפחות 2 תווים',
 
   // ── Table Browser ──
+  'auth.homeButton': 'כניסת משתמש',
+  'auth.switchUserButton': 'החלף משתמש',
+  'auth.homeHelper': 'היכנסו כדי לטעון את ההיסטוריה, הבנק וההגדרות שלכם.',
+  'auth.chooserSubtitle': 'בחרו איך להיכנס לחשבון שלכם.',
+  'auth.socialHelper': 'כניסה עם Google תטען את ההיסטוריה של החשבון הקיים. ההתקדמות האורחת הנוכחית לא מתמזגת אוטומטית.',
+  'auth.accountMenuTitle': 'חשבון',
+  'auth.accountMenuSubtitle': 'כאן אפשר להחליף משתמש או להתנתק.',
+  'auth.currentAccountLabel': 'החשבון הנוכחי',
+  'auth.currentGuest': 'מזהה אורח נוכחי: {{id}}',
+  'auth.signOutButton': 'התנתק',
+  'auth.continueWithGoogle': 'המשך עם Google',
+  'auth.continueWithEmail': 'כניסה עם אימייל',
+  'auth.backToOptions': 'חזרה לאפשרויות כניסה',
+
   'browse.title': 'חפש שולחן',
   'browse.table': 'שולחן',
   'browse.host': 'מארח',

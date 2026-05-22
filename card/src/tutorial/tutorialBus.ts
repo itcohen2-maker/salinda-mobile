@@ -212,6 +212,8 @@ let l5aTargetResult: number | null = null;
  *  operator card from the fan and drop it on the slot, exactly like the
  *  real game. */
 let l5BlockOpCycle = false;
+/** While true (L5.2 only), only Slinda can be tapped in the fan. */
+let l5bJokerOnlyMode = false;
 
 /** While true, the player hand renders in the EXACT order that the
  *  tutorial rigged it — `sortHandCards` becomes a no-op. Used in L5.2
@@ -494,6 +496,14 @@ export const tutorialBus = {
     return l5BlockOpCycle;
   },
 
+  setL5bJokerOnlyMode(on: boolean): void {
+    l5bJokerOnlyMode = on;
+    notifyL5Ui();
+  },
+  getL5bJokerOnlyMode(): boolean {
+    return l5bJokerOnlyMode;
+  },
+
   setTutorialPreserveHandOrder(on: boolean): void {
     tutorialPreserveHandOrder = on;
     notifyL5Ui();
@@ -690,6 +700,7 @@ export const tutorialBus = {
     l5aDiceUnlocked = false;
     l5aTargetResult = null;
     l5BlockOpCycle = false;
+    l5bJokerOnlyMode = false;
     tutorialPreserveHandOrder = false;
     fracGuidedMode = false;
     l6MiniLocked = false;

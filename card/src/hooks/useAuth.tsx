@@ -1,7 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { performSocialSignIn, type SocialAuthProvider } from '../auth/socialSignIn';
+import {
+  performSocialSignIn,
+  type SocialAuthProvider,
+  type SocialSignInOptions,
+} from '../auth/socialSignIn';
 import { supabase } from '../lib/supabase';
 import type { TableSkinId } from '../theme/tableSkins';
 
@@ -40,8 +44,9 @@ interface AuthContextValue {
   /** Sign in with email + password (for users who already linked their account). */
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   /** Sign in with Google or Apple, primarily for native mobile flows. */
-  signInWithProvider: (provider: SocialAuthProvider) => Promise<{ error: string | null }>;
+  signInWithProvider: (provider: SocialAuthProvider, options?: SocialSignInOptions) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  signOutToGuest: () => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
   /** Purchase the Slinda card for 150 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
   purchaseSlinda: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
@@ -144,9 +149,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const applySession = useCallback(async (nextSession: Session | null) => {
+    setSession(nextSession);
+    if (nextSession?.user) {
+      await fetchProfile(nextSession.user.id);
+    } else {
+      setProfile(null);
+    }
+  }, [fetchProfile]);
+
   const refreshProfile = useCallback(async () => {
     if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
+
+  const beginAnonymousSession = useCallback(async (): Promise<{ error: string | null }> => {
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) return { error: error.message };
+
+      await applySession(data?.session ?? null);
+      return { error: null };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Could not create a guest session.',
+      };
+    }
+  }, [applySession]);
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
@@ -156,19 +184,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: sessionData } = await supabase.auth.getSession();
         const s = sessionData?.session ?? null;
         if (s) {
-          setSession(s);
-          void fetchProfile(s.user.id);
+          await applySession(s);
         } else {
-          try {
-            const { data, error } = await supabase.auth.signInAnonymously();
-            if (error) {
-              console.warn('[auth] signInAnonymously failed:', error.message);
-            } else if (data?.session) {
-              setSession(data.session);
-              void fetchProfile(data.session.user.id);
-            }
-          } catch (e) {
-            console.warn('[auth] signInAnonymously threw:', e);
+          const result = await beginAnonymousSession();
+          if (result.error) {
+            console.warn('[auth] signInAnonymously failed:', result.error);
           }
         }
       } catch (e) {
@@ -229,26 +249,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   }, []);
 
-  const signInWithProvider = useCallback(async (provider: SocialAuthProvider) => {
-    const result = await performSocialSignIn(provider);
+  const signInWithProvider = useCallback(async (provider: SocialAuthProvider, options?: SocialSignInOptions) => {
+    const result = await performSocialSignIn(provider, options);
     if (result.error) return result;
 
     try {
       const { data } = await supabase.auth.getSession();
       const nextSession = data?.session ?? null;
-      setSession(nextSession);
-      if (nextSession?.user) {
-        await fetchProfile(nextSession.user.id);
-      } else {
-        setProfile(null);
-      }
+      await applySession(nextSession);
       return { error: null };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : 'Could not finish sign-in.',
       };
     }
-  }, [fetchProfile]);
+  }, [applySession]);
 
   const purchaseSlinda = useCallback(async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
     try {
@@ -459,6 +474,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
   }, []);
 
+  const signOutToGuest = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) return { error: error.message };
+      return await beginAnonymousSession();
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Could not switch to guest mode.',
+      };
+    }
+  }, [beginAnonymousSession]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -472,6 +499,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signInWithProvider,
         signOut: signOutFn,
+        signOutToGuest,
         refreshProfile,
         purchaseSlinda,
         consumeSlinda,

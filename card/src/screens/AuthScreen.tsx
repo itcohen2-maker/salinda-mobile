@@ -1,9 +1,3 @@
-// ============================================================
-// AuthScreen.tsx - Account entry screen for web and mobile.
-// Web keeps the email/password form. Native starts with a
-// social-auth chooser and falls back to the same email flow.
-// ============================================================
-
 import React, { useMemo, useState } from 'react';
 import {
   View,
@@ -16,45 +10,53 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useLocale } from '../i18n/LocaleContext';
+
 import { useAuth } from '../hooks/useAuth';
+import { useLocale } from '../i18n/LocaleContext';
 
 interface Props {
   onSuccess: () => void;
   onBack: () => void;
 }
 
+type EmailAuthMode = 'link' | 'signin';
+
 export function AuthScreen({ onSuccess, onBack }: Props) {
-  const { t, locale } = useLocale();
-  const { signUp, signIn, signInWithProvider, isAnonymous, user, profile } = useAuth();
-  const shortUserId = user?.id ? user.id.slice(0, 3).toUpperCase() : null;
+  const { t } = useLocale();
+  const {
+    signUp,
+    signIn,
+    signInWithProvider,
+    signOutToGuest,
+    isAnonymous,
+    user,
+    profile,
+  } = useAuth();
   const isNativeChooser = Platform.OS !== 'web';
-  const [mode, setMode] = useState<'link' | 'signin'>(isAnonymous ? 'link' : 'signin');
-  const [showEmailForm, setShowEmailForm] = useState(!isNativeChooser);
+  const isSignedInUser = !!user && !isAnonymous;
+  const shortUserId = user?.id ? user.id.slice(0, 3).toUpperCase() : '---';
+  const [mode, setMode] = useState<EmailAuthMode>(isAnonymous ? 'link' : 'signin');
+  const [showEmailForm, setShowEmailForm] = useState(!isNativeChooser && isAnonymous);
+  const [forceAccountPicker, setForceAccountPicker] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const showChooser = isNativeChooser && !showEmailForm;
-  const accountMetaLabel = locale === 'he'
-    ? `מזהה אורח נוכחי: ${shortUserId ?? 'לא זמין עדיין'}`
-    : `Current guest ID: ${shortUserId ?? 'Not available yet'}`;
-
   const chooserCopy = useMemo(() => ({
-    title: locale === 'he' ? 'כניסת משתמש' : t('auth.homeButton'),
-    subtitle: locale === 'he'
-      ? 'בחרו איך להיכנס לחשבון שלכם.'
-      : t('auth.chooserSubtitle'),
-    helper: locale === 'he'
-      ? 'כניסה עם Google או Apple תטען את ההיסטוריה של החשבון הקיים. ההתקדמות האורחת הנוכחית לא מתמזגת אוטומטית.'
-      : t('auth.socialHelper'),
-    google: locale === 'he' ? 'המשך עם Google' : t('auth.continueWithGoogle'),
-    apple: locale === 'he' ? 'המשך עם Apple' : t('auth.continueWithApple'),
-    email: locale === 'he' ? 'כניסה עם אימייל' : t('auth.continueWithEmail'),
-    backToOptions: locale === 'he' ? 'חזרה לאפשרויות כניסה' : t('auth.backToOptions'),
-  }), [locale, t]);
+    title: t('auth.homeButton'),
+    subtitle: t('auth.chooserSubtitle'),
+    helper: t('auth.socialHelper'),
+    google: t('auth.continueWithGoogle'),
+    email: t('auth.continueWithEmail'),
+    backToOptions: t('auth.backToOptions'),
+  }), [t]);
+
+  const currentGuestLabel = t('auth.currentGuest', { id: shortUserId });
+  const currentAccountName = profile?.username?.trim() || user?.email || shortUserId;
+  const showAccountMenu = isSignedInUser;
+  const showChooser = isAnonymous && isNativeChooser && !showEmailForm;
 
   const handleSubmit = async () => {
     setError(null);
@@ -86,16 +88,53 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
     }
   };
 
-  const handleSocialSignIn = async (provider: 'google' | 'apple') => {
+  const handleSocialSignIn = async () => {
     setError(null);
     setLoading(true);
     try {
-      const result = await signInWithProvider(provider);
+      const result = await signInWithProvider(
+        'google',
+        forceAccountPicker ? { forceAccountPicker: true } : undefined,
+      );
       if (result.error) {
         setError(result.error);
       } else {
         onSuccess();
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSwitchUser = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await signOutToGuest();
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setMode('signin');
+      setForceAccountPicker(true);
+      setShowEmailForm(!isNativeChooser);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await signOutToGuest();
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      onSuccess();
     } finally {
       setLoading(false);
     }
@@ -110,13 +149,60 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        {showChooser ? (
+        {showAccountMenu ? (
+          <>
+            <Text style={styles.title}>{t('auth.accountMenuTitle')}</Text>
+            <Text style={styles.subtitle}>{t('auth.accountMenuSubtitle')}</Text>
+
+            <View style={styles.accountCard}>
+              <Text style={styles.accountCardLabel}>{t('auth.currentAccountLabel')}</Text>
+              <Text style={styles.accountCardName}>{currentAccountName}</Text>
+              {user?.email ? (
+                <Text style={styles.accountCardMeta}>{user.email}</Text>
+              ) : null}
+            </View>
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.socialBtn, loading && styles.btnDisabled]}
+              onPress={() => void handleSwitchUser()}
+              disabled={loading}
+              activeOpacity={0.85}
+              testID="auth-switch-user-button"
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.socialBtnText}>{t('auth.switchUserButton')}</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.emailFallbackBtn, loading && styles.btnDisabled]}
+              onPress={() => void handleLogout()}
+              disabled={loading}
+              activeOpacity={0.85}
+              testID="auth-sign-out-button"
+            >
+              <Text style={styles.emailFallbackText}>{t('auth.signOutButton')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+              <Text style={styles.backText}>{t('auth.back')}</Text>
+            </TouchableOpacity>
+          </>
+        ) : showChooser ? (
           <>
             <Text style={styles.title}>{chooserCopy.title}</Text>
             <Text style={styles.subtitle}>{chooserCopy.subtitle}</Text>
             <Text style={styles.accountMeta}>
-              {accountMetaLabel}
-              {profile?.username ? ` • ${profile.username}` : ''}
+              {currentGuestLabel}
+              {profile?.username ? ` - ${profile.username}` : ''}
             </Text>
             <Text style={styles.helperText}>{chooserCopy.helper}</Text>
 
@@ -128,22 +214,16 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
 
             <TouchableOpacity
               style={[styles.socialBtn, loading && styles.btnDisabled]}
-              onPress={() => void handleSocialSignIn('google')}
+              onPress={() => void handleSocialSignIn()}
               disabled={loading}
               activeOpacity={0.85}
               testID="auth-social-google-button"
             >
-              <Text style={styles.socialBtnText}>{chooserCopy.google}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.socialBtn, styles.socialBtnSecondary, loading && styles.btnDisabled]}
-              onPress={() => void handleSocialSignIn('apple')}
-              disabled={loading}
-              activeOpacity={0.85}
-              testID="auth-social-apple-button"
-            >
-              <Text style={styles.socialBtnText}>{chooserCopy.apple}</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.socialBtnText}>{chooserCopy.google}</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -172,8 +252,8 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
               {mode === 'link' ? t('auth.linkSubtitle') : t('auth.signInSubtitle')}
             </Text>
             <Text style={styles.accountMeta}>
-              {accountMetaLabel}
-              {profile?.username ? ` • ${profile.username}` : ''}
+              {currentGuestLabel}
+              {profile?.username ? ` - ${profile.username}` : ''}
             </Text>
 
             {mode === 'link' ? (
@@ -302,6 +382,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 18,
   },
+  accountCard: {
+    backgroundColor: 'rgba(17,24,39,0.82)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(252,211,77,0.24)',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 18,
+  },
+  accountCardLabel: {
+    color: 'rgba(209,213,219,0.78)',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  accountCardName: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  accountCardMeta: {
+    color: '#93C5FD',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+  },
   input: {
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 14,
@@ -329,11 +436,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 12,
-  },
-  socialBtnSecondary: {
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
   socialBtnText: {
     color: '#FFF',

@@ -1499,6 +1499,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => tutorialBus.setL5GuidedMode(false);
   }, [engine.lessonIndex, engine.phase]);
 
+  useEffect(() => {
+    const on = engine.lessonIndex === 4 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
+    tutorialBus.setL5bJokerOnlyMode(on);
+    return () => tutorialBus.setL5bJokerOnlyMode(false);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
   // L5 is now a pure "place an operator card" lesson ג€” no cycle-on-tap. The
   // fan is the PRIMARY interaction target (learner picks a card from it), so
   // we explicitly DO NOT block fan taps. Cycling the `?` slot is blocked in
@@ -3511,6 +3517,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const l4bHintKey: string | null = isL4bAwait
     ? (l4bHintPhase === 'pickCard' ? 'tutorial.l4b.hintPickCard' : 'tutorial.l4b.hintFillDie')
     : null;
+  const isL4Step3BotDemo = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'bot-demo';
   const isL4Step3Await = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
   const isL4Step3Celebrate = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'celebrate';
   const showL4Step3IntroModal = isL4Step3Await && !l4Step3IntroApproved;
@@ -3618,6 +3625,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : isFracDefenseActive ? null
     : (isFracAttackActive && engine.phase === 'bot-demo') ? null
     : (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && (engine.stepIndex === 0 || engine.stepIndex === 1) && engine.phase === 'await-mimic') ? null
+    : isL4Step3BotDemo ? null
     : showL4Step3IntroModal || showL4Step3FinishModal ? null
     : engine.phase === 'post-signs-choice' || engine.phase === 'core-complete' ? null
     : isL7Step1Phase ? null
@@ -6021,18 +6029,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 }}
               >
                 {t('tutorial.welcome.headline')}
-              </Text>
-              <Text
-                style={{
-                  color: '#FDE68A',
-                  fontSize: scaleTutorialWelcome(18, 10),
-                  fontWeight: '800',
-                  textAlign: 'center',
-                  lineHeight: scaleTutorialWelcome(22, 12),
-                  opacity: 0.96,
-                  marginTop: scaleTutorialWelcome(-2, -1),
-                }}
-              >
+                {' '}
                 {t('tutorial.welcome.headlineSub')}
               </Text>
               <Text

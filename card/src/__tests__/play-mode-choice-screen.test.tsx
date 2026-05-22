@@ -39,6 +39,7 @@ jest.mock('../i18n/LocaleContext', () => ({
     t: (key: string) => {
       const copy: Record<string, string> = {
         'auth.homeButton': 'Sign in',
+        'auth.switchUserButton': 'Switch user',
         'auth.homeHelper': 'Sign in to load your history, bank, and settings.',
         'feedbackInbox.open': 'Feedback inbox',
         'lang.en': 'English',
@@ -102,11 +103,12 @@ describe('PlayModeChoiceScreen auth button', () => {
     expect(screen.getByText('Sign in to load your history, bank, and settings.')).toBeTruthy();
   });
 
-  it('hides the sign-in button for signed-in players', () => {
+  it('keeps the auth button for signed-in players without the helper text', () => {
     mockUseAuth.mockReturnValue({ isAnonymous: false, profile: { total_coins: 15 } });
 
     render(<PlayModeChoiceScreen {...baseProps} />);
 
-    expect(screen.queryByTestId('home-auth-button')).toBeNull();
+    expect(screen.getByTestId('home-auth-button')).toBeTruthy();
+    expect(screen.queryByText('Sign in to load your history, bank, and settings.')).toBeNull();
   });
 });

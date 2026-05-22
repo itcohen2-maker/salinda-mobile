@@ -6433,6 +6433,34 @@ function timerProgressColor(progress: number): string {
 
 export type EquationResultVisualState = 'placeholder' | 'ready' | 'error' | 'tutorial-target';
 
+const EQUATION_VISUAL_TOKENS = {
+  numberText: '#17324D',
+  numberTextMuted: 'rgba(23,50,77,0.3)',
+  numberSurface: '#FFF8EC',
+  numberBorder: '#D7C29C',
+  numberShadow: 'rgba(140,93,24,0.18)',
+  operatorFill: '#E89B1F',
+  operatorBorder: '#C97A1D',
+  operatorText: '#40210D',
+  operatorGlow: 'rgba(232,155,31,0.34)',
+  bracket: '#FFF2D8',
+  bracketShadow: 'rgba(64,33,13,0.36)',
+  equals: '#D89B2B',
+  resultBorder: '#C1872E',
+  resultFill: '#FFF2D8',
+  resultText: '#17324D',
+  resultTextMuted: 'rgba(23,50,77,0.45)',
+  resultGlow: '#E5A93B',
+  groupFill: 'rgba(255,248,236,0.09)',
+  groupBorder: 'rgba(255,248,236,0.08)',
+  groupShadow: 'rgba(8,39,24,0.18)',
+  rowBorder: 'rgba(215,194,156,0.2)',
+  rowFill: 'rgba(255,248,236,0.08)',
+  rowFillActive: 'rgba(255,248,236,0.18)',
+  emptyBorder: 'rgba(215,194,156,0.38)',
+  emptyFill: 'rgba(255,248,236,0.04)',
+} as const;
+
 export function getEquationResultVisualState({
   finalResult,
   hasError,
@@ -7319,7 +7347,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     borderColor: withAlpha(timerColor, 0.72),
     backgroundColor: withAlpha(timerColor, 0.16),
   } : null;
-  const equalsColor = timerColor ?? '#FFD700';
+  const equalsColor = timerColor ?? EQUATION_VISUAL_TOKENS.equals;
   const l5aTarget = state.isTutorial ? tutorialBus.getL5aTargetResult() : null;
   const resultVisualState = getEquationResultVisualState({
     finalResult,
@@ -7327,8 +7355,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     tutorialTarget: l5aTarget,
     ok,
   });
-  const neutralResultTextColor = '#7A1F15';
-  const readyResultTextColor = '#6B210F';
+  const neutralResultTextColor = EQUATION_VISUAL_TOKENS.resultText;
+  const readyResultTextColor = EQUATION_VISUAL_TOKENS.resultText;
   const resultBoxDynamic = resultVisualState === 'placeholder' && timerColor ? {
     ...Platform.select({
       ios: {
@@ -7737,6 +7765,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     state.isTutorial && !isSolved && tutorialBus.getL4bDicePulse()
       ? tutorialBus.getL4Config()?.pickB ?? null
       : null;
+  const isL5MirroredEquation =
+    state.isTutorial &&
+    tutorialBus.getL5GuidedMode() &&
+    tutorialBus.getL5aBlockFanTaps();
   const shouldHideUnusedSolvedTutorialDice =
     state.isTutorial &&
     isSolved &&
@@ -7751,6 +7783,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     ? diceValues
         .map((value, index) => ({ value, index }))
         .filter(({ index }) => tutorialSolvedUsedDice?.has(index))
+    : isL5MirroredEquation
+      ? diceValues
+          .map((value, index) => ({ value, index }))
+          .filter(({ index }) => index === 0 || index === 1)
     : l4bTargetDieIndex != null
       ? diceValues
           .map((value, index) => ({ value, index }))
@@ -7867,44 +7903,69 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       <Animated.View style={{ width: '100%', maxWidth: '100%', alignItems: 'center', opacity: eqRowAnim, transform: [{ translateY: eqRowAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
         <View style={[eqS.eqRow, eqRowDynamicStyle]}>
           {(() => {
-            const bColor = '#F97316';
-            const renderBracket = (char: '(' | ')', visible: boolean) => (
+            const renderBracket = (char: '(' | ')') => (
               <Text
-                style={[eqS.bracket, { color: bColor }, !visible && eqS.hiddenMiddle]}
+                style={eqS.bracket}
                 allowFontScaling={false}
               >
                 {char}
               </Text>
             );
+            if (show3rd && !isL5aSimple) {
+              if (!parensRight) {
+                return (
+                  <>
+                    <View style={eqS.groupedExpression}>
+                      {renderBracket('(')}
+                      <View style={eqS.groupedBody}>
+                        <View style={eqS.eqChunk}>
+                          {renderDiceSlot(dice1, 1)}
+                          {renderOpBtn(1, op1, isL5aSimple || dice1 !== null || isParensTutorial)}
+                        </View>
+                        <View>{renderDiceSlot(dice2, 2)}</View>
+                      </View>
+                      {renderBracket(')')}
+                    </View>
+                    <View style={eqS.eqChunk}>
+                      {renderOpBtn(2, op2, show3rd)}
+                      {renderDiceSlot(dice3, 3)}
+                    </View>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <View style={eqS.eqChunk}>
+                    {renderDiceSlot(dice1, 1)}
+                    {renderOpBtn(1, op1, isL5aSimple || dice1 !== null || isParensTutorial)}
+                  </View>
+                  <View style={eqS.groupedExpression}>
+                    {renderBracket('(')}
+                    <View style={eqS.groupedBody}>
+                      <View>{renderDiceSlot(dice2, 2)}</View>
+                      <View style={eqS.eqChunk}>
+                        {renderOpBtn(2, op2, show3rd)}
+                        {renderDiceSlot(dice3, 3)}
+                      </View>
+                    </View>
+                    {renderBracket(')')}
+                  </View>
+                </>
+              );
+            }
             return (
               <>
-                {/* outer left bracket — visible only in LEFT mode. Hidden in
-                    L5a so the learner sees just `[d1] [?] [d2]`. */}
-                {show3rd && !isL5aSimple ? renderBracket('(', !parensRight) : null}
-                {/* d1 + op1 (kept as a chunk for inner gap). Op1 is always
-                    tappable in L5a — even if dice1 hasn't been prefilled yet
-                    (bus race) — so the sign-cycle never feels stuck. */}
                 <View style={eqS.eqChunk}>
                   {renderDiceSlot(dice1, 1)}
                   {renderOpBtn(1, op1, isL5aSimple || dice1 !== null || isParensTutorial)}
                 </View>
-                {/* mid-open bracket — visible only in RIGHT mode (before d2) */}
-                {show3rd && !isL5aSimple ? renderBracket('(', parensRight) : null}
-                {/* d2 — always at the same column position */}
                 <View>{renderDiceSlot(dice2, 2)}</View>
-                {/* mid-close bracket — visible only in LEFT mode (after d2) */}
-                {show3rd && !isL5aSimple ? renderBracket(')', !parensRight) : null}
-                {/* op2 + d3 (kept as a chunk for inner gap). Lesson 5a hides
-                    the whole chunk — the third slot + second op belong to the
-                    advanced equation and would confuse the sign-cycle lesson. */}
                 {isL5aSimple ? null : (
                   <View style={[eqS.eqChunk]}>
                     {renderOpBtn(2, op2, show3rd)}
                     {renderDiceSlot(dice3, 3)}
                   </View>
                 )}
-                {/* outer right bracket — visible only in RIGHT mode */}
-                {show3rd && !isL5aSimple ? renderBracket(')', parensRight) : null}
               </>
             );
           })()}
@@ -8057,32 +8118,83 @@ const eqS = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 6,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: EQUATION_VISUAL_TOKENS.rowFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: EQUATION_VISUAL_TOKENS.rowBorder,
     direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
     writingDirection: 'ltr',
   },
   /** קבוצה שלמה של סלוטים+סימנים — לא נשברת באמצע */
   eqChunk: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
-  bracket: { fontSize: 36, lineHeight: 44, fontWeight: '900', color: '#F97316', marginHorizontal: 1, textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  groupedExpression: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+    borderRadius: 18,
+    backgroundColor: EQUATION_VISUAL_TOKENS.groupFill,
+    borderWidth: 1,
+    borderColor: EQUATION_VISUAL_TOKENS.groupBorder,
+    ...Platform.select({
+      ios: {
+        shadowColor: EQUATION_VISUAL_TOKENS.groupShadow,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 1,
+        shadowRadius: 12,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  groupedBody: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  bracket: {
+    minWidth: 18,
+    fontSize: 46,
+    lineHeight: 48,
+    fontWeight: '900',
+    color: EQUATION_VISUAL_TOKENS.bracket,
+    textShadowColor: EQUATION_VISUAL_TOKENS.bracketShadow,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 3,
+  },
   hiddenMiddle: { display: 'none' as any },
   // סלוטים למספרים — 44×44 לנוחות
   slot: { width: 44, height: 44, minWidth: 44, minHeight: 44, flexShrink: 0, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' as const },
-  slotFilled: { backgroundColor: '#FFF', borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 8 }, android: { elevation: 4 } }) },
-  slotEmpty: { borderWidth: 2, borderStyle: 'dashed' as any, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.02)' },
-  slotVal: { fontSize: 24, fontWeight: '800', color: '#1a1a2e' },
-  slotPlaceholder: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.15)' },
+  slotFilled: {
+    backgroundColor: EQUATION_VISUAL_TOKENS.numberSurface,
+    borderWidth: 2,
+    borderColor: EQUATION_VISUAL_TOKENS.numberBorder,
+    ...Platform.select({
+      ios: { shadowColor: EQUATION_VISUAL_TOKENS.numberShadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8 },
+      android: { elevation: 4 },
+    }),
+  },
+  slotEmpty: { borderWidth: 2, borderStyle: 'dashed' as any, borderColor: EQUATION_VISUAL_TOKENS.emptyBorder, backgroundColor: EQUATION_VISUAL_TOKENS.emptyFill },
+  slotVal: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: EQUATION_VISUAL_TOKENS.numberText,
+    textShadowColor: 'rgba(255,255,255,0.28)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+  },
+  slotPlaceholder: { fontSize: 20, fontWeight: '700', color: EQUATION_VISUAL_TOKENS.numberTextMuted },
   // כפתור פעולה — אותו גודל כמו סלוט מספר (44×44) וגופן כמו slotVal
   opBtn: { width: 44, height: 44, minWidth: 44, minHeight: 44, flexShrink: 0, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: Platform.OS === 'android' ? 'visible' as const : 'hidden' as const },
-  opBtnEmpty: { borderWidth: 2, borderStyle: 'dashed' as any, borderColor: '#F9A825', backgroundColor: 'transparent' },
-  opBtnFilled: { backgroundColor: '#F9A825', ...Platform.select({ ios: { shadowColor: 'rgba(249,168,37,0.3)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6 } }) },
-  opBtnEmptyTxt: { fontSize: 26, fontWeight: '800', color: '#F9A825', textAlign: 'center' as const, writingDirection: 'ltr' as const },
-  opBtnFilledTxt: { fontSize: 28, fontWeight: '900', color: Platform.OS === 'android' ? '#1a1a2e' : '#FFFFFF', textAlign: 'center' as const, writingDirection: 'ltr' as const },
-  eqEquals: { fontSize: 24, fontWeight: '800', color: '#FFD700', marginHorizontal: 2 },
-  resultBox: { minWidth: 48, height: 52, borderRadius: 12, borderWidth: 2, borderColor: '#9A3412', backgroundColor: '#FFF1D6', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  resultVal: { fontSize: 26, fontWeight: '800', color: '#7A1F15' },
-  resultPlaceholder: { fontSize: 26, fontWeight: '800', color: 'rgba(255,215,0,0.4)' },
+  opBtnEmpty: { borderWidth: 2, borderStyle: 'dashed' as any, borderColor: EQUATION_VISUAL_TOKENS.operatorBorder, backgroundColor: 'transparent' },
+  opBtnFilled: {
+    backgroundColor: EQUATION_VISUAL_TOKENS.operatorFill,
+    ...Platform.select({
+      ios: { shadowColor: EQUATION_VISUAL_TOKENS.operatorGlow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6 },
+    }),
+  },
+  opBtnEmptyTxt: { fontSize: 26, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.operatorBorder, textAlign: 'center' as const, writingDirection: 'ltr' as const },
+  opBtnFilledTxt: { fontSize: 28, fontWeight: '900', color: EQUATION_VISUAL_TOKENS.operatorText, textAlign: 'center' as const, writingDirection: 'ltr' as const },
+  eqEquals: { fontSize: 24, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.equals, marginHorizontal: 2 },
+  resultBox: { minWidth: 48, height: 52, borderRadius: 12, borderWidth: 2, borderColor: EQUATION_VISUAL_TOKENS.resultBorder, backgroundColor: EQUATION_VISUAL_TOKENS.resultFill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  resultVal: { fontSize: 26, fontWeight: '900', color: EQUATION_VISUAL_TOKENS.resultText },
+  resultPlaceholder: { fontSize: 26, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.resultTextMuted },
   resultError: { fontSize: 20, fontWeight: '900', color: '#EA4335' },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
   hint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
@@ -8094,21 +8206,21 @@ function getEquationResultCubeTheme(visualState: EquationResultVisualState) {
     case 'tutorial-target':
       return {
         boxStyle: {
-          borderColor: '#B45309',
-          backgroundColor: '#FFE7B8',
+          borderColor: EQUATION_VISUAL_TOKENS.resultBorder,
+          backgroundColor: EQUATION_VISUAL_TOKENS.resultFill,
           borderWidth: 3,
           ...Platform.select({
             ios: {
-              shadowColor: '#F59E0B',
+              shadowColor: EQUATION_VISUAL_TOKENS.resultGlow,
               shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.4,
+              shadowOpacity: 0.34,
               shadowRadius: 10,
             },
             android: { elevation: 9 },
           }),
         },
         valueStyle: {
-          color: '#6B210F',
+          color: EQUATION_VISUAL_TOKENS.resultText,
           fontSize: 30,
           fontWeight: '900' as const,
         },
@@ -8130,12 +8242,12 @@ function getEquationResultCubeTheme(visualState: EquationResultVisualState) {
     default:
       return {
         boxStyle: {
-          borderColor: '#9A3412',
-          backgroundColor: '#FFF1D6',
+          borderColor: EQUATION_VISUAL_TOKENS.resultBorder,
+          backgroundColor: EQUATION_VISUAL_TOKENS.resultFill,
           borderWidth: 2,
         },
         valueStyle: {
-          color: 'rgba(122,31,21,0.48)',
+          color: EQUATION_VISUAL_TOKENS.resultTextMuted,
           fontSize: 24,
           fontWeight: '800' as const,
         },
@@ -9637,6 +9749,8 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       return;
     }
     if (bl) {
+      const l5bJokerOnlyMode = state.isTutorial && tutorialBus.getL5bJokerOnlyMode();
+      if (l5bJokerOnlyMode && card.type !== 'joker') return;
       if (card.type === 'operation') {
         if (state.equationHandSlots[0]?.card.id === card.id) {
           // already placed in equation — no-op
@@ -19806,7 +19920,7 @@ export function PlayModeChoiceScreen({
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
-  const authHomeButtonLabel = locale === 'he' ? 'כניסת משתמש' : t('auth.homeButton');
+  const authHomeButtonLabel = isAnonymous ? t('auth.homeButton') : t('auth.switchUserButton');
   const authHomeHelper = locale === 'he'
     ? 'היכנסו כדי לטעון את ההיסטוריה, הבנק וההגדרות שלכם.'
     : t('auth.homeHelper');
@@ -19887,31 +20001,29 @@ export function PlayModeChoiceScreen({
               backgroundColor: 'rgba(255,90,180,0.16)',
             }}
           />
+          <LulosButton
+            text={authHomeButtonLabel}
+            color="blue"
+            width={localeButtonWidth}
+            height={localeButtonHeight}
+            fontSize={localeButtonFontSize}
+            testID="home-auth-button"
+            onPress={onOpenAuth}
+            style={{ marginTop: 12, alignSelf: 'center' }}
+          />
           {isAnonymous ? (
-            <>
-              <LulosButton
-                text={authHomeButtonLabel}
-                color="blue"
-                width={localeButtonWidth}
-                height={localeButtonHeight}
-                fontSize={localeButtonFontSize}
-                testID="home-auth-button"
-                onPress={onOpenAuth}
-                style={{ marginTop: 12, alignSelf: 'center' }}
-              />
-              <Text
-                style={{
-                  marginTop: 8,
-                  maxWidth: 260,
-                  color: '#D1D5DB',
-                  fontSize: 12,
-                  lineHeight: 17,
-                  textAlign: 'center',
-                }}
-              >
-                {authHomeHelper}
-              </Text>
-            </>
+            <Text
+              style={{
+                marginTop: 8,
+                maxWidth: 260,
+                color: '#D1D5DB',
+                fontSize: 12,
+                lineHeight: 17,
+                textAlign: 'center',
+              }}
+            >
+              {authHomeHelper}
+            </Text>
           ) : null}
         </View>
         <View style={{ flex: 1, width: '100%', justifyContent: 'flex-start', alignItems: 'center' }}>

@@ -107,6 +107,24 @@ describe('performSocialSignIn', () => {
     });
   });
 
+  it('forces the Google account picker when requested', async () => {
+    platformRef.OS = 'android';
+
+    const result = await performSocialSignIn('google', { forceAccountPicker: true });
+
+    expect(result).toEqual({ error: null });
+    expect(mockSupabaseAuth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: {
+        redirectTo: 'salinda://auth/callback',
+        skipBrowserRedirect: true,
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
+  });
+
   it('returns a surfaced error when the browser flow is canceled', async () => {
     platformRef.OS = 'android';
     mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' } as never);
