@@ -10373,7 +10373,7 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth';
+type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth';
 
 type WebBackdropTone = 'black' | 'white';
 
@@ -10502,6 +10502,7 @@ function StartScreen({
   const [playerCount, setPlayerCount] = useState(2);
   const [numberRange, setNumberRange] = useState<'easy' | 'full'>('full');
   const [gameMode, setGameMode] = useState<LocalGameMode>(forcedGameMode ?? 'vs-bot');
+  const [isSoloNoOpponent, setIsSoloNoOpponent] = useState(false);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [botDisplayName, setBotDisplayName] = useState('');
   // Saved human player name — loaded once from AsyncStorage so we don't
@@ -10817,8 +10818,10 @@ function StartScreen({
     }
     const humanName = effectiveSavedName || t('start.playerPlaceholder', { n: String(1) });
     const storedProfiles = storedProfilesRef.current;
+    // If solo-no-opponent checkbox is checked, override to 'solo' mode.
+    const effectiveGameMode: LocalGameMode = isSoloNoOpponent ? 'solo' : gameMode;
     const players =
-      gameMode === 'vs-bot'
+      effectiveGameMode === 'vs-bot'
         ? [
             {
               name: humanName,
@@ -10830,7 +10833,7 @@ function StartScreen({
               isBot: true,
             },
           ]
-        : gameMode === 'solo'
+        : effectiveGameMode === 'solo'
           ? [
               {
                 name: humanName,
@@ -10852,8 +10855,8 @@ function StartScreen({
     }
     dispatch({
       type: 'START_GAME',
-      mode: gameMode,
-      botDifficulty: gameMode === 'vs-bot' ? botDifficulty : undefined,
+      mode: effectiveGameMode,
+      botDifficulty: effectiveGameMode === 'vs-bot' ? botDifficulty : undefined,
       players,
       difficulty: numberRange,
       fractions,
@@ -12186,6 +12189,30 @@ function StartScreen({
 
         {/* Start button — למטה, ללא מסגרת/רקע נוסף סביב הכפתור */}
         <View style={{ marginTop: 40, marginBottom: 4, alignItems: 'center' }}>
+          <TouchableOpacity
+            testID="start-solo-no-opponent-toggle"
+            onPress={() => setIsSoloNoOpponent((v) => !v)}
+            style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}
+            activeOpacity={0.7}
+          >
+            <View style={{
+              width: 22,
+              height: 22,
+              borderRadius: 4,
+              borderWidth: 2,
+              borderColor: isSoloNoOpponent ? '#F59E0B' : '#6B7280',
+              backgroundColor: isSoloNoOpponent ? '#F59E0B' : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              {isSoloNoOpponent ? (
+                <Text style={{ color: '#111827', fontSize: 14, fontWeight: '900', lineHeight: 16 }}>✓</Text>
+              ) : null}
+            </View>
+            <Text style={{ color: '#D1D5DB', fontSize: 13, fontWeight: '500' }}>
+              {t('start.soloNoOpponent')}
+            </Text>
+          </TouchableOpacity>
           <CasinoButton
             text={t('start.letsPlay')}
             width={220}
@@ -20217,16 +20244,12 @@ export function PlayModeChoiceScreen({
 
 function GameEntryChoiceScreen({
   onBack,
-  onSolo,
   onVsBot,
-  onPassAndPlay,
-  onOnline,
+  onWithFriends,
 }: {
   onBack: () => void;
-  onSolo: () => void;
   onVsBot: () => void;
-  onPassAndPlay: () => void;
-  onOnline: () => void;
+  onWithFriends: () => void;
 }) {
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
@@ -20300,26 +20323,120 @@ function GameEntryChoiceScreen({
           <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
             {t('gameEntry.title')}
           </Text>
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: buttonGap }}>
+            <MenuCapsuleButton
+              text={t('gameEntry.vsSalinda')}
+              color="green"
+              testID="lobby-play-bot"
+              onPress={onVsBot}
+            />
+            <View style={{ marginTop: 6 }}>
+              <Text style={{ color: '#FCD34D', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+                {t('gameEntry.recommended')}
+              </Text>
+            </View>
+          </View>
           <MenuCapsuleButton
-            text={t('gameEntry.solo')}
-            color="purple"
-            testID="lobby-play-solo"
-            onPress={onSolo}
-            style={{ marginBottom: buttonGap }}
+            text={t('gameEntry.withFriends')}
+            color="orange"
+            textColor="#FFFFFF"
+            testID="lobby-play-friends"
+            onPress={onWithFriends}
           />
-          <MenuCapsuleButton
-            text={t('gameEntry.vsBot')}
-            color="green"
-            testID="lobby-play-bot"
-            onPress={onVsBot}
-            style={{ marginBottom: buttonGap }}
+        </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function FriendsChoiceScreen({
+  onBack,
+  onSameDevice,
+  onOnline,
+}: {
+  onBack: () => void;
+  onSameDevice: () => void;
+  onOnline: () => void;
+}) {
+  const { t, locale } = useLocale();
+  const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
+  const compactMainMenu = responsive.isTight;
+  const buttonGap = 28;
+  const entryBlockTopGap = compactMainMenu ? 102 : 120;
+  const entryHeroSize = compactMainMenu ? 58 : 64;
+  const safeTop = getScreenSafeTop(insets.top);
+  const menuTopPadding = Math.max(safeTop, compactMainMenu ? 18 : 30);
+  const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
+  const placeTopBackOnRightOnAndroid = false;
+  const backButtonLabel = locale === 'he'
+    ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
+    : `${BACK_ARROW_GLYPH} ${t('gameEntry.back')}`;
+
+  return (
+    <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
+      <AmbientBackground playMode="game-entry" forceVisible />
+      <ScrollView
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: 'center',
+          paddingHorizontal: 24,
+          paddingTop: menuTopPadding,
+          paddingBottom: menuBottomPadding,
+          minHeight: responsive.height,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="always"
+      >
+        <View style={{ width: '100%', maxWidth: 360, alignItems: 'center', position: 'relative' }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            ...(placeTopBackOnRightOnAndroid ? { right: 0 } : { left: 0 }),
+            zIndex: 5,
+          }}
+        >
+          <LulosButton
+            text={backButtonLabel}
+            color="blue"
+            width={128}
+            height={38}
+            fontSize={13}
+            testID="friends-choice-back"
+            onPress={onBack}
           />
+        </View>
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -8,
+            ...(placeTopBackOnRightOnAndroid ? { left: 4 } : { right: 4 }),
+            zIndex: 1,
+          }}
+        >
+          <SpinningCard
+            frontSource={salindaShopCardImg}
+            width={entryHeroSize}
+            speed={28}
+            backLabel="Salinda"
+            active
+          />
+        </View>
+        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
+          <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
+            {t('gameEntry.withFriendsTitle')}
+          </Text>
           <MenuCapsuleButton
             text={t('gameEntry.sameDevice')}
             color="orange"
             textColor="#FFFFFF"
             testID="lobby-play-pass-and-play"
-            onPress={onPassAndPlay}
+            onPress={onSameDevice}
             style={{ marginBottom: buttonGap }}
           />
           <MenuCapsuleButton
@@ -21052,15 +21169,18 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     screen = (
       <GameEntryChoiceScreen
         onBack={() => setPlayMode('choose')}
-        onSolo={() => {
-          setSelectedLocalGameMode('solo');
-          setPlayMode('local');
-        }}
         onVsBot={() => {
           setSelectedLocalGameMode('vs-bot');
           setPlayMode('local');
         }}
-        onPassAndPlay={() => {
+        onWithFriends={() => setPlayMode('friends-choice')}
+      />
+    );
+  } else if (playMode === 'friends-choice') {
+    screen = (
+      <FriendsChoiceScreen
+        onBack={() => setPlayMode('game-entry')}
+        onSameDevice={() => {
           setSelectedLocalGameMode('pass-and-play');
           setPlayMode('local');
         }}
