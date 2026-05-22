@@ -5,7 +5,7 @@ import { HtmlCanvasEmbed } from './HtmlCanvasEmbed';
 
 export interface LulosButtonProps {
   text: string;
-  color: 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'orange';
+  color: 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'orange' | 'forfeit';
   onPress: () => void;
   disabled?: boolean;
   width?: number;
@@ -36,6 +36,15 @@ const PALETTES = {
     twinkle: 'rgba(255,170,170,0.5)', twinkleGlow: 'rgba(234,67,53,0)',
     text: { fill: '#FFD0CC', stroke: 'rgba(100,10,5,0.5)', shadow: 'rgba(60,5,0,0.7)' },
     rnShadow: '#8B1A12',
+  },
+  forfeit: {
+    // Muted wine palette: still reads as caution, but no longer competes
+    // with the primary action button.
+    s1: '#221417', s2: '#352025', s3: '#4A2C33', s4: '#60353E',
+    hi: 'rgba(255,210,170,', sym: '#8A5A48', symhi: '#C28767',
+    twinkle: 'rgba(255,235,205,0.34)', twinkleGlow: 'rgba(255,210,170,0)',
+    text: { fill: '#F7E7C6', stroke: 'rgba(55,25,18,0.45)', shadow: 'rgba(28,12,8,0.55)' },
+    rnShadow: '#1A0F12',
   },
   blue: {
     s1: '#060E2A', s2: '#0E1A42', s3: '#12245C', s4: '#1A2E6B',

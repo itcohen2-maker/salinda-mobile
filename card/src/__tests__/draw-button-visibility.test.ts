@@ -1,4 +1,9 @@
-import { initialState, shouldShowConfirmEquationButton, shouldShowDrawForfeitButton } from '../../index';
+import {
+  initialState,
+  shouldShowConfirmEquationButton,
+  shouldShowDrawForfeitButton,
+  shouldShowSolvedPromptInlineBackButton,
+} from '../../index';
 import type { GameState } from '../../index';
 
 function makeState(overrides: Partial<GameState> = {}): GameState {
@@ -78,6 +83,35 @@ describe('shouldShowConfirmEquationButton', () => {
         canUseActiveTurnUi: true,
         confirmReady: true,
         manualTutorialConfirm: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('shouldShowSolvedPromptInlineBackButton', () => {
+  it('moves the back button inline with the pick-cards prompt in a normal solved turn', () => {
+    expect(
+      shouldShowSolvedPromptInlineBackButton({
+        showSolvedPickCardsPrompt: true,
+        isTutorial: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps the large overlay back button path for tutorial solved flows', () => {
+    expect(
+      shouldShowSolvedPromptInlineBackButton({
+        showSolvedPickCardsPrompt: true,
+        isTutorial: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not render the inline back button when the solved prompt is absent', () => {
+    expect(
+      shouldShowSolvedPromptInlineBackButton({
+        showSolvedPickCardsPrompt: false,
+        isTutorial: false,
       }),
     ).toBe(false);
   });

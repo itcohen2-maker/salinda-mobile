@@ -45,9 +45,12 @@ jest.mock('../i18n/LocaleContext', () => ({
         'feedbackInbox.noAccessBody': 'This screen is only available to allowlisted admins.',
         'feedbackInbox.senderAnonymous': 'Anonymous player',
         'feedbackInbox.senderUnknown': 'Unknown player',
+        'feedbackInbox.senderTypeGuest': 'Guest',
+        'feedbackInbox.senderTypeRegistered': 'Registered',
         'feedbackInbox.locale': 'Locale',
         'feedbackInbox.version': 'Version',
         'feedbackInbox.noComment': 'No comment',
+        'feedbackInbox.openGift': 'Gift coins',
         'feedbackInbox.kind.general': 'General',
         'feedbackInbox.kind.game': 'Game',
         'feedbackInbox.kind.tutorial': 'Tutorial',
@@ -61,6 +64,8 @@ jest.mock('../i18n/LocaleContext', () => ({
 }));
 
 describe('FeedbackInboxScreen', () => {
+  const openAdminCoinGifts = jest.fn();
+
   beforeEach(() => {
     mockLimit.mockReset();
     mockOrder.mockReset();
@@ -69,6 +74,7 @@ describe('FeedbackInboxScreen', () => {
     mockUseAuth.mockReset();
     mockUseFeedbackAdmin.mockReset();
     mockSetStringAsync.mockReset();
+    openAdminCoinGifts.mockReset();
 
     mockOrder.mockReturnValue({ limit: mockLimit });
     mockSelect.mockReturnValue({ order: mockOrder });
@@ -80,13 +86,13 @@ describe('FeedbackInboxScreen', () => {
     mockUseAuth.mockReturnValue({ user: { id: 'user-1' } });
     mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: false, loading: false });
 
-    render(<FeedbackInboxScreen onBack={jest.fn()} />);
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
 
     expect(screen.getByText('Access restricted')).toBeTruthy();
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it('renders feedback rows for allowlisted admins', async () => {
+  it('renders registered feedback rows and shows the gift shortcut', async () => {
     mockUseAuth.mockReturnValue({ user: { id: 'admin-1' } });
     mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true, loading: false });
     mockLimit.mockResolvedValue({
@@ -108,12 +114,76 @@ describe('FeedbackInboxScreen', () => {
       error: null,
     });
 
-    render(<FeedbackInboxScreen onBack={jest.fn()} />);
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
 
     await waitFor(() => {
       expect(screen.getByText('Noa')).toBeTruthy();
-      expect(screen.getByText('Game · ★★★★★ · android')).toBeTruthy();
+      expect(screen.getByText('Registered')).toBeTruthy();
+      expect(screen.getByText(/Game/)).toBeTruthy();
+      expect(screen.getByText(/android/)).toBeTruthy();
       expect(screen.getByText('Loved it')).toBeTruthy();
+      expect(screen.getByTestId('feedback-open-gift-fb-1')).toBeTruthy();
+    });
+  });
+
+  it('shows the guest badge and still opens coin gifts when an anonymous sender has a username', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'admin-1' } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true, loading: false });
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          id: 'fb-guest',
+          username_snapshot: 'guest_42',
+          is_anonymous: true,
+          locale: 'en',
+          experience_kind: 'general',
+          rating: 4,
+          comment: 'Useful',
+          platform: 'ios',
+          app_version: '1.0.0',
+          status: 'new',
+          created_at: '2026-05-20T12:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
+
+    const giftButton = await screen.findByTestId('feedback-open-gift-fb-guest');
+    fireEvent.press(giftButton);
+
+    expect(screen.getByText('Guest')).toBeTruthy();
+    expect(openAdminCoinGifts).toHaveBeenCalledWith('guest_42');
+  });
+
+  it('does not show the gift shortcut when there is no username snapshot', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'admin-1' } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true, loading: false });
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          id: 'fb-2',
+          username_snapshot: null,
+          is_anonymous: true,
+          locale: 'en',
+          experience_kind: 'tutorial',
+          rating: 3,
+          comment: '',
+          platform: 'web',
+          app_version: '1.0.0',
+          status: 'new',
+          created_at: '2026-05-20T12:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Guest')).toBeTruthy();
+      expect(screen.queryByTestId('feedback-open-gift-fb-2')).toBeNull();
     });
   });
 
@@ -139,7 +209,7 @@ describe('FeedbackInboxScreen', () => {
       error: null,
     });
 
-    render(<FeedbackInboxScreen onBack={jest.fn()} />);
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
 
     const copyButton = await screen.findByTestId('feedback-copy-username-fb-1');
     fireEvent.press(copyButton);

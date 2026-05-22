@@ -2,6 +2,7 @@
   "expo": {
     "name": "Salinda / סלינדה",
     "slug": "salinda-game",
+    "scheme": "salinda",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -89,7 +90,8 @@
           "project": "react-native"
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "expo-web-browser"
     ]
   }
 }

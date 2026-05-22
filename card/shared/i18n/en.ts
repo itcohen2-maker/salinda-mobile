@@ -1427,8 +1427,14 @@ export const en: Record<string, string> = {
   'auth.haveAccount': 'Already have an account? Sign in',
   'auth.back': '← Back',
   'auth.usernameMinLength': 'Username must be at least 2 characters',
-  'auth.homeButton': 'Registered user',
-  'auth.homeHelper': 'Sign in to keep your bank and settings.',
+  'auth.homeButton': 'Sign in',
+  'auth.homeHelper': 'Sign in to load your history, bank, and settings.',
+  'auth.chooserSubtitle': 'Choose how to sign in to your account',
+  'auth.socialHelper': 'Google or Apple sign-in loads your existing account history. Current guest progress does not merge automatically.',
+  'auth.continueWithGoogle': 'Continue with Google',
+  'auth.continueWithApple': 'Continue with Apple',
+  'auth.continueWithEmail': 'Sign in with email',
+  'auth.backToOptions': 'Back to sign-in options',
 
   // ── Table Browser ──
   'browse.title': 'Find a Table',

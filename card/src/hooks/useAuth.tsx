@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { performSocialSignIn, type SocialAuthProvider } from '../auth/socialSignIn';
 import { supabase } from '../lib/supabase';
 import type { TableSkinId } from '../theme/tableSkins';
 
@@ -38,6 +39,8 @@ interface AuthContextValue {
   signUp: (email: string, password: string, username: string) => Promise<{ error: string | null }>;
   /** Sign in with email + password (for users who already linked their account). */
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** Sign in with Google or Apple, primarily for native mobile flows. */
+  signInWithProvider: (provider: SocialAuthProvider) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   /** Purchase the Slinda card for 150 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
@@ -225,6 +228,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) return { error: error.message };
     return { error: null };
   }, []);
+
+  const signInWithProvider = useCallback(async (provider: SocialAuthProvider) => {
+    const result = await performSocialSignIn(provider);
+    if (result.error) return result;
+
+    try {
+      const { data } = await supabase.auth.getSession();
+      const nextSession = data?.session ?? null;
+      setSession(nextSession);
+      if (nextSession?.user) {
+        await fetchProfile(nextSession.user.id);
+      } else {
+        setProfile(null);
+      }
+      return { error: null };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Could not finish sign-in.',
+      };
+    }
+  }, [fetchProfile]);
 
   const purchaseSlinda = useCallback(async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
     try {
@@ -446,6 +470,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         signUp,
         signIn,
+        signInWithProvider,
         signOut: signOutFn,
         refreshProfile,
         purchaseSlinda,

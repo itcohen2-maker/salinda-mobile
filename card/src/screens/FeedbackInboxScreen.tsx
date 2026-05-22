@@ -113,6 +113,9 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
   const emptyMessage = hasError ? t('feedbackInbox.error') : t('feedbackInbox.empty');
   const copyHint = locale === 'he' ? 'לחצו על השם להעתקה' : 'Tap username to copy';
   const copiedLabel = locale === 'he' ? 'הועתק' : 'Copied';
+  const senderTypeGuestLabel = locale === 'he' ? 'מזדמן' : t('feedbackInbox.senderTypeGuest');
+  const senderTypeRegisteredLabel = locale === 'he' ? 'רשום' : t('feedbackInbox.senderTypeRegistered');
+  const openGiftLabel = locale === 'he' ? 'מתנת מטבעות' : t('feedbackInbox.openGift');
 
   const handleCopyUsername = useCallback(async (feedbackId: string, username: string) => {
     const safeUsername = username.trim();
@@ -188,8 +191,8 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
               const senderUsername = item.username_snapshot?.trim() ?? '';
               const hasSenderUsername = senderUsername.length > 0;
               const senderTypeLabel = item.is_anonymous
-                ? t('feedbackInbox.senderTypeGuest')
-                : t('feedbackInbox.senderTypeRegistered');
+                ? senderTypeGuestLabel
+                : senderTypeRegisteredLabel;
 
               return (
                 <View key={item.id} style={styles.card}>
@@ -235,7 +238,7 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
                         style={styles.giftShortcutButton}
                         testID={`feedback-open-gift-${item.id}`}
                       >
-                        <Text style={styles.giftShortcutButtonText}>{t('feedbackInbox.openGift')}</Text>
+                        <Text style={styles.giftShortcutButtonText}>{openGiftLabel}</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>

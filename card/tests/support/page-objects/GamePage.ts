@@ -6,6 +6,7 @@ export class GamePage {
   readonly playerHand: Locator = this.page.getByTestId('player-hand');
   readonly opponentHand: Locator = this.page.getByTestId('opponent-hand');
   readonly equationArea: Locator = this.page.getByTestId('equation-area');
+  readonly equationResultBox: Locator = this.page.getByTestId('equation-result-box');
   readonly diceArea: Locator = this.page.getByTestId('dice-area');
   readonly endTurnButton: Locator = this.page.getByTestId('end-turn');
   readonly rollDiceButton: Locator = this.page.getByTestId('roll-dice');

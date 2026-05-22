@@ -121,6 +121,8 @@ test.describe('Desktop Gameplay Playfield', () => {
       await game.rollDiceButton.click();
 
       await expect(game.resetEquationButton).toBeVisible();
+      await expect(game.equationResultBox).toBeVisible();
+      await expect(game.equationResultBox).toHaveAttribute('data-result-state', 'placeholder');
     });
 
     test('keeps the hand clickable before the confirm button appears', async ({ page, lobby, game }, testInfo) => {

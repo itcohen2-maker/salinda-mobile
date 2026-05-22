@@ -6,7 +6,7 @@
 import * as Sentry from '@sentry/react-native';
 Sentry.init({ dsn: 'https://2e289fe194f1d2fbbb13515d0b011dc6@o4511423830228992.ingest.de.sentry.io/4511423832064080' });
 
-import React, { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
 import type { ClassroomLaunchConfig, HostGameSettings, OverflowSwapPileChoice, OverflowSwapStage } from './shared/types';
@@ -93,6 +93,7 @@ import { disposeSfx, initializeSfx, playSfx, setSfxMuted, setSfxVolume } from '.
 import { SOUNDS_ENABLED_STORAGE_KEY, resolveStoredSoundsEnabled } from './src/audio/preferences';
 import { getAudioLoadStatus, getAudioReplayStatus } from './src/audio/playbackStatus';
 import { installAndroidTouchSoundWorkaround } from './src/utils/disableAndroidTouchSounds';
+import { resolveHandInitialCenterIdx } from './src/utils/resolveHandInitialCenterIdx';
 // TEMP: capture full stack trace for TypeError
 const _origConsoleError = console.error;
 const sendDebugLog = (hypothesisId: string, location: string, message: string, data: Record<string, unknown> = {}) => {
@@ -1118,11 +1119,16 @@ function TournamentInfoModal({
 }
 
 function sortHandCards(cards: Card[]): Card[] {
+  const isL5bRiggedHand = cards.some(
+    (card) =>
+      card.type === 'joker' &&
+      (card.id.startsWith('tut-l5b-joker-') || card.id.startsWith('tut-l5b-bot-joker-')),
+  );
   // Tutorial opt-out: when L5.2 (joker-place) rigs Slinda at the middle
   // index of the fan, the default "operations before jokers" rule would
   // push her to the end. Skip the sort so the learner sees Slinda right
   // where the bot is about to pulse her.
-  if (tutorialBus.getTutorialPreserveHandOrder()) return cards;
+  if (tutorialBus.getTutorialPreserveHandOrder() || isL5bRiggedHand) return cards;
   return orderHandForFan(cards);
 }
 
@@ -6425,6 +6431,25 @@ function timerProgressColor(progress: number): string {
 }
 
 
+export type EquationResultVisualState = 'placeholder' | 'ready' | 'error' | 'tutorial-target';
+
+export function getEquationResultVisualState({
+  finalResult,
+  hasError,
+  tutorialTarget,
+  ok: _ok,
+}: {
+  finalResult: number | null;
+  hasError: boolean;
+  tutorialTarget: number | null;
+  ok?: boolean;
+}): EquationResultVisualState {
+  if (hasError) return 'error';
+  if (finalResult !== null) return 'ready';
+  if (tutorialTarget !== null) return 'tutorial-target';
+  return 'placeholder';
+}
+
 export type EquationBuilderRef = { resetAll: () => void } | null;
 // ??? Exports for src/bot/ (single-player vs bot feature) ??????????????????
 // See docs/superpowers/plans/2026-04-11-single-player-vs-bot.md
@@ -7295,22 +7320,31 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     backgroundColor: withAlpha(timerColor, 0.16),
   } : null;
   const equalsColor = timerColor ?? '#FFD700';
-  const neutralResultBorderColor = '#9A3412';
-  const neutralResultBackgroundColor = '#FFF1D6';
+  const l5aTarget = state.isTutorial ? tutorialBus.getL5aTargetResult() : null;
+  const resultVisualState = getEquationResultVisualState({
+    finalResult,
+    hasError,
+    tutorialTarget: l5aTarget,
+    ok,
+  });
   const neutralResultTextColor = '#7A1F15';
-  const resultBoxDynamic = (!hasError && !ok && timerColor) ? {
-    borderColor: withAlpha(timerColor, 0.92),
+  const readyResultTextColor = '#6B210F';
+  const resultBoxDynamic = resultVisualState === 'placeholder' && timerColor ? {
     ...Platform.select({
       ios: {
-        shadowColor: withAlpha(timerColor, 0.35),
+        shadowColor: withAlpha(timerColor, 0.22),
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 1,
-        shadowRadius: 8,
+        shadowRadius: 10,
       },
       android: { elevation: 6 },
     }),
   } : null;
-  const resultTextColor = ok ? '#FFF' : (state.isTutorial ? '#FFD700' : neutralResultTextColor);
+  const resultTextColor = resultVisualState === 'ready' || resultVisualState === 'tutorial-target'
+    ? readyResultTextColor
+    : resultVisualState === 'error'
+      ? '#FFFFFF'
+      : neutralResultTextColor;
   const needsOp1Pulse = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
   const needsOp2Pulse = !isSolved && !state.isTutorial && show3rd && dice3 !== null && !effectiveOp2;
 
@@ -7882,7 +7916,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
         <View style={eqS.resultRow}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: equalsColor }}>=</Text>
           <View style={{ position: 'relative' }}>
-            {state.isTutorial && (ok || (tutorialBus.getL5aTargetResult() !== null && finalResult === null && !hasError)) ? (
+            {state.isTutorial && (ok || resultVisualState === 'tutorial-target') ? (
               <Animated.View
                 pointerEvents="none"
                 style={{
@@ -7911,60 +7945,55 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   top: -8, left: -8, right: -8, bottom: -8,
                   borderRadius: 16,
                   borderWidth: 3,
-                  borderColor: hasError ? '#FCA5A5' : '#86EFAC',
+                  borderColor: hasError ? '#FCA5A5' : '#FCD34D',
                   opacity: solvedResultPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.95] }),
                   transform: [{ scale: solvedResultPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }],
                   ...Platform.select({
-                    ios: { shadowColor: hasError ? '#F87171' : '#22C55E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 12 },
+                    ios: { shadowColor: hasError ? '#F87171' : '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 12 },
                     android: { elevation: 12 },
                   }),
                 }}
               />
             ) : null}
             {(() => {
-              // Lesson 5.1: when no finalResult yet, surface the target
-              // number ("= 7") the learner is aiming for, so they know which
-              // operator card to pick. Once the learner drops a card and
-              // finalResult becomes non-null, fall back to the normal render
-              // (green/red box reflects correctness against validTargets).
-              const l5aTarget = state.isTutorial ? tutorialBus.getL5aTargetResult() : null;
-              const showL5aTarget = l5aTarget !== null && finalResult === null && !hasError;
-              return (
-                <Animated.View style={[
-                  {
-                    minWidth: 76, height: 48, borderRadius: 12, borderWidth: 2,
-                    // L5.1 target uses the same strong `ok`-style green fill
-                    // as a solved answer — the earlier pale-mint rendering
-                    // faded into the background; reusing the solved palette
-                    // keeps the number visually prominent so it reads as
-                    // "the goal", not as a disabled hint.
-                    borderColor: hasError ? '#B91C1C' : ok ? '#15803D' : showL5aTarget ? '#15803D' : (state.isTutorial ? 'rgba(124,58,237,0.95)' : neutralResultBorderColor),
-                    backgroundColor: hasError ? '#DC2626' : ok ? '#166534' : showL5aTarget ? '#166534' : (state.isTutorial ? 'rgba(124,58,237,0.45)' : neutralResultBackgroundColor),
-                    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16,
-                  },
-                  resultBoxDynamic,
-                  isSolved && !state.isTutorial && {
+              const resultDisplayValue =
+                resultVisualState === 'ready'
+                  ? String(finalResult)
+                  : resultVisualState === 'tutorial-target'
+                    ? String(l5aTarget)
+                    : '?';
+              const readyPopStyle = resultVisualState === 'ready'
+                ? {
+                    opacity: resultFade.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }),
+                    transform: [{ scale: resultFade.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
+                  }
+                : null;
+              const solvedPulseStyle = isSolved && !state.isTutorial
+                ? {
                     transform: [{ scale: solvedResultPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }],
-                  },
-                ]}>
-                  {hasError ? (
-                    <Text allowFontScaling={false} style={{ fontSize: 20, fontWeight: '900', color: '#FFF' }}>?</Text>
-                  ) : finalResult !== null ? (
-                    <Animated.Text allowFontScaling={false} numberOfLines={1} style={{
-                      fontSize: 26, fontWeight: '900', color: resultTextColor,
-                      transform: state.isTutorial && ok
-                        ? [{ scale: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }) }]
-                        : [],
-                    }}>{finalResult}</Animated.Text>
-                  ) : showL5aTarget ? (
-                    <Animated.Text allowFontScaling={false} numberOfLines={1} style={{
-                      fontSize: 28, fontWeight: '900', color: '#FFFFFF',
-                      transform: [{ scale: tutorialResultPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }],
-                    }}>{l5aTarget}</Animated.Text>
-                  ) : (
-                    <Text allowFontScaling={false} style={{ fontSize: 24, fontWeight: '800', color: state.isTutorial ? 'rgba(255,215,0,0.4)' : 'rgba(255,255,255,0.4)' }}>?</Text>
-                  )}
-                </Animated.View>
+                  }
+                : null;
+              const tutorialValuePulseStyle =
+                state.isTutorial && (resultVisualState === 'tutorial-target' || ok)
+                  ? {
+                      transform: [{
+                        scale: tutorialResultPulse.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, resultVisualState === 'tutorial-target' ? 1.18 : 1.25],
+                        }),
+                      }],
+                    }
+                  : null;
+              return (
+                <EquationResultCube
+                  visualState={resultVisualState}
+                  displayValue={resultDisplayValue}
+                  boxStyle={[resultBoxDynamic, readyPopStyle, solvedPulseStyle]}
+                  valueStyle={[
+                    { color: resultTextColor },
+                    tutorialValuePulseStyle,
+                  ]}
+                />
               );
             })()}
           </View>
@@ -8058,6 +8087,94 @@ const eqS = StyleSheet.create({
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
   hint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
 });
+
+function getEquationResultCubeTheme(visualState: EquationResultVisualState) {
+  switch (visualState) {
+    case 'ready':
+    case 'tutorial-target':
+      return {
+        boxStyle: {
+          borderColor: '#B45309',
+          backgroundColor: '#FFE7B8',
+          borderWidth: 3,
+          ...Platform.select({
+            ios: {
+              shadowColor: '#F59E0B',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.4,
+              shadowRadius: 10,
+            },
+            android: { elevation: 9 },
+          }),
+        },
+        valueStyle: {
+          color: '#6B210F',
+          fontSize: 30,
+          fontWeight: '900' as const,
+        },
+      };
+    case 'error':
+      return {
+        boxStyle: {
+          borderColor: '#B91C1C',
+          backgroundColor: '#DC2626',
+          borderWidth: 2,
+        },
+        valueStyle: {
+          color: '#FFFFFF',
+          fontSize: 20,
+          fontWeight: '900' as const,
+        },
+      };
+    case 'placeholder':
+    default:
+      return {
+        boxStyle: {
+          borderColor: '#9A3412',
+          backgroundColor: '#FFF1D6',
+          borderWidth: 2,
+        },
+        valueStyle: {
+          color: 'rgba(122,31,21,0.48)',
+          fontSize: 24,
+          fontWeight: '800' as const,
+        },
+      };
+  }
+}
+
+export function EquationResultCube({
+  visualState,
+  displayValue,
+  boxStyle,
+  valueStyle,
+}: {
+  visualState: EquationResultVisualState;
+  displayValue: string;
+  boxStyle?: any;
+  valueStyle?: any;
+}) {
+  const theme = getEquationResultCubeTheme(visualState);
+  const webProps = Platform.OS === 'web'
+    ? ({ 'data-result-state': visualState } as any)
+    : null;
+  return (
+    <Animated.View
+      testID="equation-result-box"
+      {...(webProps ?? {})}
+      style={[eqS.resultBox, theme.boxStyle, boxStyle]}
+    >
+      <Animated.Text
+        allowFontScaling={false}
+        numberOfLines={1}
+        testID="equation-result-value"
+        style={[eqS.resultVal, theme.valueStyle, valueStyle]}
+      >
+        {displayValue}
+      </Animated.Text>
+    </Animated.View>
+  );
+}
 
 // ???????????????????????????????????????????????????????????????
 //  STAGING ZONE
@@ -8470,6 +8587,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   const interactionLockedRef = useRef(interactionLocked);
   interactionLockedRef.current = interactionLocked;
   const cardIdsSignature = useMemo(() => cards.map((c) => c.id).join('|'), [cards]);
+  const initialCenterIdx = useMemo(
+    () => resolveHandInitialCenterIdx(cards, centerCardId),
+    [cards, centerCardId],
+  );
   const lastCenterIdx = useRef(-1);
   const lastPanDecisionLogAt = useRef(0);
   const pinchLoggedRef = useRef(false);
@@ -8528,22 +8649,21 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     return unsub;
   }, [scrollX, cards]);
 
-  useEffect(() => {
-    scrollX.setValue(0);
-    scrollRef.current = 0;
-    lastCenterIdx.current = 0;
-    setCenterIdx(0);
-    onCenterCard?.(cards[0] ?? null);
-  }, [count]);
+  useLayoutEffect(() => {
+    scrollX.setValue(initialCenterIdx);
+    scrollRef.current = initialCenterIdx;
+    lastCenterIdx.current = initialCenterIdx;
+    setCenterIdx(initialCenterIdx);
+    onCenterCard?.(cards[initialCenterIdx] ?? null);
+  }, [cardIdsSignature, initialCenterIdx, onCenterCard]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!centerCardId) return;
     const targetIdx = cards.findIndex((card) => card.id === centerCardId);
     if (targetIdx < 0) return;
-    // L5.2 swaps in a new 5-card hand, then the count-change effect above
-    // briefly resets the fan to index 0. Snap Slinda back to the centred
-    // rigged slot immediately so she is already in the middle before the
-    // learner sees/taps the card.
+    // If a tutorial step decides which card should be centered after the
+    // hand already rendered, snap it into place immediately instead of
+    // waiting for a visible spring from the previous focus.
     if (tutorialBus.getL5GuidedMode() && tutorialBus.getTutorialPreserveHandOrder()) {
       scrollX.stopAnimation();
       scrollX.setValue(targetIdx);
@@ -9346,6 +9466,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
 function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (card: Card | null) => void; onFractionTapForOnb?: () => void } = {}) {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
+  const [l5UiTick, setL5UiTick] = useState(0);
+  useEffect(() => tutorialBus.subscribeL5Ui(() => setL5UiTick((n) => n + 1)), []);
   const soundOn = state.soundsEnabled !== false;
   const mpOpt = useMultiplayerOptional();
   const myIdx = (state as { myPlayerIndex?: number }).myPlayerIndex;
@@ -9399,7 +9521,16 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
   );
   const emptySet = useMemo(() => new Set<string>(), []);
   const [wildFracDefenseCard, setWildFracDefenseCard] = useState<Card | null>(null);
-  const sorted = sortHandCards(currentHand);
+  const isTutorialL5bRiggedHand = useMemo(
+    () =>
+      currentHand.some(
+        (card) =>
+          card.type === 'joker' &&
+          (card.id.startsWith('tut-l5b-joker-') || card.id.startsWith('tut-l5b-bot-joker-')),
+      ),
+    [currentHand],
+  );
+  const sorted = useMemo(() => sortHandCards(currentHand), [currentHand, l5UiTick]);
   const fractionDefenseHintKeyRef = useRef('');
   const lastBotPredictedCueRef = useRef<string>('');
   useEffect(() => {
@@ -9677,8 +9808,10 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         : tutorialPairHighlightIds;
   const tutorialCenteredCardId =
     state.isTutorial &&
-    tutorialBus.getL5GuidedMode() &&
-    tutorialBus.getTutorialPreserveHandOrder()
+    (
+      (tutorialBus.getL5GuidedMode() && tutorialBus.getTutorialPreserveHandOrder()) ||
+      isTutorialL5bRiggedHand
+    )
       ? (sorted.find((card) => card.type === 'joker')?.id ?? null)
       : null;
   const tutorialFocusedCardId = tutorialCenteredCardId;
@@ -16411,6 +16544,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const showSolvedPickCardsPrompt =
     hideSolvedResultsUi &&
     state.stagedCards.length === 0;
+  const showSolvedPromptInlineBackButton = shouldShowSolvedPromptInlineBackButton({
+    showSolvedPickCardsPrompt,
+    isTutorial: state.isTutorial,
+  });
   const resultsUiTurnKey = `${state.roundsPlayed}:${state.currentPlayerIndex}`;
   const resultsUiTurnKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -17380,14 +17517,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         <View style={{ position: 'absolute', top: belowTableStripTop, left: 0, right: 0, minHeight: 50, zIndex: 30, alignItems: 'center', justifyContent: 'center', overflow: 'visible' }} pointerEvents="box-none">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', paddingHorizontal: 12 }}>
             <ChooseCardsPromptButton />
-            <PickCardsActionButton
-              color="blue"
-              width={PICK_CARDS_INLINE_BACK_BTN_W}
-              height={PICK_CARDS_INLINE_BACK_BTN_H}
-              fontSize={15}
-              testID="pick-cards-back-inline"
-              onPress={() => dispatch({ type: 'REVERT_TO_BUILDING' })}
-            />
+            {showSolvedPromptInlineBackButton ? (
+              <PickCardsActionButton
+                color="blue"
+                width={PICK_CARDS_INLINE_BACK_BTN_W}
+                height={PICK_CARDS_INLINE_BACK_BTN_H}
+                fontSize={15}
+                testID="pick-cards-back-inline"
+                onPress={() => dispatch({ type: 'REVERT_TO_BUILDING' })}
+              />
+            ) : null}
           </View>
         </View>
       ) : showBelowTablePossibleResults ? (
@@ -17721,9 +17860,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 <Animated.View style={{flexShrink:0,marginTop:10,alignItems:'center',opacity: shouldBlinkGameTimerHint ? gameTimerHintOpacity : 1,transform:[{translateY:bottomActionLift}]}}>
                   <LulosButton
                     text={t('game.drawForfeit')}
-                    color="red"
-                    height={40}
-                    fontSize={15}
+                    color="forfeit"
+                    height={38}
+                    fontSize={14}
                     testID="draw-card-forfeit"
                     onPress={()=>{
                       playDrawForfeitSound();
@@ -17874,7 +18013,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       )}
 
       {/* בחר קלפים — בעיגון התחתון המקורי כדי לא להסתיר את תוצאת התרגיל */}
-      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !showSolvedPickCardsPrompt && !l5GuidedTutorial && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getL9ParensFilter()) && (
+      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !showSolvedPromptInlineBackButton && !l5GuidedTutorial && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getL9ParensFilter()) && (
         <View
           style={[
             StyleSheet.absoluteFillObject,
@@ -19667,8 +19806,10 @@ export function PlayModeChoiceScreen({
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
-  const authHomeButtonLabel = t('auth.homeButton');
-  const authHomeHelper = t('auth.homeHelper');
+  const authHomeButtonLabel = locale === 'he' ? 'כניסת משתמש' : t('auth.homeButton');
+  const authHomeHelper = locale === 'he'
+    ? 'היכנסו כדי לטעון את ההיסטוריה, הבנק וההגדרות שלכם.'
+    : t('auth.homeHelper');
   const feedbackToggleLabel = locale === 'he'
     ? (feedbackOpen ? 'סגור פידבק' : 'שלח פידבק')
     : (feedbackOpen ? 'Close feedback' : 'Send feedback');
@@ -20065,6 +20206,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const salindaVolumeRef = useRef(initialSalindaVolume);
   const salindaPrevVolumeRef = useRef(initialSalindaVolume);
   const [showSalindaPanel, setShowSalindaPanel] = useState(false);
+  const [salindaVolumeTouched, setSalindaVolumeTouched] = useState<boolean | null>(null);
+  const salindaMusicPulseAnim = useRef(new Animated.Value(0)).current;
   const [preferredName, setPreferredName] = useState('');
   const [adminCoinGiftUsername, setAdminCoinGiftUsername] = useState<string | null>(null);
   const SALINDA_PANEL_H = isAndroidPlatform ? 188 : 160;
@@ -20540,10 +20683,14 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const toggleSounds = useCallback(() => {
     dispatch({ type: 'SET_SOUNDS_ENABLED', enabled: !soundOn });
   }, [dispatch, soundOn]);
-  const openSalindaPanel = useCallback(() => setShowSalindaPanel((v) => !v), []);
   const markSalindaVolumeTouched = useCallback(() => {
+    setSalindaVolumeTouched(true);
     AsyncStorage.setItem(SALINDA_VOLUME_TOUCHED_KEY, 'true').catch(() => {});
   }, [SALINDA_VOLUME_TOUCHED_KEY]);
+  const openSalindaPanel = useCallback(() => {
+    markSalindaVolumeTouched();
+    setShowSalindaPanel((v) => !v);
+  }, [markSalindaVolumeTouched]);
   const applySalindaRatio = useCallback((ratio: number) => {
     const normalized = Math.max(0, Math.min(1, ratio));
     const next = Math.round((SALINDA_MAX_VOLUME * normalized) * 100) / 100;
@@ -20565,6 +20712,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       AsyncStorage.getItem(SALINDA_VOLUME_KEY),
       AsyncStorage.getItem(SALINDA_VOLUME_TOUCHED_KEY),
     ]).then(([stored, touched]) => {
+      setSalindaVolumeTouched(touched === 'true');
       const clamped = resolveRestoredSalindaVolume(stored, SALINDA_MAX_VOLUME, touched === 'true');
       salindaVolumeRef.current = clamped;
       salindaPrevVolumeRef.current = clamped;
@@ -20586,8 +20734,44 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     }
   }, [soundOn, setSalindaVolumeClamped]);
 
+  useEffect(() => {
+    if (salindaVolumeTouched !== false || showSalindaPanel) {
+      salindaMusicPulseAnim.stopAnimation();
+      salindaMusicPulseAnim.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(salindaMusicPulseAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(salindaMusicPulseAnim, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+
+    return () => loop.stop();
+  }, [salindaMusicPulseAnim, salindaVolumeTouched, showSalindaPanel]);
+
   const showTutorialHeader = playMode === 'tutorial';
   const webFocusMode = webPresentation?.focusMode ?? false;
+  const salindaMusicPulseScale = salindaMusicPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.1],
+  });
+  const salindaMusicPulseGlow = salindaMusicPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.16, 0.42],
+  });
 
   const handleWebBack = useCallback(() => {
     if (showShop) {
@@ -21033,28 +21217,48 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           >
             <SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={compactGlobalControls ? 20 : 22} />
           </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={t('game.music')}
-            onPress={openSalindaPanel}
+          <Animated.View
+            pointerEvents="box-none"
             style={{
               position: 'absolute',
               bottom: salindaMusicBottom,
               right: globalCtrlRight,
-              width: globalCtrlBtnH,
-              height: globalCtrlBtnH,
-              borderRadius: globalCtrlBtnH / 2,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(0,0,0,0.35)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.25)',
               zIndex: 9999,
-              opacity: salindaVolume > 0 ? 1 : 0.48,
+              transform: [{ scale: salindaMusicPulseScale }],
             }}
           >
-            <SalindaAudioIcon variant="music" size={compactGlobalControls ? 18 : 20} />
-          </TouchableOpacity>
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                bottom: -4,
+                left: -4,
+                borderRadius: (globalCtrlBtnH + 8) / 2,
+                backgroundColor: 'rgba(34,211,238,0.28)',
+                opacity: salindaMusicPulseGlow,
+              }}
+            />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={t('game.music')}
+              onPress={openSalindaPanel}
+              style={{
+                width: globalCtrlBtnH,
+                height: globalCtrlBtnH,
+                borderRadius: globalCtrlBtnH / 2,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0,0,0,0.35)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.25)',
+                opacity: salindaVolume > 0 ? 1 : 0.48,
+              }}
+            >
+              <SalindaAudioIcon variant="music" size={compactGlobalControls ? 18 : 20} />
+            </TouchableOpacity>
+          </Animated.View>
         </>
       )}
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { useAdminAccess } from '../admin/useAdminAccess';
-import { grantAdminCoins } from '../admin/grantCoins';
+import { findAdminCoinGiftTarget, grantAdminCoins } from '../admin/grantCoins';
 import { AdminCoinGiftsScreen } from './AdminCoinGiftsScreen';
 
 jest.mock('../admin/useAdminAccess', () => ({
@@ -23,10 +23,12 @@ jest.mock('../i18n/LocaleContext', () => ({
 
 describe('AdminCoinGiftsScreen', () => {
   const mockUseAdminAccess = useAdminAccess as jest.Mock;
+  const mockFindAdminCoinGiftTarget = findAdminCoinGiftTarget as jest.Mock;
   const mockGrantAdminCoins = grantAdminCoins as jest.Mock;
 
   beforeEach(() => {
     mockUseAdminAccess.mockReset();
+    mockFindAdminCoinGiftTarget.mockReset();
     mockGrantAdminCoins.mockReset();
   });
 
@@ -36,6 +38,24 @@ describe('AdminCoinGiftsScreen', () => {
     render(<AdminCoinGiftsScreen onBack={jest.fn()} />);
 
     expect(screen.getByText('Access restricted')).toBeTruthy();
+  });
+
+  it('prefills the username and auto-loads the target when initialUsername is provided', async () => {
+    mockUseAdminAccess.mockReturnValue({ isAdmin: true, loading: false });
+    mockFindAdminCoinGiftTarget.mockResolvedValue({
+      id: 'target-1',
+      totalCoins: 1200,
+      username: 'player_abc123',
+    });
+
+    render(<AdminCoinGiftsScreen initialUsername="player_abc123" onBack={jest.fn()} />);
+
+    await waitFor(() => {
+      expect(mockFindAdminCoinGiftTarget).toHaveBeenCalledWith('player_abc123');
+      expect(screen.getByDisplayValue('player_abc123')).toBeTruthy();
+      expect(screen.getByText('Target player')).toBeTruthy();
+      expect(screen.getByText('Current balance: 1200')).toBeTruthy();
+    });
   });
 
   it('submits a coin gift for admins', async () => {
