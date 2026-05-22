@@ -19909,25 +19909,10 @@ export function PlayModeChoiceScreen({
   const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 18 : 24;
-  const localeButtonGap = compactMainMenu ? 10 : 12;
-  const localeButtonWidth = compactMainMenu ? 124 : 132;
-  const localeButtonHeight = compactMainMenu ? 36 : 38;
-  const localeButtonFontSize = compactMainMenu ? 13 : 14;
-  const primaryButtonFontSize = compactMainMenu ? (locale === 'he' ? 18 : 17) : (locale === 'he' ? 20 : 18);
-  const secondaryButtonFontSize = compactMainMenu ? (locale === 'he' ? 17 : 16) : (locale === 'he' ? 19 : 17);
   const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 22 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
-  const shopToPrimaryContentGap = 100;
   const primaryStackGap = 28;
-  const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
-  const authHomeButtonLabel = isAnonymous ? t('auth.homeButton') : t('auth.switchUserButton');
-  const authHomeHelper = locale === 'he'
-    ? 'אל תאבדו את הקופה שלכם! התחברו כדי לשמור הגדרות ונתונים.'
-    : t('auth.homeHelper');
-  const feedbackToggleLabel = locale === 'he'
-    ? (feedbackOpen ? 'סגור פידבק' : 'שלח פידבק')
-    : (feedbackOpen ? 'Close feedback' : 'Send feedback');
   const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
 
@@ -19955,6 +19940,11 @@ export function PlayModeChoiceScreen({
     return () => { cancelled = true; };
   }, []);
 
+  // Hero button label and action depend on tutorial completion state
+  const heroLabel = tutorialDone ? t('lobby.playNow') : t('lobby.startTutorial');
+  const heroAction = tutorialDone ? onPlay : onHowToPlay;
+  const heroTestID = tutorialDone ? 'lobby-single-player' : 'lobby-start-tutorial';
+
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
       <AmbientBackground playMode="choose" forceVisible />
@@ -19972,184 +19962,48 @@ export function PlayModeChoiceScreen({
         contentInsetAdjustmentBehavior="always"
       >
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
-        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center' }}>
-          <Text style={{ color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginBottom: 8 }}>{t('lang.label')}</Text>
-          <View testID="lobby-language-toggle" style={{ flexDirection: 'row', direction: 'ltr', gap: localeButtonGap, marginBottom: sectionGap }}>
-            <LulosButton
-              text={t('lang.he')}
-              color={locale === 'he' ? 'orange' : 'blue'}
-              width={localeButtonWidth}
-              height={localeButtonHeight}
-              fontSize={localeButtonFontSize}
-              testID="lobby-language-he"
-              onPress={() => void setLocale('he')}
-            />
-            <LulosButton
-              text={t('lang.en')}
-              color={locale === 'en' ? 'orange' : 'blue'}
-              width={localeButtonWidth}
-              height={localeButtonHeight}
-              fontSize={localeButtonFontSize}
-              testID="lobby-language-en"
-              onPress={() => void setLocale('en')}
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('mode.play')}
-            testID="lobby-single-player"
-            onPress={onPlay}
-            android_disableSound
-            style={({ pressed }) => ({
-              width: '85%',
-              height: 65,
-              backgroundColor: '#1B4D3E',
-              borderRadius: 32.5,
-              borderWidth: 2,
-              borderColor: '#A3E635',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingTop: 0,
-              paddingBottom: 0,
-              marginBottom: 25,
-              shadowColor: '#FF4FD8',
-              shadowOpacity: 0.72,
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 0 },
-              elevation: 14,
-              opacity: pressed ? 0.88 : 1,
-              transform: [{ scale: pressed ? 0.98 : 1 }],
-            })}
-          >
-            <Text
-              style={{
-                color: '#FFFFFF',
-                fontSize: primaryButtonFontSize,
-                fontWeight: 'bold',
-                textAlign: 'center',
-                includeFontPadding: false,
-                textAlignVertical: 'center',
-              }}
-            >
-              {t('mode.play')}
-            </Text>
-          </Pressable>
-          <View style={{ alignItems: 'center', width: '80%', marginVertical: 15 }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={authHomeButtonLabel}
-              testID="home-auth-button"
-              onPress={onOpenAuth}
-              android_disableSound
-              style={({ pressed }) => ({
-                backgroundColor: '#1E293B',
-                paddingHorizontal: 20,
-                paddingVertical: 8,
-                borderRadius: 20,
-                borderWidth: 1,
-                borderColor: '#38BDF8',
-                marginBottom: isAnonymous ? 10 : 0,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed ? 0.82 : 1,
-              })}
-            >
-              <Text
-                style={{
-                  color: '#38BDF8',
-                  fontSize: 14,
-                  fontWeight: '600',
-                  includeFontPadding: false,
-                  textAlign: 'center',
-                  textAlignVertical: 'center',
-                }}
-              >
-                {authHomeButtonLabel}
-              </Text>
-            </Pressable>
-            {isAnonymous ? (
-              <Text
-                style={{
-                  color: '#94A3B8',
-                  fontSize: 14,
-                  textAlign: 'center',
-                  lineHeight: 20,
-                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
-                }}
-              >
-                {authHomeHelper}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <View style={{ flex: 1, width: '100%', justifyContent: 'flex-start', alignItems: 'center' }}>
-          <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: shopToPrimaryContentGap }}>
-            <View style={{ width: '100%', alignItems: 'center', marginBottom: primaryStackGap }}>
-              <Text style={{ alignSelf: 'stretch', color: '#D1D5DB', fontSize: 13, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>{t('lobby.yourName')}</Text>
-              <LinearGradient
-                colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
+          <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
+
+            {/* ── 1. HERO BUTTON ── */}
+            <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={heroLabel}
+                testID={heroTestID}
+                onPress={heroAction}
+                android_disableSound
+                style={({ pressed }) => ({
                   width: 280,
-                  borderRadius: 26,
-                  padding: 3,
-                  shadowColor: '#4A3200',
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.32,
-                  shadowRadius: 10,
-                  elevation: 7,
-                }}
+                  height: 72,
+                  backgroundColor: '#1B4D3E',
+                  borderRadius: 36,
+                  borderWidth: 2,
+                  borderColor: '#A3E635',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: '#FF4FD8',
+                  shadowOpacity: 0.82,
+                  shadowRadius: 20,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 18,
+                  opacity: pressed ? 0.88 : 1,
+                  transform: [{ scale: pressed ? 0.97 : 1 }],
+                })}
               >
-                <LinearGradient
-                  colors={['#0B153C', '#142763', '#1B3F8C']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                <Text
                   style={{
-                    borderRadius: 23,
-                    overflow: 'hidden',
-                    position: 'relative',
+                    color: '#FFFFFF',
+                    fontSize: 24,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    includeFontPadding: false,
+                    textAlignVertical: 'center',
                   }}
                 >
-                  <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-                    <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
-                    <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
-                    <Text style={{ position: 'absolute', bottom: 7, left: 58, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
-                    <Text style={{ position: 'absolute', bottom: 9, right: 62, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
-                  </View>
-                  <TextInput
-                    style={{
-                      width: '100%',
-                      backgroundColor: 'transparent',
-                      borderWidth: 1,
-                      borderColor: 'rgba(226,232,255,0.14)',
-                      borderRadius: 21,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                      color: '#EAF1FF',
-                      fontSize: 16,
-                      fontWeight: '800',
-                      textAlign: 'center',
-                    }}
-                    value={preferredName}
-                    onChangeText={(name) => onPreferredNameChange(name.slice(0, 7))}
-                    placeholder={t('lobby.namePlaceholder')}
-                    placeholderTextColor="rgba(226,235,255,0.8)"
-                    maxLength={7}
-                  />
-                </LinearGradient>
-              </LinearGradient>
-            </View>
-            <View style={{ alignSelf: 'center', marginBottom: primaryStackGap }}>
-              <MenuCapsuleButton
-                text={guideButtonLabel}
-                color="orange"
-                textColor="#FFFFFF"
-                fontSize={secondaryButtonFontSize}
-                testID="lobby-tutorial"
-                onPress={onHowToPlay}
-              />
+                  {heroLabel}
+                </Text>
+              </Pressable>
               {!tutorialDone ? (
                 <View
                   pointerEvents="none"
@@ -20174,7 +20028,161 @@ export function PlayModeChoiceScreen({
                 </View>
               ) : null}
             </View>
-            <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
+
+            {/* ── 2. SECONDARY ROW: name input + language toggle + coins ── */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                gap: 10,
+                marginBottom: sectionGap,
+                flexWrap: 'wrap',
+              }}
+            >
+              {/* Name input — compact */}
+              <LinearGradient
+                colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 18,
+                  padding: 2,
+                  shadowColor: '#4A3200',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.28,
+                  shadowRadius: 6,
+                  elevation: 5,
+                }}
+              >
+                <LinearGradient
+                  colors={['#0B153C', '#142763', '#1B3F8C']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                    position: 'relative',
+                  }}
+                >
+                  <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+                    <Text style={{ position: 'absolute', top: 4, left: 14, color: 'rgba(230,240,255,0.55)', fontSize: 9 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', bottom: 4, right: 14, color: 'rgba(255,248,200,0.38)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                  </View>
+                  <TextInput
+                    style={{
+                      width: 140,
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: 'rgba(226,232,255,0.14)',
+                      borderRadius: 14,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      color: '#EAF1FF',
+                      fontSize: 14,
+                      fontWeight: '800',
+                      textAlign: 'center',
+                    }}
+                    value={preferredName}
+                    onChangeText={(name) => onPreferredNameChange(name.slice(0, 7))}
+                    placeholder={t('lobby.yourName')}
+                    placeholderTextColor="rgba(226,235,255,0.8)"
+                    maxLength={7}
+                  />
+                </LinearGradient>
+              </LinearGradient>
+
+              {/* Language toggle — compact */}
+              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', direction: 'ltr', gap: 6 }}>
+                <LulosButton
+                  text={t('lang.he')}
+                  color={locale === 'he' ? 'orange' : 'blue'}
+                  width={56}
+                  height={36}
+                  fontSize={13}
+                  testID="lobby-language-he"
+                  onPress={() => void setLocale('he')}
+                />
+                <LulosButton
+                  text={t('lang.en')}
+                  color={locale === 'en' ? 'orange' : 'blue'}
+                  width={56}
+                  height={36}
+                  fontSize={13}
+                  testID="lobby-language-en"
+                  onPress={() => void setLocale('en')}
+                />
+              </View>
+
+              {/* Coins / shop */}
+              <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
+            </View>
+
+            {/* ── 3. FOOTER LINKS ── */}
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 4,
+                marginBottom: sectionGap,
+              }}
+            >
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="lobby-tutorial"
+                onPress={onHowToPlay}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.howToPlay')}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#4B5563', fontSize: 14 }}> · </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="home-feedback-toggle"
+                onPress={() => setFeedbackOpen((prev) => !prev)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.sendFeedback')}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#4B5563', fontSize: 14 }}> · </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="home-auth-button"
+                onPress={onOpenAuth}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>{t('lobby.account')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Feedback card — inline expansion */}
+            {feedbackOpen ? (
+              <View style={{ width: '100%', alignItems: 'center', marginBottom: sectionGap }}>
+                <FeedbackMailCard
+                  isRTL={locale === 'he'}
+                  locale={locale}
+                  promptKind="general"
+                  dismissLabel={closeFeedbackLabel}
+                  onDismiss={() => setFeedbackOpen(false)}
+                  onSubmit={async ({ rating, comment }) => {
+                    const result = await onFeedbackSubmit({
+                      kind: 'general',
+                      rating,
+                      comment,
+                    });
+                    if (result === 'submitted') {
+                      setFeedbackOpen(false);
+                    }
+                    return result;
+                  }}
+                />
+              </View>
+            ) : null}
+
+            {/* ── 4. ADMIN BLOCK (unchanged) ── */}
             {isFeedbackAdmin ? (
               <>
                 <LulosButton
@@ -20199,40 +20207,8 @@ export function PlayModeChoiceScreen({
                 />
               </>
             ) : null}
-            <LulosButton
-              text={feedbackToggleLabel}
-              color={feedbackOpen ? 'purple' : 'blue'}
-              width={220}
-              height={42}
-              fontSize={14}
-              testID="home-feedback-toggle"
-              onPress={() => setFeedbackOpen((prev) => !prev)}
-              style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
-            />
-            {feedbackOpen ? (
-              <View style={{ width: '100%', alignItems: 'center' }}>
-                <FeedbackMailCard
-                  isRTL={locale === 'he'}
-                  locale={locale}
-                  promptKind="general"
-                  dismissLabel={closeFeedbackLabel}
-                  onDismiss={() => setFeedbackOpen(false)}
-                  onSubmit={async ({ rating, comment }) => {
-                    const result = await onFeedbackSubmit({
-                      kind: 'general',
-                      rating,
-                      comment,
-                    });
-                    if (result === 'submitted') {
-                      setFeedbackOpen(false);
-                    }
-                    return result;
-                  }}
-                />
-              </View>
-            ) : null}
+
           </View>
-        </View>
         </View>
       </ScrollView>
     </View>

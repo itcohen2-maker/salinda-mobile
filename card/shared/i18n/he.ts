@@ -153,6 +153,11 @@ export const he: Record<string, string> = {
 
   'lobby.backToMode': '→ בחירת אופן משחק',
   'lobby.guideButton': '?איך משחקים',
+  'lobby.playNow': 'שחק עכשיו',
+  'lobby.startTutorial': 'התחל הדרכה',
+  'lobby.howToPlay': 'כיצד לשחק',
+  'lobby.sendFeedback': 'שלח פידבק',
+  'lobby.account': 'חשבון',
   'lobby.tutorialContinueBadge': 'המשך',
   'lobby.advancedToggleShow': 'התאמות מתקדמות',
   'lobby.advancedToggleHide': 'הסתר התאמות מתקדמות',
