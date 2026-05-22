@@ -940,6 +940,10 @@ export const he: Record<string, string> = {
   'start.timerPickerMin': 'דק׳',
   'start.timerModalStart': 'התחלה',
   'start.letsPlay': 'בואו נשחק',
+  'start.step1Title': 'שחקנים',
+  'start.step2Title': 'רמת קושי',
+  'start.next': 'הבא',
+  'start.howToPlayLink': 'כיצד לשחק?',
 
   'dev.onboardingClearedTitle': 'מפתחים',
   'dev.onboardingClearedBody': 'איפוס הדרכה (מפתחות נוקו)',

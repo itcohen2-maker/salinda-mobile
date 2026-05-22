@@ -940,6 +940,10 @@ export const en: Record<string, string> = {
   'start.timerPickerMin': 'Min',
   'start.timerModalStart': 'Apply',
   'start.letsPlay': "Let's play",
+  'start.step1Title': 'Players',
+  'start.step2Title': 'Difficulty',
+  'start.next': 'Next',
+  'start.howToPlayLink': 'How to play?',
 
   'dev.onboardingClearedTitle': 'Developer',
   'dev.onboardingClearedBody': 'Onboarding tip keys were cleared.',

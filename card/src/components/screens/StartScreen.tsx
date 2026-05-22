@@ -30,6 +30,7 @@ export default function StartScreen({
   const { t, isRTL } = useLocale();
   const { dispatch } = useGame();
   const responsive = useResponsiveLayout();
+  const [step, setStep] = useState<1 | 2>(1);
   const [playerCount, setPlayerCount] = useState(2);
   const [names, setNames] = useState<string[]>(() => {
     const base = Array(10).fill('');
@@ -42,12 +43,6 @@ export default function StartScreen({
 
   const maxPlayers = difficulty === 'easy' ? 8 : 10;
   const ta = isRTL ? 'right' : 'left';
-  const topActionsDirection = responsive.isSingleColumn ? 'column' : 'row';
-  const topActionButtonWidth = responsive.isSingleColumn
-    ? ('100%' as const)
-    : responsive.isCompact
-      ? ('48%' as const)
-      : undefined;
   const primaryCtaWidth = responsive.isSingleColumn ? '100%' : 220;
   const primaryCtaHeight = responsive.isCompact ? 52 : 56;
   const stackedChoiceRow = responsive.isSingleColumn;
@@ -80,149 +75,161 @@ export default function StartScreen({
       ]}
       keyboardShouldPersistTaps="handled"
     >
-      <View
-        testID="start-top-actions"
-        style={[
-          styles.topActions,
-          {
-            flexDirection: topActionsDirection,
-            alignItems: responsive.isSingleColumn ? 'stretch' : 'center',
-          },
-        ]}
-      >
-        {onBackToChoice ? (
-          <Button
-            testID="start-back-button"
-            variant="secondary"
-            size="sm"
-            onPress={onBackToChoice}
-            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
-          >
-            {t('lobby.backToMode')}
-          </Button>
-        ) : null}
-        {onHowToPlay ? (
-          <Button
-            testID="start-how-to-play-button"
-            variant="primary"
-            size="sm"
-            onPress={onHowToPlay}
-            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
-          >
-            {t('mode.howToPlay')}
-          </Button>
-        ) : null}
-        {onShop ? (
-          <Button
-            testID="start-shop-button"
-            variant="gold"
-            size="sm"
-            onPress={onShop}
-            style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
-          >
-            {t('shop.openShop')}
-          </Button>
-        ) : null}
-        <Button
-          testID="start-rules-button"
-          variant="secondary"
-          size="sm"
-          onPress={() => setShowRules((prev) => !prev)}
-          style={[styles.topActionBtn, topActionButtonWidth ? { width: topActionButtonWidth } : null]}
+      {/* ── Top bar: back arrow (left) + icon row (right) ── */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          testID="start-back-button"
+          onPress={step === 1 ? onBackToChoice : () => setStep(1)}
+          style={styles.backBtn}
+          accessibilityLabel={t('lobby.backToMode')}
         >
-          {t('start.rulesButton')}
-        </Button>
+          <Text style={styles.backBtnText}>←</Text>
+        </TouchableOpacity>
+
+        <View style={styles.topRightIcons}>
+          {onHowToPlay ? (
+            <TouchableOpacity
+              testID="start-how-to-play-button"
+              onPress={onHowToPlay}
+              style={styles.iconBtn}
+              accessibilityLabel={t('mode.howToPlay')}
+            >
+              <Text style={styles.iconBtnText}>?</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onShop ? (
+            <TouchableOpacity
+              testID="start-shop-button"
+              onPress={onShop}
+              style={styles.iconBtn}
+              accessibilityLabel={t('shop.openShop')}
+            >
+              <Text style={styles.iconBtnText}>🛒</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            testID="start-rules-button"
+            onPress={() => setShowRules((prev) => !prev)}
+            style={styles.iconBtn}
+            accessibilityLabel={t('start.rulesButton')}
+          >
+            <Text style={styles.iconBtnText}>📖</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
       <View style={styles.logoWrap}>
         <SalindaLogoOption06 width={300} />
       </View>
       <Text style={styles.subtitle}>{t('start.subtitle')}</Text>
 
-      <Text style={[styles.label, { textAlign: ta }]}>{t('start.playerCount')}</Text>
-      <View
-        testID="start-player-count-row"
-        style={[
-          styles.countRow,
-          responsive.isCompact ? styles.countRowCompact : null,
-        ]}
-      >
-        {Array.from({ length: maxPlayers - 1 }, (_, i) => i + 2).map((n) => (
-          <TouchableOpacity
-            key={n}
-            onPress={() => setPlayerCount(n)}
-            style={[styles.countBtn, playerCount === n && styles.countBtnActive]}
+      {/* ── Step 1: Players ── */}
+      {step === 1 && (
+        <View>
+          <Text style={[styles.stepTitle, { textAlign: ta }]}>{t('start.step1Title')}</Text>
+
+          <Text style={[styles.label, { textAlign: ta }]}>{t('start.playerCount')}</Text>
+          <View
+            testID="start-player-count-row"
+            style={[
+              styles.countRow,
+              responsive.isCompact ? styles.countRowCompact : null,
+            ]}
           >
-            <Text style={[styles.countText, playerCount === n && styles.countTextActive]}>{n}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            {Array.from({ length: maxPlayers - 1 }, (_, i) => i + 2).map((n) => (
+              <TouchableOpacity
+                key={n}
+                onPress={() => setPlayerCount(n)}
+                style={[styles.countBtn, playerCount === n && styles.countBtnActive]}
+              >
+                <Text style={[styles.countText, playerCount === n && styles.countTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <Text style={[styles.label, { textAlign: ta }]}>{t('start.playerNames')}</Text>
-      {Array.from({ length: playerCount }, (_, i) => (
-        <TextInput
-          key={i}
-          placeholder={t('start.playerPlaceholder', { n: String(i + 1) })}
-          placeholderTextColor="#9CA3AF"
-          value={names[i]}
-          onChangeText={(text) => {
-            const newNames = [...names];
-            newNames[i] = text;
-            setNames(newNames);
-          }}
-          style={[styles.input, { textAlign: ta }]}
-        />
-      ))}
+          <Text style={[styles.label, { textAlign: ta }]}>{t('start.playerNames')}</Text>
+          {Array.from({ length: playerCount }, (_, i) => (
+            <TextInput
+              key={i}
+              placeholder={t('start.playerPlaceholder', { n: String(i + 1) })}
+              placeholderTextColor="#9CA3AF"
+              value={names[i]}
+              onChangeText={(text) => {
+                const newNames = [...names];
+                newNames[i] = text;
+                setNames(newNames);
+              }}
+              style={[styles.input, { textAlign: ta }]}
+            />
+          ))}
 
-      <Text style={[styles.label, { textAlign: ta }]}>{t('start.difficulty')}</Text>
-      <View
-        testID="start-difficulty-row"
-        style={[
-          styles.diffRow,
-          stackedChoiceRow ? styles.diffRowStacked : null,
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.diffBtn, difficulty === 'full' && styles.diffFull]}
-          onPress={() => setDifficulty('full')}
-        >
-          <Text style={[styles.diffText, difficulty === 'full' && { color: '#FFF' }]}>{t('start.diffFull')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.diffBtn, difficulty === 'easy' && styles.diffEasy]}
-          onPress={() => {
-            setDifficulty('easy');
-            setPlayerCount((c) => Math.min(c, 8));
-          }}
-        >
-          <Text style={[styles.diffText, difficulty === 'easy' && { color: '#FFF' }]}>{t('start.diffEasy')}</Text>
-        </TouchableOpacity>
-      </View>
+          <Button
+            testID="start-next-button"
+            variant="primary"
+            size="lg"
+            onPress={() => setStep(2)}
+            style={{
+              width: primaryCtaWidth,
+              height: primaryCtaHeight,
+              borderRadius: 28,
+              marginTop: 20,
+              alignSelf: 'center',
+            }}
+          >
+            {t('start.next')}
+          </Button>
+        </View>
+      )}
 
-      <Button
-        testID="start-play-button"
-        variant="primary"
-        size="lg"
-        onPress={handleStart}
-        style={{
-          width: primaryCtaWidth,
-          height: primaryCtaHeight,
-          borderRadius: 28,
-          marginTop: 12,
-          alignSelf: 'center',
-        }}
-      >
-        {t('start.startGame')}
-      </Button>
-      <Button
-        testID="start-toggle-rules"
-        variant="secondary"
-        size="sm"
-        onPress={() => setShowRules(!showRules)}
-        style={{ width: '100%', marginTop: 8 }}
-      >
-        {showRules ? t('start.hideRules') : t('start.showRules')}
-      </Button>
+      {/* ── Step 2: Difficulty + Start ── */}
+      {step === 2 && (
+        <View>
+          <Text style={[styles.stepTitle, { textAlign: ta }]}>{t('start.step2Title')}</Text>
 
+          <Text style={[styles.label, { textAlign: ta }]}>{t('start.difficulty')}</Text>
+          <View
+            testID="start-difficulty-row"
+            style={[
+              styles.diffRow,
+              stackedChoiceRow ? styles.diffRowStacked : null,
+            ]}
+          >
+            <TouchableOpacity
+              style={[styles.diffBtn, difficulty === 'full' && styles.diffFull]}
+              onPress={() => setDifficulty('full')}
+            >
+              <Text style={[styles.diffText, difficulty === 'full' && { color: '#FFF' }]}>{t('start.diffFull')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.diffBtn, difficulty === 'easy' && styles.diffEasy]}
+              onPress={() => {
+                setDifficulty('easy');
+                setPlayerCount((c) => Math.min(c, 8));
+              }}
+            >
+              <Text style={[styles.diffText, difficulty === 'easy' && { color: '#FFF' }]}>{t('start.diffEasy')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Button
+            testID="start-play-button"
+            variant="primary"
+            size="lg"
+            onPress={handleStart}
+            style={{
+              width: primaryCtaWidth,
+              height: primaryCtaHeight,
+              borderRadius: 28,
+              marginTop: 12,
+              alignSelf: 'center',
+            }}
+          >
+            {t('start.letsPlay')}
+          </Button>
+        </View>
+      )}
+
+      {/* ── Rules panel (toggled from top-right icon) ── */}
       {showRules && (
         <View style={styles.rules}>
           <Text style={[styles.rulesTitle, { textAlign: ta }]}>{t('start.rulesTitle')}</Text>
@@ -268,31 +275,62 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#111827' },
   container: { padding: 24, paddingTop: 60, alignItems: 'stretch' },
   containerCompact: { padding: 16, paddingTop: 40 },
-  topActions: {
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
+
+  /* ── Top bar ── */
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
-  topActionBtn: {
-    minWidth: 92,
+  backBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#374151',
   },
+  backBtnText: { color: '#D1D5DB', fontSize: 18, fontWeight: '700' },
+  topRightIcons: { flexDirection: 'row', gap: 8 },
+  iconBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+  iconBtnText: { fontSize: 18 },
+
+  /* ── Logo / subtitle ── */
   logoWrap: { alignSelf: 'center', marginBottom: 8, maxWidth: '100%' },
-  subtitle: { color: '#9CA3AF', fontSize: 13, marginTop: 4, marginBottom: 28, alignSelf: 'center', textAlign: 'center' },
+  subtitle: { color: '#9CA3AF', fontSize: 13, marginTop: 4, marginBottom: 20, alignSelf: 'center', textAlign: 'center' },
+
+  /* ── Step title ── */
+  stepTitle: { color: '#F9FAFB', fontSize: 18, fontWeight: '700', marginBottom: 12, marginTop: 4 },
+
+  /* ── Common labels & inputs ── */
   label: { color: '#D1D5DB', fontSize: 13, fontWeight: '600', alignSelf: 'stretch', marginBottom: 8, marginTop: 16 },
+  input: { width: '100%', backgroundColor: '#374151', borderWidth: 1, borderColor: '#4B5563', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, marginBottom: 6 },
+
+  /* ── Player count chips — 44×44 hit targets ── */
   countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignSelf: 'flex-end', direction: 'ltr' },
   countRowCompact: { alignSelf: 'stretch', justifyContent: 'flex-end' },
   countBtn: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
   countBtnActive: { backgroundColor: '#F59E0B' },
   countText: { color: '#D1D5DB', fontWeight: '700', fontSize: 14 },
   countTextActive: { color: '#FFF' },
-  input: { width: '100%', backgroundColor: '#374151', borderWidth: 1, borderColor: '#4B5563', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, marginBottom: 6 },
+
+  /* ── Difficulty row ── */
   diffRow: { flexDirection: 'row', gap: 10, width: '100%', direction: 'ltr' },
   diffRowStacked: { flexDirection: 'column' },
   diffBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
   diffEasy: { backgroundColor: '#16A34A' },
   diffFull: { backgroundColor: '#DC2626' },
   diffText: { color: '#D1D5DB', fontWeight: '600', fontSize: 14 },
+
+  /* ── Rules panel ── */
   rules: {
     marginTop: 16,
     backgroundColor: '#1F2937',
