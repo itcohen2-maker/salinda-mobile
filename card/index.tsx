@@ -19906,6 +19906,7 @@ export function PlayModeChoiceScreen({
   const responsive = useResponsiveLayout();
   const preferredNameSeededRef = useRef(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 18 : 24;
   const localeButtonGap = compactMainMenu ? 10 : 12;
@@ -19920,9 +19921,7 @@ export function PlayModeChoiceScreen({
   const primaryStackGap = 28;
   const guideButtonLabel = t('lobby.guideButton');
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
-  const authHomeButtonLabel = isAnonymous
-    ? (locale === 'he' ? 'התחברות' : t('auth.homeButton'))
-    : t('auth.switchUserButton');
+  const authHomeButtonLabel = isAnonymous ? t('auth.homeButton') : t('auth.switchUserButton');
   const authHomeHelper = locale === 'he'
     ? 'אל תאבדו את הקופה שלכם! התחברו כדי לשמור הגדרות ונתונים.'
     : t('auth.homeHelper');
@@ -19947,6 +19946,14 @@ export function PlayModeChoiceScreen({
       cancelled = true;
     };
   }, [onPreferredNameChange, preferredName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem('lulos_tutorial_done').then((v) => {
+      if (!cancelled) setTutorialDone(v === 'true');
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
@@ -20134,15 +20141,39 @@ export function PlayModeChoiceScreen({
                 </LinearGradient>
               </LinearGradient>
             </View>
-            <MenuCapsuleButton
-              text={guideButtonLabel}
-              color="orange"
-              textColor="#FFFFFF"
-              fontSize={secondaryButtonFontSize}
-              testID="lobby-tutorial"
-              onPress={onHowToPlay}
-              style={{ marginBottom: primaryStackGap, alignSelf: 'center' }}
-            />
+            <View style={{ alignSelf: 'center', marginBottom: primaryStackGap }}>
+              <MenuCapsuleButton
+                text={guideButtonLabel}
+                color="orange"
+                textColor="#FFFFFF"
+                fontSize={secondaryButtonFontSize}
+                testID="lobby-tutorial"
+                onPress={onHowToPlay}
+              />
+              {!tutorialDone ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    backgroundColor: '#F59E0B',
+                    borderRadius: 10,
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.18,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 2 },
+                    elevation: 4,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                    {t('lobby.tutorialContinueBadge')}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
             <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
             {isFeedbackAdmin ? (
               <>
@@ -20345,7 +20376,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const webPresentation = useContext(WebPresentationContext);
   // Web starts at the home/choose screen like mobile; URL-based room joins still work via the effect below.
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
-  // Auto-start tutorial disabled — app opens on choose screen
+  // FTU routing: new users (lulos_tutorial_done not set) are sent to tutorial automatically
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
@@ -20629,6 +20660,20 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   useEffect(() => {
     AsyncStorage.setItem(PREFERRED_NAME_KEY, preferredName).catch(() => {});
   }, [preferredName]);
+
+  // FTU routing: auto-navigate new users to tutorial if they have never completed it
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem('lulos_tutorial_done').then((v) => {
+      if (cancelled) return;
+      if (v === null) {
+        // First-time user — route directly to tutorial
+        setPlayMode('tutorial');
+      }
+      // v === 'true' → returning user, keep default 'choose'
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const launchClassroomPractice = useCallback((config: ClassroomLaunchConfig) => {
     classroomPracticeStartedAtRef.current = Date.now();

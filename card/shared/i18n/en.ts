@@ -141,6 +141,7 @@ export const en: Record<string, string> = {
 
   'lobby.backToMode': '→ Back to play mode',
   'lobby.guideButton': 'How to play?',
+  'lobby.tutorialContinueBadge': 'Continue',
   'lobby.advancedToggleShow': 'Advanced setup',
   'lobby.advancedToggleHide': 'Hide advanced setup',
   'lobby.rulesModalClose': 'Close',
