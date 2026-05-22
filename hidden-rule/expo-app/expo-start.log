@@ -1,0 +1,18 @@
+
+> expo-app@1.0.0 start
+> expo start --lan --port 8082 --clear
+
+Starting project at C:\Users\asus\bmad\hidden-rule\expo-app
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8082
+Logs for your project will appear below.
+iOS .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS .\index.ts ▓▓░░░░░░░░░░░░░░ 14.1% ( 9/27)
+iOS .\index.ts ▓▓░░░░░░░░░░░░░░ 14.1% ( 48/205)
+iOS .\index.ts ▓▓▓▓▓▓░░░░░░░░░░ 39.4% (238/379)
+iOS .\index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.7% (446/520)
+iOS .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 94.2% (600/623)
+iOS .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.5% (806/808)
+iOS Bundled 23668ms index.ts (808 modules)
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context

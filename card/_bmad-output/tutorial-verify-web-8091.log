@@ -1,0 +1,33 @@
+
+> salinda-game@1.0.0 web
+> expo start --web --port 8091
+
+env: load .env
+env: export EXPO_PUBLIC_LOCAL_SOCKET_SERVER EXPO_PUBLIC_SERVER_URL EXPO_PUBLIC_WEB_APP_URL EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
+Starting project at C:\Users\asus\bmad\card
+Starting Metro Bundler
+Waiting on http://localhost:8091
+Logs for your project will appear below.
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  1.0% (1/1)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  5.2% ( 40/175)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 24.0% (104/214)
+Web .\index.tsx ▓▓▓▓▓▓▓▓░░░░░░░░ 53.7% (280/382)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 75.9% (493/566)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.7% (643/644)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 34016ms index.tsx (646 modules)
+Web Bundled 7875ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 407ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 7746ms index.tsx (1 module)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 862ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console

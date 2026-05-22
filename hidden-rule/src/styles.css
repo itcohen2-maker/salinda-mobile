@@ -1,0 +1,41 @@
+:root {
+  color-scheme: dark;
+  font-family: "Frank Ruhl Libre", Georgia, serif;
+  background: #0d0f13;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(33, 40, 49, 0.62) 0%, rgba(13, 15, 19, 0) 60%),
+    #0d0f13;
+}
+
+body {
+  min-height: 100vh;
+  color: #ede4d3;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  direction: rtl;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}

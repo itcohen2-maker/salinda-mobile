@@ -1,0 +1,462 @@
+/* ============================================================
+   Hidden Rule — v2 Button Family
+   --------------------------------------------------------------
+   Three components, one consistent system:
+
+     .hr-primary    — default primary CTA (brass-framed plaque)
+     .hr-secondary  — quieter sibling (ivory-hairline panel)
+     .hr-premium    — ceremonial primary for chapter-tier actions
+
+   Shared properties
+   - Frank Ruhl Libre, mixed-case (no uppercase, no small caps)
+   - Hebrew + English both supported; letter-spacing zeroed for HE
+   - Labels are NOT baked in; consumer sets via prop / text node
+   - Mobile-friendly hit targets (≥48 / 56 / 64)
+   - Labels wrap naturally; safe text area preserved on wrap
+   - Transparent background; the face is the only painted area
+   - Hover is desktop-only and barely there; pressed / focused /
+     disabled carry the interactive load
+   ============================================================ */
+
+/* — Shared label rules — */
+.hr-label {
+  font-family: "Frank Ruhl Libre", "Cormorant Garamond", "EB Garamond",
+               Georgia, "David Libre", "Times New Roman", serif;
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 1.22;
+  letter-spacing: 0.005em;
+  text-align: center;
+  text-wrap: balance;          /* nice line breaks when wrapping */
+  white-space: normal;         /* allow wrap — not brittle nowrap */
+  color: #ECE4D0;              /* ivory */
+  display: inline-block;
+}
+.hr-label:lang(he),
+.hr-label[lang="he"] {
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+/* ============================================================
+   COMPONENT 1 · PRIMARY  (default CTA)
+   Use for: Play, Submit, Continue, Next Chapter, Name the Rule
+   ============================================================ */
+.hr-primary {
+  --brass-top:  #D6B36C;
+  --brass-mid:  #8C6B2C;
+  --brass-deep: #5A4218;
+  --face-top:   #262934;
+  --face-bot:   #14161E;
+  --oxblood:    #6E2A2E;
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 1.25px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 200px;
+  max-width: 340px;
+  min-height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    var(--brass-top)   0%,
+    #B89149            22%,
+    var(--brass-mid)   58%,
+    var(--brass-deep) 100%
+  );
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.50))
+    drop-shadow(0 2px 3px rgba(6,8,12,0.40))
+    drop-shadow(0 8px 16px rgba(6,8,12,0.30));
+  transition:
+    transform 120ms cubic-bezier(.4,.2,.2,1),
+    filter   180ms ease,
+    background 180ms ease;
+}
+.hr-primary__face {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 28px;           /* safe text area */
+  border-radius: 12.5px;
+  background:
+    radial-gradient(120% 90% at 50% 38%,
+      rgba(36, 56, 96, 0.24) 0%,
+      rgba(36, 56, 96, 0.08) 35%,
+      transparent 75%),
+    linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 1px 0    rgba(236, 228, 208, 0.10),
+    inset 0 2px 1px  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0   rgba(0, 0, 0, 0.55),
+    inset 0 -10px 14px -8px rgba(0, 0, 0, 0.50),
+    inset 0 0 18px   rgba(0, 0, 0, 0.28);
+}
+.hr-primary__label {
+  font-size: 19px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Hover: desktop only, very subtle */
+@media (hover: hover) and (pointer: fine) {
+  .hr-primary:hover:not(.is-disabled):not(.is-pressed):not(.is-focused)
+  .hr-primary__face {
+    background:
+      radial-gradient(120% 90% at 50% 38%,
+        rgba(40, 62, 104, 0.28) 0%, transparent 75%),
+      linear-gradient(180deg, #2C2F3B 0%, #15171F 100%);
+  }
+}
+
+.hr-primary.is-pressed,
+.hr-primary:active:not(.is-disabled) {
+  transform: translateY(1.5px);
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.45))
+    drop-shadow(0 1px 2px rgba(6,8,12,0.35))
+    drop-shadow(0 2px 4px rgba(6,8,12,0.22));
+  background: linear-gradient(180deg, #A07F3B 0%, #7A5D26 40%, var(--brass-deep) 100%);
+}
+.hr-primary.is-pressed .hr-primary__face,
+.hr-primary:active:not(.is-disabled) .hr-primary__face {
+  background:
+    radial-gradient(120% 90% at 50% 60%, rgba(20, 32, 58, 0.30) 0%, transparent 75%),
+    linear-gradient(180deg, #0F1118 0%, #1A1D27 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    inset 0 8px 10px -6px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+
+.hr-primary.is-focused,
+.hr-primary:focus-visible:not(.is-disabled) {
+  box-shadow:
+    0 0 0 2px   #0C0E14,
+    0 0 0 4px   var(--oxblood),
+    0 0 0 5.5px rgba(140, 52, 56, 0.28);
+}
+
+.hr-primary.is-disabled,
+.hr-primary[disabled] {
+  cursor: not-allowed;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.22));
+  background: linear-gradient(180deg, #6B6358 0%, #4F4940 50%, #383229 100%);
+}
+.hr-primary.is-disabled .hr-primary__face,
+.hr-primary[disabled] .hr-primary__face {
+  background: linear-gradient(180deg, #2A2C32 0%, #1C1E24 100%);
+  box-shadow:
+    inset 0 1px 0  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.22);
+}
+.hr-primary.is-disabled .hr-primary__label,
+.hr-primary[disabled] .hr-primary__label {
+  color: rgba(236, 228, 208, 0.30);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.hr-primary--block { width: 100%; max-width: 100%; }
+
+/* ============================================================
+   COMPONENT 2 · SECONDARY  (quieter sibling)
+   Use for: Hint, Back, Rules, Continue (when secondary), Cancel
+   Form: an inscribed panel — no brass frame, ivory hairline edge.
+   ============================================================ */
+.hr-secondary {
+  --face-top:  #232631;
+  --face-bot:  #15171F;
+  --edge:      rgba(236, 228, 208, 0.22);
+  --edge-hi:   rgba(236, 228, 208, 0.34);
+  --brass:     #9A7732;
+  --brass-bright: #C9A560;
+  --ink:       #1F2A42;
+  --ink-deep:  #131A2A;
+  --oxblood:   #6E2A2E;
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  max-width: 280px;
+  min-height: 48px;
+  padding: 10px 22px;            /* safe text area */
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 0 0 1px  var(--edge),
+    inset 0 1px 0   rgba(236, 228, 208, 0.06),
+    inset 0 -1px 0  rgba(0, 0, 0, 0.55),
+    0 1px 2px       rgba(0, 0, 0, 0.40);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+.hr-secondary__label {
+  font-size: 16px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Hover: desktop only, edge warms */
+@media (hover: hover) and (pointer: fine) {
+  .hr-secondary:hover:not(.is-disabled):not(.is-pressed):not(.is-focused):not(.is-selected) {
+    box-shadow:
+      inset 0 0 0 1px  var(--edge-hi),
+      inset 0 1px 0   rgba(236, 228, 208, 0.09),
+      inset 0 -1px 0  rgba(0, 0, 0, 0.55),
+      0 1px 2px       rgba(0, 0, 0, 0.40);
+  }
+}
+
+.hr-secondary.is-pressed,
+.hr-secondary:active:not(.is-disabled):not(.is-selected) {
+  background: linear-gradient(180deg, #0E1018 0%, #181B23 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--edge),
+    inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    inset 0 8px 10px -8px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+.hr-secondary.is-pressed .hr-secondary__label,
+.hr-secondary:active:not(.is-disabled):not(.is-selected) .hr-secondary__label {
+  transform: translateY(0.5px);
+}
+
+.hr-secondary.is-focused,
+.hr-secondary:focus-visible:not(.is-disabled) {
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 165, 96, 0.65),
+    inset 0 1px 0  rgba(236, 228, 208, 0.10),
+    0 0 0 2px      #0C0E14,
+    0 0 0 3.5px    var(--oxblood),
+    0 0 0 4.5px    rgba(140, 52, 56, 0.25);
+}
+
+/* Selected — quiet ink-blue fill with a tapered brass hairline.
+   The underline is a centered gradient stroke, not a solid bar,
+   so it reads as a quiet inscribed mark rather than a flat tab. */
+.hr-secondary.is-selected {
+  background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
+  box-shadow:
+    inset 0 0 0 1px  rgba(201, 165, 96, 0.55),
+    inset 0 1px 0   rgba(236, 228, 208, 0.10),
+    0 1px 2px       rgba(0, 0, 0, 0.50);
+}
+.hr-secondary.is-selected::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 4px;
+  height: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    rgba(201, 165, 96, 0)    0%,
+    rgba(201, 165, 96, 0.90) 22%,
+    rgba(214, 179, 108, 0.95) 50%,
+    rgba(201, 165, 96, 0.90) 78%,
+    rgba(201, 165, 96, 0)    100%);
+  border-radius: 1px;
+}
+.hr-secondary.is-selected .hr-secondary__label {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 10px rgba(40, 60, 100, 0.40);
+}
+
+.hr-secondary.is-disabled,
+.hr-secondary[disabled] {
+  cursor: not-allowed;
+  background: linear-gradient(180deg, #1A1C22 0%, #14161B 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 228, 208, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+}
+.hr-secondary.is-disabled .hr-secondary__label,
+.hr-secondary[disabled] .hr-secondary__label {
+  color: rgba(236, 228, 208, 0.28);
+  text-shadow: none;
+}
+
+.hr-secondary--block  { width: 100%; max-width: 100%; }
+.hr-secondary--narrow { min-width: 88px; padding: 10px 16px; }
+
+/* ============================================================
+   COMPONENT 3 · PREMIUM CEREMONIAL  (special actions only)
+   Use sparingly for: chapter intros, "Begin", "Reveal the Rule"
+   ============================================================ */
+.hr-premium {
+  --brass-top:  #DDBA72;
+  --brass-mid:  #9A7732;
+  --brass-deep: #5A4218;
+  --face-top:   #272B37;
+  --face-bot:   #11141C;
+  --oxblood:    #6E2A2E;
+  --ink-shadow: rgba(20, 30, 56, 0.55);
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 1.5px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 240px;
+  max-width: 360px;
+  min-height: 64px;
+  border-radius: 15px;
+  background: linear-gradient(
+    180deg,
+    var(--brass-top)   0%,
+    #BE9648            22%,
+    var(--brass-mid)   58%,
+    var(--brass-deep) 100%
+  );
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.55))
+    drop-shadow(0 2px 3px var(--ink-shadow))
+    drop-shadow(0 14px 24px rgba(8, 12, 22, 0.42));
+  transition:
+    transform 120ms cubic-bezier(.4,.2,.2,1),
+    filter   180ms ease,
+    background 180ms ease;
+}
+.hr-premium__face {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 36px;            /* safe text area */
+  border-radius: 13.5px;
+  background:
+    radial-gradient(120% 90% at 50% 35%,
+      rgba(36, 56, 96, 0.30) 0%, transparent 75%),
+    linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 1px 0    rgba(236, 228, 208, 0.12),
+    inset 0 2px 1px  rgba(236, 228, 208, 0.04),
+    inset 0 -1px 0   rgba(0, 0, 0, 0.65),
+    inset 0 -12px 16px -8px rgba(0, 0, 0, 0.55),
+    inset 0 0 22px   rgba(0, 0, 0, 0.32);
+}
+/* Inscribed hairline rectangle inside the face */
+.hr-premium__face::before {
+  content: "";
+  position: absolute;
+  inset: 5px 10px;
+  border-radius: 9px;
+  border: 0.75px solid rgba(214, 179, 108, 0.28);
+  pointer-events: none;
+}
+/* Tiny brass markers centered on each short edge */
+.hr-premium__face::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 5px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 5px 50%,
+      #E7C57A 0%, #8C6B2C 40%, rgba(140,107,44,0) 65%),
+    radial-gradient(circle at calc(100% - 5px) 50%,
+      #E7C57A 0%, #8C6B2C 40%, rgba(140,107,44,0) 65%);
+}
+.hr-premium__label {
+  position: relative;
+  font-size: 20px;
+  text-shadow:
+    0 1px 0  rgba(0, 0, 0, 0.7),
+    0 0 18px rgba(36, 56, 96, 0.40);
+}
+
+.hr-premium.is-pressed,
+.hr-premium:active:not(.is-disabled) {
+  transform: translateY(1.5px);
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.5))
+    drop-shadow(0 1px 2px var(--ink-shadow))
+    drop-shadow(0 3px 6px rgba(8, 12, 22, 0.28));
+  background: linear-gradient(180deg, #A07F3B 0%, #7A5D26 40%, var(--brass-deep) 100%);
+}
+.hr-premium.is-pressed .hr-premium__face,
+.hr-premium:active:not(.is-disabled) .hr-premium__face {
+  background:
+    radial-gradient(120% 90% at 50% 60%, rgba(20, 32, 58, 0.30) 0%, transparent 75%),
+    linear-gradient(180deg, #0F1118 0%, #1A1D27 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.75),
+    inset 0 10px 12px -6px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+
+.hr-premium.is-focused,
+.hr-premium:focus-visible:not(.is-disabled) {
+  box-shadow:
+    0 0 0 2px  #0C0E14,
+    0 0 0 4px  var(--oxblood),
+    0 0 0 5.5px rgba(140, 52, 56, 0.28);
+}
+
+.hr-premium.is-disabled,
+.hr-premium[disabled] {
+  cursor: not-allowed;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.28));
+  background: linear-gradient(180deg, #6B6358 0%, #4F4940 50%, #383229 100%);
+}
+.hr-premium.is-disabled .hr-premium__face,
+.hr-premium[disabled] .hr-premium__face {
+  background: linear-gradient(180deg, #2A2C32 0%, #1C1E24 100%);
+  box-shadow:
+    inset 0 1px 0  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    inset 0 0 12px rgba(0, 0, 0, 0.25);
+}
+.hr-premium.is-disabled .hr-premium__face::before,
+.hr-premium[disabled] .hr-premium__face::before {
+  border-color: rgba(236, 228, 208, 0.08);
+}
+.hr-premium.is-disabled .hr-premium__face::after,
+.hr-premium[disabled] .hr-premium__face::after {
+  background:
+    radial-gradient(circle at 5px 50%, #8A8275 0%, #4A4438 40%, transparent 65%),
+    radial-gradient(circle at calc(100% - 5px) 50%, #8A8275 0%, #4A4438 40%, transparent 65%);
+}
+.hr-premium.is-disabled .hr-premium__label,
+.hr-premium[disabled] .hr-premium__label {
+  color: rgba(236, 228, 208, 0.30);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.hr-premium--block { width: 100%; max-width: 100%; }

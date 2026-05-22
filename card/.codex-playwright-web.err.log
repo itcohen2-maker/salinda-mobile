@@ -1,0 +1,21 @@
+C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\build\src\utils\errors.js:130
+    throw error;
+    ^
+
+Error: ENOENT: no such file or directory, watch 'C:\Users\asus\bmad\card\test-results\.playwright-artifacts-0'
+    at FSWatcher.<computed> (node:internal/fs/watchers:254:19)
+    at Object.watch (node:fs:2551:36)
+    at FallbackWatcher._watchdir (C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:119:33)
+    at C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:219:22
+    at Walker.<anonymous> (C:\Users\asus\bmad\card\node_modules\metro-file-map\src\watchers\FallbackWatcher.js:358:5)
+    at Walker.emit (node:events:508:28)
+    at C:\Users\asus\bmad\card\node_modules\walker\lib\walker.js:69:16
+    at FSReqCallback.oncomplete (node:fs:184:23) {
+  errno: -4058,
+  syscall: 'watch',
+  code: 'ENOENT',
+  path: 'C:\\Users\\asus\\bmad\\card\\test-results\\.playwright-artifacts-0',
+  filename: 'C:\\Users\\asus\\bmad\\card\\test-results\\.playwright-artifacts-0'
+}
+
+Node.js v24.13.0

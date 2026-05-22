@@ -1,0 +1,49 @@
+
+> salinda-game@1.0.0 web
+> expo start --web --offline --port 8099
+
+env: load .env
+env: export EXPO_PUBLIC_LOCAL_SOCKET_SERVER EXPO_PUBLIC_SERVER_URL EXPO_PUBLIC_WEB_APP_URL EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
+Networking has been disabled
+Starting project at C:\Users\asus\bmad\card
+Starting Metro Bundler
+Waiting on http://localhost:8099
+Logs for your project will appear below.
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  1.0% (1/1)
+Web .\index.tsx ▓░░░░░░░░░░░░░░░  8.1% ( 60/211)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 20.7% (127/350)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 20.7% (187/542)
+Web .\index.tsx ▓▓▓▓░░░░░░░░░░░░ 28.4% (326/612)
+Web .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 49.0% (451/644)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 67.9% (664/806)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 81.1% (859/954)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.0% (1044/1060)
+Web Bundled 38220ms index.tsx (1070 modules)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1070/1070)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 2198ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 104ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 136ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 139ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 191ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 362ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 3723ms index.tsx (1 module)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 287ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console

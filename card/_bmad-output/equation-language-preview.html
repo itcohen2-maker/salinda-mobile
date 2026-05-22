@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Equation Language Preview</title>
+    <script>
+      if (new URLSearchParams(window.location.search).get("view") === "mobile") {
+        document.documentElement.classList.add("mobile-view");
+      }
+    </script>
+    <style>
+      :root {
+        --sand-1: #f7c05a;
+        --sand-2: #d87e54;
+        --sand-3: #fff2d8;
+        --ink-1: #17324d;
+        --ink-2: #40210d;
+        --board-1: #0f5b39;
+        --board-2: #0b472e;
+        --board-outline: #e5c66b;
+        --number-surface: #fff8ec;
+        --number-border: #d7c29c;
+        --number-shadow: rgba(140, 93, 24, 0.18);
+        --operator-fill: #e89b1f;
+        --operator-border: #c97a1d;
+        --operator-text: #40210d;
+        --bracket: #d97706;
+        --equals: #d89b2b;
+        --result-fill: #fff2d8;
+        --result-border: #c1872e;
+        --result-text: #17324d;
+        --result-muted: rgba(23, 50, 77, 0.45);
+        --danger-fill: #dc2626;
+        --danger-border: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(255, 243, 215, 0.24), transparent 32%),
+          linear-gradient(180deg, var(--sand-1), var(--sand-2));
+        color: #fff8ec;
+      }
+
+      html.mobile-view body {
+        padding: 0;
+        background: #000000;
+      }
+
+      .stage {
+        width: min(980px, 100%);
+        display: grid;
+        gap: 18px;
+        justify-items: center;
+      }
+
+      html.mobile-view .stage {
+        width: min(430px, 100vw);
+        min-height: 100vh;
+        gap: 0;
+      }
+
+      .intro {
+        max-width: 620px;
+        text-align: center;
+      }
+
+      html.mobile-view .intro {
+        display: none;
+      }
+
+      .intro h1 {
+        margin: 0 0 10px;
+        font-size: clamp(30px, 5vw, 46px);
+        font-weight: 900;
+        color: #fff7e6;
+      }
+
+      .intro p {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.55;
+        color: rgba(255, 247, 230, 0.92);
+      }
+
+      .phone {
+        width: min(390px, 100%);
+        border-radius: 38px;
+        padding: 14px;
+        background: #171411;
+        box-shadow: 0 28px 80px rgba(66, 26, 10, 0.35);
+      }
+
+      html.mobile-view .phone {
+        width: 100%;
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .phone-screen {
+        min-height: 790px;
+        border-radius: 28px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top, rgba(255, 247, 225, 0.24), transparent 34%),
+          linear-gradient(180deg, #f1b74d 0%, #e69654 56%, #b95b55 100%);
+      }
+
+      html.mobile-view .phone-screen {
+        min-height: 100vh;
+        border-radius: 0;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px 10px;
+        direction: ltr;
+        color: #fffdf7;
+        font-weight: 900;
+      }
+
+      .status .left,
+      .status .right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .signal {
+        width: 22px;
+        height: 14px;
+        display: inline-grid;
+        grid-auto-flow: column;
+        align-items: end;
+        gap: 2px;
+      }
+
+      .signal span {
+        display: block;
+        width: 4px;
+        background: #fffdf7;
+        border-radius: 4px 4px 0 0;
+      }
+
+      .signal span:nth-child(1) { height: 4px; opacity: 0.65; }
+      .signal span:nth-child(2) { height: 7px; opacity: 0.78; }
+      .signal span:nth-child(3) { height: 10px; opacity: 0.9; }
+      .signal span:nth-child(4) { height: 13px; }
+
+      .battery {
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        font-size: 12px;
+      }
+
+      .content {
+        padding: 10px 16px 24px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .top-bar {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .close-pill,
+      .target-card,
+      .lesson-chip {
+        border-radius: 18px;
+        border: 3px solid rgba(94, 51, 10, 0.4);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      }
+
+      .close-pill {
+        width: 62px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        color: #fff6e1;
+        font-size: 22px;
+        font-weight: 900;
+        background: linear-gradient(180deg, #c0392b, #8d1f16);
+      }
+
+      .target-card {
+        width: 92px;
+        height: 120px;
+        justify-self: end;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+        border-color: rgba(35, 139, 222, 0.5);
+      }
+
+      .target-card span {
+        font-size: 62px;
+        font-weight: 900;
+        line-height: 1;
+        color: #1f86db;
+      }
+
+      .lesson-chip {
+        justify-self: center;
+        padding: 10px 18px;
+        color: #fff7e1;
+        font-size: 16px;
+        font-weight: 900;
+        background: linear-gradient(180deg, #ff8d1f, #d86107);
+      }
+
+      .panel {
+        border-radius: 36px;
+        padding: 18px 14px 16px;
+        border: 8px solid var(--board-outline);
+        background:
+          radial-gradient(circle at top, rgba(255, 248, 236, 0.14), transparent 48%),
+          linear-gradient(180deg, var(--board-1), var(--board-2));
+        box-shadow:
+          inset 0 2px 0 rgba(255, 248, 236, 0.18),
+          0 14px 30px rgba(54, 18, 7, 0.22);
+      }
+
+      .panel-title {
+        margin: 0 0 10px;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 900;
+        color: rgba(255, 243, 214, 0.96);
+        letter-spacing: 0.02em;
+      }
+
+      .equation {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        direction: ltr;
+      }
+
+      .grouped-expression {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 4px 5px;
+        border-radius: 18px;
+        background: rgba(255, 248, 236, 0.09);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 248, 236, 0.08),
+          0 8px 16px rgba(8, 39, 24, 0.18);
+      }
+
+      .grouped-expression.is-placeholder {
+        background: rgba(255, 248, 236, 0.07);
+      }
+
+      .grouped-expression.is-error {
+        background: rgba(255, 248, 236, 0.11);
+      }
+
+      .grouped-core {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .token,
+      .result {
+        min-width: 46px;
+        height: 46px;
+        padding: 0 10px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .number {
+        color: var(--ink-1);
+        background: var(--number-surface);
+        border: 2px solid var(--number-border);
+        box-shadow: 0 7px 14px var(--number-shadow);
+        font-size: 24px;
+      }
+
+      .number.muted {
+        color: rgba(23, 50, 77, 0.34);
+      }
+
+      .operator {
+        color: var(--operator-text);
+        background: var(--operator-fill);
+        border: 2px solid var(--operator-border);
+        box-shadow: 0 8px 16px rgba(232, 155, 31, 0.28);
+        font-size: 27px;
+      }
+
+      .bracket,
+      .equals {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .bracket {
+        min-width: 18px;
+        color: var(--sand-3);
+        font-size: 46px;
+        text-shadow:
+          0 2px 0 rgba(64, 33, 13, 0.36),
+          0 0 10px rgba(255, 242, 216, 0.22);
+      }
+
+      .equals {
+        color: var(--equals);
+        font-size: 28px;
+        margin-inline: 2px;
+      }
+
+      .result {
+        min-width: 74px;
+        height: 50px;
+        color: var(--result-text);
+        background: var(--result-fill);
+        border: 3px solid var(--result-border);
+        box-shadow: 0 9px 18px rgba(229, 169, 59, 0.25);
+        font-size: 30px;
+      }
+
+      .result.placeholder {
+        border-width: 2px;
+        color: var(--result-muted);
+        box-shadow: none;
+      }
+
+      .result.error {
+        color: #ffffff;
+        background: var(--danger-fill);
+        border-color: var(--danger-border);
+        font-size: 22px;
+        box-shadow: none;
+      }
+
+      .grouped-expression .token {
+        position: relative;
+        z-index: 1;
+      }
+
+      .states {
+        display: grid;
+        gap: 12px;
+      }
+
+      .state-card {
+        padding: 12px 10px;
+        border-radius: 22px;
+        background: rgba(255, 248, 236, 0.1);
+        border: 1px solid rgba(255, 248, 236, 0.12);
+      }
+
+      .state-label {
+        margin-bottom: 8px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 900;
+        color: rgba(255, 243, 214, 0.96);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+      }
+
+      .chip {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 247, 224, 0.9);
+        color: #5a2f10;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .notes {
+        display: grid;
+        gap: 10px;
+      }
+
+      .note {
+        padding: 12px 14px;
+        border-radius: 18px;
+        background: rgba(255, 248, 236, 0.15);
+        border: 1px solid rgba(255, 248, 236, 0.14);
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #fff8e8;
+        font-size: 13px;
+      }
+
+      .note span {
+        color: rgba(255, 248, 232, 0.9);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .footer {
+        text-align: center;
+        font-size: 12px;
+        color: rgba(255, 247, 226, 0.8);
+      }
+
+      html.mobile-view .footer {
+        padding-bottom: 8px;
+      }
+
+      @media (min-width: 860px) {
+        .stage {
+          grid-template-columns: minmax(280px, 1fr) 390px;
+          align-items: center;
+        }
+
+        .intro {
+          text-align: right;
+          justify-self: stretch;
+        }
+      }
+
+      @media (max-width: 420px) {
+        body {
+          padding: 10px;
+        }
+
+        .phone {
+          padding: 10px;
+          border-radius: 30px;
+        }
+
+        .phone-screen {
+          min-height: auto;
+        }
+
+        .content {
+          padding-inline: 12px;
+        }
+
+        .target-card {
+          width: 82px;
+          height: 108px;
+        }
+
+        .target-card span {
+          font-size: 54px;
+        }
+
+        .equation {
+          gap: 6px;
+        }
+
+        .grouped-expression {
+          padding: 4px;
+          gap: 2px;
+        }
+
+        .grouped-core {
+          gap: 5px;
+        }
+
+        .bracket {
+          font-size: 42px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="intro">
+        <h1>משוואה אחידה במובייל</h1>
+        <p>
+          זה דמו מובייל-פירסט: אותו קו עיצובי של המשחק, אבל רק אזור המשוואה.
+          הספרות נשארות קריאות בשמש, האופרטורים מובחנים מהמספרים, והתוצאה נראית
+          כמו חלק מהפתרון ולא קופסה בצבע זר.
+        </p>
+      </section>
+
+      <section class="phone" aria-label="mobile equation preview">
+        <div class="phone-screen">
+          <div class="status">
+            <div class="left">
+              <span class="battery">69</span>
+              <span>5G</span>
+              <span class="signal" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+              </span>
+            </div>
+            <div class="right">
+              <span>12:42</span>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="top-bar">
+              <div class="close-pill">×</div>
+              <div class="lesson-chip">שפת המספרים החדשה</div>
+              <div class="target-card"><span>3</span></div>
+            </div>
+
+            <div class="panel">
+              <p class="panel-title">מצב מוכן</p>
+              <div class="equation">
+                <span class="grouped-expression">
+                  <span class="bracket">(</span>
+                  <span class="grouped-core">
+                    <span class="token number">5</span>
+                    <span class="token operator">×</span>
+                    <span class="token number">2</span>
+                  </span>
+                  <span class="bracket">)</span>
+                </span>
+                <span class="token operator">+</span>
+                <span class="token number">6</span>
+              </div>
+              <div class="equation" style="margin-top: 10px;">
+                <span class="equals">=</span>
+                <span class="result">16</span>
+              </div>
+            </div>
+
+            <div class="states">
+              <div class="state-card">
+                <div class="state-label">לפני בחירה</div>
+                <div class="equation">
+                  <span class="grouped-expression is-placeholder">
+                    <span class="bracket">(</span>
+                    <span class="grouped-core">
+                      <span class="token number">5</span>
+                      <span class="token operator">?</span>
+                      <span class="token number">2</span>
+                    </span>
+                    <span class="bracket">)</span>
+                  </span>
+                  <span class="token operator">+</span>
+                  <span class="token number muted">_</span>
+                  <span class="equals">=</span>
+                  <span class="result placeholder">?</span>
+                </div>
+              </div>
+
+              <div class="state-card">
+                <div class="state-label">שגיאה</div>
+                <div class="equation">
+                  <span class="grouped-expression is-error">
+                    <span class="bracket">(</span>
+                    <span class="grouped-core">
+                      <span class="token number">5</span>
+                      <span class="token operator">−</span>
+                      <span class="token number">2</span>
+                    </span>
+                    <span class="bracket">)</span>
+                  </span>
+                  <span class="token operator">+</span>
+                  <span class="token number">6</span>
+                  <span class="equals">=</span>
+                  <span class="result error">טעות</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="chips">
+              <div class="chip">מספרים: כחול כהה על קרם</div>
+              <div class="chip">אופרטורים: כתום עקבי</div>
+              <div class="chip">תוצאה: אותה משפחה של הספרות</div>
+            </div>
+
+            <div class="notes">
+              <div class="note">
+                <strong>מה מומש כאן</strong>
+                <span>ריווח, גדלים וניגודיות לפי מסך טלפון צר, בלי להעמיס את שאר מסך המשחק.</span>
+              </div>
+              <div class="note">
+                <strong>למה זה יותר מדויק</strong>
+                <span>העין קוראת קודם את המספרים, אחר כך את הפעולות, ורק אז את מצב התוצאה.</span>
+              </div>
+            </div>
+
+            <div class="footer">מובייל 390px · דגש על קריאות באור יום</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

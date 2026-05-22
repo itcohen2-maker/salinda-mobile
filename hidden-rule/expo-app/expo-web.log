@@ -1,0 +1,14 @@
+
+> expo-app@1.0.0 web
+> expo start --web --port 8083
+
+Starting project at C:\Users\asus\bmad\hidden-rule\expo-app
+Starting Metro Bundler
+Waiting on http://localhost:8083
+Logs for your project will appear below.
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 4841ms index.ts (244 modules)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 37ms index.ts (1 module)
+ LOG  [web] Logs will appear in the browser console

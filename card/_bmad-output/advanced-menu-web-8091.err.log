@@ -1,0 +1,12 @@
+Error: GetEnv.NoBoolean: true  is not a boolean.
+Error: GetEnv.NoBoolean: true  is not a boolean.
+    at Object.boolish (C:\Users\asus\bmad\card\node_modules\getenv\index.js:70:15)
+    at C:\Users\asus\bmad\card\node_modules\getenv\index.js:84:27
+    at Env.CI (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\utils\env.ts:41:19)
+    at isInteractive (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\utils\interactive.ts:5:15)
+    at withExtendedResolver (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\metro\withMetroMultiPlatform.ts:274:36)
+    at withMetroMultiPlatformAsync (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\metro\withMetroMultiPlatform.ts:977:10)
+    at loadMetroConfigAsync (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\metro\instantiateMetro.ts:186:12)
+    at instantiateMetroAsync (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\metro\instantiateMetro.ts:230:7)
+    at MetroBundlerDevServer.startImplementationAsync (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\metro\MetroBundlerDevServer.ts:1062:69)
+    at MetroBundlerDevServer.startAsync (C:\Users\asus\bmad\card\node_modules\expo\node_modules\@expo\cli\src\start\server\BundlerDevServer.ts:160:18)

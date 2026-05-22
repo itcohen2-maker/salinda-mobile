@@ -1,0 +1,433 @@
+/* ============================================================
+   Hidden Rule — Primary CTA v2
+   --------------------------------------------------------------
+   Three variants in one consistent family. All:
+     - mobile-friendly hit target (≥56px)
+     - flexible width — labels grow inside a safe padded zone
+     - mixed-case type via Frank Ruhl Libre (Latin + Hebrew)
+     - no reliance on uppercase, no hover dependency
+     - bidi-safe (use dir="auto" on the label)
+
+   Variants:
+     .hr-btn-refined  — current direction, polished, no corner pins
+     .hr-btn-minimal  — clean inscribed panel, no brass frame
+     .hr-btn-premium  — double-frame plaque, inscribed inner rule
+   ============================================================ */
+
+/* — shared font face for labels — */
+.hr-btn-v2-label {
+  font-family: "Frank Ruhl Libre", "Cormorant Garamond", "EB Garamond",
+               Georgia, "David Libre", "Times New Roman", serif;
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+/* Hebrew letterforms don't take tracking — kill it cleanly. */
+.hr-btn-v2-label:lang(he),
+.hr-btn-v2-label[lang="he"] {
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+/* ============================================================
+   VARIANT A · REFINED
+   The current direction, simplified.
+   ============================================================ */
+.hr-btn-refined {
+  --brass-top:  #D6B36C;
+  --brass-mid:  #8C6B2C;
+  --brass-deep: #5A4218;
+  --face-top:   #262934;
+  --face-bot:   #14161E;
+  --ivory:      #ECE4D0;
+  --oxblood:    #6E2A2E;
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 1.25px;          /* the brass frame thickness */
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 200px;
+  min-height: 58px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    var(--brass-top)   0%,
+    #B89149            22%,
+    var(--brass-mid)   58%,
+    var(--brass-deep) 100%
+  );
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.50))
+    drop-shadow(0 2px 3px rgba(6,8,12,0.40))
+    drop-shadow(0 8px 16px rgba(6,8,12,0.32));
+  transition:
+    transform 120ms cubic-bezier(.4,.2,.2,1),
+    filter   180ms ease,
+    background 180ms ease;
+}
+.hr-btn-refined__face {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The safe area for the dynamic label */
+  padding: 12px 32px;
+  border-radius: 12.5px;
+  background:
+    radial-gradient(120% 90% at 50% 38%,
+      rgba(36, 56, 96, 0.24) 0%,
+      rgba(36, 56, 96, 0.08) 35%,
+      transparent 75%),
+    linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 1px 0    rgba(236, 228, 208, 0.10),
+    inset 0 2px 1px  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0   rgba(0, 0, 0, 0.55),
+    inset 0 -10px 14px -8px rgba(0, 0, 0, 0.50),
+    inset 0 0 18px   rgba(0, 0, 0, 0.28);
+}
+.hr-btn-refined__label {
+  color: var(--ivory);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Hover — minimal, desktop-only */
+@media (hover: hover) and (pointer: fine) {
+  .hr-btn-refined:hover:not(.is-disabled):not(.is-pressed):not(.is-focused)
+  .hr-btn-refined__face {
+    background:
+      radial-gradient(120% 90% at 50% 38%,
+        rgba(40, 62, 104, 0.28) 0%, transparent 75%),
+      linear-gradient(180deg, #2C2F3B 0%, #15171F 100%);
+  }
+}
+
+/* Pressed — explicit and feel-through */
+.hr-btn-refined.is-pressed,
+.hr-btn-refined:active:not(.is-disabled) {
+  transform: translateY(1.5px);
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.45))
+    drop-shadow(0 1px 2px rgba(6,8,12,0.35))
+    drop-shadow(0 2px 4px rgba(6,8,12,0.25));
+  background: linear-gradient(180deg, #A07F3B 0%, #7A5D26 40%, var(--brass-deep) 100%);
+}
+.hr-btn-refined.is-pressed .hr-btn-refined__face,
+.hr-btn-refined:active:not(.is-disabled) .hr-btn-refined__face {
+  background:
+    radial-gradient(120% 90% at 50% 60%, rgba(20, 32, 58, 0.30) 0%, transparent 75%),
+    linear-gradient(180deg, #0F1118 0%, #1A1D27 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    inset 0 8px 10px -6px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+
+/* Focused — oxblood ring, very clear */
+.hr-btn-refined.is-focused,
+.hr-btn-refined:focus-visible:not(.is-disabled) {
+  box-shadow:
+    0 0 0 2px   #0C0E14,
+    0 0 0 4px   var(--oxblood),
+    0 0 0 5.5px rgba(140, 52, 56, 0.28);
+}
+
+/* Disabled — tarnished */
+.hr-btn-refined.is-disabled,
+.hr-btn-refined[disabled] {
+  cursor: not-allowed;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.25));
+  background: linear-gradient(180deg, #6B6358 0%, #4F4940 50%, #383229 100%);
+}
+.hr-btn-refined.is-disabled .hr-btn-refined__face,
+.hr-btn-refined[disabled] .hr-btn-refined__face {
+  background: linear-gradient(180deg, #2A2C32 0%, #1C1E24 100%);
+  box-shadow:
+    inset 0 1px 0  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.22);
+}
+.hr-btn-refined.is-disabled .hr-btn-refined__label,
+.hr-btn-refined[disabled] .hr-btn-refined__label {
+  color: rgba(236, 228, 208, 0.30);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+
+.hr-btn-refined--block { width: 100%; }
+
+/* ============================================================
+   VARIANT B · MINIMAL
+   No brass frame. Just an ivory hairline, an inscribed feel,
+   and the matte face. Reads as a quiet inscribed panel.
+   ============================================================ */
+.hr-btn-minimal {
+  --face-top:  #232631;
+  --face-bot:  #14161C;
+  --edge:      rgba(236, 228, 208, 0.22);
+  --edge-hi:   rgba(236, 228, 208, 0.34);
+  --ivory:     #ECE4D0;
+  --brass:     #9A7732;
+  --brass-bright: #C9A560;
+  --oxblood:   #6E2A2E;
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+  min-height: 56px;
+  padding: 12px 32px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 0 0 1px  var(--edge),
+    inset 0 1px 0   rgba(236, 228, 208, 0.07),
+    inset 0 -1px 0  rgba(0, 0, 0, 0.55),
+    0 1px 2px       rgba(0, 0, 0, 0.40);
+  color: var(--ivory);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+.hr-btn-minimal__label {
+  color: var(--ivory);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Hover — only desktop, only edge warms slightly */
+@media (hover: hover) and (pointer: fine) {
+  .hr-btn-minimal:hover:not(.is-disabled):not(.is-pressed):not(.is-focused) {
+    box-shadow:
+      inset 0 0 0 1px  var(--edge-hi),
+      inset 0 1px 0   rgba(236, 228, 208, 0.09),
+      inset 0 -1px 0  rgba(0, 0, 0, 0.55),
+      0 1px 2px       rgba(0, 0, 0, 0.40);
+  }
+}
+
+/* Pressed */
+.hr-btn-minimal.is-pressed,
+.hr-btn-minimal:active:not(.is-disabled) {
+  background: linear-gradient(180deg, #0E1018 0%, #181B23 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--edge),
+    inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    inset 0 8px 10px -8px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+
+/* Focused — the inner edge warms to brass + outer oxblood ring */
+.hr-btn-minimal.is-focused,
+.hr-btn-minimal:focus-visible:not(.is-disabled) {
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 165, 96, 0.65),
+    inset 0 1px 0  rgba(236, 228, 208, 0.10),
+    0 0 0 2px  #0C0E14,
+    0 0 0 3.5px var(--oxblood),
+    0 0 0 4.5px rgba(140, 52, 56, 0.25);
+}
+
+/* Disabled */
+.hr-btn-minimal.is-disabled,
+.hr-btn-minimal[disabled] {
+  cursor: not-allowed;
+  background: linear-gradient(180deg, #1A1C22 0%, #14161B 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 228, 208, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  color: rgba(236, 228, 208, 0.28);
+}
+.hr-btn-minimal.is-disabled .hr-btn-minimal__label,
+.hr-btn-minimal[disabled] .hr-btn-minimal__label {
+  text-shadow: none;
+  color: rgba(236, 228, 208, 0.28);
+}
+
+.hr-btn-minimal--block { width: 100%; }
+
+/* ============================================================
+   VARIANT C · PREMIUM
+   A richer plaque: double frame, inscribed inner rule,
+   tiny brass side-markers (centered on each short edge).
+   Still calm, still ceremonial — but more handworked.
+   ============================================================ */
+.hr-btn-premium {
+  --brass-top:  #DDBA72;
+  --brass-mid:  #9A7732;
+  --brass-deep: #5A4218;
+  --face-top:   #272B37;
+  --face-bot:   #11141C;
+  --ivory:      #ECE4D0;
+  --oxblood:    #6E2A2E;
+  --ink-shadow: rgba(20, 30, 56, 0.55);
+
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 1.5px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 220px;
+  min-height: 62px;
+  border-radius: 15px;
+  background: linear-gradient(
+    180deg,
+    var(--brass-top)   0%,
+    #BE9648            22%,
+    var(--brass-mid)   58%,
+    var(--brass-deep) 100%
+  );
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.55))
+    drop-shadow(0 2px 3px var(--ink-shadow))
+    drop-shadow(0 12px 22px rgba(8, 12, 22, 0.40));
+  transition:
+    transform 120ms cubic-bezier(.4,.2,.2,1),
+    filter   180ms ease,
+    background 180ms ease;
+}
+.hr-btn-premium__face {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 38px;       /* the safe area */
+  border-radius: 13.5px;
+  background:
+    radial-gradient(120% 90% at 50% 35%,
+      rgba(36, 56, 96, 0.28) 0%, transparent 75%),
+    linear-gradient(180deg, var(--face-top) 0%, var(--face-bot) 100%);
+  box-shadow:
+    inset 0 1px 0    rgba(236, 228, 208, 0.12),
+    inset 0 2px 1px  rgba(236, 228, 208, 0.04),
+    inset 0 -1px 0   rgba(0, 0, 0, 0.65),
+    inset 0 -12px 16px -8px rgba(0, 0, 0, 0.55),
+    inset 0 0 22px   rgba(0, 0, 0, 0.32);
+}
+/* Inscribed inner rectangle — hairline brass rule offset inside */
+.hr-btn-premium__face::before {
+  content: "";
+  position: absolute;
+  inset: 5px 10px;
+  border-radius: 9px;
+  border: 0.75px solid rgba(214, 179, 108, 0.28);
+  pointer-events: none;
+}
+/* Two small brass markers centered on each short edge */
+.hr-btn-premium__face::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 5px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 5px 50%,
+      #E7C57A 0%, #8C6B2C 40%, rgba(140,107,44,0) 65%),
+    radial-gradient(circle at calc(100% - 5px) 50%,
+      #E7C57A 0%, #8C6B2C 40%, rgba(140,107,44,0) 65%);
+}
+.hr-btn-premium__label {
+  position: relative;
+  color: var(--ivory);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.7),
+    0 0 18px rgba(36, 56, 96, 0.40);
+  font-size: 20px;
+}
+
+/* Pressed */
+.hr-btn-premium.is-pressed,
+.hr-btn-premium:active:not(.is-disabled) {
+  transform: translateY(1.5px);
+  filter:
+    drop-shadow(0 1px 0   rgba(0,0,0,0.5))
+    drop-shadow(0 1px 2px var(--ink-shadow))
+    drop-shadow(0 3px 6px rgba(8, 12, 22, 0.3));
+  background: linear-gradient(180deg, #A07F3B 0%, #7A5D26 40%, var(--brass-deep) 100%);
+}
+.hr-btn-premium.is-pressed .hr-btn-premium__face,
+.hr-btn-premium:active:not(.is-disabled) .hr-btn-premium__face {
+  background:
+    radial-gradient(120% 90% at 50% 60%, rgba(20, 32, 58, 0.30) 0%, transparent 75%),
+    linear-gradient(180deg, #0F1118 0%, #1A1D27 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.75),
+    inset 0 10px 12px -6px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(236, 228, 208, 0.04);
+}
+
+/* Focused */
+.hr-btn-premium.is-focused,
+.hr-btn-premium:focus-visible:not(.is-disabled) {
+  box-shadow:
+    0 0 0 2px  #0C0E14,
+    0 0 0 4px  var(--oxblood),
+    0 0 0 5.5px rgba(140, 52, 56, 0.28);
+}
+
+/* Disabled */
+.hr-btn-premium.is-disabled,
+.hr-btn-premium[disabled] {
+  cursor: not-allowed;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.3));
+  background: linear-gradient(180deg, #6B6358 0%, #4F4940 50%, #383229 100%);
+}
+.hr-btn-premium.is-disabled .hr-btn-premium__face,
+.hr-btn-premium[disabled] .hr-btn-premium__face {
+  background: linear-gradient(180deg, #2A2C32 0%, #1C1E24 100%);
+  box-shadow:
+    inset 0 1px 0  rgba(236, 228, 208, 0.03),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    inset 0 0 12px rgba(0, 0, 0, 0.25);
+}
+.hr-btn-premium.is-disabled .hr-btn-premium__face::before,
+.hr-btn-premium[disabled] .hr-btn-premium__face::before {
+  border-color: rgba(236, 228, 208, 0.08);
+}
+.hr-btn-premium.is-disabled .hr-btn-premium__face::after,
+.hr-btn-premium[disabled] .hr-btn-premium__face::after {
+  background:
+    radial-gradient(circle at 5px 50%, #8A8275 0%, #4A4438 40%, transparent 65%),
+    radial-gradient(circle at calc(100% - 5px) 50%, #8A8275 0%, #4A4438 40%, transparent 65%);
+}
+.hr-btn-premium.is-disabled .hr-btn-premium__label,
+.hr-btn-premium[disabled] .hr-btn-premium__label {
+  color: rgba(236, 228, 208, 0.30);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.hr-btn-premium--block { width: 100%; }
