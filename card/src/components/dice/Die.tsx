@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Animated } from 'react-native'
 interface DieProps {
   value: number | null
   rolling?: boolean
+  accessibilityLabel?: string
 }
 
 const dotPositions: Record<number, [number, number][]> = {
@@ -17,7 +18,7 @@ const dotPositions: Record<number, [number, number][]> = {
 
 const SIZE = 56
 
-export default function Die({ value, rolling }: DieProps) {
+export default function Die({ value, rolling, accessibilityLabel }: DieProps) {
   const spin = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -39,7 +40,10 @@ export default function Die({ value, rolling }: DieProps) {
   const dots = value && !rolling ? dotPositions[value] || [] : []
 
   return (
-    <Animated.View style={[styles.die, { transform: [{ rotateZ }] }]}>
+    <Animated.View
+      style={[styles.die, { transform: [{ rotateZ }] }]}
+      accessibilityLabel={accessibilityLabel ?? (value != null && !rolling ? `Die showing ${value}` : 'Die rolling')}
+    >
       {dots.length > 0 ? (
         dots.map(([xPct, yPct], i) => (
           <View

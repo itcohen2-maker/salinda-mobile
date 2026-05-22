@@ -13,6 +13,7 @@ interface ButtonProps {
   disabled?: boolean
   style?: StyleProp<ViewStyle>
   testID?: string
+  accessibilityLabel?: string
 }
 
 const bgColors: Record<Variant, string> = {
@@ -51,6 +52,7 @@ export default function Button({
   disabled,
   style,
   testID,
+  accessibilityLabel,
 }: ButtonProps) {
   const responsive = useResponsiveLayout()
   const [pv, ph] = paddings[size]
@@ -64,6 +66,8 @@ export default function Button({
       disabled={disabled}
       activeOpacity={0.7}
       touchSoundDisabled
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? (typeof children === 'string' ? children : undefined)}
       style={[
         styles.base,
         {
