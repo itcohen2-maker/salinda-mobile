@@ -575,11 +575,13 @@ export function WildCard({
   selected,
   onPress,
   small,
+  accessibilityLabel,
 }: {
   card: Card;
   selected?: boolean;
   onPress?: () => void;
   small?: boolean;
+  accessibilityLabel?: string;
 }) {
   const w = small ? 100 : 110;
   const h = small ? 140 : 158;
@@ -591,7 +593,7 @@ export function WildCard({
   }, []);
   return (
     <Animated.View style={{ opacity: fade }}>
-      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress}>
+      <TouchableOpacity onPress={onPress} activeOpacity={onPress ? 0.7 : 1} disabled={!onPress} accessibilityLabel={accessibilityLabel ?? 'Wild card'} accessibilityRole={onPress ? 'button' : undefined}>
         <View
           style={[
             {
