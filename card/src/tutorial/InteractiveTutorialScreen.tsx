@@ -7,7 +7,17 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getWebGameLayout } from '../theme/webLayout';
@@ -402,6 +412,269 @@ interface Props {
   gameState: any;
 }
 
+const TUTORIAL_WELCOME_COPY = {
+  title: 'ברוכים הבאים לסלינדה',
+  goalPrefix: 'מתחילים עם 7 קלפים, ',
+  goalHighlight: 'ומנצחים שנשארים רק עם 2 קלפים!',
+  action: 'בכל תור בונים תרגיל מ-2 או 3 קוביות.',
+  rulePrefix: 'התוצאה חייבת להיות ',
+  ruleMatch: 'שווה לקלף ביד',
+  ruleMiddle: ' או לחיבור של ',
+  rulePair: 'שני קלפים',
+  ruleSuffix: ' כדי להיפטר מהם!',
+  rewardBasicPrefix: 'בסיום ההדרכה תרוויחו ',
+  rewardBasicValue: '10 מטבעות!',
+  rewardHookPrefix: 'המשיכו ל-',
+  rewardHookTitle: 'איך מנצחים?',
+  rewardHookMiddle: ' ותרוויחו עוד ',
+  rewardHookValue: '20 מטבעות!',
+  start: 'בואו נתחיל',
+  advanced: 'הדרכת מתקדמים',
+} as const;
+
+type TutorialWelcomeModalProps = {
+  topInset: number;
+  bottomInset: number;
+  horizontalPadding: number;
+  cardMaxWidth: ViewStyle['maxWidth'];
+  cardWidth: ViewStyle['width'];
+  cardPaddingVertical: number;
+  cardPaddingHorizontal: number;
+  cardGap: number;
+  borderRadius: number;
+  borderWidth: number;
+  onStart: () => void;
+  onAdvanced: () => void;
+};
+
+function TutorialWelcomeModal({
+  topInset,
+  bottomInset,
+  horizontalPadding,
+  cardMaxWidth,
+  cardWidth,
+  cardPaddingVertical,
+  cardPaddingHorizontal,
+  cardGap,
+  borderRadius,
+  borderWidth,
+  onStart,
+  onAdvanced,
+}: TutorialWelcomeModalProps) {
+  return (
+    <View
+      pointerEvents="auto"
+      style={[
+        styles.tutorialWelcomeOverlay,
+        {
+          paddingTop: topInset,
+          paddingBottom: bottomInset,
+          paddingHorizontal: horizontalPadding,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.tutorialWelcomeCard,
+          {
+            borderRadius,
+            borderWidth,
+            maxWidth: cardMaxWidth,
+            width: cardWidth,
+            paddingVertical: cardPaddingVertical,
+            paddingHorizontal: cardPaddingHorizontal,
+            gap: cardGap,
+          },
+        ]}
+      >
+        <View style={[styles.tutorialWelcomeTextBlock, { gap: cardGap }]}>
+          <Text style={styles.tutorialWelcomeTitle}>{TUTORIAL_WELCOME_COPY.title}</Text>
+
+          <Text style={styles.tutorialWelcomeBodyText}>
+            {TUTORIAL_WELCOME_COPY.goalPrefix}
+            <Text style={styles.tutorialWelcomeGoldStrong}>
+              {TUTORIAL_WELCOME_COPY.goalHighlight}
+            </Text>
+          </Text>
+
+          <Text style={styles.tutorialWelcomeBodyText}>{TUTORIAL_WELCOME_COPY.action}</Text>
+
+          <Text style={styles.tutorialWelcomeBodyText}>
+            {TUTORIAL_WELCOME_COPY.rulePrefix}
+            <Text style={styles.tutorialWelcomeGoldStrong}>
+              {TUTORIAL_WELCOME_COPY.ruleMatch}
+            </Text>
+            {TUTORIAL_WELCOME_COPY.ruleMiddle}
+            <Text style={styles.tutorialWelcomeGoldStrong}>
+              {TUTORIAL_WELCOME_COPY.rulePair}
+            </Text>
+            <Text style={styles.tutorialWelcomeWhiteStrong}>
+              {TUTORIAL_WELCOME_COPY.ruleSuffix}
+            </Text>
+          </Text>
+        </View>
+
+        <View style={styles.tutorialWelcomeRewardBlock}>
+          <Text style={styles.tutorialWelcomeRewardText}>
+            {TUTORIAL_WELCOME_COPY.rewardBasicPrefix}
+            <Text style={styles.tutorialWelcomeRewardGold}>
+              {TUTORIAL_WELCOME_COPY.rewardBasicValue}
+            </Text>
+          </Text>
+          <Text style={styles.tutorialWelcomeRewardText}>
+            {TUTORIAL_WELCOME_COPY.rewardHookPrefix}
+            <Text style={styles.tutorialWelcomeRewardGold}>
+              {TUTORIAL_WELCOME_COPY.rewardHookTitle}
+            </Text>
+            {TUTORIAL_WELCOME_COPY.rewardHookMiddle}
+            <Text style={styles.tutorialWelcomeRewardGold}>
+              {TUTORIAL_WELCOME_COPY.rewardHookValue}
+            </Text>
+          </Text>
+        </View>
+
+        <View style={[styles.tutorialWelcomeButtonStack, { gap: Math.max(8, cardGap) }]}>
+          <TouchableOpacity
+            onPress={onStart}
+            accessibilityRole="button"
+            accessibilityLabel={TUTORIAL_WELCOME_COPY.start}
+            style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeStartButton]}
+          >
+            <Text style={styles.tutorialWelcomeButtonText}>
+              {TUTORIAL_WELCOME_COPY.start}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onAdvanced}
+            accessibilityRole="button"
+            accessibilityLabel={TUTORIAL_WELCOME_COPY.advanced}
+            style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeAdvancedButton]}
+          >
+            <Text style={styles.tutorialWelcomeButtonText}>
+              {TUTORIAL_WELCOME_COPY.advanced}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  tutorialWelcomeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.60)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9400,
+  },
+  tutorialWelcomeCard: {
+    backgroundColor: '#78350F',
+    borderColor: '#FACC15',
+    alignSelf: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FACC15',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.7,
+        shadowRadius: 20,
+      },
+      android: { elevation: 12 },
+    }),
+  },
+  tutorialWelcomeTextBlock: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  tutorialWelcomeTitle: {
+    color: '#FACC15',
+    fontSize: 25,
+    fontWeight: '900',
+    lineHeight: 30,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: false,
+  },
+  tutorialWelcomeBodyText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 23,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: false,
+  },
+  tutorialWelcomeGoldStrong: {
+    color: '#FACC15',
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  tutorialWelcomeWhiteStrong: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  tutorialWelcomeRewardBlock: {
+    width: '100%',
+    marginTop: 18,
+    alignItems: 'center',
+  },
+  tutorialWelcomeRewardText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 22,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: false,
+  },
+  tutorialWelcomeRewardGold: {
+    color: '#FFDF00',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  tutorialWelcomeButtonStack: {
+    width: '100%',
+  },
+  tutorialWelcomeButton: {
+    minHeight: 48,
+    paddingVertical: 0,
+    paddingHorizontal: 28,
+    borderRadius: 18,
+    borderWidth: 2,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tutorialWelcomeStartButton: {
+    backgroundColor: '#16A34A',
+    borderColor: '#4ADE80',
+  },
+  tutorialWelcomeAdvancedButton: {
+    backgroundColor: '#6D28D9',
+    borderColor: '#C4B5FD',
+  },
+  tutorialWelcomeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: false,
+  },
+});
+
 function normalizeTutorialEquationDisplay(
   equationDisplay: string | null | undefined,
 ): string | null {
@@ -599,14 +872,14 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
     Math.max(min, Math.round(value * tutorialWelcomeScale));
   const tutorialMockupTopInset = Math.max(tutorialSafeTop + 22, 44);
   const tutorialMockupBottomInset = Math.max((insets.bottom || 0) + 24, 44);
-  const tutorialMockupHorizontalPadding = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 12);
+  const tutorialMockupHorizontalPadding = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
   const tutorialMockupCardMaxWidth = isAndroidTutorialWelcome
-    ? Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 320)
-    : 268;
-  const tutorialMockupCardWidth = isAndroidTutorialWelcome ? tutorialMockupCardMaxWidth : '74%';
-  const tutorialMockupCardPaddingVertical = isAndroidTutorialWelcome ? 14 : scaleTutorialWelcome(18, 9);
-  const tutorialMockupCardPaddingHorizontal = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(16, 8);
-  const tutorialMockupCardGap = isAndroidTutorialWelcome ? 8 : scaleTutorialWelcome(10, 5);
+    ? Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 340)
+    : Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 360);
+  const tutorialMockupCardWidth = '100%';
+  const tutorialMockupCardPaddingVertical = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
+  const tutorialMockupCardPaddingHorizontal = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
+  const tutorialMockupCardGap = isAndroidTutorialWelcome ? 11 : scaleTutorialWelcome(12, 9);
   const [engine, dispatchEngine] = useReducer(
     (s: MimicState, a: MimicAction) => mimicReducer(s, a, LESSON_SHAPES),
     INITIAL_MIMIC_STATE,
@@ -5982,142 +6255,27 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* Welcome bubble ג€” shown at the very start before any lesson begins */}
       {showWelcomeBubble && engine.phase !== 'idle' && (
-        <View
-          pointerEvents="auto"
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.60)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9400,
-            paddingTop: tutorialMockupTopInset,
-            paddingBottom: tutorialMockupBottomInset,
-            paddingHorizontal: tutorialMockupHorizontalPadding,
+        <TutorialWelcomeModal
+          topInset={tutorialMockupTopInset}
+          bottomInset={tutorialMockupBottomInset}
+          horizontalPadding={tutorialMockupHorizontalPadding}
+          cardMaxWidth={tutorialMockupCardMaxWidth}
+          cardWidth={tutorialMockupCardWidth}
+          cardPaddingVertical={tutorialMockupCardPaddingVertical}
+          cardPaddingHorizontal={tutorialMockupCardPaddingHorizontal}
+          cardGap={tutorialMockupCardGap}
+          borderRadius={scaleTutorialWelcome(22, 11)}
+          borderWidth={scaleTutorialWelcome(3, 1)}
+          onStart={() => {
+            advancedStartedFromWelcomeRef.current = false;
+            setShowWelcomeBubble(false);
           }}
-        >
-          <View
-            style={{
-              backgroundColor: '#78350F',
-              borderRadius: scaleTutorialWelcome(22, 11),
-              paddingVertical: tutorialMockupCardPaddingVertical,
-              paddingHorizontal: tutorialMockupCardPaddingHorizontal,
-              borderWidth: scaleTutorialWelcome(3, 1),
-              borderColor: '#FACC15',
-              maxWidth: tutorialMockupCardMaxWidth,
-              width: tutorialMockupCardWidth,
-              alignSelf: 'center',
-              alignItems: 'center',
-              gap: tutorialMockupCardGap,
-              ...Platform.select({
-                ios: { shadowColor: '#FACC15', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 20 },
-                android: { elevation: 12 },
-              }),
-            }}
-          >
-            <View style={{ width: '100%', alignItems: 'center', gap: tutorialMockupCardGap }}>
-              <Text style={{ color: '#FEF3C7', fontSize: scaleTutorialWelcome(28, 14), fontWeight: '900', textAlign: 'center', lineHeight: scaleTutorialWelcome(32, 16) }}>
-                {t('tutorial.welcome.title')}
-              </Text>
-              <Text
-                style={{
-                  color: '#FDE68A',
-                  fontSize: scaleTutorialWelcome(26, 13),
-                  fontWeight: '900',
-                  textAlign: 'center',
-                  lineHeight: scaleTutorialWelcome(30, 15),
-                }}
-              >
-                {t('tutorial.welcome.headline')}
-                {' '}
-                {t('tutorial.welcome.headlineSub')}
-              </Text>
-              <Text
-                style={{
-                  color: '#FDE68A',
-                  fontSize: scaleTutorialWelcome(26, 13),
-                  fontWeight: '900',
-                  textAlign: 'center',
-                  lineHeight: scaleTutorialWelcome(30, 15),
-                  marginTop: scaleTutorialWelcome(4, 2),
-                  marginBottom: scaleTutorialWelcome(4, 2),
-                }}
-              >
-                {t('tutorial.welcome.tagline')}
-              </Text>
-              <Text
-                style={{
-                  color: '#FEF3C7',
-                  fontSize: scaleTutorialWelcome(26, 13),
-                  fontWeight: '900',
-                  textAlign: 'center',
-                  lineHeight: scaleTutorialWelcome(30, 15),
-                  marginTop: scaleTutorialWelcome(4, 2),
-                  marginBottom: scaleTutorialWelcome(4, 2),
-                }}
-              >
-                {t('tutorial.welcome.body')}
-              </Text>
-            </View>
-            <View style={{ width: '100%', alignItems: 'center', gap: tutorialMockupCardGap }}>
-              <Text style={{ color: '#FDE68A', fontSize: scaleTutorialWelcome(15, 10), fontWeight: '700', textAlign: 'center', lineHeight: scaleTutorialWelcome(22, 12) }}>
-                {t('tutorial.welcome.coreRewardPrefix')}
-                <Text style={{ color: '#FACC15', fontWeight: '900', textShadowColor: 'rgba(250,204,21,0.45)', textShadowRadius: 8 }}>
-                  {t('tutorial.welcome.coreRewardValue')}
-                </Text>
-                {t('tutorial.welcome.coreRewardSuffix')}
-              </Text>
-              <Text style={{ color: '#FDE68A', fontSize: scaleTutorialWelcome(14, 9), fontWeight: '600', textAlign: 'center', lineHeight: scaleTutorialWelcome(21, 11), opacity: 0.95 }}>
-                {t('tutorial.welcome.advancedRewardPrefix')}
-                <Text style={{ color: '#FACC15', fontWeight: '900', textShadowColor: 'rgba(250,204,21,0.45)', textShadowRadius: 8 }}>
-                  {t('tutorial.welcome.advancedRewardValue')}
-                </Text>
-                {t('tutorial.welcome.advancedRewardSuffix')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => {
-                advancedStartedFromWelcomeRef.current = false;
-                setShowWelcomeBubble(false);
-              }}
-              style={{
-                paddingVertical: scaleTutorialWelcome(15, 8),
-                paddingHorizontal: scaleTutorialWelcome(28, 14),
-                borderRadius: scaleTutorialWelcome(18, 9),
-                backgroundColor: '#16A34A',
-                borderWidth: scaleTutorialWelcome(2, 1),
-                borderColor: '#4ADE80',
-                width: '100%',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#F0FDF4', fontWeight: '900', fontSize: scaleTutorialWelcome(17, 10) }}>
-                {t('tutorial.welcome.start')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                advancedStartedFromWelcomeRef.current = true;
-                setShowWelcomeBubble(false);
-                dispatchEngine({ type: 'JUMP_TO_ADVANCED' });
-              }}
-              style={{
-                paddingVertical: scaleTutorialWelcome(14, 7),
-                paddingHorizontal: scaleTutorialWelcome(28, 14),
-                borderRadius: scaleTutorialWelcome(18, 9),
-                backgroundColor: '#6D28D9',
-                borderWidth: scaleTutorialWelcome(2, 1),
-                borderColor: '#C4B5FD',
-                width: '100%',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: scaleTutorialWelcome(16, 10) }}>
-                {t('tutorial.welcome.advancedBtn')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          onAdvanced={() => {
+            advancedStartedFromWelcomeRef.current = true;
+            setShowWelcomeBubble(false);
+            dispatchEngine({ type: 'JUMP_TO_ADVANCED' });
+          }}
+        />
       )}
 
       {/* Core tutorial finished ג€” choice screen: continue to fractions or start real game. */}
