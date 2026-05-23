@@ -294,26 +294,19 @@ export function generateTutorialHand(
     }
   }
 
-  // Fill distractors
+  // Fill distractors spread across 0–12 for visual variety
   const usedValues = new Set(
     [...solutionCards, ...specialCards]
       .filter(c => c.type === 'number')
       .map(c => c.value),
   );
-  const distractors: Card[] = [];
-  let fillAttempts = 0;
   const needed = HAND_SIZE - solutionCards.length - specialCards.length;
-  while (distractors.length < needed && fillAttempts < 100) {
-    const v = randInt(1, lesson.maxRange);
-    if (!usedValues.has(v)) {
-      usedValues.add(v);
-      distractors.push(numCard(v));
-    }
-    fillAttempts++;
-  }
-  // Pad if needed
+  const candidates = shuffle(
+    Array.from({ length: 13 }, (_, i) => i).filter(v => !usedValues.has(v)),
+  );
+  const distractors: Card[] = candidates.slice(0, needed).map(numCard);
   while (distractors.length < needed) {
-    distractors.push(numCard(randInt(1, lesson.maxRange)));
+    distractors.push(numCard(randInt(0, 12)));
   }
 
   const solutionIds = solutionCards.map(c => c.id);
