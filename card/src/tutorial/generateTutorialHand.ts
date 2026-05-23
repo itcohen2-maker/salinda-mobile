@@ -205,7 +205,7 @@ export function generateTutorialHand(
     return fallbackHand(lesson);
   }
 
-  const HAND_SIZE = 9;
+  const HAND_SIZE = 7;
   const solutionCards: Card[] = [];
   const specialCards: Card[] = [];
   let targetEq: EquationOption | null = null;
