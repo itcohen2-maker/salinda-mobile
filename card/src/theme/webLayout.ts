@@ -127,13 +127,9 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
   const timerTop = mobileWebViewport
     ? Math.round(tableTop + tableHeight - 45 - mobileCompactRatio * 12)
     : tableTop + tableHeight + 32;
-  // On desktop the frame is taller than the viewport so the naive
-  // "frameHeight - 140" formula lands inside the hand-fan area and the button
-  // gets covered by card overlaps.  Anchor it just above the hand instead.
-  const handTop = frameHeight - handZoneTop;
   const goldActionButtonTop = mobileWebViewport
     ? Math.max(96, Math.min(680, frameHeight - Math.round(140 + mobileCompactRatio * 40)))
-    : Math.max(tableTop + tableHeight + 20, handTop - 70);
+    : frameHeight - 140;
 
   return {
     viewportWidth,
