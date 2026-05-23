@@ -189,6 +189,11 @@ export const en: Record<string, string> = {
   'feedbackInbox.status.new': 'New',
   'feedbackInbox.status.reviewed': 'Reviewed',
   'feedbackInbox.status.archived': 'Archived',
+  'feedbackInbox.sortNewest': 'Newest first',
+  'feedbackInbox.sortOldest': 'Oldest first',
+  'feedbackInbox.markReviewed': 'Mark reviewed',
+  'feedbackInbox.archive': 'Archive',
+  'feedbackInbox.actionError': 'Could not update status. Try again.',
   'lobby.toggleToJoin': 'I have a room code — join',
   'lobby.toggleToCreate': 'Create a new room',
   'lobby.leaveRoom': '→ Leave room',
@@ -846,7 +851,7 @@ export const en: Record<string, string> = {
   'guidance.wildResultsBody': 'A wild card can complete any exercise you choose.',
 
   'equation.buildTitle': 'Build an exercise from the dice',
-  'results.possibleChip': 'Possible\nresults',
+  'results.possibleChip': 'Drop\na\ncard?',
   'ui.lastTurnPlayedCards': 'Cards played last turn',
   'ui.timerResetShort': '⏱ Reset',
   'ui.cancel': 'Cancel',
@@ -1059,7 +1064,6 @@ export const en: Record<string, string> = {
   'start.modeSolo': 'Solo',
   'start.modePassAndPlay': 'Pass and play',
   'start.modeVsBot': 'Vs Salinda',
-  'start.soloNoOpponent': 'Play without opponent',
   'start.botDifficulty': 'Choose difficulty',
   'start.botEasy': 'Easy',
   'start.botMedium': 'Medium',
@@ -1227,7 +1231,7 @@ export const en: Record<string, string> = {
   'tutorial.l3.hintRoll': 'Tap the button to roll the dice',
   'tutorial.l3.celebrate': 'Use these numbers to build an equation. If it matches a card, you discard it!',
   'tutorial.l3.tipTitle': 'Feeling stuck?',
-  'tutorial.l3.tipBody': 'You do not have to build everything from scratch. Sometimes the board already has a solved equation waiting - it is worth using it.',
+  'tutorial.l3.tipBody': 'Do not work too hard. Sometimes the solution is already waiting on the board. One tap can show you how to drop cards easily.',
   'tutorial.l3.tipCta': 'Show me!',
 
   // Lesson 4 — Build an exercise
@@ -1345,9 +1349,10 @@ export const en: Record<string, string> = {
   'tutorial.l6.desc': 'The green button shows which results the dice can make, then you choose one and match cards to it.',
   // 6.1 — open the green chip
   'tutorial.l6a.botIntro': 'The green button shows what you can build from the dice on the table. Tap it to open the list.',
-  'tutorial.l6a.hintTapChip': 'Tap the green button to see all possible results.',
-  'tutorial.l6a.celebrate': 'The result list is open. Each mini card is a number you can reach with the dice.',
-  'tutorial.l6a.continue': 'Got it - show me a mini card >',
+  'tutorial.l6a.hintTapChip': 'Tap the "Drop a card?" button to see which options we have.',
+  'tutorial.l6a.celebrate': '💰 Here is what came out. Tap the mini cards. Each one shows a different equation for its result.',
+  'tutorial.l6a.continue': 'Got it, continue!',
+  'tutorial.l6a.redChipFeedback': 'This drops card {{value}}',
   // 6.2 — tap a mini card to see the red solve chip
   'tutorial.l6b.botIntro': 'The mini cards show some of the options you can solve. Tapping a mini card opens the way to reach that result.',
   'tutorial.l6b.hintTapMini': 'Choose a mini card. The red card will show which equation creates that result.',
