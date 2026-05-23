@@ -149,7 +149,7 @@ function buildL6PossibleResultsSetup(): L6PossibleResultsSetup {
   };
 }
 
-function TutorialWildMiniCard({ maxNumber }: { maxNumber: 12 | 25 }) {
+function TutorialWildMiniCard() {
   const w = 66;
   const h = 92;
   return (
@@ -194,7 +194,7 @@ function TutorialWildMiniCard({ maxNumber }: { maxNumber: 12 | 25 }) {
               {TUTORIAL_WILD_STAR}
             </Text>
             <Text style={{ fontSize: 10, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>
-              {maxNumber === 12 ? '0–12' : '0–25'}
+              0–25
             </Text>
           </View>
         </View>
@@ -1771,6 +1771,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL7 = engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX;
     return tutorialBus.subscribeUserEvent((evt) => {
       if (step.outcome(evt)) {
+        // L4.1: filter the played card out of the rigged hand so L4.2 starts clean.
+        if (engine.lessonIndex === 3 && engine.stepIndex === 0 && evt.kind === 'cardTapped') {
+          const cfg = tutorialBus.getL4Config();
+          const m = /^tut-l4-(?:bot-)?card-(\d+)(?:-|$)/.exec(evt.cardId);
+          const playedValue = m ? parseInt(m[1], 10) : null;
+          if (cfg?.hand && playedValue !== null) {
+            tutorialBus.setL4Config({ ...cfg, hand: cfg.hand.filter((v) => v !== playedValue) });
+          }
+        }
         dispatchEngine({ type: 'OUTCOME_MATCHED' });
         return;
       }
@@ -4342,7 +4351,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       ? Math.max(124, webTutorialLayout.tableTop - 76)
       : null;
   const tutorialCompactMidBubbleTop = tutorialWebAboveTableBubbleTop ?? 400;
-  const tutorialL6AfterOpenBubbleTop = tutorialWebAboveTableBubbleTop ?? Math.max(tutorialSafeTop + 58, 112);
+  const tutorialL6AfterOpenBubbleTop = tutorialWebAboveTableBubbleTop ?? Math.max(tutorialSafeTop + 34, 86);
   const tutorialGameTableBottom =
     webTutorialLayout
       ? webTutorialLayout.tableTop + webTutorialLayout.tableHeight
@@ -5527,12 +5536,41 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 }),
               }}
             >
-              <Text style={{ color: '#DDD6FE', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
-                {t('tutorial.wildTitle')}
+              <Text
+                style={{
+                  color: '#FFDF00',
+                  fontSize: 25,
+                  lineHeight: 31,
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+                  includeFontPadding: false,
+                }}
+              >
+                {t('tutorial.l6c.turnModalTitle')}
               </Text>
-              <TutorialWildMiniCard maxNumber={gameState?.mathRangeMax === 25 ? 25 : 12} />
-              <Text style={{ color: '#F8FAFC', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 26 }}>
-                {t('tutorial.l6c.wildMockupBody')}
+              <TutorialWildMiniCard />
+              <Text
+                style={{
+                  color: '#FFFFFF',
+                  fontSize: 16,
+                  fontWeight: '500',
+                  textAlign: 'center',
+                  textAlignVertical: 'center',
+                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+                  lineHeight: 24,
+                  includeFontPadding: false,
+                }}
+              >
+                {t('tutorial.l6c.turnModalBodyBeforeCards')}
+                <Text style={{ color: '#FFDF00', fontWeight: '900' }}>
+                  {t('tutorial.l6c.turnModalBodyCards')}
+                </Text>
+                {t('tutorial.l6c.turnModalBodyAfterCards')}
+                <Text style={{ color: '#FFDF00', fontWeight: '900' }}>
+                  {t('tutorial.l6c.turnModalBodyBuild')}
+                </Text>
+                {t('tutorial.l6c.turnModalBodyAfterBuild')}
               </Text>
             </View>
           </View>
@@ -5547,15 +5585,29 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             <View style={{
               backgroundColor: '#6D28D9',
               borderRadius: 20,
+              minHeight: 58,
               paddingVertical: 15, paddingHorizontal: 42,
               borderWidth: 2, borderColor: '#A78BFA',
+              alignItems: 'center',
+              justifyContent: 'center',
               ...Platform.select({
                 ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
                 android: { elevation: 12 },
               }),
             }}>
-              <Text style={{ color: '#F5F3FF', fontSize: 17, fontWeight: '900' }}>
-                {t('tutorial.gotIt')}
+              <Text
+                style={{
+                  color: '#FFFFFF',
+                  fontSize: 17,
+                  lineHeight: 22,
+                  fontWeight: '900',
+                  textAlign: 'center',
+                  textAlignVertical: 'center',
+                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+                  includeFontPadding: false,
+                }}
+              >
+                {t('tutorial.l6c.turnModalCta')}
               </Text>
             </View>
           </TouchableOpacity>
@@ -6122,7 +6174,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               title={bubbleTitle}
               tone={bubbleTone}
               arrowSize='small'
-              withTail={!isL6Step1Bubble && !isL6OpenChipHintBubble}
+              withTail={!isL6Step1Bubble && !isL6OpenChipHintBubble && !isL6AfterResultsOpenBubble}
               size={isCompact ? 'compact' : 'normal'}
               maxWidth={isL6ReadExerciseBubble ? tutorialCompactBubbleMaxWidth : isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
               tailTop={false}
