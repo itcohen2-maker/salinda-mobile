@@ -560,3 +560,7 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used within <AuthProvider>');
   return ctx;
 }
+
+export function useAuthOptional(): AuthContextValue | null {
+  return useContext(AuthContext);
+}

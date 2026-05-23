@@ -1458,6 +1458,14 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
 
+    const activeState = room.state;
+    if (!activeState) {
+      const message = t(loc, 'game.notStarted');
+      socket.emit('error', { message });
+      reply({ ok: false, message });
+      return;
+    }
+
     const disguise = isPity ? generateDisguisedProfile() : null;
     target.isBot = true;
     target.isConnected = true;
@@ -1466,7 +1474,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
     // Sync room.state.players — it's a separate array created by spread in startGame,
     // so mutating room.players alone leaves isBot=false in the game engine.
-    const stateTarget = room.state.players.find((p) => p.id === target.id);
+    const stateTarget = activeState.players.find((p) => p.id === target.id);
     if (stateTarget) {
       stateTarget.isBot = true;
       stateTarget.isConnected = true;
@@ -1475,19 +1483,18 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     }
 
     // Sync bot difficulty override into live game state.
-    if (room.state) {
-      room.state = {
-        ...(room.state as any),
-        hostGameSettings: { ...room.state.hostGameSettings, botDifficulty: resolvedBotDiff },
-      };
-    }
+    const updatedState = {
+      ...activeState,
+      hostGameSettings: { ...activeState.hostGameSettings, botDifficulty: resolvedBotDiff },
+    };
     room.configuredGameSettings = {
       ...(room.configuredGameSettings ?? {}),
       botDifficulty: resolvedBotDiff,
     };
     promoteConnectedHumanHost(room, playerId);
     clearRoomDisconnectGrace(room);
-    if (room.state) room.state = withOnlineTurnDeadline(room.state);
+    const liveState = withOnlineTurnDeadline(updatedState);
+    room.state = liveState;
     room.lastActivity = Date.now();
 
     emitRoomPlayers(io, room);
@@ -1495,7 +1502,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     scheduleRoomTurnTimer(io, room);
     scheduleBotAction(io, room);
 
-    const playerView = getPlayerView(room.state, playerId, playerLocale(room, playerId));
+    const playerView = getPlayerView(liveState, playerId, playerLocale(room, playerId));
     reply({ ok: true, playerView });
   });
 

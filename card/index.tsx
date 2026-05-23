@@ -927,6 +927,71 @@ function isBlockingGameplayNotification(notification: Notification | null | unde
   return notification?.requireAck === true;
 }
 
+const INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX = 'confirm-staged-invalid';
+
+function getRegularStagedSelectionErrorKey(st: GameState): 'confirm.needNumberOrWild' | 'confirm.sumMismatch' | null {
+  if (st.isTutorial) return null;
+  if (st.phase !== 'solved' || st.hasPlayedCards || st.equationResult === null) return null;
+  if (st.stagedCards.length === 0) return null;
+  const stagedNumbers = st.stagedCards.filter(c => c.type === 'number' || c.type === 'wild');
+  const stagedOpCard = st.stagedCards.find(c => c.type === 'operation') ?? null;
+  if (stagedNumbers.length === 0) return 'confirm.needNumberOrWild';
+  if (stagedOpCard != null) return 'confirm.sumMismatch';
+  return validateStagedCards(stagedNumbers, stagedOpCard, st.equationResult, st.mathRangeMax ?? 25)
+    ? null
+    : 'confirm.sumMismatch';
+}
+
+function invalidStagedSelectionNotification(
+  st: GameState,
+  tf: (key: string, params?: MsgParams) => string,
+): Notification {
+  const target = st.equationResult ?? '?';
+  const body = tf('confirm.invalidSelection.body', { n: String(target) });
+  return {
+    id: `${INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX}-${st.roundsPlayed}-${st.currentPlayerIndex}-${Date.now()}`,
+    title: tf('confirm.invalidSelection.title'),
+    message: body,
+    body,
+    style: 'error',
+    autoDismissMs: 4500,
+  };
+}
+
+function rejectInvalidStagedSelection(
+  st: GameState,
+  tf: (key: string, params?: MsgParams) => string,
+  messageKey: 'confirm.needNumberOrWild' | 'confirm.sumMismatch',
+): GameState {
+  return {
+    ...st,
+    stagedCards: [],
+    selectedCards: [],
+    message: tf(messageKey),
+    notifications: [
+      ...(st.notifications ?? []).filter((n) => !n.id.startsWith(INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX)),
+      invalidStagedSelectionNotification(st, tf),
+    ],
+  };
+}
+
+function getTutorialL4CardMatchTarget(st: GameState): number | null {
+  if (!st.isTutorial || !tutorialBus.getL4CardMatchOnlyMode()) return null;
+  return st.equationResult ?? tutorialBus.getLastEquationResult();
+}
+
+function rejectTutorialL4CardMatchSelection(
+  st: GameState,
+  tf: (key: string, params?: MsgParams) => string,
+): GameState {
+  return {
+    ...st,
+    stagedCards: [],
+    selectedCards: [],
+    message: tf('tutorial.l4c.tryAgain'),
+  };
+}
+
 type BotPresentationState = {
   action: BotAction | null;
   candidateCardId: string | null;
@@ -2569,6 +2634,13 @@ function gameReducer(
     }
     case 'STAGE_CARD': {
       if (st.phase !== 'solved' || st.hasPlayedCards) return st;
+      const l4MatchTarget = getTutorialL4CardMatchTarget(st);
+      if (
+        l4MatchTarget !== null &&
+        (action.card.type !== 'number' || action.card.value !== l4MatchTarget)
+      ) {
+        return rejectTutorialL4CardMatchSelection(st, tf);
+      }
       if (st.stagedCards.some(c => c.id === action.card.id)) return st;
       if (action.card.type !== 'number' && action.card.type !== 'operation' && action.card.type !== 'wild') return st;
       if (action.card.type === 'wild' && st.stagedCards.some(c => c.type === 'wild')) return st;
@@ -2597,10 +2669,23 @@ function gameReducer(
       const stNumbers = st.stagedCards.filter(c => c.type === 'number' || c.type === 'wild');
       const stOpCards = st.stagedCards.filter(c => c.type === 'operation');
       const stOpCard = stOpCards.length === 1 ? stOpCards[0] : null;
+      const l4MatchTarget = getTutorialL4CardMatchTarget(st);
+      if (l4MatchTarget !== null) {
+        const matchesL4Target =
+          st.stagedCards.length === 1 &&
+          stNumbers.length === 1 &&
+          stNumbers[0]?.type === 'number' &&
+          stNumbers[0].value === l4MatchTarget;
+        if (!matchesL4Target) return rejectTutorialL4CardMatchSelection(st, tf);
+      }
       const l11MissingKey = st.isTutorial
         ? getL11MultiPlayTutorialMissingKey(st.stagedCards, tutorialBus.getL11Config())
         : null;
       if (l11MissingKey) return { ...st, message: tf(l11MissingKey) };
+      const regularStagedSelectionErrorKey = getRegularStagedSelectionErrorKey(st);
+      if (regularStagedSelectionErrorKey) {
+        return rejectInvalidStagedSelection(st, tf, regularStagedSelectionErrorKey);
+      }
       if (stNumbers.length === 0) return { ...st, message: tf('confirm.needNumberOrWild') };
       // Reject operation cards in multi-play (outside l6 tutorial wild step)
       if (stOpCard != null && !(st.isTutorial && tutorialBus.getL6WildStepMode())) {
@@ -2609,6 +2694,9 @@ function gameReducer(
       if (st.isTutorial && tutorialBus.getL6WildStepMode()) {
         const hasWild = stNumbers.some(c => c.type === 'wild');
         if (!hasWild) return { ...st, message: 'בחרו קלף פרא' };
+        if (!isL6WildTutorialSelectionReady(st.stagedCards, st.equationResult, st.mathRangeMax ?? 25)) {
+          return { ...st, message: tf('tutorial.l6c.mismatch') };
+        }
         // Wild alone is valid — no op card or extra numbers required.
         // Auto-set wild resolvedValue so validateStagedCards can pass.
         const fixedSum = stNumbers.filter(c => c.type === 'number').reduce((a, c) => a + (c.value ?? 0), 0);
@@ -3132,9 +3220,11 @@ function gameReducer(
           return st;
         }
       }
-      // Fraction toasts can spam on repeated taps; keep only the latest one.
+      // Repeated transient toasts can spam on taps; keep only the latest one.
       const baseList = id.startsWith('frac-')
         ? notifs.filter((n) => !n.id.startsWith('frac-'))
+        : id.startsWith(INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX)
+          ? notifs.filter((n) => !n.id.startsWith(INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX))
         : notifs;
       const next = [...baseList, payload];
       if (id.startsWith('onb-')) {
@@ -10105,6 +10195,15 @@ function BottomControlsBar() {
 
   const onPlaceCards = useCallback(() => {
     if (placeCardsDisabled) return;
+    const regularStagedSelectionErrorKey = getRegularStagedSelectionErrorKey(state);
+    if (regularStagedSelectionErrorKey) {
+      dispatch({
+        type: 'PUSH_NOTIFICATION',
+        payload: invalidStagedSelectionNotification(state, t),
+      });
+      state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
+      return;
+    }
     const isL4Step3SingleCardMode =
       state.isTutorial &&
       tutorialBus.getL4GuidedEqValidationMode() &&
@@ -10125,7 +10224,7 @@ function BottomControlsBar() {
     }
     if (soundOn && state.stagedCards.length >= 2) playPlaceMultipleSound();
     dispatch({ type: 'CONFIRM_STAGED' });
-  }, [dispatch, placeCardsDisabled, playPlaceMultipleSound, soundOn, state.equationResult, state.isTutorial, state.stagedCards]);
+  }, [dispatch, placeCardsDisabled, playPlaceMultipleSound, soundOn, state, t]);
 
   const BOTTOM_PLACE_BTN_W = 160;
   const bottomRowW = BOTTOM_PLACE_BTN_W;
@@ -16796,6 +16895,18 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     resultsStripArrowAnim.setValue(0);
     setResultsMiniArrowPulse(false);
   }, [hideSolvedResultsUi, resultsOpen, resultsStripArrowAnim]);
+  // When reverting from 'solved' back to 'building' (REVERT_TO_BUILDING), restore
+  // the results chip visibility. resultsChipHiddenThisTurn stays true after the
+  // solved→building transition because it only resets on turn change, causing
+  // both the chip and the strip to be invisible after going back.
+  const prevPhaseForResultsRef = useRef(state.phase);
+  useEffect(() => {
+    const prev = prevPhaseForResultsRef.current;
+    prevPhaseForResultsRef.current = state.phase;
+    if (prev === 'solved' && state.phase === 'building') {
+      setResultsChipHiddenThisTurn(false);
+    }
+  }, [state.phase]);
   const parensToggleShouldAnimateColor = parensToggleAttentionActive;
   const parensToggleBackgroundColor = parensToggleShouldAnimateColor ? parensToggleBg : '#F97316';
 
@@ -17197,6 +17308,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const placeCardsDisabled = l11PlaceMissingKey != null || l6WildPlaceBlocked;
   const onPlaceCards = useCallback(() => {
     if (placeCardsDisabled) return;
+    const regularStagedSelectionErrorKey = getRegularStagedSelectionErrorKey(state);
+    if (regularStagedSelectionErrorKey) {
+      dispatch({
+        type: 'PUSH_NOTIFICATION',
+        payload: invalidStagedSelectionNotification(state, t),
+      });
+      state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
+      return;
+    }
     const isL4Step3SingleCardMode =
       state.isTutorial &&
       tutorialBus.getL4GuidedEqValidationMode() &&
@@ -17216,7 +17336,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       }
     }
     dispatch({ type: 'CONFIRM_STAGED' });
-  }, [dispatch, placeCardsDisabled, state.equationResult, state.isTutorial, state.stagedCards]);
+  }, [dispatch, placeCardsDisabled, state, t]);
   const showSoloBuildConfirmHint =
     !state.isTutorial &&
     state.mode === 'solo' &&
@@ -22216,9 +22336,12 @@ function MobileWebFocusButton({
       onPress={onPress}
       activeOpacity={0.88}
       style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        minWidth: 116,
+        height: 40,
+        borderRadius: 20,
+        paddingHorizontal: 13,
+        flexDirection: 'row',
+        gap: 7,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor,
@@ -22230,8 +22353,11 @@ function MobileWebFocusButton({
         shadowRadius: 12,
       }}
     >
-      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
+      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 19, fontWeight: '900', lineHeight: 21 }}>
         {active ? '×' : '⛶'}
+      </Text>
+      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 13, fontWeight: '900', lineHeight: 15 }}>
+        {label}
       </Text>
     </TouchableOpacity>
   );
@@ -22456,8 +22582,8 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     ? (webFullscreenActive ? 'צא ממסך מלא' : 'מסך מלא')
     : (webFullscreenActive ? 'Exit Fullscreen' : 'Fullscreen');
   const mobileFocusLabel = locale === 'he'
-    ? (webFocusMode || webFullscreenActive ? 'צא מתצוגת פוקוס' : 'תצוגת פוקוס')
-    : (webFocusMode || webFullscreenActive ? 'Exit Focus View' : 'Focus View');
+    ? (webFocusMode || webFullscreenActive ? 'יציאה' : 'מסך מלא')
+    : (webFocusMode || webFullscreenActive ? 'Exit' : 'Fullscreen');
   const backdropLabel = locale === 'he'
     ? (webBackdropTone === 'black' ? 'רקע לבן' : 'רקע שחור')
     : (webBackdropTone === 'black' ? 'White Backdrop' : 'Black Backdrop');
@@ -22513,9 +22639,12 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
             pointerEvents="box-none"
             style={{
               position: 'absolute',
-              right: 12,
-              bottom: Math.max(14, (insets.bottom || 0) + 14),
+              left: 0,
+              right: 0,
+              top: Math.max(10, (insets.top || 0) + 10),
+              height: 44,
               zIndex: 31000,
+              alignItems: 'center',
             }}
           >
             <MobileWebFocusButton

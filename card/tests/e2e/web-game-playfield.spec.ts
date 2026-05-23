@@ -315,6 +315,8 @@ test.describe('Mobile Gameplay Playfield', () => {
 
     await page.addInitScript(() => {
       window.localStorage.setItem('lulos_tutorial_done', 'true');
+      Object.defineProperty(Element.prototype, 'requestFullscreen', { value: undefined, configurable: true });
+      Object.defineProperty(Element.prototype, 'webkitRequestFullscreen', { value: undefined, configurable: true });
     });
     await lobby.goto();
     await expect(lobby.openGameMenu).toBeVisible({ timeout: 30_000 });

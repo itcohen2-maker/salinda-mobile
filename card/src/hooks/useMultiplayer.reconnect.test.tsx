@@ -2,6 +2,7 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { LocaleProvider } from '../i18n/LocaleContext';
+import { supabase } from '../lib/supabase';
 
 const mockSocket = {
   on: jest.fn(),
@@ -23,6 +24,10 @@ jest.mock('socket.io-client', () => ({
 import { MultiplayerProvider, useMultiplayer } from './useMultiplayer';
 
 let multiplayerCtx: ReturnType<typeof useMultiplayer> | null = null;
+const mockSupabaseAuth = supabase.auth as unknown as {
+  getSession: jest.Mock;
+  onAuthStateChange: jest.Mock;
+};
 
 function CaptureContext() {
   multiplayerCtx = useMultiplayer();
@@ -44,6 +49,8 @@ describe('useMultiplayer lobby reconnect flow', () => {
     mockSocket.disconnect.mockClear();
     mockSocket.connected = false;
     mockSocket.active = true;
+    mockSupabaseAuth.getSession.mockClear();
+    mockSupabaseAuth.onAuthStateChange.mockClear();
     await AsyncStorage.clear();
   });
 
@@ -59,6 +66,8 @@ describe('useMultiplayer lobby reconnect flow', () => {
     await waitFor(() => {
       expect(multiplayerCtx).not.toBeNull();
     });
+    expect(mockSupabaseAuth.getSession).not.toHaveBeenCalled();
+    expect(mockSupabaseAuth.onAuthStateChange).not.toHaveBeenCalled();
 
     act(() => {
       multiplayerCtx!.joinTable('4821', 'Noa');

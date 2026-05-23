@@ -293,6 +293,7 @@ let l9ParensFilter = false;
  *  bypassing the l7ParensResults filter (which requires operators in equation). */
 let l7Step1Mode = false;
 let l6WildStepMode = false;
+let l4CardMatchOnlyMode = false;
 
 /** Lesson 11 (multi-play) addends — published by InteractiveTutorialScreen
  *  before the bot demo so the bot stages the correct cards. */
@@ -450,6 +451,12 @@ export const tutorialBus = {
   },
   getL4GuidedEqValidationMode(): boolean {
     return l4GuidedEqValidationMode;
+  },
+  setL4CardMatchOnlyMode(on: boolean): void {
+    l4CardMatchOnlyMode = on;
+  },
+  getL4CardMatchOnlyMode(): boolean {
+    return l4CardMatchOnlyMode;
   },
 
   setL5GuidedMode(on: boolean): void {
@@ -716,6 +723,7 @@ export const tutorialBus = {
     l9ParensFilter = false;
     l7Step1Mode = false;
     l6WildStepMode = false;
+    l4CardMatchOnlyMode = false;
     l11Config = null;
     l11StrictMultiPlayMode = false;
     l5UiListeners.clear();

@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { io, type Socket } from 'socket.io-client';
-import { supabase } from '../lib/supabase';
+import { useAuthOptional } from './useAuth';
 import type {
   BotDifficulty,
   ClassroomAdvanceRoundPayload,
@@ -534,6 +534,8 @@ function isValidPlayerView(view: unknown): view is PlayerView {
 
 export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const { locale } = useLocale();
+  const auth = useAuthOptional();
+  const authAccessToken = auth?.session?.access_token ?? null;
   const localeRef = useRef(locale);
   localeRef.current = locale;
 
@@ -569,15 +571,10 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const prevHumanPlayerIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
-    // Keep sessionTokenRef up-to-date so connect() can pass it to the socket
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      sessionTokenRef.current = session?.access_token ?? null;
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      sessionTokenRef.current = session?.access_token ?? null;
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    // Use the AuthProvider session so web OAuth callbacks do not race another
+    // Supabase auth session read on the same Navigator LockManager key.
+    sessionTokenRef.current = authAccessToken;
+  }, [authAccessToken]);
 
   useEffect(() => {
     serverStateRef.current = serverState;

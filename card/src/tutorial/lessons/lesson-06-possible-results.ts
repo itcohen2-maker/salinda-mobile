@@ -9,7 +9,9 @@
 // it in the EquationBuilder.
 //
 // 6.1 (open-chip) — the learner taps the green "possible results"
-//     chip next to the pile. The strip of mini-cards slides open.
+//     chip next to the pile. The strip of mini-cards slides open,
+//     then the learner gets a short reading beat explaining that
+//     each mini-card is a reachable result.
 //     Outcome: `resultsChipTapped` user event.
 //
 // 6.2 (tap-mini)  — one of the mini-cards pulses; the learner taps
@@ -28,10 +30,11 @@ export const lesson06PossibleResults: Lesson = {
   steps: [
     {
       id: 'open-chip',
-      // Wait 200ms so the 140ms setTimeout for TUTORIAL_FORCE_SOLVED has time to
+      // Wait long enough so the 140ms TUTORIAL_FORCE_SOLVED rig has committed
+      // and the learner has a readable beat before control moves to them.
       // fire before BOT_DEMO_DONE transitions to await-mimic. Without this delay
       // there is a ~140ms window where the equation isn't shown yet on entry.
-      botDemo: async (api) => { await api.wait(200); },
+      botDemo: async (api) => { await api.wait(900); },
       outcome: (e) => e.kind === 'resultsChipTapped',
       hintKey: 'tutorial.l6a.hintTapChip',
       botHintKey: 'tutorial.l6a.hintTapChip',
@@ -40,11 +43,14 @@ export const lesson06PossibleResults: Lesson = {
     {
       id: 'tap-mini',
       botDemo: async (api) => {
-        await api.wait(1800);
+        await api.wait(2600);
         // Bot taps the first mini-card in the strip (sorted by result ascending).
         // The host rigs dice + hand so at least one mini-card is always present.
         // Wait is kept well below the 6 s safety fallback so the tap actually fires.
         await api.tapMiniResult(0);
+        // Keep the red solve-exercise chip visible for a readable beat before
+        // handing control back to the learner.
+        await api.wait(1700);
       },
       outcome: (e) => e.kind === 'l6TapMiniAck',
       hintKey: 'tutorial.l6b.hintTapMini',

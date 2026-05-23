@@ -69,6 +69,8 @@ export const en: Record<string, string> = {
   'confirm.needNumberOrWild': 'Pick at least one number or wild card',
   'confirm.noEquationResult': 'No equation result',
   'confirm.sumMismatch': 'These cards do not add up to the target — try again',
+  'confirm.invalidSelection.title': 'Invalid selection',
+  'confirm.invalidSelection.body': 'Selection cleared. Pick cards again that add up to {{n}}.',
 
   'identical.wrongPhase': 'Wrong phase',
   'identical.identicalLimit': 'Identical card play limit reached',
@@ -1336,17 +1338,19 @@ export const en: Record<string, string> = {
 
   // Lesson 6 — Possible outcomes (green chip + mini-cards + red solve chip)
   'tutorial.l6.title': 'Possible outcomes',
-  'tutorial.l6.desc': 'Tap the green button to see every result you can build from the dice — then copy one into the equation.',
+  'tutorial.l6.desc': 'The green button shows which results the dice can make, then you choose one and match cards to it.',
   // 6.1 — open the green chip
-  'tutorial.l6a.botIntro': 'See the green button? Tap it',
-  'tutorial.l6a.hintTapChip': 'See the green button? Tap it',
-  'tutorial.l6a.celebrate': 'Here they are! Each mini card is a possible result',
+  'tutorial.l6a.botIntro': 'The green button shows what you can build from the dice on the table. Tap it to open the list.',
+  'tutorial.l6a.hintTapChip': 'Tap the green button to see all possible results.',
+  'tutorial.l6a.celebrate': 'The result list is open. Each mini card is a number you can reach with the dice.',
   // 6.2 — tap a mini card to see the red solve chip
-  'tutorial.l6b.botIntro': 'The mini cards show some of the options you can solve for',
-  'tutorial.l6b.hintTapMini': 'Tap a mini card and you will discover the way too',
-  'tutorial.l6b.celebrate': 'Nice! 🎉',
+  'tutorial.l6b.botIntro': 'The mini cards show some of the options you can solve. Tapping a mini card opens the way to reach that result.',
+  'tutorial.l6b.hintTapMini': 'Choose a mini card. The red card will show which equation creates that result.',
+  'tutorial.l6b.hintReadExercise': 'This is the red card: it shows the equation that reaches your chosen result. When it is clear, tap Got it.',
+  'tutorial.l6b.celebrate': 'Exactly. First check the possible results, then choose cards that match one of them.',
+  'tutorial.l6b.demoContinue': 'Got it - now I will try >',
   'tutorial.l6b.continue': 'Got it - let\'s continue >',
-  // 6.3 — copy the red equation into the equation builder
+  // 6.3 — finish a move with a wild card
   'tutorial.l6c.botIntro': 'Your turn — finish the move with a wild card and hit the target',
   'tutorial.l6c.wildMockupBody': 'You can place it instead of any number',
   'tutorial.l6c.hintCopy': 'Pick a wild card (or another card together with the wild card). This way you can get rid of two cards at once!',
