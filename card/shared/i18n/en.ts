@@ -1221,7 +1221,8 @@ export const en: Record<string, string> = {
   'tutorial.l2.title': 'Pick a card',
   'tutorial.l2.desc': 'Tap a card to pick it.',
   'tutorial.l2.hintTap': 'Try tapping a card',
-  'tutorial.l2.botTap': "Here's how to pick a card",
+  'tutorial.l2.botTapTitle': "You win when you're left with only 2 cards!",
+  'tutorial.l2.botTap': "That means you need to discard exactly 5 cards.",
   'tutorial.l2.celebrate': 'Nice — you picked a card',
 
   // Lesson 3 — Dice
@@ -1362,6 +1363,13 @@ export const en: Record<string, string> = {
   'tutorial.l6b.continue': 'Got it - let\'s continue >',
   // 6.3 — finish a move with a wild card
   'tutorial.l6c.botIntro': 'Your turn — finish the move with a wild card and hit the target',
+  'tutorial.l6c.turnModalTitle': 'Your turn!',
+  'tutorial.l6c.turnModalBodyBeforeCards': 'Look first at ',
+  'tutorial.l6c.turnModalBodyCards': 'your cards below',
+  'tutorial.l6c.turnModalBodyAfterCards': '.\nChoose a card you want to get rid of, and try to ',
+  'tutorial.l6c.turnModalBodyBuild': 'build a dice equation',
+  'tutorial.l6c.turnModalBodyAfterBuild': ' that lands exactly on its result!',
+  'tutorial.l6c.turnModalCta': 'Let’s go! 🚀',
   'tutorial.l6c.wildMockupBody': 'You can place it instead of any number',
   'tutorial.l6c.hintCopy': 'Pick a wild card (or another card together with the wild card). This way you can get rid of two cards at once!',
   'tutorial.l6c.hintConfirm': 'Tap confirm to place the cards',

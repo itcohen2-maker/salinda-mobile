@@ -4137,10 +4137,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     l4CardMatchWrongKey === 'tutorial.l4c.tryAgain' ||
     l4Step3HintKey === 'tutorial.l4c.hintBuildProgress' ||
     l4Step3HintKey === 'tutorial.l4c.tryAgain';
+  const isL2BotDemo = engine.lessonIndex === 1 && engine.phase === 'bot-demo';
   const bubbleTitle =
     isL4CardChoiceBubble
       ? String(gameState?.equationResult ?? '?')
-      : undefined;
+      : isL2BotDemo
+        ? t('tutorial.l2.botTapTitle')
+        : undefined;
   const bubbleTitleStyleOverride =
     isL4CardChoiceBubble
       ? {
@@ -4188,6 +4191,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 lineHeight: 24,
                 fontWeight: '900' as const,
               }
+      : isL2BotDemo
+        ? {
+            color: '#4A8FB5',
+            fontSize: 15,
+            fontWeight: '600' as const,
+          }
       : undefined;
   const bubbleTone: HappyBubbleTone =
     l4Step3HintKey === 'tutorial.l4c.hintPressPlay' ? 'buttonOrange'
@@ -4566,7 +4575,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         null
       ) : (
         <View
-          pointerEvents="auto"
+          pointerEvents="none"
           style={{
             position: 'absolute',
             top: HEADER_COL_H,
