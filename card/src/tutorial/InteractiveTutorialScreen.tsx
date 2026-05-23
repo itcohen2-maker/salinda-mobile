@@ -2179,7 +2179,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase === 'bot-demo') {
       timer = setTimeout(() => dispatchEngine({ type: 'BOT_DEMO_DONE' }), 250);
     } else if (engine.phase === 'await-mimic') {
-      timer = setTimeout(() => tutorialBus.emitUserEvent({ kind: 'l3SolvedAck' }), 1500);
+      timer = setTimeout(() => dispatchEngine({ type: 'OUTCOME_MATCHED' }), 1500);
     }
     return () => {
       if (timer) clearTimeout(timer);
