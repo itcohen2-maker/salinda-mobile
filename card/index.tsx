@@ -4757,6 +4757,9 @@ function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopP
         return { border: fc.dark, face: fc.face };
       })()
     : getNumColors(value);
+  const label = fractionLabel ? getFractionDisplay(fractionLabel) : String(value);
+  const labelColor = fractionLabel ? cl.face : cl.dark;
+  const labelFontSize = fractionLabel ? 16 : value >= 10 ? 16 : 18;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   // Stronger "pop" animation (no translateY to avoid clipping)
   const scaleAnim = useRef(new Animated.Value(0.35)).current;
@@ -4836,11 +4839,27 @@ function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopP
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{
-          fontSize: fractionLabel ? 16 : 18, fontWeight: '900', color: cl.face,
-          textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1,
-        }} numberOfLines={1}>
-          {fractionLabel ? getFractionDisplay(fractionLabel) : value}
+        <Text
+          allowFontScaling={false}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}
+          style={{
+            width: MINI_W - 7,
+            fontSize: labelFontSize,
+            lineHeight: 20,
+            fontWeight: '900',
+            color: labelColor,
+            textAlign: 'center',
+            textAlignVertical: 'center',
+            writingDirection: 'ltr',
+            includeFontPadding: false,
+            textShadowColor: 'rgba(255,255,255,0.55)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 1,
+          }}
+          numberOfLines={1}
+        >
+          {label}
         </Text>
       </View>
     </View>
@@ -5705,10 +5724,10 @@ const dpS = StyleSheet.create({ empty: { width:80, height:115, borderRadius:12, 
 //  RESULTS CHIP BUTTON (squircle casino chip)
 // ???????????????????????????????????????????????????????????????
 
-const CHIP_W = 76;
+const CHIP_W = 88;
 const CHIP_H = 68;
 const CHIP_R = 14;
-const SOLVE_CHIP_W = CHIP_W + 30;
+const SOLVE_CHIP_W = 106;
 
 function ResultsSlot({
   onToggle,
@@ -6070,8 +6089,10 @@ function ResultsChip({ onPress, matchCount, boostedPulse = false, noPulse = fals
             position: 'absolute', top: 0, left: 0, right: 0, height: CHIP_H,
             alignItems: 'center', justifyContent: 'center',
           }}>
-            <Text numberOfLines={2} style={{
-              color: '#F0E8B0', fontSize: 11, fontWeight: '900', textAlign: 'center', lineHeight: 14,
+            <Text allowFontScaling={false} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.78} style={{
+              width: CHIP_W - 12,
+              color: '#F0E8B0', fontSize: 10.2, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', lineHeight: 11.4,
+              paddingHorizontal: 2, includeFontPadding: false,
               textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
               writingDirection: isRTL ? 'rtl' : 'ltr',
             }}>{t('results.possibleChip')}</Text>
@@ -6870,9 +6891,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   const dice1Ref = useRef<number | null>(dice1);
   const dice2Ref = useRef<number | null>(dice2);
   const dice3Ref = useRef<number | null>(dice3);
+  const diceValuesRef = useRef(diceValues);
+  const tutorialEquationDisplayOverrideRef = useRef<string | null>(null);
   useEffect(() => { dice1Ref.current = dice1; }, [dice1]);
   useEffect(() => { dice2Ref.current = dice2; }, [dice2]);
   useEffect(() => { dice3Ref.current = dice3; }, [dice3]);
+  useEffect(() => { diceValuesRef.current = diceValues; }, [diceValues]);
   const finalResultRef = useRef<number | null>(null);
   useEffect(() => {
     if (!state.isTutorial) return;
@@ -6895,6 +6919,17 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       } else if (cmd.kind === 'eqSetOp') {
         if (cmd.which === 1) setOp1(cmd.op);
         else setOp2(cmd.op);
+      } else if (cmd.kind === 'eqFillFromEquation') {
+        const resolved = resolveEquationDiceIndicesForUi(cmd.equation, diceValuesRef.current);
+        if (!resolved) return;
+        const { parsed, indices: [idx0, idx1, idx2] } = resolved;
+        tutorialEquationDisplayOverrideRef.current = cmd.equation;
+        setParensRight(parsed.parensRight);
+        setDice1(idx0); dice1Ref.current = idx0;
+        setDice2(idx1); dice2Ref.current = idx1;
+        setDice3(idx2); dice3Ref.current = idx2;
+        setOp1(parsed.operators[0] ?? '+');
+        setOp2(parsed.operators[1] ?? null);
       } else if (cmd.kind === 'eqConfirm') {
         tutorialBus.setLastEquationResult(finalResultRef.current);
         confirmRef.current?.();
@@ -7113,15 +7148,20 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       state.isTutorial &&
       state.phase === 'solved' &&
       !state.hasPlayedCards &&
-      !state.showPossibleResults;
+      (!state.showPossibleResults || tutorialBus.getL6GuidedMode());
     if (!shouldPrefill) {
       tutorialSolvedAutofillKeyRef.current = null;
+      tutorialEquationDisplayOverrideRef.current = null;
       return;
     }
-    const resolved = resolveEquationDiceIndicesForUi(state.lastEquationDisplay, diceValues);
+    if (!tutorialBus.getL6GuidedMode()) {
+      tutorialEquationDisplayOverrideRef.current = null;
+    }
+    const equationDisplayForPrefill = tutorialEquationDisplayOverrideRef.current ?? state.lastEquationDisplay;
+    const resolved = resolveEquationDiceIndicesForUi(equationDisplayForPrefill, diceValues);
     if (!resolved) return;
     const { parsed, indices: [idx0, idx1, idx2] } = resolved;
-    const runKey = `${state.currentPlayerIndex}|${state.lastEquationDisplay}|${state.equationResult ?? 'x'}`;
+    const runKey = `${state.currentPlayerIndex}|${equationDisplayForPrefill}|${state.equationResult ?? 'x'}`;
     if (idx0 === null || idx1 === null) return;
     const alreadyFilled =
       tutorialSolvedAutofillKeyRef.current === runKey &&
@@ -7159,6 +7199,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     dice3,
     op1,
     op2,
+    l5UiTick,
     // parensRight intentionally omitted: setParensRight inside prefill() updates
     // GameScreen state which feeds back here via prop, creating a cascade. The
     // tutorialSolvedAutofillKeyRef ref-guard already prevents double-execution.
@@ -7939,11 +7980,9 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       {/* Dice pool. In tutorial solved states that lead into card-picking,
           keep only the dice that actually participated in the confirmed
           equation so unused dice do not compete with the next action.
-          Exception: in lesson 6 (possible-results; identified by
-          state.showPossibleResults in tutorial mode) the whole dice row is
-          hidden because the prefilled reference equation should not compete
-          with the mini-cards. */}
-      {(!isSolved || state.isTutorial) && !(state.isTutorial && state.showPossibleResults && !tutorialBus.getL7GuidedMode() && !tutorialBus.getL9ParensFilter()) && (
+          Exception: possible-results tutorial keeps the dice visible so the
+          learner can compare the rolled dice to the result and mini-cards. */}
+      {(!isSolved || state.isTutorial) && !(state.isTutorial && state.showPossibleResults && !tutorialBus.getL6GuidedMode() && !tutorialBus.getL7GuidedMode() && !tutorialBus.getL9ParensFilter()) && (
         <View style={eqS.diceRow}>
           {visibleDiceEntries.map(({ value: dv, index: dIdx }) => {
             const isUsed = visibleDiceSet.has(dIdx);
@@ -8551,7 +8590,7 @@ const FAN_TOUCH_DRAG_START_DX = 20;
 const FAN_CARD_PRESS_RETENTION = { top: 24, bottom: 24, left: 24, right: 24 } as const;
 const SIMPLE_HAND_FAN_TEST_ID = 'simple-hand-fan';
 
-function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium', interactionLocked = false, centerCardId = null, tutorialFocusCardId = null }: {
+function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandPendingId, defenseValidCardIds, tutorialHighlightCardIds = null, forwardCardId: _forwardCardId, onTap, onCenterCard, waitingMode = false, botTeachingActive = false, botCandidateCardId = null, botTeachingDifficulty = 'medium', interactionLocked = false, cardPressDisabled = false, centerCardId = null, tutorialFocusCardId = null }: {
   cards: Card[];
   stagedCardIds: Set<string>;
   equationHandPlacedIds: Set<string>;
@@ -8566,6 +8605,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   botCandidateCardId?: string | null;
   botTeachingDifficulty?: BotDifficulty;
   interactionLocked?: boolean;
+  cardPressDisabled?: boolean;
   centerCardId?: string | null;
   tutorialFocusCardId?: string | null;
 }) {
@@ -9638,11 +9678,11 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
               hitSlop={edgeHitSlop}
               pressRetentionOffset={FAN_CARD_PRESS_RETENTION}
               testID={`hand-card-${card.id}`}
-              onPressIn={() => { if (!isDefenseInvalid && !waitingMode && !interactionLocked) setPressedCardId(card.id); }}
+              onPressIn={() => { if (!isDefenseInvalid && !waitingMode && !interactionLocked && !cardPressDisabled) setPressedCardId(card.id); }}
               onPressOut={() => setPressedCardId(null)}
-              onPress={() => { if (interactionLocked) return; setPressedCardId(null); tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: card.id }); onTap(card); }}
-              disabled={isDefenseInvalid || waitingMode || interactionLocked}
-              style={Platform.OS === 'web' ? ({ cursor: isDefenseInvalid || waitingMode || interactionLocked ? SALINDA_WEB_CURSOR_DEFAULT : SALINDA_WEB_CURSOR_POINTER } as any) : undefined}
+              onPress={() => { if (interactionLocked || cardPressDisabled) return; setPressedCardId(null); tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: card.id }); onTap(card); }}
+              disabled={isDefenseInvalid || waitingMode || interactionLocked || cardPressDisabled}
+              style={Platform.OS === 'web' ? ({ cursor: isDefenseInvalid || waitingMode || interactionLocked || cardPressDisabled ? SALINDA_WEB_CURSOR_DEFAULT : SALINDA_WEB_CURSOR_POINTER } as any) : undefined}
             >
               <View style={[
                 isStaged && { borderWidth: 3, borderColor: '#FF6B00', borderRadius: 12 },
@@ -9777,6 +9817,10 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     [currentHand],
   );
   const sorted = useMemo(() => sortHandCards(currentHand), [currentHand, l5UiTick]);
+  const l6ResultsMiniCardsOnly =
+    state.isTutorial &&
+    tutorialBus.getL6GuidedMode() &&
+    (state.phase === 'solved' || state.showPossibleResults);
   const fractionDefenseHintKeyRef = useRef('');
   const lastBotPredictedCueRef = useRef<string>('');
   useEffect(() => {
@@ -9803,6 +9847,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     }
     // במשחק מול הבוט — חסימת לחיצות על קלפים כשהבוט במהלכו
     if (isLocalBotTurn) return;
+    if (l6ResultsMiniCardsOnly) return;
     console.log('CARD TAP', card.id, card.type, card.type==='operation'?card.operation:'', 'phase=', state.phase, 'hp=', state.hasPlayedCards);
     if (state.hasPlayedCards) {
       console.log('BLOCKED: hasPlayedCards'); return;
@@ -10113,6 +10158,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
           botTeachingDifficulty={state.botConfig?.difficulty ?? 'medium'}
           centerCardId={tutorialCenteredCardId}
           tutorialFocusCardId={tutorialFocusedCardId}
+          cardPressDisabled={l6ResultsMiniCardsOnly}
         />
       </View>
     </>
@@ -10130,6 +10176,10 @@ function BottomControlsBar() {
   const so = state.phase === 'solved';
   const showSolved = so && !state.hasPlayedCards;
   const hasStaged = showSolved && state.stagedCards.length > 0;
+  const l6ResultsMiniCardsOnly =
+    state.isTutorial &&
+    tutorialBus.getL6GuidedMode() &&
+    (state.phase === 'solved' || state.showPossibleResults);
   const l11PlaceMissingKey = state.isTutorial
     ? getL11MultiPlayTutorialMissingKey(state.stagedCards, tutorialBus.getL11Config())
     : null;
@@ -10191,9 +10241,10 @@ function BottomControlsBar() {
     sound.stopAsync().catch(() => {});
   }, [soundOn]);
 
-  const showBar = showSolved;
+  const showBar = showSolved && !l6ResultsMiniCardsOnly;
 
   const onPlaceCards = useCallback(() => {
+    if (l6ResultsMiniCardsOnly) return;
     if (placeCardsDisabled) return;
     const regularStagedSelectionErrorKey = getRegularStagedSelectionErrorKey(state);
     if (regularStagedSelectionErrorKey) {
@@ -10224,7 +10275,7 @@ function BottomControlsBar() {
     }
     if (soundOn && state.stagedCards.length >= 2) playPlaceMultipleSound();
     dispatch({ type: 'CONFIRM_STAGED' });
-  }, [dispatch, placeCardsDisabled, playPlaceMultipleSound, soundOn, state, t]);
+  }, [dispatch, l6ResultsMiniCardsOnly, placeCardsDisabled, playPlaceMultipleSound, soundOn, state, t]);
 
   const BOTTOM_PLACE_BTN_W = 160;
   const bottomRowW = BOTTOM_PLACE_BTN_W;
@@ -10256,7 +10307,7 @@ function BottomControlsBar() {
 
   return (
     <View style={{minHeight:40,alignItems:'center',justifyContent:'center',paddingHorizontal:0}}>
-      {showSolved ? (
+      {showBar ? (
         hasStaged ? (
           <View
             style={{
@@ -15829,11 +15880,20 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // so their wrappers must report their measured window position via bus.
   const confirmBtnWrapperRef = useRef<View>(null);
   const playCardsBtnWrapperRef = useRef<View>(null);
+  const solveChipWrapperRef = useRef<View>(null);
   /** Re-render when tutorialBus L5 UI flags change (module-level, not React state). */
   const [l5UiTick, setL5UiTick] = useState(0);
   useEffect(() => tutorialBus.subscribeL5Ui(() => setL5UiTick((n) => n + 1)), []);
   const l5GuidedTutorial = state.isTutorial && tutorialBus.getL5GuidedMode();
   const l5HideFanStrip = l5GuidedTutorial && tutorialBus.getL5HideFan();
+  const l6ResultsMiniCardsOnly =
+    state.isTutorial &&
+    tutorialBus.getL6GuidedMode() &&
+    (state.phase === 'solved' || state.showPossibleResults);
+  useEffect(() => {
+    if (!l6ResultsMiniCardsOnly || state.stagedCards.length === 0) return;
+    state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
+  }, [dispatch, l6ResultsMiniCardsOnly, state.stagedCards]);
   const [centerCard, setCenterCard] = useState<Card | null>(null);
   const [cardHintJokerSeen, setCardHintJokerSeen] = useState(false);
   const [cardHintOpSeen, setCardHintOpSeen] = useState(false);
@@ -16598,6 +16658,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       }
       return [];
     }
+    if (state.isTutorial && tutorialBus.getL6GuidedMode()) {
+      return state.validTargets.filter(t => handNumberValuesForResults.has(t.result));
+    }
     return state.isTutorial
       ? state.validTargets
       : state.validTargets.filter(t => handNumberValuesForResults.has(t.result));
@@ -16653,10 +16716,14 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         const sorted = [...resultsStripFeedRef.current].sort((a, b) => a.result - b.result);
         const target = sorted[cmd.idx];
         if (target) {
+          setResultsChipHiddenThisTurn(true);
+          setResultsOpenState(true);
+          setResultsChipBoostedPulse(false);
           setSelectedEquationForDisplay({ equation: target.equation, result: target.result });
           setParensToggleNeedsAttention(false);
           setSolveExerciseHidden(false);
           setSolveChipPulseKey((prev) => prev + 1);
+          tutorialBus.emitFanDemo({ kind: 'eqFillFromEquation', equation: target.equation });
         }
       }
     });
@@ -16962,9 +17029,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     setParensToggleTouched(false);
     setSolveExerciseHidden(false);
     setSolveChipPulseKey(prev => prev + 1);
+    if (state.isTutorial && tutorialBus.getL6GuidedMode()) {
+      tutorialBus.emitFanDemo({ kind: 'eqFillFromEquation', equation: eq.equation });
+    }
     // Tutorial (lesson 6 step 6.2) watches for this event as the outcome
     // predicate — without the emit the lesson never advances.
     if (state.isTutorial) {
+      setResultsChipHiddenThisTurn(true);
+      setResultsOpenState(true);
+      setResultsChipBoostedPulse(false);
       tutorialBus.emitUserEvent({ kind: 'miniCardTapped', result: eq.result, equation: eq.equation });
       // Find the simplest 2-number dice combination that produces eq.result
       // so the bot demo in L6.3 can replicate it. Tries all ordered pairs
@@ -17276,6 +17349,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     resultsOpen &&
     (resultsStripFeed.length > 0 || (!isBotTurnAny && playableFractionCardsForResults.length > 0));
   const showSolveChipNearPile = selectedEquationForDisplay !== null && !solveExerciseHidden;
+  useEffect(() => {
+    if (showSolveChipNearPile && state.isTutorial && tutorialBus.getL6GuidedMode()) return;
+    tutorialBus.setLayout('solveChip', null);
+  }, [showSolveChipNearPile, state.isTutorial, l6ResultsMiniCardsOnly]);
   const showTopResultsDock =
     !hideSolvedResultsUi &&
     showPossibleResultsPhaseUi &&
@@ -17307,6 +17384,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     );
   const placeCardsDisabled = l11PlaceMissingKey != null || l6WildPlaceBlocked;
   const onPlaceCards = useCallback(() => {
+    if (l6ResultsMiniCardsOnly) return;
     if (placeCardsDisabled) return;
     const regularStagedSelectionErrorKey = getRegularStagedSelectionErrorKey(state);
     if (regularStagedSelectionErrorKey) {
@@ -17336,7 +17414,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       }
     }
     dispatch({ type: 'CONFIRM_STAGED' });
-  }, [dispatch, placeCardsDisabled, state, t]);
+  }, [dispatch, l6ResultsMiniCardsOnly, placeCardsDisabled, state, t]);
   const showSoloBuildConfirmHint =
     !state.isTutorial &&
     state.mode === 'solo' &&
@@ -17430,7 +17508,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const topControlsTop = safe.insets.top || 6;
   const botOverlayTopOffset = topControlsTop + 86;
   const topControlsLift = Platform.OS === 'web' ? 0 : isAndroid ? -28 : -65;
-  const discardPileTop = isAndroid ? Math.max(12, topControlsTop + topControlsLift + 2) : 50;
+  const discardPileTop = isAndroid
+    ? Math.max(12, topControlsTop + topControlsLift + 2)
+    : (Platform.OS === 'web' && mobileWebViewport)
+      ? Math.min(50, Math.max(8, tableTop - 148))
+      : 50;
   const discardPileRight = isAndroid ? 8 : 12;
   const fullBleedBackgroundFrame = useMemo(
     () => ({
@@ -17710,12 +17792,50 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             />
           ) : null}
           {showSolveChipNearPile ? (
-            <SolveExerciseChip
-              equation={selectedEquationForDisplay!.equation}
-              pulseKey={solveChipPulseKey}
-              loopPulse={state.isTutorial && tutorialBus.getL7SolveChipLoopPulse()}
-              onPress={state.isTutorial || !canUseActiveTurnUi ? () => {} : () => setSolveExerciseHidden(true)}
-            />
+            <View
+              ref={solveChipWrapperRef}
+              style={{ alignItems: 'center', width: SOLVE_CHIP_W + 28 }}
+              onLayout={() => {
+                if (!state.isTutorial || !tutorialBus.getL6GuidedMode()) return;
+                solveChipWrapperRef.current?.measureInWindow?.((x, y, w, h) => {
+                  tutorialBus.setLayout('solveChip', { top: y, left: x, width: w, height: h });
+                });
+              }}
+            >
+              <SolveExerciseChip
+                equation={selectedEquationForDisplay!.equation}
+                pulseKey={solveChipPulseKey}
+                loopPulse={state.isTutorial && tutorialBus.getL7SolveChipLoopPulse()}
+                onPress={state.isTutorial || !canUseActiveTurnUi ? () => {} : () => setSolveExerciseHidden(true)}
+              />
+              {state.isTutorial && tutorialBus.getL6GuidedMode() ? (
+                <Text
+                  allowFontScaling={false}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.82}
+                  style={{
+                    marginTop: 3,
+                    width: SOLVE_CHIP_W + 22,
+                    color: '#FEF3C7',
+                    fontSize: 12,
+                    lineHeight: 15,
+                    fontWeight: '900',
+                    textAlign: 'center',
+                    textAlignVertical: 'center',
+                    writingDirection: isRTL ? 'rtl' : 'ltr',
+                    includeFontPadding: false,
+                    textShadowColor: 'rgba(0,0,0,0.9)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 3,
+                  }}
+                >
+                  {t('tutorial.l6a.redChipFeedback', {
+                    value: String(selectedEquationForDisplay!.result),
+                  })}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
       )}
@@ -18051,7 +18171,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           })()}
         </View>
       )}
-      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length > 0 && !l5GuidedTutorial && (
+      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length > 0 && !l5GuidedTutorial && !l6ResultsMiniCardsOnly && (
         <View
           style={{
             position: 'absolute',
