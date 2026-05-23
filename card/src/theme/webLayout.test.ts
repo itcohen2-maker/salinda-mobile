@@ -40,8 +40,9 @@ describe('getWebGameLayout', () => {
     expect(layout.handBottom).toBe(155);
     expect(layout.fanCardHeight).toBe(140);
     expect(layout.fanViewportHeight).toBe(116);
-    // Gold button sits 140px above the bottom of the 900px desktop frame
-    expect(layout.goldActionButtonTop).toBe(760);
+    // Gold button: max(tableBottom+20, handTop-70) = max(425, 535) = 535
+    expect(layout.goldActionButtonTop).toBe(535);
+    expect(layout.goldActionButtonTop).toBeLessThan(900 - (155 + 140)); // above hand zone top
     expect(layout.timerTop).toBe(layout.tableTop + layout.tableHeight + 32);
   });
 

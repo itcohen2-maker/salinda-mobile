@@ -21749,7 +21749,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   )));
   const compactGlobalControls = routerScreenWidth < 380;
   const globalCtrlBtnH = compactGlobalControls ? 36 : 40;
-  const globalCtrlRight = 14;
+  const globalCtrlRight = routerWebLayout
+    ? Math.round((routerWebLayout.viewportWidth - routerWebLayout.playfieldWidth) / 2 + 14)
+    : 14;
   const soundExtrasBottom = Math.max(14, (insets.bottom || 0) + 12);
   const globalMuteBottom = soundExtrasBottom;
   const salindaMusicBottom = globalMuteBottom + globalCtrlBtnH + 8;
@@ -22671,7 +22673,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const webSideGutter = mobileWebViewport ? 0 : Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
   const showWebChromeControls = dockedControls;
-  const showMobileWebFocusControl = mobileWebViewport && !dockedControls && !showSplash;
+  const showMobileWebFocusControl = false; // removed: fullscreen not reliable on all mobile browsers
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
   const webControlsAnchorStyle = dockedControls
     ? {
