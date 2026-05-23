@@ -4147,11 +4147,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     l4CardMatchWrongKey === 'tutorial.l4c.tryAgain' ||
     l4Step3HintKey === 'tutorial.l4c.hintBuildProgress' ||
     l4Step3HintKey === 'tutorial.l4c.tryAgain';
+  const isL2Active = engine.lessonIndex === 1 && (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
   const isL2BotDemo = engine.lessonIndex === 1 && engine.phase === 'bot-demo';
   const bubbleTitle =
     isL4CardChoiceBubble
       ? String(gameState?.equationResult ?? '?')
-      : isL2BotDemo
+      : isL2Active
         ? t('tutorial.l2.botTapTitle')
         : undefined;
   const bubbleTitleStyleOverride =

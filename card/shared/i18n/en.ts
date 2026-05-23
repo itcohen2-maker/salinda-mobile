@@ -1222,7 +1222,7 @@ export const en: Record<string, string> = {
   'tutorial.l2.desc': 'Tap a card to pick it.',
   'tutorial.l2.hintTap': 'Try tapping a card',
   'tutorial.l2.botTapTitle': "You win when you're left with only 2 cards!",
-  'tutorial.l2.botTap': "That means you need to discard exactly 5 cards.",
+  'tutorial.l2.botTap': 'Try tapping any card to continue.',
   'tutorial.l2.celebrate': 'Nice — you picked a card',
 
   // Lesson 3 — Dice
