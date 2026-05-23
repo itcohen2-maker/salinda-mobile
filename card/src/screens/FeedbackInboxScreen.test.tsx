@@ -8,6 +8,7 @@ const mockUseFeedbackAdmin = jest.fn();
 const mockSetStringAsync = jest.fn();
 const mockLimit = jest.fn();
 const mockOrder = jest.fn();
+const mockEq = jest.fn();
 const mockSelect = jest.fn();
 const mockFrom = jest.fn();
 
@@ -57,6 +58,11 @@ jest.mock('../i18n/LocaleContext', () => ({
         'feedbackInbox.status.new': 'New',
         'feedbackInbox.status.reviewed': 'Reviewed',
         'feedbackInbox.status.archived': 'Archived',
+        'feedbackInbox.sortNewest': 'Newest first',
+        'feedbackInbox.sortOldest': 'Oldest first',
+        'feedbackInbox.markReviewed': 'Mark reviewed',
+        'feedbackInbox.archive': 'Archive',
+        'feedbackInbox.actionError': 'Action failed. Please try again.',
       };
       return copy[key] ?? key;
     },
@@ -69,6 +75,7 @@ describe('FeedbackInboxScreen', () => {
   beforeEach(() => {
     mockLimit.mockReset();
     mockOrder.mockReset();
+    mockEq.mockReset();
     mockSelect.mockReset();
     mockFrom.mockReset();
     mockUseAuth.mockReset();
@@ -77,7 +84,8 @@ describe('FeedbackInboxScreen', () => {
     openAdminCoinGifts.mockReset();
 
     mockOrder.mockReturnValue({ limit: mockLimit });
-    mockSelect.mockReturnValue({ order: mockOrder });
+    mockEq.mockReturnValue({ order: mockOrder });
+    mockSelect.mockReturnValue({ eq: mockEq });
     mockFrom.mockReturnValue({ select: mockSelect });
     mockSetStringAsync.mockResolvedValue(undefined);
   });

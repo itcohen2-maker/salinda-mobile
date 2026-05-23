@@ -65,6 +65,7 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
   const [activeTab, setActiveTab] = useState<FeedbackSubmissionStatus>('new');
   const [ascending, setAscending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   const loadFeedbackItems = useCallback(async () => {
     if (!user?.id || !isFeedbackAdmin) {
@@ -140,6 +141,7 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
   }, []);
 
   const handleUpdateStatus = useCallback(async (id: string, newStatus: FeedbackSubmissionStatus) => {
+    setUpdatingIds((prev) => new Set(prev).add(id));
     setFeedbackItems((prev) => prev.filter((item) => item.id !== id));
     setActionError(null);
     try {
@@ -154,6 +156,12 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
     } catch {
       setActionError(t('feedbackInbox.actionError'));
       void loadFeedbackItems();
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }, [loadFeedbackItems, t]);
 
@@ -308,7 +316,8 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
                       {activeTab === 'new' ? (
                         <TouchableOpacity
                           onPress={() => void handleUpdateStatus(item.id, 'reviewed')}
-                          style={styles.actionButton}
+                          style={[styles.actionButton, updatingIds.has(item.id) && styles.actionButtonDisabled]}
+                          disabled={updatingIds.has(item.id)}
                           testID={`feedback-mark-reviewed-${item.id}`}
                         >
                           <Text style={styles.actionButtonText}>{t('feedbackInbox.markReviewed')}</Text>
@@ -316,7 +325,8 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
                       ) : null}
                       <TouchableOpacity
                         onPress={() => void handleUpdateStatus(item.id, 'archived')}
-                        style={[styles.actionButton, styles.actionButtonArchive]}
+                        style={[styles.actionButton, styles.actionButtonArchive, updatingIds.has(item.id) && styles.actionButtonDisabled]}
+                        disabled={updatingIds.has(item.id)}
                         testID={`feedback-archive-${item.id}`}
                       >
                         <Text style={styles.actionButtonText}>{t('feedbackInbox.archive')}</Text>
@@ -368,13 +378,6 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 22,
     fontWeight: '900',
-    textAlign: 'center',
-  },
-  subtitle: {
-    marginTop: 12,
-    color: '#CBD5E1',
-    fontSize: 13,
-    lineHeight: 18,
     textAlign: 'center',
   },
   scroll: {
@@ -576,6 +579,9 @@ const styles = StyleSheet.create({
   actionButtonArchive: {
     backgroundColor: 'rgba(100,116,139,0.18)',
     borderColor: 'rgba(148,163,184,0.34)',
+  },
+  actionButtonDisabled: {
+    opacity: 0.45,
   },
   actionButtonText: {
     color: '#BFDBFE',
