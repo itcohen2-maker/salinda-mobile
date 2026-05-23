@@ -1,18 +1,25 @@
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import {
   AuthProvider,
   useAuth,
   type PlayerProfile,
 } from './useAuth';
-import { performSocialSignIn } from '../auth/socialSignIn';
+import {
+  consumeSocialAuthReturnTo,
+  createSessionFromUrl,
+  isSocialAuthCallbackUrl,
+  performSocialSignIn,
+} from '../auth/socialSignIn';
 import { supabase } from '../lib/supabase';
 
 jest.mock('../auth/socialSignIn', () => ({
+  consumeSocialAuthReturnTo: jest.fn(),
   createSessionFromUrl: jest.fn(),
+  isSocialAuthCallbackUrl: jest.fn(),
   performSocialSignIn: jest.fn(),
-  SOCIAL_AUTH_CALLBACK_PATH: 'auth/callback',
 }));
 
 const profilesById: Record<string, PlayerProfile> = {
@@ -61,6 +68,8 @@ const mockSupabase = supabase as unknown as {
   };
   from: jest.Mock;
 };
+const platformRef = Platform as typeof Platform & { OS: string };
+const originalPlatform = platformRef.OS;
 
 function createProfileQuery() {
   let selectedUserId = '';
@@ -111,7 +120,14 @@ describe('useAuth', () => {
     mockSupabase.auth.getSession.mockResolvedValue({
       data: { session: signedInSession },
     });
+    (consumeSocialAuthReturnTo as jest.Mock).mockReturnValue('/');
+    (createSessionFromUrl as jest.Mock).mockResolvedValue(undefined);
+    (isSocialAuthCallbackUrl as jest.Mock).mockReturnValue(false);
     (performSocialSignIn as jest.Mock).mockResolvedValue({ error: null });
+  });
+
+  afterAll(() => {
+    platformRef.OS = originalPlatform;
   });
 
   it('signs out and immediately restores a guest session', async () => {
@@ -156,5 +172,58 @@ describe('useAuth', () => {
     expect(performSocialSignIn).toHaveBeenCalledWith('google', { forceAccountPicker: true });
     await waitFor(() => expect(result.current.user?.id).toBe('user-1'));
     expect(result.current.isAnonymous).toBe(false);
+  });
+
+  it('continues bootstrapping when the web OAuth callback exchange fails', async () => {
+    platformRef.OS = 'web';
+    (isSocialAuthCallbackUrl as jest.Mock).mockReturnValue(true);
+    (createSessionFromUrl as jest.Mock).mockRejectedValue(new Error('bad callback'));
+    (consumeSocialAuthReturnTo as jest.Mock).mockReturnValue('/?room=1234');
+
+    const originalLocation = globalThis.window.location;
+    const originalHistory = globalThis.window.history;
+    const replaceState = jest.fn();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    Object.defineProperty(globalThis.window, 'location', {
+      configurable: true,
+      value: {
+        href: 'https://app.local/auth/callback?code=bad',
+        origin: 'https://app.local',
+        pathname: '/auth/callback',
+        search: '?code=bad',
+        hash: '',
+      },
+    });
+    Object.defineProperty(globalThis.window, 'history', {
+      configurable: true,
+      value: { replaceState },
+    });
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(createSessionFromUrl).toHaveBeenCalledWith('https://app.local/auth/callback?code=bad');
+      expect(mockSupabase.auth.getSession).toHaveBeenCalled();
+      expect(result.current.user?.id).toBe('user-1');
+      expect(replaceState).toHaveBeenCalledWith(null, '', 'https://app.local/?room=1234');
+      expect(warnSpy).toHaveBeenCalledWith('[auth] OAuth callback failed:', expect.any(Error));
+    } finally {
+      warnSpy.mockRestore();
+      Object.defineProperty(globalThis.window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+      Object.defineProperty(globalThis.window, 'history', {
+        configurable: true,
+        value: originalHistory,
+      });
+      platformRef.OS = originalPlatform;
+    }
   });
 });

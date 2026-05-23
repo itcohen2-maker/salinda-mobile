@@ -79,6 +79,7 @@ import {
   MIMIC_MULTI_PLAY_LESSON_INDEX,
 } from './MimicEngine';
 import type { Card, Fraction } from '../../shared/types';
+import { SALINDA_TUTORIAL_REWARDS } from '../../shared/salindaEconomy';
 import { createBotDemonstrator } from './BotDemonstrator';
 import { isL6WildTutorialSelectionReady } from './l6WildSelection';
 import { tutorialBus, type LayoutRect } from './tutorialBus';
@@ -998,6 +999,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const [l9Stage, setL9Stage] = useState<0 | 1 | 2>(0);
   const l9MismatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const l9RiggedRef = useRef(false);
+  const l9InternalResetRef = useRef(false);
   const l7Step1RiggedRef = useRef(false);
   const l7WaitingForBuildingRef = useRef(false);
   const l7Step1SelectionRef = useRef<{ result: number; equation: string } | null>(null);
@@ -1137,7 +1139,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
-      void supabase.rpc('award_coins', { p_amount: 10, p_source: 'tutorial_core' });
+      void supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.basic, p_source: 'tutorial_core' });
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1159,7 +1161,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
-      void supabase.rpc('award_coins', { p_amount: 20, p_source: 'tutorial_advanced' });
+      void supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.advanced, p_source: 'tutorial_advanced' });
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2078,21 +2080,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         return;
       }
       if (evt.kind === 'l4Step3WrongCard') {
-        const hasCorrectCardSelected = (gameState?.stagedCards ?? []).some(
-          (card) =>
-            card.type === 'number' &&
-            card.value != null &&
-            card.value === gameState?.equationResult,
-        );
         if (l4Step3WrongTimerRef.current) clearTimeout(l4Step3WrongTimerRef.current);
         setL4Step3Phase('wrongCard');
         l4Step3WrongTimerRef.current = setTimeout(() => {
-          setL4Step3Phase(hasCorrectCardSelected ? 'pressPlay' : 'pickCard');
+          setL4Step3Phase('pickCard');
           l4Step3WrongTimerRef.current = null;
-        }, 900);
+        }, 1600);
       }
     });
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.equationResult, gameState?.stagedCards, l4Step3IntroApproved]);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, l4Step3IntroApproved]);
 
   // Run the shake + auto-clear whenever wrongAttemptTick increments.
   useEffect(() => {
@@ -3174,6 +3170,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase !== 'await-mimic' || l9Stage !== 0) return;
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
     tutorialBus.emitFanDemo({ kind: 'openResultsChip' });
+    if (l9InternalResetRef.current) {
+      // Internal reset (stage 1→0 within await-mimic): validTargets already populated
+      // from the ROLL_DICE in bot-demo — don't null them or mini cards vanish.
+      l9InternalResetRef.current = false;
+      return;
+    }
     gameDispatch({ type: 'TUTORIAL_SET_VALID_TARGETS', targets: null });
   }, [engine.lessonIndex, engine.phase, l9Stage, gameDispatch]);
 
@@ -3914,6 +3916,24 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // generic "you finished the lesson" right after every action is noise.
     : engine.phase === 'all-done' ? t('tutorial.engine.allDone')
     : null;
+  const isL4Step3CardChoiceBubble =
+    l4Step3HintKey === 'tutorial.l4c.hintBuildProgress' ||
+    l4Step3HintKey === 'tutorial.l4c.tryAgain';
+  const bubbleTitle =
+    isL4Step3CardChoiceBubble
+      ? String(gameState?.equationResult ?? '?')
+      : undefined;
+  const bubbleTitleStyleOverride =
+    isL4Step3CardChoiceBubble
+      ? {
+          color: '#C2410C',
+          fontSize: 38,
+          lineHeight: 42,
+          fontWeight: '900' as const,
+          letterSpacing: 0.5,
+          marginBottom: 8,
+        }
+      : undefined;
   const bubbleTextStyleOverride =
     l4bHintKey === 'tutorial.l4b.hintPickCard'
       ? {
@@ -3925,7 +3945,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       : l4Step3HintKey === 'tutorial.l4c.hintBuildProgress'
         ? {
             color: '#7C2D12',
-            fontSize: 18,
+            fontSize: 16,
             lineHeight: 22,
             fontWeight: '900' as const,
           }
@@ -3940,7 +3960,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             ? {
                 color: '#991B1B',
                 fontSize: 17,
-                lineHeight: 21,
+                lineHeight: 24,
                 fontWeight: '900' as const,
               }
       : undefined;
@@ -4142,6 +4162,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         gameDispatch({ type: 'REVERT_TO_BUILDING' });
         tutorialBus.emitFanDemo({ kind: 'eqReset' });
       } else {
+        l9InternalResetRef.current = true;
         setL9Stage(0);
         tutorialBus.setL6CopyConfig(null);
         tutorialBus.emitFanDemo({ kind: 'eqReset' });
@@ -5775,11 +5796,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           >
             <HappyBubble
               text={bubbleText}
+              title={bubbleTitle}
               tone={bubbleTone}
               arrowSize='small'
               size={isCompact ? 'compact' : 'normal'}
               maxWidth={isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
               tailTop={false}
+              titleStyleOverride={bubbleTitleStyleOverride}
               textStyleOverride={bubbleTextStyleOverride}
             />
           </View>

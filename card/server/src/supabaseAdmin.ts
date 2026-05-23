@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { LobbyTableTheme } from '../../shared/types';
+import type { SalindaCoinSource } from '../../shared/salindaEconomy';
 
 const url = process.env.SUPABASE_URL ?? '';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
@@ -65,7 +66,7 @@ export async function fetchPlayerActiveTableTheme(userId: string): Promise<Lobby
 
 // ── Coin helpers ──
 
-export type CoinSource = 'game_courage' | 'tutorial_core' | 'tutorial_advanced' | 'tutorial_legacy';
+export type CoinSource = SalindaCoinSource;
 
 /**
  * Award coins to a player via the award_coins_for_player Postgres function.
@@ -76,6 +77,7 @@ export async function awardCoinsForPlayer(opts: {
   amount: number;
   source: CoinSource;
   matchId?: string;
+  idempotencyKey?: string;
 }): Promise<void> {
   if (adminUnavailable('awardCoinsForPlayer')) return;
   try {
@@ -84,6 +86,7 @@ export async function awardCoinsForPlayer(opts: {
       p_amount: opts.amount,
       p_source: opts.source,
       p_match_id: opts.matchId ?? null,
+      p_idempotency_key: opts.idempotencyKey ?? null,
     });
     if (error) console.error('[supabaseAdmin] awardCoinsForPlayer:', error.message);
   } catch (err) {

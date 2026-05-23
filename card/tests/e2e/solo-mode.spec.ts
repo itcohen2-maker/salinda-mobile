@@ -15,6 +15,7 @@ test.describe('Solo mode', () => {
 
     await expect(lobby.startPlayerCountRow).toHaveCount(0);
     await expect(lobby.startBotSettings).toHaveCount(0);
+    await expect(lobby.startSoloNoOpponentToggle).toHaveCount(0);
 
     await page.getByTestId('start-lets-play').click();
     await expect(lobby.guidanceSkip).toBeVisible({ timeout: 15_000 });

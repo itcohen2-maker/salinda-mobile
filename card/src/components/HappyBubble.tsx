@@ -26,6 +26,8 @@ type Props = {
   tone?: HappyBubbleTone;
   /** Optional title rendered above `text` in a larger, bolder style */
   title?: string;
+  /** Optional style override for the title text only. */
+  titleStyleOverride?: StyleProp<TextStyle>;
   /** Show the tail */
   withTail?: boolean;
   /** Tail size — 'small' is the default speech-tail; 'big' is a chunky
@@ -45,6 +47,7 @@ export function HappyBubble({
   text,
   tone = 'demo',
   title,
+  titleStyleOverride,
   withTail = true,
   arrowSize = 'small',
   tailTop = false,
@@ -85,7 +88,18 @@ export function HappyBubble({
         }}
       >
         {title ? (
-          <Text style={{ color: palette.text, fontSize: compact ? 16 : 22, fontWeight: '900', textAlign: 'center', marginBottom: 4 }}>
+          <Text
+            style={[
+              {
+                color: palette.text,
+                fontSize: compact ? 16 : 22,
+                fontWeight: '900',
+                textAlign: 'center',
+                marginBottom: 4,
+              },
+              titleStyleOverride,
+            ]}
+          >
             {title}
           </Text>
         ) : null}

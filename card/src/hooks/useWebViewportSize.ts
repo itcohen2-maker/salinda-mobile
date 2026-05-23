@@ -7,13 +7,24 @@ import { Platform, useWindowDimensions } from 'react-native';
  */
 function readInnerSize(): { width: number; height: number } {
   if (typeof window === 'undefined') return { width: 0, height: 0 };
+  const docEl = typeof document !== 'undefined' ? document.documentElement : null;
   const vv = window.visualViewport;
-  if (vv && vv.width >= 1 && vv.height >= 1) {
-    return { width: Math.round(vv.width), height: Math.round(vv.height) };
-  }
+  const layoutWidth =
+    window.innerWidth >= 1
+      ? window.innerWidth
+      : docEl?.clientWidth && docEl.clientWidth >= 1
+        ? docEl.clientWidth
+        : vv?.width ?? 0;
+  const visualHeight =
+    vv && vv.height >= 1
+      ? vv.height
+      : window.innerHeight >= 1
+        ? window.innerHeight
+        : docEl?.clientHeight ?? 0;
+
   return {
-    width: Math.round(window.innerWidth),
-    height: Math.round(window.innerHeight),
+    width: Math.round(layoutWidth),
+    height: Math.round(visualHeight),
   };
 }
 

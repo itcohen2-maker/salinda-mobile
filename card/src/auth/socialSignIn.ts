@@ -13,6 +13,7 @@ export interface SocialSignInOptions {
 export const SOCIAL_AUTH_SCHEME = 'salinda';
 export const SOCIAL_AUTH_CALLBACK_PATH = 'auth/callback';
 export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
+export const SOCIAL_AUTH_RETURN_TO_STORAGE_KEY = 'salinda_social_auth_return_to';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -24,6 +25,67 @@ export function buildSocialAuthRedirectUri(): string {
   // In development builds, makeRedirectUri() may resolve to the dev-client launcher URL.
   // Supabase must receive the exact native deep link URI that is allow-listed in Auth > Redirect URLs.
   return SOCIAL_AUTH_NATIVE_REDIRECT_URI;
+}
+
+function hasSocialAuthParams(url: string): boolean {
+  try {
+    const { params, errorCode } = QueryParams.getQueryParams(url);
+    return Boolean(
+      errorCode ||
+      params.code ||
+      params.access_token ||
+      params.refresh_token ||
+      params.error_code ||
+      params.error_description
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isSocialAuthCallbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url, 'https://phony.example');
+    return (
+      (parsed.pathname.includes(SOCIAL_AUTH_CALLBACK_PATH) && Boolean(parsed.search || parsed.hash)) ||
+      hasSocialAuthParams(url)
+    );
+  } catch {
+    return hasSocialAuthParams(url);
+  }
+}
+
+function getCurrentWebReturnTo(): string {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/';
+
+  const pathname = window.location.pathname || '/';
+  if (pathname.includes(SOCIAL_AUTH_CALLBACK_PATH)) return '/';
+
+  return `${pathname}${window.location.search || ''}` || '/';
+}
+
+export function rememberSocialAuthReturnTo(): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage?.setItem(SOCIAL_AUTH_RETURN_TO_STORAGE_KEY, getCurrentWebReturnTo());
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
+}
+
+export function consumeSocialAuthReturnTo(): string {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/';
+
+  try {
+    const stored = window.sessionStorage?.getItem(SOCIAL_AUTH_RETURN_TO_STORAGE_KEY);
+    window.sessionStorage?.removeItem(SOCIAL_AUTH_RETURN_TO_STORAGE_KEY);
+    if (stored && stored.startsWith('/') && !stored.startsWith('//')) return stored;
+  } catch {
+    // Fall through to the default app entry.
+  }
+
+  return '/';
 }
 
 export async function createSessionFromUrl(url: string): Promise<void> {
@@ -83,6 +145,7 @@ export async function performSocialSignIn(
       if (error) return { error: error.message };
       if (!data?.url) return { error: 'Could not start sign-in.' };
       if (typeof window !== 'undefined') {
+        rememberSocialAuthReturnTo();
         window.location.assign(data.url);
       }
       return { error: null };

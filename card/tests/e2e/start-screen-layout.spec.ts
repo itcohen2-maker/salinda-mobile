@@ -12,9 +12,10 @@ test.describe('Start screen layout', () => {
       expect(viewport).not.toBeNull();
 
       if (shellBox && viewport) {
-        expect(shellBox.width).toBeGreaterThanOrEqual(expectedWidth - 1);
-        expect(shellBox.width).toBeLessThanOrEqual(expectedWidth + 1);
-        expect(Math.abs(shellBox.x - (viewport.width - expectedWidth) / 2)).toBeLessThanOrEqual(1);
+        const targetWidth = Math.min(expectedWidth, viewport.width);
+        expect(shellBox.width).toBeGreaterThanOrEqual(targetWidth - 1);
+        expect(shellBox.width).toBeLessThanOrEqual(targetWidth + 1);
+        expect(Math.abs(shellBox.x - (viewport.width - targetWidth) / 2)).toBeLessThanOrEqual(1);
       }
     };
 

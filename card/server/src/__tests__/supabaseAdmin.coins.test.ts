@@ -56,6 +56,7 @@ describe('awardCoinsForPlayer', () => {
       p_amount: 5,
       p_source: 'game_courage',
       p_match_id: 'match-uuid',
+      p_idempotency_key: null,
     });
   });
 
@@ -70,6 +71,27 @@ describe('awardCoinsForPlayer', () => {
       p_amount: 10,
       p_source: 'tutorial_core',
       p_match_id: null,
+      p_idempotency_key: null,
+    });
+  });
+
+  it('passes an idempotency key for replayable gameplay rewards', async () => {
+    mockRpc.mockResolvedValueOnce({ error: null });
+    const { awardCoinsForPlayer } = loadSupabaseAdmin();
+
+    await awardCoinsForPlayer({
+      playerId: 'player-uuid',
+      amount: 10,
+      source: 'game_standard_win',
+      idempotencyKey: 'local-game-1',
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith('award_coins_for_player', {
+      p_player_id: 'player-uuid',
+      p_amount: 10,
+      p_source: 'game_standard_win',
+      p_match_id: null,
+      p_idempotency_key: 'local-game-1',
     });
   });
 
@@ -108,6 +130,7 @@ describe('recordMatch — coin awarding', () => {
       p_player_id: 'player-1',
       p_amount: 5,
       p_source: 'game_courage',
+      p_idempotency_key: null,
     });
   });
 

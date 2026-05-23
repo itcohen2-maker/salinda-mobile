@@ -15,6 +15,7 @@ export type WebGameLayout = {
   viewportHeight: number;
   frameHeight: number;
   contentScale: number;
+  mobileCompactRatio: number;
   playfieldWidth: number;
   contentWidth: number;
   tableWidth: number;
@@ -38,7 +39,7 @@ export type WebGameLayout = {
 
 export const WEB_GAME_PLAYFIELD_MAX_WIDTH = 412;
 export const WEB_GAME_PLAYFIELD_MIN_HEIGHT = 900; // was 768
-export const WEB_MOBILE_VIEWPORT_MAX_WIDTH = 480;
+export const WEB_MOBILE_VIEWPORT_MAX_WIDTH = 600;
 export const WEB_MOBILE_GAME_FRAME_HEIGHT = 844;
 export const WEB_MOBILE_LANDSCAPE_MAX_HEIGHT = 430;
 export const WEB_MOBILE_LANDSCAPE_MAX_WIDTH = 900;
@@ -81,6 +82,9 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
   const viewportHeight = rawViewportHeight > 0 ? rawViewportHeight : 568;
   const mobileWebViewport = isWebMobileViewport(rawViewportWidth, rawViewportHeight);
   const portraitMobileWebViewport = isPortraitMobileViewport(rawViewportWidth, rawViewportHeight);
+  const mobileCompactRatio = portraitMobileWebViewport
+    ? clamp((WEB_MOBILE_GAME_FRAME_HEIGHT - viewportHeight) / (WEB_MOBILE_GAME_FRAME_HEIGHT - 568), 0, 1)
+    : 0;
   // Phone-width web mirrors the native app frame; wider web keeps the fixed
   // desktop canvas. Neither path grows with the live viewport height.
   const frameHeight = portraitMobileWebViewport
@@ -100,26 +104,30 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
   const nativeIosHandFan = getNativeHandFanMetrics('ios');
   // Phone-size web should mirror the app proportions instead of the narrow
   // desktop column. Wider web still uses the fixed 900px desktop layout.
-  const tableHeight = mobileWebViewport ? 240 : 220;
-  const tableTop = mobileWebViewport ? 205 : 185;
-  const tableBottomPadding = mobileWebViewport ? 75 : 65;
-  const handBottom = mobileWebViewport ? 195 : 155;
+  const tableHeight = mobileWebViewport ? Math.round(240 - mobileCompactRatio * 30) : 220;
+  const tableTop = mobileWebViewport ? Math.round(205 - mobileCompactRatio * 55) : 185;
+  const tableBottomPadding = mobileWebViewport ? Math.round(75 - mobileCompactRatio * 20) : 65;
   const fanCardHeight = mobileWebViewport ? nativeIosHandFan.cardHeight : 140;
   const fanCardWidth = mobileWebViewport ? nativeIosHandFan.cardWidth : Math.round(fanCardHeight * 0.71);
   const fanViewportHeight = mobileWebViewport ? nativeIosHandFan.viewportHeight : Math.ceil(fanCardHeight * 1.15 + 55 - 100);
   const handStripAboveFan = mobileWebViewport ? nativeIosHandFan.stripAboveFan : 24;
   const handStripHeight = mobileWebViewport ? nativeIosHandFan.stripHeight : fanViewportHeight + handStripAboveFan;
+  const handBottom = mobileWebViewport
+    ? Math.round(clamp(195 - mobileCompactRatio * 155, 40, 195))
+    : 155;
   const handZoneTop = handBottom + handStripHeight;
   const miniResultsBottom = handZoneTop - 10;
   const tableWidth = mobileWebViewport
     ? Math.max(300, playfieldWidth - 24)
     : clamp(playfieldWidth - 24, 300, WEB_GAME_PLAYFIELD_MAX_WIDTH - 24);
-  const resultsTop = mobileWebViewport ? 84 : 76;
+  const resultsTop = mobileWebViewport ? Math.round(84 - mobileCompactRatio * 12) : 76;
   const resultsRight = 128;
-  const parensTop = mobileWebViewport ? 170 : 156;
-  const timerTop = mobileWebViewport ? 400 : tableTop + tableHeight + 32;
+  const parensTop = mobileWebViewport ? Math.round(tableTop - 35) : 156;
+  const timerTop = mobileWebViewport
+    ? Math.round(tableTop + tableHeight - 45 - mobileCompactRatio * 12)
+    : tableTop + tableHeight + 32;
   const goldActionButtonTop = mobileWebViewport
-    ? Math.max(96, Math.min(680, frameHeight - 140))
+    ? Math.max(96, Math.min(680, frameHeight - Math.round(140 + mobileCompactRatio * 40)))
     : frameHeight - 140;
 
   return {
@@ -127,6 +135,7 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
     viewportHeight,
     frameHeight,
     contentScale,
+    mobileCompactRatio,
     playfieldWidth,
     contentWidth,
     tableWidth,

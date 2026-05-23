@@ -83,6 +83,11 @@ import {
   extractEquationOperators,
   validateEquationCommitsForDisplay,
 } from './shared/validation';
+import {
+  SALINDA_COIN_SOURCES,
+  SALINDA_GAMEPLAY_REWARDS,
+  shouldAwardLocalStandardWinReward,
+} from './shared/salindaEconomy';
 
 const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', 'welcome.title')]);
 const RESULTS_POSSIBLE_TITLES = new Set([t('he', 'results.possibleTitle'), t('en', 'results.possibleTitle')]);
@@ -4009,6 +4014,7 @@ function GameProvider({ children }: { children: ReactNode }) {
   // update — GameScreen unmounts before its effect can run when phase → turn-transition.
   const { awardCoins: _awardCoinsForMeter } = useAuth();
   const lastAwardSyncedPulseRef = useRef<number>(0);
+  const lastStandardWinAwardedSessionKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if ((state.courageRewardPulseId ?? 0) === 0) {
       lastAwardSyncedPulseRef.current = 0;
@@ -4019,8 +4025,45 @@ function GameProvider({ children }: { children: ReactNode }) {
     const pulseId = state.courageRewardPulseId ?? 0;
     if (pulseId <= 0 || lastAwardSyncedPulseRef.current === pulseId) return;
     lastAwardSyncedPulseRef.current = pulseId;
-    void _awardCoinsForMeter(EXCELLENCE_METER_FULL_REWARD_COINS, 'excellence_meter_full');
+    void _awardCoinsForMeter(EXCELLENCE_METER_FULL_REWARD_COINS, SALINDA_COIN_SOURCES.excellence_meter_full);
   }, [override, _awardCoinsForMeter, state.courageRewardPulseId, state.lastCourageCoinsAwarded, state.isTutorial]);
+
+  useEffect(() => {
+    if (override) return;
+    const rewardSessionKey =
+      state.openingDrawId ??
+      (state.soloSessionStats?.startedAtMs != null
+        ? `solo-${state.soloSessionStats.startedAtMs}`
+        : state.turnStartedAt != null
+          ? `${state.mode}-${state.turnStartedAt}`
+          : null);
+    if (!shouldAwardLocalStandardWinReward({
+      phase: state.phase,
+      mode: state.mode,
+      isTutorial: state.isTutorial,
+      winnerIsBot: state.winner?.isBot === true,
+      rewardSessionKey,
+      lastAwardedSessionKey: lastStandardWinAwardedSessionKeyRef.current,
+    })) {
+      return;
+    }
+    lastStandardWinAwardedSessionKeyRef.current = rewardSessionKey;
+    void _awardCoinsForMeter(
+      SALINDA_GAMEPLAY_REWARDS.standard_win,
+      SALINDA_COIN_SOURCES.game_standard_win,
+      rewardSessionKey,
+    );
+  }, [
+    override,
+    _awardCoinsForMeter,
+    state.isTutorial,
+    state.mode,
+    state.openingDrawId,
+    state.phase,
+    state.soloSessionStats?.startedAtMs,
+    state.turnStartedAt,
+    state.winner?.isBot,
+  ]);
 
   // dispatch reads overrideRef.current so it never needs to be recreated when override
   // changes — making it stable prevents cascading useEffect re-runs in child components.
@@ -7379,6 +7422,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // ?? Render helpers ??
   const renderDiceSlot = (slotValue: number | null, slotNum: 1 | 2 | 3) => (
     <TouchableOpacity
+      testID={`equation-dice-slot-${slotNum}`}
       style={[eqS.slot, slotValue !== null ? eqS.slotFilled : eqS.slotEmpty]}
       onPress={() => slotValue !== null && removeDice(slotNum)}
       activeOpacity={0.7}
@@ -7481,6 +7525,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
           const jokerAccent = getOperatorColors(handOp).face;
           return (
             <TouchableOpacity
+              testID={`equation-op-slot-${which}`}
               onPress={onPress}
               activeOpacity={willNoOpOnPress ? 1 : 0.7}
               disabled={willNoOpOnPress}
@@ -7539,6 +7584,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
         }
         return (
           <TouchableOpacity
+            testID={`equation-op-slot-${which}`}
             onPress={onPress}
             activeOpacity={willNoOpOnPress ? 1 : 0.7}
             disabled={willNoOpOnPress}
@@ -7575,6 +7621,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       // Regular operation card — אותו תא 52×52 כמו סלוט קובייה כדי שלא ידרס את המספרים
       return (
         <TouchableOpacity
+          testID={`equation-op-slot-${which}`}
           onPress={onPress}
           activeOpacity={willNoOpOnPress ? 1 : 0.7}
           disabled={willNoOpOnPress}
@@ -7626,6 +7673,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     }
     return (
       <TouchableOpacity
+        testID={`equation-op-slot-${which}`}
         onPress={onPress}
         activeOpacity={willNoOpOnPress ? 1 : 0.7}
         touchSoundDisabled
@@ -7843,6 +7891,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                     tutorialBus.emitUserEvent({ kind: 'eqUserPickedDice', idx: dIdx });
                   }
                 }}
+                  testID={`equation-dice-pool-${dIdx}`}
                   activeOpacity={0.7}
                   touchSoundDisabled
                   style={[
@@ -8919,13 +8968,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     if (!fanRootEl || typeof fanRootEl.contains !== 'function') return;
     const fanContains = fanRootEl.contains.bind(fanRootEl);
 
-    const isInsideFan = (target: EventTarget | null, clientX?: number, clientY?: number) => {
-      if (typeof clientX === 'number' && typeof clientY === 'number') {
-        const rect = fanRootEl.getBoundingClientRect();
-        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-          return true;
-        }
-      }
+    const isInsideFan = (target: EventTarget | null) => {
       if (!target || !(target instanceof Node)) return false;
       return fanContains(target);
     };
@@ -8936,7 +8979,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleMouseDownLike = (evt: MouseEvent | PointerEvent) => {
-      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
+      if (!isInsideFan(evt.target)) return;
       if (interactionLockedRef.current) return;
       if ('pointerType' in evt && evt.pointerType !== 'mouse') return;
       if (evt.button !== 0) return;
@@ -8972,7 +9015,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleClickCapture = (evt: MouseEvent) => {
-      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
+      if (!isInsideFan(evt.target)) return;
       if (Date.now() < suppressClickUntilRef.current) {
         evt.preventDefault();
         evt.stopPropagation();
@@ -8980,7 +9023,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleWheel = (evt: WheelEvent) => {
-      if (!isInsideFan(evt.target, evt.clientX, evt.clientY)) return;
+      if (!isInsideFan(evt.target)) return;
       if (interactionLockedRef.current) return;
       const dominantDelta = Math.abs(evt.deltaX) > Math.abs(evt.deltaY) ? evt.deltaX : evt.deltaY;
       if (Math.abs(dominantDelta) < 1) return;
@@ -9194,6 +9237,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     <View
       ref={fanRootRef}
       testID={SIMPLE_HAND_FAN_TEST_ID}
+      pointerEvents={Platform.OS === 'web' ? 'box-none' : 'auto'}
       style={[
         { width: fanScreenWidth, height: fanH, overflow: 'visible' },
         Platform.OS === 'web'
@@ -9790,26 +9834,16 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         tutorialBus.getL4GuidedEqValidationMode() &&
         state.equationResult != null;
       if (isL4Step3SingleCardMode) {
-        const stagedCorrectCard = state.stagedCards.find(
-          (stagedCard) =>
-            stagedCard.type === 'number' &&
-            stagedCard.value === state.equationResult,
+        if (card.type !== 'number') {
+          return;
+        }
+        const isCurrentCardStaged = state.stagedCards.some(
+          (stagedCard) => stagedCard.id === card.id,
         );
-        const isMatchingNumber =
-          card.type === 'number' &&
-          card.value === state.equationResult;
-        if (!isMatchingNumber) {
-          tutorialBus.emitUserEvent({ kind: 'l4Step3WrongCard', cardId: card.id });
-          return;
-        }
-        if (stagedCorrectCard && stagedCorrectCard.id !== card.id) {
-          tutorialBus.emitUserEvent({ kind: 'l4Step3WrongCard', cardId: card.id });
-          return;
-        }
         state.stagedCards.forEach((stagedCard) => {
           if (stagedCard.id !== card.id) dispatch({ type: 'UNSTAGE_CARD', card: stagedCard });
         });
-        if (!stagedCorrectCard) {
+        if (!isCurrentCardStaged) {
           dispatch({ type: 'STAGE_CARD', card });
         }
         tutorialBus.emitUserEvent({ kind: 'l4Step3CardAccepted', cardId: card.id });
@@ -10071,9 +10105,27 @@ function BottomControlsBar() {
 
   const onPlaceCards = useCallback(() => {
     if (placeCardsDisabled) return;
+    const isL4Step3SingleCardMode =
+      state.isTutorial &&
+      tutorialBus.getL4GuidedEqValidationMode() &&
+      state.equationResult != null;
+    if (isL4Step3SingleCardMode) {
+      const stagedNumber =
+        state.stagedCards.length === 1 && state.stagedCards[0]?.type === 'number'
+          ? state.stagedCards[0]
+          : null;
+      if (!stagedNumber || stagedNumber.value !== state.equationResult) {
+        tutorialBus.emitUserEvent({
+          kind: 'l4Step3WrongCard',
+          cardId: stagedNumber?.id ?? 'tutorial-l4c-wrong-play',
+        });
+        state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
+        return;
+      }
+    }
     if (soundOn && state.stagedCards.length >= 2) playPlaceMultipleSound();
     dispatch({ type: 'CONFIRM_STAGED' });
-  }, [placeCardsDisabled, state.stagedCards.length, dispatch, playPlaceMultipleSound, soundOn]);
+  }, [dispatch, placeCardsDisabled, playPlaceMultipleSound, soundOn, state.equationResult, state.isTutorial, state.stagedCards]);
 
   const BOTTOM_PLACE_BTN_W = 160;
   const bottomRowW = BOTTOM_PLACE_BTN_W;
@@ -10502,7 +10554,6 @@ function StartScreen({
   const [playerCount, setPlayerCount] = useState(2);
   const [numberRange, setNumberRange] = useState<'easy' | 'full'>('full');
   const [gameMode, setGameMode] = useState<LocalGameMode>(forcedGameMode ?? 'vs-bot');
-  const [isSoloNoOpponent, setIsSoloNoOpponent] = useState(false);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [botDisplayName, setBotDisplayName] = useState('');
   // Saved human player name — loaded once from AsyncStorage so we don't
@@ -10678,11 +10729,12 @@ function StartScreen({
     { label: t('start.advancedSetup.operatorsTitle'), value: operatorSummaryLabel, colors: ['rgba(236,72,153,0.98)', 'rgba(168,85,247,0.98)'] as const },
     { label: t('start.wheel.timerRow'), value: timerSummaryLabel, colors: ['rgba(239,68,68,0.98)', 'rgba(251,146,60,0.98)'] as const },
   ];
-  const advancedEntryPreviewChips = [
-    { label: t('start.wheel.numberRange'), value: rangeSummaryLabel, colors: ['rgba(59,130,246,0.98)', 'rgba(34,211,238,0.98)'] as const },
-    { label: t('lobby.fractions'), value: fractionSummaryLabel, colors: ['rgba(96,165,250,0.98)', 'rgba(129,140,248,0.98)'] as const },
-    { label: t('start.advancedSetup.operatorsTitle'), value: operatorSummaryLabel, colors: ['rgba(236,72,153,0.98)', 'rgba(168,85,247,0.98)'] as const },
-  ];
+  const advancedEntryOperatorTag = { key: 'operators', label: operatorSummaryLabel };
+  const advancedEntryFractionsTag = { key: 'fractions', label: fractions ? t('lobby.withFractions') : t('lobby.noFractions') };
+  const advancedEntryRangeTag = { key: 'range', label: t('start.advancedSetup.entryRangeTag', { value: rangeSummaryLabel }) };
+  const advancedEntryPreviewTags = isRTL
+    ? [advancedEntryRangeTag, advancedEntryFractionsTag, advancedEntryOperatorTag]
+    : [advancedEntryOperatorTag, advancedEntryFractionsTag, advancedEntryRangeTag];
 
   useEffect(() => {
     let cancelled = false;
@@ -10818,8 +10870,7 @@ function StartScreen({
     }
     const humanName = effectiveSavedName || t('start.playerPlaceholder', { n: String(1) });
     const storedProfiles = storedProfilesRef.current;
-    // If solo-no-opponent checkbox is checked, override to 'solo' mode.
-    const effectiveGameMode: LocalGameMode = isSoloNoOpponent ? 'solo' : gameMode;
+    const effectiveGameMode: LocalGameMode = gameMode;
     const players =
       effectiveGameMode === 'vs-bot'
         ? [
@@ -12106,11 +12157,11 @@ function StartScreen({
 
           <WheelRow index={guidanceWheelIndex}>
           <LinearGradient colors={['#1A73E8', '#4285F4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={hsS.rowGradientOuter}>
-          <View style={[hsS.row, hsS.startRowGuidance, { flexDirection: iosRtlLabelRow }]}>
-            <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+          <View style={[hsS.row, hsS.startRowGuidance, hsS.guidanceRowPolished, { flexDirection: iosRtlLabelRow }]}>
+            <Text style={[hsS.guidanceRowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
               {t('start.wheel.guidanceRow')}
             </Text>
-            <View style={hsS.toggleGroup}>
+            <View style={hsS.guidanceToggleWrapper}>
               {([
                 [true, t('lobby.on')],
                 [false, t('lobby.off')],
@@ -12121,9 +12172,16 @@ function StartScreen({
                     setGuidance(key);
                   }}
                   activeOpacity={0.7}
-                  style={[hsS.toggleBtn, guidanceOn === key ? hsS.toggleOn : hsS.toggleOff]}
+                  style={[
+                    hsS.guidanceToggleBtn,
+                    guidanceOn === key
+                      ? (key ? hsS.guidanceToggleOnActive : hsS.guidanceToggleOffActive)
+                      : hsS.guidanceToggleInactive,
+                  ]}
                 >
-                  <Text style={guidanceOn === key ? hsS.toggleOnTxt : hsS.toggleOffTxt}>{label}</Text>
+                  <Text style={[hsS.guidanceToggleText, guidanceOn === key ? hsS.guidanceToggleTextActive : hsS.guidanceToggleTextInactive]}>
+                    {label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -12146,40 +12204,29 @@ function StartScreen({
             onPress={() => setAdvancedSetupOpen(true)}
             style={hsS.advancedEntryInner}
           >
-            {/* שורה אחת: תמיד [תוכן | כפתור] בציר LTR הפיזי — אותו סדר כמו כותרת המודל (המשכיות כיוון) */}
-            <View style={{ flexDirection: rtlRow, alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-                <View style={{ flexDirection: rtlRow, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
-                  <Text style={[hsS.advancedEntryTitle, { textAlign: 'center', flex: 1, writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-                    {t('start.advancedSetup.entryTitle')}
-                  </Text>
-                </View>
-                <Text style={[hsS.advancedEntryTeaser, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+            <View style={[hsS.advancedEntryHeader, { flexDirection: rtlRow }]}>
+              <View style={hsS.advancedEntryHeaderText}>
+                <Text style={[hsS.advancedEntryTitle, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+                  {t('start.advancedSetup.entryTitle')}
+                </Text>
+                <Text style={[hsS.advancedEntryTeaser, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
                   {t('start.advancedSetup.entryRowTeaser')}
                 </Text>
-                <View style={[hsS.advancedEntryPreviewRow, { flexDirection: rtlRow }]}>
-                  {advancedEntryPreviewChips.map((chip) => (
-                    <AdvancedSetupPreviewChip
-                      key={chip.label}
-                      label={chip.label}
-                      value={chip.value}
-                      colors={chip.colors}
-                      compact
-                    />
-                  ))}
-                </View>
               </View>
-              <LinearGradient
-                colors={['#ffffff', '#fde68a', '#f9a8d4']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={hsS.advancedEntryCtaWrap}
-              >
-                <View style={[hsS.advancedEntryCtaInner, { flexDirection: rtlRow }]}>
-                  <Text style={hsS.advancedEntryCtaTxt}>{t('start.advancedSetup.entryOpenCta')}</Text>
-                  <Text style={hsS.advancedEntryCtaArrow}>{isRTL ? '‹' : '›'}</Text>
+              <View style={hsS.advancedEntryCtaWrap}>
+                <Text style={hsS.advancedEntryCtaTxt}>
+                  {t('start.advancedSetup.entryOpenCta')} {isRTL ? '‹' : '›'}
+                </Text>
+              </View>
+            </View>
+            <View style={hsS.advancedEntryPreviewRow}>
+              {advancedEntryPreviewTags.map((tag) => (
+                <View key={tag.key} style={hsS.advancedEntryTag}>
+                  <Text style={hsS.advancedEntryTagText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                    {tag.label}
+                  </Text>
                 </View>
-              </LinearGradient>
+              ))}
             </View>
           </TouchableOpacity>
           </LinearGradient>
@@ -12189,30 +12236,6 @@ function StartScreen({
 
         {/* Start button — למטה, ללא מסגרת/רקע נוסף סביב הכפתור */}
         <View style={{ marginTop: 40, marginBottom: 4, alignItems: 'center' }}>
-          <TouchableOpacity
-            testID="start-solo-no-opponent-toggle"
-            onPress={() => setIsSoloNoOpponent((v) => !v)}
-            style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}
-            activeOpacity={0.7}
-          >
-            <View style={{
-              width: 22,
-              height: 22,
-              borderRadius: 4,
-              borderWidth: 2,
-              borderColor: isSoloNoOpponent ? '#F59E0B' : '#6B7280',
-              backgroundColor: isSoloNoOpponent ? '#F59E0B' : 'transparent',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              {isSoloNoOpponent ? (
-                <Text style={{ color: '#111827', fontSize: 14, fontWeight: '900', lineHeight: 16 }}>✓</Text>
-              ) : null}
-            </View>
-            <Text style={{ color: '#D1D5DB', fontSize: 13, fontWeight: '500' }}>
-              {t('start.soloNoOpponent')}
-            </Text>
-          </TouchableOpacity>
           <CasinoButton
             text={t('start.letsPlay')}
             width={220}
@@ -12436,7 +12459,53 @@ const hsS = StyleSheet.create({
     backgroundColor: 'rgba(52,168,83,0.92)',
   },
   startRowGuidance: {
-    backgroundColor: 'rgba(66,133,244,0.92)',
+    backgroundColor: '#1d4ed8',
+  },
+  guidanceRowPolished: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 0,
+  },
+  guidanceRowLabel: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    flexShrink: 1,
+  },
+  guidanceToggleWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    padding: 2,
+    flexShrink: 0,
+  },
+  guidanceToggleBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 56,
+  },
+  guidanceToggleInactive: {
+    backgroundColor: 'transparent',
+  },
+  guidanceToggleOnActive: {
+    backgroundColor: '#38bdf8',
+  },
+  guidanceToggleOffActive: {
+    backgroundColor: '#64748b',
+  },
+  guidanceToggleText: {
+    fontSize: 14,
+    fontWeight: '900',
+    includeFontPadding: false,
+  },
+  guidanceToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  guidanceToggleTextInactive: {
+    color: '#94a3b8',
   },
   rowRange: {
     backgroundColor: 'rgba(180,83,9,0.92)',
@@ -12657,37 +12726,66 @@ const hsS = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
   },
   advancedEntryInner: {
-    borderRadius: 11,
+    borderRadius: 16,
     marginHorizontal: 2,
     marginBottom: 4,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(15,23,42,0.58)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
+    padding: 15,
+    backgroundColor: '#1e1b4b',
+    borderWidth: 2,
+    borderColor: '#c084fc',
+    ...Platform.select({
+      ios: { shadowColor: '#c084fc', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 8 },
+      android: { elevation: 4 },
+      web: { boxShadow: '0 0 8px rgba(192,132,252,0.4)' } as any,
+    }),
+  },
+  advancedEntryHeader: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    gap: 10,
+  },
+  advancedEntryHeaderText: {
+    flex: 1,
+    minWidth: 0,
   },
   advancedEntryTitle: {
     color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: 22,
     fontWeight: '900',
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    marginBottom: 4,
   },
   advancedEntryTeaser: {
-    color: 'rgba(254,249,195,0.98)',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 15,
-    marginTop: 5,
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   advancedEntryPreviewRow: {
-    flexWrap: 'nowrap',
-    gap: 5,
-    marginTop: 6,
+    flexDirection: 'row',
+    gap: 8,
     alignItems: 'stretch',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     width: '100%',
+  },
+  advancedEntryTag: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: '#0f172a',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  advancedEntryTagText: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   advancedEntryChipRow: {
     flexWrap: 'wrap',
@@ -12723,33 +12821,21 @@ const hsS = StyleSheet.create({
     color: '#FFFFFF',
   },
   advancedEntryCtaWrap: {
-    borderRadius: 999,
-    alignSelf: 'flex-start',
-    padding: 1.5,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6 },
-      android: { elevation: 5 },
-    }),
-  },
-  advancedEntryCtaInner: {
-    flexDirection: 'row',
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15,23,42,0.94)',
+    flexShrink: 0,
   },
   advancedEntryCtaTxt: {
-    color: '#FEF3C7',
-    fontSize: 13,
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '900',
-  },
-  advancedEntryCtaArrow: {
-    color: '#FDE68A',
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: -1,
+    includeFontPadding: false,
   },
 });
 
@@ -17109,6 +17195,28 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       state.mathRangeMax ?? 25,
     );
   const placeCardsDisabled = l11PlaceMissingKey != null || l6WildPlaceBlocked;
+  const onPlaceCards = useCallback(() => {
+    if (placeCardsDisabled) return;
+    const isL4Step3SingleCardMode =
+      state.isTutorial &&
+      tutorialBus.getL4GuidedEqValidationMode() &&
+      state.equationResult != null;
+    if (isL4Step3SingleCardMode) {
+      const stagedNumber =
+        state.stagedCards.length === 1 && state.stagedCards[0]?.type === 'number'
+          ? state.stagedCards[0]
+          : null;
+      if (!stagedNumber || stagedNumber.value !== state.equationResult) {
+        tutorialBus.emitUserEvent({
+          kind: 'l4Step3WrongCard',
+          cardId: stagedNumber?.id ?? 'tutorial-l4c-wrong-play',
+        });
+        state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
+        return;
+      }
+    }
+    dispatch({ type: 'CONFIRM_STAGED' });
+  }, [dispatch, placeCardsDisabled, state.equationResult, state.isTutorial, state.stagedCards]);
   const showSoloBuildConfirmHint =
     !state.isTutorial &&
     state.mode === 'solo' &&
@@ -17552,7 +17660,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       {/* ?? SLOT 3: שולחן ירוק + תרגיל + טיימר (מוקאפ תרגיל הועבר ליד תוצאות אפשריות) ?? */}
       <View style={{position:'absolute',top:tableTop,left:0,right:0,zIndex:2,flexDirection:'row',justifyContent:'center',alignItems:'stretch',gap:0,transform:[{ translateX: EQUATION_TABLE_SHIFT_X }]}}>
         <View style={{width:tableWidth,maxWidth:'100%',minWidth:0,justifyContent:'flex-end',paddingBottom:tableBottomPadding}}>
-          <View style={tableShellStyle}>
+          <View testID="equation-table-shell" style={tableShellStyle}>
             {gameFramedTableSurface ? (
               <Image
                 source={gameFramedTableSurface.source as any}
@@ -17599,8 +17707,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       {/* מניפה: מלא את המסך; ללא bottom שלילי — תואם AppShell בלי paddingBottom תחתון.
           ללא שכבת הכהיה במצב הדרכה כדי שהשחקן יראה תמיד את הקלפים במניפה. */}
       <View style={[StyleSheet.absoluteFillObject, { zIndex: isLocalBotTurn ? 52 : 4, opacity: 1 }]} pointerEvents="box-none">
-        <View testID="player-hand" style={{ position: 'absolute', bottom: handBottomOffset, left: 0, right: 0, height: handStripHeight, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 12, width: '100%' }}>
-          <View style={{ height: handInnerHeight, width: '100%', alignItems: 'center', justifyContent: 'flex-end', overflow: 'visible' }}>
+        <View pointerEvents="box-none" testID="player-hand" style={{ position: 'absolute', bottom: handBottomOffset, left: 0, right: 0, height: handStripHeight, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 12, width: '100%' }}>
+          <View pointerEvents="box-none" style={{ height: handInnerHeight, width: '100%', alignItems: 'center', justifyContent: 'flex-end', overflow: 'visible' }}>
             {!l5HideFanStrip ? <PlayerHand onCenterCard={setCenterCard} onFractionTapForOnb={onFractionTapForOnb} /> : null}
           </View>
         </View>
@@ -17911,7 +18019,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   disabled={placeCardsDisabled}
                   onPress={() => {
                     if (placeCardsDisabled) return;
-                    dispatch({ type: 'CONFIRM_STAGED' });
+                    onPlaceCards();
                   }}
                 />
               </Animated.View>
@@ -21987,6 +22095,44 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   );
 }
 
+type WebkitFullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type WebkitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+function getWebFullscreenElement(doc: Document): Element | null {
+  const webkitDoc = doc as WebkitFullscreenDocument;
+  return doc.fullscreenElement ?? webkitDoc.webkitFullscreenElement ?? null;
+}
+
+async function exitWebFullscreen(doc: Document): Promise<void> {
+  const webkitDoc = doc as WebkitFullscreenDocument;
+  if (doc.exitFullscreen) {
+    await doc.exitFullscreen();
+    return;
+  }
+  const maybePromise = webkitDoc.webkitExitFullscreen?.();
+  if (maybePromise && typeof maybePromise.then === 'function') await maybePromise;
+}
+
+async function requestWebFullscreen(root: HTMLElement): Promise<boolean> {
+  const webkitRoot = root as WebkitFullscreenElement;
+  if (root.requestFullscreen) {
+    await root.requestFullscreen({ navigationUI: 'hide' } as FullscreenOptions);
+    return true;
+  }
+  if (webkitRoot.webkitRequestFullscreen) {
+    const maybePromise = webkitRoot.webkitRequestFullscreen();
+    if (maybePromise && typeof maybePromise.then === 'function') await maybePromise;
+    return true;
+  }
+  return false;
+}
+
 function WebChromeActionButton({
   label,
   onPress,
@@ -22042,6 +22188,55 @@ function WebChromeActionButton({
   );
 }
 
+function MobileWebFocusButton({
+  active,
+  label,
+  onPress,
+  lightBackdrop = false,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+  lightBackdrop?: boolean;
+}) {
+  const backgroundColor = active
+    ? (lightBackdrop ? '#0f172a' : '#f8fafc')
+    : (lightBackdrop ? 'rgba(255,255,255,0.86)' : 'rgba(15,23,42,0.82)');
+  const borderColor = lightBackdrop ? 'rgba(15,23,42,0.22)' : 'rgba(255,255,255,0.18)';
+  const iconColor = active
+    ? (lightBackdrop ? '#f8fafc' : '#0f172a')
+    : (lightBackdrop ? '#0f172a' : '#f8fafc');
+
+  return (
+    <TouchableOpacity
+      testID="mobile-web-focus-toggle"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      activeOpacity={0.88}
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor,
+        borderWidth: 1,
+        borderColor,
+        shadowColor: lightBackdrop ? '#64748B' : '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
+      }}
+    >
+      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
+        {active ? '×' : '⛶'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowSplash: (v: boolean) => void }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLocale();
@@ -22086,11 +22281,17 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     const syncFullscreen = () => {
-      setWebFullscreenActive(!!document.fullscreenElement);
+      const active = !!getWebFullscreenElement(document);
+      setWebFullscreenActive(active);
+      if (!active) setWebFocusMode(false);
     };
     syncFullscreen();
     document.addEventListener('fullscreenchange', syncFullscreen);
-    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener('webkitfullscreenchange', syncFullscreen as EventListener);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreen as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -22140,23 +22341,25 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const toggleWebFullscreen = useCallback(async () => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
+      if (getWebFullscreenElement(document)) {
+        await exitWebFullscreen(document);
         setWebFullscreenActive(false);
         setWebFocusMode(false);
         return;
       }
-      const root = document.documentElement as HTMLElement & {
-        requestFullscreen?: () => Promise<void>;
-      };
-      setWebFocusMode(true);
-      if (root.requestFullscreen) {
-        await root.requestFullscreen();
+      if (webFocusMode) {
+        setWebFocusMode(false);
+        return;
       }
+      const root = document.documentElement;
+      setWebFocusMode(true);
+      const requestedFullscreen = await requestWebFullscreen(root);
+      setWebFullscreenActive(requestedFullscreen && !!getWebFullscreenElement(document));
     } catch {
-      setWebFocusMode((prev) => !prev);
+      setWebFocusMode(true);
+      setWebFullscreenActive(false);
     }
-  }, []);
+  }, [webFocusMode]);
 
   const handleWebBackPress = useCallback(() => {
     if (webBackAction) {
@@ -22167,8 +22370,8 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
       window.history.back();
       return;
     }
-    if (Platform.OS === 'web' && typeof document !== 'undefined' && document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => {});
+    if (Platform.OS === 'web' && typeof document !== 'undefined' && getWebFullscreenElement(document)) {
+      void exitWebFullscreen(document).catch(() => {});
     }
     setWebFocusMode(false);
   }, [webBackAction]);
@@ -22217,6 +22420,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const webSideGutter = mobileWebViewport ? 0 : Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
   const showWebChromeControls = dockedControls;
+  const showMobileWebFocusControl = mobileWebViewport && !dockedControls && !showSplash;
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
   const webControlsAnchorStyle = dockedControls
     ? {
@@ -22251,6 +22455,9 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const fullscreenLabel = locale === 'he'
     ? (webFullscreenActive ? 'צא ממסך מלא' : 'מסך מלא')
     : (webFullscreenActive ? 'Exit Fullscreen' : 'Fullscreen');
+  const mobileFocusLabel = locale === 'he'
+    ? (webFocusMode || webFullscreenActive ? 'צא מתצוגת פוקוס' : 'תצוגת פוקוס')
+    : (webFocusMode || webFullscreenActive ? 'Exit Focus View' : 'Focus View');
   const backdropLabel = locale === 'he'
     ? (webBackdropTone === 'black' ? 'רקע לבן' : 'רקע שחור')
     : (webBackdropTone === 'black' ? 'White Backdrop' : 'Black Backdrop');
@@ -22299,6 +22506,24 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
                 fullWidth={dockedControls}
               />
             </View>
+          </View>
+        ) : null}
+        {showMobileWebFocusControl ? (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              right: 12,
+              bottom: Math.max(14, (insets.bottom || 0) + 14),
+              zIndex: 31000,
+            }}
+          >
+            <MobileWebFocusButton
+              active={webFocusMode || webFullscreenActive}
+              label={mobileFocusLabel}
+              onPress={() => { void toggleWebFullscreen(); }}
+              lightBackdrop={webBackdropTone === 'white'}
+            />
           </View>
         ) : null}
         {showAds ? (

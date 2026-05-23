@@ -3,14 +3,20 @@ import type { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import {
+  consumeSocialAuthReturnTo,
   createSessionFromUrl,
+  isSocialAuthCallbackUrl,
   performSocialSignIn,
-  SOCIAL_AUTH_CALLBACK_PATH,
   type SocialAuthProvider,
   type SocialSignInOptions,
 } from '../auth/socialSignIn';
 import { supabase } from '../lib/supabase';
 import type { TableSkinId } from '../theme/tableSkins';
+import {
+  SALINDA_CATALOG,
+  SALINDA_TUTORIAL_REWARDS,
+  type SalindaCoinSource,
+} from '../../shared/salindaEconomy';
 
 export interface PlayerProfile {
   id: string;
@@ -66,7 +72,7 @@ interface AuthContextValue {
   /** Set active card back, table theme, or table skin (must already be owned). */
   setActiveSkin: (kind: 'card_back' | 'table_theme' | 'table_skin', themeId: string) => Promise<'ok' | 'not_owned' | 'invalid' | 'error'>;
   /** Award coins to the current user wallet and refresh local profile cache. */
-  awardCoins: (amount: number, source: string) => Promise<'ok' | 'error'>;
+  awardCoins: (amount: number, source: SalindaCoinSource | string, idempotencyKey?: string | null) => Promise<'ok' | 'error'>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -98,12 +104,12 @@ export async function syncTutorialCoins(): Promise<void> {
     if (isNaN(count) || count <= 0) return;
 
     if (count === 1) {
-      await supabase.rpc('award_coins', { p_amount: 10, p_source: 'tutorial_core' });
+      await supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.basic, p_source: 'tutorial_core' });
     } else if (count === 2) {
-      await supabase.rpc('award_coins', { p_amount: 10, p_source: 'tutorial_core' });
-      await supabase.rpc('award_coins', { p_amount: 20, p_source: 'tutorial_advanced' });
+      await supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.basic, p_source: 'tutorial_core' });
+      await supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.advanced, p_source: 'tutorial_advanced' });
     } else {
-      await supabase.rpc('award_coins', { p_amount: count * 10, p_source: 'tutorial_legacy' });
+      await supabase.rpc('award_coins', { p_amount: count * SALINDA_TUTORIAL_REWARDS.basic, p_source: 'tutorial_legacy' });
     }
 
     await AsyncStorage.setItem(TUTORIAL_COINS_SYNCED_KEY, 'true');
@@ -179,20 +185,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applySession]);
 
+  const handleWebOAuthCallback = useCallback(async () => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const callbackUrl = window.location.href;
+    if (!isSocialAuthCallbackUrl(callbackUrl)) return;
+
+    try {
+      await createSessionFromUrl(callbackUrl);
+    } catch (error) {
+      console.warn('[auth] OAuth callback failed:', error);
+    } finally {
+      const returnTo = consumeSocialAuthReturnTo();
+      try {
+        window.history?.replaceState?.(null, '', `${window.location.origin}${returnTo}`);
+      } catch {
+        // URL cleanup should never block session recovery.
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
 
     const init = async () => {
       try {
-        if (
-          Platform.OS === 'web' &&
-          typeof window !== 'undefined' &&
-          window.location.pathname.includes(SOCIAL_AUTH_CALLBACK_PATH) &&
-          (window.location.search || window.location.hash)
-        ) {
-          await createSessionFromUrl(window.location.href);
-          window.history.replaceState(null, '', window.location.origin);
-        }
+        await handleWebOAuthCallback();
 
         const { data: sessionData } = await supabase.auth.getSession();
         const s = sessionData?.session ?? null;
@@ -230,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       try { subscription?.unsubscribe(); } catch (_) {}
     };
-  }, [fetchProfile]);
+  }, [fetchProfile, handleWebOAuthCallback]);
 
   /**
    * Links email + password to the current anonymous session (preserving coins/rating).
@@ -334,9 +351,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) return 'error';
       const currentCoins = profile?.total_coins ?? 0;
       if ((profile?.wild_owned ?? false) === true) return 'already_owned';
-      if (currentCoins < 200) return 'insufficient_coins';
+      if (currentCoins < SALINDA_CATALOG.wild_card.price) return 'insufficient_coins';
       try {
-        const nextCoins = currentCoins - 200;
+        const nextCoins = currentCoins - SALINDA_CATALOG.wild_card.price;
         const { data, error } = await supabase
           .from('profiles')
           .update({ total_coins: nextCoins })
@@ -469,10 +486,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshProfile]);
 
-  const awardCoins = useCallback(async (amount: number, source: string): Promise<'ok' | 'error'> => {
+  const awardCoins = useCallback(async (
+    amount: number,
+    source: SalindaCoinSource | string,
+    idempotencyKey?: string | null,
+  ): Promise<'ok' | 'error'> => {
     if (!Number.isFinite(amount) || amount <= 0) return 'error';
     try {
-      const { error } = await supabase.rpc('award_coins', { p_amount: amount, p_source: source });
+      const rpcParams: Record<string, number | string | null> = {
+        p_amount: amount,
+        p_source: source,
+      };
+      if (idempotencyKey != null) rpcParams.p_idempotency_key = idempotencyKey;
+      const { error } = await supabase.rpc('award_coins', rpcParams);
       if (error) return 'error';
       setProfile((prev) => (prev ? { ...prev, total_coins: (prev.total_coins ?? 0) + amount } : prev));
       return 'ok';

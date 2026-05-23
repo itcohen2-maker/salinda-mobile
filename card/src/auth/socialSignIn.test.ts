@@ -3,7 +3,7 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '../lib/supabase';
-import { performSocialSignIn } from './socialSignIn';
+import { isSocialAuthCallbackUrl, performSocialSignIn } from './socialSignIn';
 
 jest.mock('../lib/supabase', () => ({
   supabase: {
@@ -162,5 +162,25 @@ describe('performSocialSignIn', () => {
     expect(result).toEqual({ error: 'Sign-in canceled.' });
     expect(mockSupabaseAuth.exchangeCodeForSession).not.toHaveBeenCalled();
     expect(mockSupabaseAuth.setSession).not.toHaveBeenCalled();
+  });
+
+  it('detects OAuth callback URLs without treating arbitrary error params as callbacks', () => {
+    mockGetQueryParams.mockReturnValue({
+      params: {},
+      errorCode: null,
+    });
+    expect(isSocialAuthCallbackUrl('https://app.local/auth/callback?code=oauth-code')).toBe(true);
+
+    mockGetQueryParams.mockReturnValue({
+      params: { access_token: 'access-token' },
+      errorCode: null,
+    });
+    expect(isSocialAuthCallbackUrl('https://app.local/#access_token=access-token')).toBe(true);
+
+    mockGetQueryParams.mockReturnValue({
+      params: { error: 'not-auth' },
+      errorCode: null,
+    });
+    expect(isSocialAuthCallbackUrl('https://app.local/?error=not-auth')).toBe(false);
   });
 });

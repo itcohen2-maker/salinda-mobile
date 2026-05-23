@@ -18,11 +18,12 @@ import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import { getWebContentWidth } from '../theme/webLayout';
 import { activateTableSkin } from '../theme/activateTableSkin';
 import { getScreenSafeTop } from '../theme/screenInsets';
+import { SALINDA_CATALOG } from '../../shared/salindaEconomy';
 
 const SALINDA_IMAGE = require('../../assets/salinda-transparent.png');
 const CLASSIC_TABLE_IMAGE = require('../../assets/table_green_default.png');
-const SLINDA_PRICE = 150;
-const WILD_PRICE = 200;
+const SLINDA_PRICE = SALINDA_CATALOG.salinda_card.price;
+const WILD_PRICE = SALINDA_CATALOG.wild_card.price;
 
 type FeedbackTone = 'success' | 'error';
 
@@ -144,7 +145,12 @@ export function ShopScreen({ visible, onClose }: Props) {
   }
 
   async function handleBuySlinda() {
-    if (slindaOwned || slindaLoading || coins < SLINDA_PRICE) return;
+    if (slindaOwned || slindaLoading) return;
+    if (coins < SLINDA_PRICE) {
+      clearFeedback();
+      showError(t('shop.insufficientCoins'));
+      return;
+    }
     setSlindaLoading(true);
     clearFeedback();
     try {
@@ -158,7 +164,12 @@ export function ShopScreen({ visible, onClose }: Props) {
   }
 
   async function handleBuyWild() {
-    if (wildOwned || wildLoading || coins < WILD_PRICE) return;
+    if (wildOwned || wildLoading) return;
+    if (coins < WILD_PRICE) {
+      clearFeedback();
+      showError(t('shop.insufficientCoins'));
+      return;
+    }
     setWildLoading(true);
     clearFeedback();
     try {
@@ -173,7 +184,12 @@ export function ShopScreen({ visible, onClose }: Props) {
 
   async function handleBuyTheme(themeId: ThemeId) {
     const theme = THEMES[themeId];
-    if (ownedThemes.includes(themeId) || themeLoading || coins < theme.price) return;
+    if (ownedThemes.includes(themeId) || themeLoading) return;
+    if (coins < theme.price) {
+      clearFeedback();
+      showError(t('shop.insufficientCoins'));
+      return;
+    }
     setThemeLoading(themeId);
     clearFeedback();
     try {
@@ -188,7 +204,12 @@ export function ShopScreen({ visible, onClose }: Props) {
 
   async function handleBuyTableSkin(skinId: TableSkinId) {
     const skin = TABLE_SKINS[skinId];
-    if (ownedTableSkins.includes(skinId) || tableSkinLoading || coins < skin.price) return;
+    if (ownedTableSkins.includes(skinId) || tableSkinLoading) return;
+    if (coins < skin.price) {
+      clearFeedback();
+      showError(t('shop.insufficientCoins'));
+      return;
+    }
     setTableSkinLoading(skinId);
     clearFeedback();
     try {
@@ -256,7 +277,7 @@ export function ShopScreen({ visible, onClose }: Props) {
     onBuy: () => void;
   }) {
     const canAfford = coins >= price;
-    const btnDisabled = owned || loading || !canAfford;
+    const btnDisabled = owned || loading;
     const btnStyle = owned ? styles.btnOwned : !canAfford ? styles.btnLocked : styles.btnBuy;
     const preview = kind === 'slinda'
       ? (
@@ -321,6 +342,7 @@ export function ShopScreen({ visible, onClose }: Props) {
                 onPress={onBuy}
                 disabled={btnDisabled}
                 activeOpacity={0.8}
+                testID={`shop-${kind}-buy`}
               >
                 {loading
                   ? <ActivityIndicator color="#FFF" size="small" />
@@ -424,8 +446,9 @@ export function ShopScreen({ visible, onClose }: Props) {
             !canAfford ? styles.productBtnLocked : styles.productBtnBuy,
           ]}
           onPress={() => void handleBuyTheme(themeId)}
-          disabled={busy || !canAfford}
+          disabled={busy}
           activeOpacity={0.8}
+          testID={`shop-theme-buy-${themeId}`}
         >
           {busy
             ? <ActivityIndicator color="#FFF" size="small" />
@@ -475,8 +498,9 @@ export function ShopScreen({ visible, onClose }: Props) {
       <TouchableOpacity
         style={[containerStyle, !canAfford ? styles.productBtnLocked : styles.productBtnBuy]}
         onPress={() => void handleBuyTableSkin(skinId)}
-        disabled={busy || !canAfford}
+        disabled={busy}
         activeOpacity={0.8}
+        testID={`shop-table-skin-buy-${skinId}`}
       >
         {busy
           ? <ActivityIndicator color="#FFF" size="small" />

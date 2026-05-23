@@ -11,6 +11,7 @@ export class LobbyPage {
   readonly guidanceSkip: Locator = this.page.getByTestId('start-guidance-skip');
   readonly startPlayerCountRow: Locator = this.page.getByTestId('start-player-count-row');
   readonly startBotSettings: Locator = this.page.getByTestId('start-bot-settings');
+  readonly startSoloNoOpponentToggle: Locator = this.page.getByTestId('start-solo-no-opponent-toggle');
   readonly createRoom: Locator = this.page.getByTestId('lobby-create-room');
   readonly joinRoom: Locator = this.page.getByTestId('lobby-join-room');
   readonly tutorialButton: Locator = this.page.getByTestId('lobby-tutorial');
