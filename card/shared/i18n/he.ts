@@ -1233,11 +1233,11 @@ export const he: Record<string, string> = {
   // שיעור 3 — הקוביות
   'tutorial.l3.title': 'הקוביות',
   'tutorial.l3.desc': 'אלה שלוש הקוביות שמהן נבנה מיד את התרגיל הבא.',
-  'tutorial.l3.botRoll': 'בכל תור מטילים קוביות. מהן נבנה את התרגיל.',
+  'tutorial.l3.botRoll': 'הטלת הקוביות תיתן לנו את המספרים לבניית התרגיל.',
   'tutorial.l3.hintRoll': 'לחץ על הכפתור לגילגול הקוביות',
-  'tutorial.l3.celebrate': 'עם המספרים האלה בונים תרגיל. אם התוצאה מתאימה לקלף ביד – נפטרים ממנו!',
+  'tutorial.l3.celebrate': 'יופי! עכשיו המטרה היא לקחת את המספרים האלה ולבנות תרגיל שיגיע בדיוק לקלף שנבחר.',
   'tutorial.l3.tipTitle': 'מרגישים תקועים?',
-  'tutorial.l3.tipBody': 'אל תתאמצו יותר מדי! לפעמים הפתרון כבר מחכה לכם על הלוח. לחיצה אחת תגלה לכם איך להיפטר מהקלפים בקלות.',
+  'tutorial.l3.tipBody': 'מרגישים תקועים? לא חייבים לבנות תרגיל מאפס. לפעמים מחכה לכם על הלוח משוואה שכבר פתורה!',
   'tutorial.l3.tipCta': 'תראו לי!',
   'tutorial.l3.previewBot': 'הנה משוואה פתורה שנפתחת אוטומטית',
   'tutorial.l3.previewCelebrate': 'מעולה! עכשיו רואים איך נראית משוואה מוכנה',
@@ -1245,24 +1245,24 @@ export const he: Record<string, string> = {
   // שיעור 4 — בניית תרגיל
   'tutorial.l4.title': 'בונים תרגיל',
   'tutorial.l4.desc': '.מצרפים שתי קוביות עם פלוס ובוחרים את הקלף שמתאים לתוצאה',
-  'tutorial.l4.botBuild': '...תראו איך אני פותר',
-  'tutorial.l4.hintTap': 'לחצו על קלף ששווה לתוצאת התרגיל כדי להיפטר ממנו.',
-  'tutorial.l4.celebrate': 'כל הכבוד סיימתם את התרגיל והתאמתם קלף לתוצאה',
+  'tutorial.l4.botBuild': 'תראו איך אני מתקרב ל-2 קלפים! אני מביט בקלפים שלי במניפה, ומנסה לבנות מהקוביות תרגיל שיהיה שווה בדיוק לאחד מהם.',
+  'tutorial.l4.hintTap': 'התרגיל מוכן ויצא 6! לחצו על קלף 6 במניפה כדי להעיף אותו מהיד.',
+  'tutorial.l4.celebrate': 'יש! הקלף עף. נשארו לבוט עוד 6 קלפים בדרך אל היעד!',
   'tutorial.l4.didYouKnow': 'הידעת?',
   'tutorial.l4.didYouKnowBestTip': 'זה הטיפ הכי טוב שאני יכול לתת לכם',
   'tutorial.l4.didYouKnowBody': 'אפשר להפטר מכמה קלפים בתור אחד',
   'tutorial.l4.didYouKnowCta': 'בוא ננסה',
 
   // שיעור 4ב — השלמת מספר חסר
-  'tutorial.l4b.botFillDie': 'הקלף המודגש כבר רומז על התוצאה — איזו קובייה חסרה?',
-  'tutorial.l4b.hintFillDie': 'לחצו על קובייה כדי להוסיף אותה לתרגיל',
+  'tutorial.l4b.botFillDie': 'הביטו בקלף המודגש (המטרה). איזה מספר חסר בתרגיל כדי להגיע אליו?',
+  'tutorial.l4b.hintFillDie': 'לחצו על הקובייה שתשלים את התרגיל לקלף המטרה.',
   'tutorial.l4b.hintPickCard': 'לחצו על קלף שתואם לתוצאה',
-  'tutorial.l4b.celebrate': 'יפה מאוד — השלמתם את התרגיל ונפטרנו מקלף',
+  'tutorial.l4b.celebrate': 'השלמתם את התרגיל והקלף עף — קרוב יותר ל-2 קלפים!',
 
   // שיעור 4ג — בניית תרגיל מלא
-  'tutorial.l4c.botFull': 'עכשיו תורכם! הרכיבו את התרגיל במלואו ובחרו קלף תואם לתוצאה',
+  'tutorial.l4c.botFull': 'עכשיו תורכם לעבוד חכם בדרך אל ה-2! הביטו בקלפים שלכם למטה וסמנו בראש קלף שאתם רוצים להעיף.',
   'tutorial.l4c.gotIt': 'הבנתי',
-  'tutorial.l4c.hintFull': 'הוסיפו קוביות וסימני פעולה לתרגיל',
+  'tutorial.l4c.hintFull': 'סמנו קלף במחשבה, והרכיבו מהקוביות תרגיל שמתאים לו.',
   'tutorial.l4c.hintPickSecondDie': 'הוסיפו עוד קובייה לתרגיל',
   'tutorial.l4c.hintPickOperator': 'לחצו בין הקוביות כדי לבחור סימן פעולה',
   'tutorial.l4c.hintBuildProgress': 'לחצו על קלף ששווה למספר שבתוצאת התרגיל',
@@ -1272,7 +1272,7 @@ export const he: Record<string, string> = {
   'tutorial.l4c.tryAgain': 'נסה שנית\nלחצו על קלף ששווה למספר שבתוצאת התרגיל',
   'tutorial.l4c.finishTitle': 'כל הכבוד, נפטרת מקלף',
   'tutorial.l4c.finishBody': 'ועכשיו נעבור לקלפים המיוחדים',
-  'tutorial.l4c.celebrate': 'כל הכבוד — סיימתם לבד',
+  'tutorial.l4c.celebrate': 'מצוין! עשיתם מהלך עצמאי ראשון בדרך לניצחון!',
 
   // שיעור 5 — קלפי פעולה וסלינדה
   'tutorial.l5.title': 'סימני הפעולה',
