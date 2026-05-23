@@ -74,7 +74,7 @@ function getInviteWebBaseUrl(): string {
     const cleanPath = pathname === '/' ? '' : pathname.replace(/\/$/, '');
     return `${window.location.origin}${cleanPath}`;
   }
-  return 'https://salinda-web.onrender.com';
+  return 'https://salinda-mobile.vercel.app';
 }
 
 function isLocalServerUrl(url: string): boolean {
@@ -486,7 +486,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
     if (!effectiveWebBase) return '';
     return `${effectiveWebBase}${inviteSuffix}`;
   }, [roomCode, inviteSuffix, effectiveWebBase]);
-  const shareRoomMessage = useMemo(() => buildRoomShareMessage({ t, roomCode }), [t, roomCode]);
+  const shareRoomMessage = useMemo(() => buildRoomShareMessage({ t, roomCode, inviteLink }), [t, roomCode, inviteLink]);
 
   const copyableInvite = inviteLink || inviteSuffix;
 

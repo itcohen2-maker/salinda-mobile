@@ -207,6 +207,7 @@ export const he: Record<string, string> = {
   'lobby.continueToRoom': 'שמור',
   'lobby.roomCodeLabel': 'קוד החדר',
   'lobby.shareCodeHint': 'שתף את הקוד עם החברים כדי שיוכלו להצטרף',
+  'lobby.shareWebLinkHint': 'במידה ואין לך אפליקציה אז תשתמש בקישור הזה לשחק:',
   'lobby.browserInvite': 'קישור אורח לדפדפן',
   'lobby.inviteHintConfigured': 'לינק מלא משתמש ב־{{base}}. להזמנת מישהו מחוץ לרשת המקומית, הזן/י למטה כתובת HTTPS ציבורית של אותו משחק (או הגדר EXPO_PUBLIC_WEB_APP_URL בבנייה).',
   'lobby.inviteHintMobile':
@@ -1231,9 +1232,9 @@ export const he: Record<string, string> = {
   'tutorial.l3.botRoll': 'בכל תור מטילים קוביות. מהן נבנה את התרגיל.',
   'tutorial.l3.hintRoll': 'לחץ על הכפתור לגילגול הקוביות',
   'tutorial.l3.celebrate': 'עם המספרים האלה בונים תרגיל. אם התוצאה מתאימה לקלף ביד – נפטרים ממנו!',
-  'tutorial.l3.tipTitle': 'טיפ חשוב',
-  'tutorial.l3.tipBody': 'לא חייבים תמיד לבנות תרגיל מאפס. לפעמים כבר מחכה לכם משוואה פתורה שאפשר ללמוד ממנה.',
-  'tutorial.l3.tipCta': 'בואו נראה',
+  'tutorial.l3.tipTitle': 'מרגישים תקועים?',
+  'tutorial.l3.tipBody': 'לא חייבים לבנות הכל מאפס! לפעמים מחכה לכם על הלוח משוואה שכבר פתורה – שווה להיעזר בה.',
+  'tutorial.l3.tipCta': 'תראו לי!',
   'tutorial.l3.previewBot': 'הנה משוואה פתורה שנפתחת אוטומטית',
   'tutorial.l3.previewCelebrate': 'מעולה! עכשיו רואים איך נראית משוואה מוכנה',
 
@@ -1353,10 +1354,11 @@ export const he: Record<string, string> = {
   'tutorial.l6a.botIntro': 'הכפתור הירוק מראה מה אפשר לבנות מהקוביות שעל השולחן. לחצו עליו כדי לפתוח את הרשימה.',
   'tutorial.l6a.hintTapChip': 'לחצו על הכפתור הירוק כדי לראות את כל התוצאות האפשריות.',
   'tutorial.l6a.celebrate': 'נפתחה רשימת התוצאות. כל מיני־קלף הוא מספר שאפשר להגיע אליו עם הקוביות.',
+  'tutorial.l6a.continue': 'הבנתי — תראו לי מיני־קלף ›',
   // 6.2 — לוחצים על מיני־קלף ורואים את התרגיל האדום
   'tutorial.l6b.botIntro': 'המיני־קלפים מראים חלק מהאפשרויות שאפשר לפתור. לחיצה על מיני־קלף פותחת את הדרך להגיע לתוצאה.',
   'tutorial.l6b.hintTapMini': 'בחרו מיני־קלף. הכרטיס האדום יראה איזה תרגיל יוצר את התוצאה.',
-  'tutorial.l6b.hintReadExercise': 'זה הכרטיס האדום: הוא מראה את התרגיל שמגיע לתוצאה שבחרתם. כשזה ברור לחצו הבנתי.',
+  'tutorial.l6b.hintReadExercise': 'הכפתור האדום מראה את התרגיל שמגיע לתוצאה שבחרתם. נסו אותם ואחר כך תמשיכו.',
   'tutorial.l6b.celebrate': 'בדיוק. קודם בודקים אילו תוצאות אפשריות, ואז בוחרים קלפים שמתאימים לאחת מהן.',
   'tutorial.l6b.demoContinue': 'הבנתי — עכשיו אני מנסה ›',
   'tutorial.l6b.continue': 'הבנתי — בוא נמשיך ›',

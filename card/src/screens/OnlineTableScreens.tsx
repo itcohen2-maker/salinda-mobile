@@ -303,7 +303,7 @@ function getInviteWebBaseUrl(): string {
     const cleanPath = pathname === '/' ? '' : pathname.replace(/\/$/, '');
     return `${window.location.origin}${cleanPath}`;
   }
-  return 'https://salinda-web.onrender.com';
+  return 'https://salinda-mobile.vercel.app';
 }
 
 function isLocalServerUrl(url: string): boolean {

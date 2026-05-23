@@ -198,6 +198,7 @@ export const en: Record<string, string> = {
   'lobby.continueToRoom': 'Save',
   'lobby.roomCodeLabel': 'Room code',
   'lobby.shareCodeHint': 'Share the code so friends can join',
+  'lobby.shareWebLinkHint': "If you don't have the app, use this link to play:",
   'lobby.browserInvite': 'Browser invite link',
   'lobby.inviteHintConfigured':
     'Full links use {{base}}. For guests outside your LAN, enter a public HTTPS URL for the same web app below (or set EXPO_PUBLIC_WEB_APP_URL in build).',
@@ -1225,6 +1226,9 @@ export const en: Record<string, string> = {
   'tutorial.l3.botRoll': 'Every turn you roll dice. Use them to build your equation.',
   'tutorial.l3.hintRoll': 'Tap the button to roll the dice',
   'tutorial.l3.celebrate': 'Use these numbers to build an equation. If it matches a card, you discard it!',
+  'tutorial.l3.tipTitle': 'Feeling stuck?',
+  'tutorial.l3.tipBody': 'You do not have to build everything from scratch. Sometimes the board already has a solved equation waiting - it is worth using it.',
+  'tutorial.l3.tipCta': 'Show me!',
 
   // Lesson 4 — Build an exercise
   'tutorial.l4.title': 'Build an exercise',
@@ -1343,10 +1347,11 @@ export const en: Record<string, string> = {
   'tutorial.l6a.botIntro': 'The green button shows what you can build from the dice on the table. Tap it to open the list.',
   'tutorial.l6a.hintTapChip': 'Tap the green button to see all possible results.',
   'tutorial.l6a.celebrate': 'The result list is open. Each mini card is a number you can reach with the dice.',
+  'tutorial.l6a.continue': 'Got it - show me a mini card >',
   // 6.2 — tap a mini card to see the red solve chip
   'tutorial.l6b.botIntro': 'The mini cards show some of the options you can solve. Tapping a mini card opens the way to reach that result.',
   'tutorial.l6b.hintTapMini': 'Choose a mini card. The red card will show which equation creates that result.',
-  'tutorial.l6b.hintReadExercise': 'This is the red card: it shows the equation that reaches your chosen result. When it is clear, tap Got it.',
+  'tutorial.l6b.hintReadExercise': 'The red button shows the equation that reaches the result you chose. Try them, then continue.',
   'tutorial.l6b.celebrate': 'Exactly. First check the possible results, then choose cards that match one of them.',
   'tutorial.l6b.demoContinue': 'Got it - now I will try >',
   'tutorial.l6b.continue': 'Got it - let\'s continue >',

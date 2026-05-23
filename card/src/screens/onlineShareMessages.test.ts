@@ -6,6 +6,7 @@ const labels: Record<string, string> = {
   'lobby.shareInviteCode': 'Share the invite code with invitees',
   'lobby.roomCodeLabel': 'Room code',
   'lobby.inviteCodeLabel': 'Invite code',
+  'lobby.shareWebLinkHint': "If you don't have the app, use this link to play:",
 };
 
 const t = (key: string): string => labels[key] ?? key;
@@ -23,7 +24,9 @@ describe('online share messages', () => {
     ).toBe(
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
-        'Room code: 1234',
+        'Room code: 1234\n' +
+        "If you don't have the app, use this link to play:\n" +
+        'https://salinda.example/?room=1234',
     );
   });
 
@@ -40,11 +43,13 @@ describe('online share messages', () => {
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
         'Room code: 1234\n' +
-        'Invite code: 987654',
+        'Invite code: 987654\n' +
+        "If you don't have the app, use this link to play:\n" +
+        'https://salinda.example/?room=1234&invite=987654',
     );
   });
 
-  it('keeps the same short format for the private-share action', () => {
+  it('keeps the same short format for the private-share action when no link', () => {
     expect(
       buildPrivateInviteShareMessage({
         t,
@@ -58,6 +63,25 @@ describe('online share messages', () => {
         'Share the code so friends can join\n' +
         'Room code: 1234\n' +
         'Invite code: 987654',
+    );
+  });
+
+  it('appends the web link to the private-share action when a link is provided', () => {
+    expect(
+      buildPrivateInviteShareMessage({
+        t,
+        roomCode: '1234',
+        inviteCode: '987654',
+        inviteLink: 'https://salinda.example/?room=1234&invite=987654',
+        inviteSuffix: '?room=1234&invite=987654',
+      }),
+    ).toBe(
+      'You were invited to play Salinda.\n' +
+        'Share the code so friends can join\n' +
+        'Room code: 1234\n' +
+        'Invite code: 987654\n' +
+        "If you don't have the app, use this link to play:\n" +
+        'https://salinda.example/?room=1234&invite=987654',
     );
   });
 });

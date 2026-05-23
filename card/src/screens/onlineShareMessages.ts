@@ -21,9 +21,11 @@ export function buildRoomShareMessage({
   t,
   roomCode,
   inviteCode,
+  inviteLink,
 }: ShareMessageOptions): string {
   const normalizedRoomCode = roomCode?.trim();
   const normalizedInviteCode = inviteCode?.trim();
+  const normalizedInviteLink = inviteLink?.trim();
 
   if (!normalizedRoomCode) return '';
 
@@ -32,6 +34,8 @@ export function buildRoomShareMessage({
     t('lobby.shareCodeHint'),
     `${t('lobby.roomCodeLabel')}: ${normalizedRoomCode}`,
     normalizedInviteCode ? `${t('lobby.inviteCodeLabel')}: ${normalizedInviteCode}` : null,
+    normalizedInviteLink ? t('lobby.shareWebLinkHint') : null,
+    normalizedInviteLink ?? null,
   ]);
 }
 
@@ -39,9 +43,11 @@ export function buildPrivateInviteShareMessage({
   t,
   roomCode,
   inviteCode,
+  inviteLink,
 }: ShareMessageOptions): string {
   const normalizedRoomCode = roomCode?.trim();
   const normalizedInviteCode = inviteCode?.trim();
+  const normalizedInviteLink = inviteLink?.trim();
 
   if (!normalizedInviteCode) return '';
 
@@ -50,5 +56,7 @@ export function buildPrivateInviteShareMessage({
     t('lobby.shareCodeHint'),
     normalizedRoomCode ? `${t('lobby.roomCodeLabel')}: ${normalizedRoomCode}` : null,
     `${t('lobby.inviteCodeLabel')}: ${normalizedInviteCode}`,
+    normalizedInviteLink ? t('lobby.shareWebLinkHint') : null,
+    normalizedInviteLink ?? null,
   ]);
 }
