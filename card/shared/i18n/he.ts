@@ -1220,15 +1220,15 @@ export const he: Record<string, string> = {
   // שיעור 1 — המניפה (גלילה)
   'tutorial.l1.title': 'המניפה',
   'tutorial.l1.desc': '.הזיזו אותה הצידה כדי לראות את כל הקלפים',
-  'tutorial.l1.hintScroll': '↔ נסו להזיז את המניפה',
-  'tutorial.l1.botScroll': 'ככה מזיזים את המניפה',
+  'tutorial.l1.hintScroll': 'הזיזו את המניפה כדי לראות את כל ה-7 ↔️',
+  'tutorial.l1.botScroll': 'הכירו את מניפת הקלפים שלכם. מתחילים עם 7 קלפים...',
 
   // שיעור 2 — בחירת קלף
   'tutorial.l2.title': 'בחירת קלף',
   'tutorial.l2.desc': '.אפשר ללחוץ על קלף כדי לבחור אותו',
-  'tutorial.l2.hintTap': 'נסו ללחוץ על קלף',
-  'tutorial.l2.botTap': 'ככה לוחצים על קלף',
-  'tutorial.l2.celebrate': 'כל הכבוד — בחרתם קלף',
+  'tutorial.l2.hintTap': 'לחצו על הקלף המודגש כדי לבחור את הראשון שנרצה להעיף.',
+  'tutorial.l2.botTap': 'חוק הברזל של סלינדה: מנצחים ברגע שנשארים עם 2 קלפים בלבד! זה אומר שצריך להעיף בדיוק 5 קלפים.',
+  'tutorial.l2.celebrate': 'מעולה! בחרנו קלף מטרה. עכשיו נראה איך מעיפים אותו ומתקרבים ל-2!',
 
   // שיעור 3 — הקוביות
   'tutorial.l3.title': 'הקוביות',
@@ -1369,6 +1369,13 @@ export const he: Record<string, string> = {
   'tutorial.l6b.continue': 'הבנתי — בוא נמשיך ›',
   // 6.3 — מסיימים מהלך עם קלף פרא
   'tutorial.l6c.botIntro': 'עכשיו תורכם — סיימו את המהלך עם קלף פרא כדי להגיע לתוצאה',
+  'tutorial.l6c.turnModalTitle': 'עכשיו תורכם!',
+  'tutorial.l6c.turnModalBodyBeforeCards': 'הביטו קודם כל ב-',
+  'tutorial.l6c.turnModalBodyCards': 'קלפים שלכם למטה',
+  'tutorial.l6c.turnModalBodyAfterCards': '.\nבחרו קלף שתרצו להיפטר ממנו, ונסו ',
+  'tutorial.l6c.turnModalBodyBuild': 'לבנות מהקוביות תרגיל',
+  'tutorial.l6c.turnModalBodyAfterBuild': ' שיגיע בדיוק לתוצאה שלו!',
+  'tutorial.l6c.turnModalCta': 'יוצאים לדרך! 🚀',
   'tutorial.l6c.wildMockupBody': 'תוכלו להניח במקום כל מספר',
   'tutorial.l6c.hintCopy': 'בחרו קלף פרא (או קלף נוסף יחד עם קלף פרא). ככה תוכלו להיפטר משני קלפים בבת אחת!',
   'tutorial.l6c.hintConfirm': 'לחצו אישור כדי להניח את הקלפים',
