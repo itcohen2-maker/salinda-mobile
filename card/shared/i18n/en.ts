@@ -425,7 +425,6 @@ export const en: Record<string, string> = {
   'ui.turnTimerLabel': 'If you do not act, turn passes',
   'ui.seconds': 'seconds',
   'ui.wildIdenticalHint': 'Wild handy? Discard it as a match when the top is a number — it counts as that number.',
-  'ui.gotIt': 'Got it',
   'ui.previousTurnSummary': 'Last turn summary',
 
   'results.possibleTitle': 'Possible results',

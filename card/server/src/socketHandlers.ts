@@ -1487,7 +1487,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     };
     promoteConnectedHumanHost(room, playerId);
     clearRoomDisconnectGrace(room);
-    room.state = withOnlineTurnDeadline(room.state);
+    if (room.state) room.state = withOnlineTurnDeadline(room.state);
     room.lastActivity = Date.now();
 
     emitRoomPlayers(io, room);

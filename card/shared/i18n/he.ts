@@ -426,7 +426,6 @@ export const he: Record<string, string> = {
   'ui.turnTimerLabel': 'אם לא תפעל/י — התור יעבור',
   'ui.seconds': 'שניות',
   'ui.wildIdenticalHint': 'יש לך קלף פרא? תוכל להפטר ממנו כקלף זהה — כשראש הערימה קלף מספר, הפרא נספר כאותו מספר.',
-  'ui.gotIt': 'הבנתי',
   'ui.previousTurnSummary': 'סיכום התור הקודם',
 
   'results.possibleTitle': 'תוצאות אפשריות',
