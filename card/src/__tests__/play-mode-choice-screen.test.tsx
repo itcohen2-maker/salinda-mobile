@@ -47,6 +47,9 @@ jest.mock('../i18n/LocaleContext', () => ({
         'lang.label': 'Language',
         'lobby.guideButton': 'Tutorial',
         'lobby.namePlaceholder': 'My name',
+        'lobby.playNow': 'Play now',
+        'lobby.sendFeedback': 'Send feedback',
+        'lobby.startTutorial': 'Start tutorial',
         'lobby.yourName': 'Your name',
         'mode.play': 'Play',
         'shop.openShop': 'Shop',
@@ -100,7 +103,6 @@ describe('PlayModeChoiceScreen auth button', () => {
     render(<PlayModeChoiceScreen {...baseProps} />);
 
     expect(screen.getByTestId('home-auth-button')).toBeTruthy();
-    expect(screen.getByText('Sign in to load your history, bank, and settings.')).toBeTruthy();
   });
 
   it('keeps the auth button for signed-in players without the helper text', () => {
@@ -110,5 +112,35 @@ describe('PlayModeChoiceScreen auth button', () => {
 
     expect(screen.getByTestId('home-auth-button')).toBeTruthy();
     expect(screen.queryByText('Sign in to load your history, bank, and settings.')).toBeNull();
+  });
+
+  it('keeps feedback and coin gifting controls hidden for non-admin players', () => {
+    mockUseAuth.mockReturnValue({ isAnonymous: false, profile: { total_coins: 15 } });
+
+    render(<PlayModeChoiceScreen {...baseProps} />);
+
+    expect(screen.queryByTestId('home-feedback-toggle')).toBeNull();
+    expect(screen.queryByTestId('home-feedback-inbox')).toBeNull();
+    expect(screen.queryByTestId('home-admin-coins')).toBeNull();
+  });
+
+  it('shows feedback and coin gifting controls for admins only', () => {
+    mockUseAuth.mockReturnValue({ isAnonymous: false, profile: { total_coins: 15 } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true });
+
+    render(<PlayModeChoiceScreen {...baseProps} />);
+
+    expect(screen.getByTestId('home-feedback-toggle')).toBeTruthy();
+    expect(screen.getByTestId('home-feedback-inbox')).toBeTruthy();
+    expect(screen.getByTestId('home-admin-coins')).toBeTruthy();
+  });
+
+  it('keeps tutorial and shop available after swapping their menu positions', () => {
+    mockUseAuth.mockReturnValue({ isAnonymous: true, profile: { total_coins: 15 } });
+
+    render(<PlayModeChoiceScreen {...baseProps} />);
+
+    expect(screen.getByTestId('lobby-tutorial')).toBeTruthy();
+    expect(screen.getByTestId('lobby-shop')).toBeTruthy();
   });
 });

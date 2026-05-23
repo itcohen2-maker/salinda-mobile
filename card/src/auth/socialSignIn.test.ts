@@ -125,6 +125,34 @@ describe('performSocialSignIn', () => {
     });
   });
 
+  it('starts Google OAuth with a web redirect on web', async () => {
+    platformRef.OS = 'web';
+    const originalLocation = globalThis.window?.location;
+    const assign = jest.fn();
+    Object.defineProperty(globalThis.window, 'location', {
+      configurable: true,
+      value: { assign },
+    });
+
+    const result = await performSocialSignIn('google');
+
+    expect(result).toEqual({ error: null });
+    expect(mockSupabaseAuth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: {
+        redirectTo: 'https://app.local/auth/callback',
+        skipBrowserRedirect: true,
+      },
+    });
+    expect(assign).toHaveBeenCalledWith('https://auth.example/start');
+    expect(mockOpenAuthSessionAsync).not.toHaveBeenCalled();
+    expect(mockSupabaseAuth.exchangeCodeForSession).not.toHaveBeenCalled();
+    Object.defineProperty(globalThis.window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
   it('returns a surfaced error when the browser flow is canceled', async () => {
     platformRef.OS = 'android';
     mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' } as never);

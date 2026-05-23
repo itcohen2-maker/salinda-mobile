@@ -64,15 +64,30 @@ export async function performSocialSignIn(
   provider: SocialAuthProvider,
   options: SocialSignInOptions = {},
 ): Promise<{ error: string | null }> {
-  if (Platform.OS === 'web') {
-    return { error: 'Social sign-in is not available in the web flow.' };
-  }
-
   try {
     const redirectTo = buildSocialAuthRedirectUri();
     const queryParams = provider === 'google' && options.forceAccountPicker
       ? { prompt: 'select_account' }
       : undefined;
+
+    if (Platform.OS === 'web') {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          ...(queryParams ? { queryParams } : {}),
+        },
+      });
+
+      if (error) return { error: error.message };
+      if (!data?.url) return { error: 'Could not start sign-in.' };
+      if (typeof window !== 'undefined') {
+        window.location.assign(data.url);
+      }
+      return { error: null };
+    }
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {

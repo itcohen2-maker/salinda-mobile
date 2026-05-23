@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import {
+  createSessionFromUrl,
   performSocialSignIn,
+  SOCIAL_AUTH_CALLBACK_PATH,
   type SocialAuthProvider,
   type SocialSignInOptions,
 } from '../auth/socialSignIn';
@@ -43,7 +46,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, username: string) => Promise<{ error: string | null }>;
   /** Sign in with email + password (for users who already linked their account). */
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  /** Sign in with Google or Apple, primarily for native mobile flows. */
+  /** Sign in with Google or Apple. */
   signInWithProvider: (provider: SocialAuthProvider, options?: SocialSignInOptions) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   signOutToGuest: () => Promise<{ error: string | null }>;
@@ -181,6 +184,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const init = async () => {
       try {
+        if (
+          Platform.OS === 'web' &&
+          typeof window !== 'undefined' &&
+          window.location.pathname.includes(SOCIAL_AUTH_CALLBACK_PATH) &&
+          (window.location.search || window.location.hash)
+        ) {
+          await createSessionFromUrl(window.location.href);
+          window.history.replaceState(null, '', window.location.origin);
+        }
+
         const { data: sessionData } = await supabase.auth.getSession();
         const s = sessionData?.session ?? null;
         if (s) {

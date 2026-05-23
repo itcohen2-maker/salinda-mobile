@@ -41,7 +41,6 @@ jest.mock('../i18n/LocaleContext', () => ({
         'auth.accountMenuTitle': 'Account',
         'auth.accountMenuSubtitle': 'Manage the user currently connected to this device.',
         'auth.currentAccountLabel': 'Current account',
-        'auth.currentGuest': `Current guest ID: ${params?.id ?? ''}`,
         'auth.signOutButton': 'Sign out',
       };
       return copy[key] ?? key;
@@ -102,6 +101,10 @@ describe('AuthScreen', () => {
 
   it('shows the provider chooser first on native without Apple', () => {
     platformRef.OS = 'android';
+    authState = {
+      ...authState,
+      profile: { username: 'player_e829d4' } as never,
+    };
 
     render(<AuthScreen onBack={onBack} onSuccess={onSuccess} />);
 
@@ -109,15 +112,19 @@ describe('AuthScreen', () => {
     expect(screen.getByTestId('auth-email-fallback-button')).toBeTruthy();
     expect(screen.queryByTestId('auth-social-apple-button')).toBeNull();
     expect(screen.queryByPlaceholderText('Email')).toBeNull();
+    expect(screen.queryByText(/Current guest ID/i)).toBeNull();
+    expect(screen.queryByText(/abc/i)).toBeNull();
+    expect(screen.queryByText(/player_e829d4/i)).toBeNull();
   });
 
-  it('keeps the email form on web for anonymous users', () => {
+  it('shows the provider chooser first on web too', () => {
     platformRef.OS = 'web';
 
     render(<AuthScreen onBack={onBack} onSuccess={onSuccess} />);
 
-    expect(screen.getByPlaceholderText('Email')).toBeTruthy();
-    expect(screen.queryByTestId('auth-social-google-button')).toBeNull();
+    expect(screen.getByTestId('auth-social-google-button')).toBeTruthy();
+    expect(screen.getByTestId('auth-email-fallback-button')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Email')).toBeNull();
   });
 
   it('reveals the email form from the native chooser', () => {

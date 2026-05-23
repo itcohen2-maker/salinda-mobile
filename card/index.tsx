@@ -34,7 +34,7 @@ import {
   I18nManager, View, Text, TextInput, ScrollView, TouchableOpacity, Image, ImageBackground, BackHandler,
   StyleSheet, Animated, Easing, Dimensions, Modal as RNModal, Platform, PanResponder, Alert,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, NativeModules, AppState, Vibration,
-  StatusBar as RNStatusBar, Pressable,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
@@ -19795,16 +19795,30 @@ function MenuCoinButton({
   coins,
   onPress,
   testID,
+  width = MENU_CAPSULE_WIDTH,
+  height = MENU_CAPSULE_HEIGHT,
+  labelFontSize,
+  coinSize,
+  iconWrapSize,
   style,
 }: {
   coins: number;
   onPress: () => void;
   testID?: string;
+  width?: number;
+  height?: number;
+  labelFontSize?: number;
+  coinSize?: number;
+  iconWrapSize?: number;
   style?: any;
 }) {
   const { t, locale } = useLocale();
   const safeCoins = Math.max(0, Math.floor(Number(coins) || 0));
   const shopButtonLabel = locale === 'he' ? 'חנות' : t('shop.openShop');
+  const resolvedCoinSize = coinSize ?? 30;
+  const resolvedIconWrapSize = iconWrapSize ?? 38;
+  const iconHaloSize = Math.max(24, resolvedIconWrapSize - 4);
+  const textFontSize = labelFontSize ?? (locale === 'he' ? 16 : 15);
   const accessibilityLabel = locale === 'he'
     ? `${shopButtonLabel}. ${safeCoins} מטבעות`
     : `Shop. You earned ${safeCoins} coins`;
@@ -19817,8 +19831,8 @@ function MenuCoinButton({
       onPress={onPress}
       style={[
         {
-          width: MENU_CAPSULE_WIDTH,
-          height: MENU_CAPSULE_HEIGHT,
+          width,
+          height,
           borderRadius: 999,
           overflow: 'hidden',
           shadowColor: '#F59E0B',
@@ -19860,8 +19874,8 @@ function MenuCoinButton({
               flexDirection: locale === 'he' ? 'row-reverse' : 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              paddingHorizontal: 16,
-              gap: 8,
+              paddingHorizontal: height <= 44 ? 12 : 16,
+              gap: height <= 44 ? 6 : 8,
             }}
           >
             <Text
@@ -19870,9 +19884,9 @@ function MenuCoinButton({
               minimumFontScale={0.82}
               style={{
                 color: '#7C2D12',
-                fontSize: locale === 'he' ? 16 : 15,
+                fontSize: textFontSize,
                 fontWeight: '900',
-                lineHeight: locale === 'he' ? 18 : 17,
+                lineHeight: Math.max(16, textFontSize + 2),
                 flexShrink: 1,
               }}
             >
@@ -19880,8 +19894,8 @@ function MenuCoinButton({
             </Text>
             <View
               style={{
-                width: 38,
-                height: 38,
+                width: resolvedIconWrapSize,
+                height: resolvedIconWrapSize,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -19890,13 +19904,13 @@ function MenuCoinButton({
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  width: 34,
-                  height: 34,
-                  borderRadius: 17,
+                  width: iconHaloSize,
+                  height: iconHaloSize,
+                  borderRadius: iconHaloSize / 2,
                   backgroundColor: 'rgba(255,248,205,0.38)',
                 }}
               />
-              <SlindaCoin size={30} spin />
+              <SlindaCoin size={resolvedCoinSize} spin />
             </View>
           </View>
         </LinearGradient>
@@ -19927,7 +19941,7 @@ export function PlayModeChoiceScreen({
   onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
 }) {
   const { t, locale, setLocale } = useLocale();
-  const { profile, isAnonymous } = useAuth();
+  const { profile } = useAuth();
   const { isFeedbackAdmin } = useFeedbackAdmin();
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
@@ -19942,6 +19956,7 @@ export function PlayModeChoiceScreen({
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
   const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
+  const showAdminControls = isFeedbackAdmin;
 
   useEffect(() => {
     let cancelled = false;
@@ -19993,44 +20008,16 @@ export function PlayModeChoiceScreen({
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
-              <Pressable
-                accessibilityRole="button"
+              <LulosButton
+                text={heroLabel}
+                color="green"
+                width={280}
+                height={72}
+                fontSize={24}
                 accessibilityLabel={heroLabel}
                 testID={heroTestID}
                 onPress={heroAction}
-                android_disableSound
-                style={({ pressed }) => ({
-                  width: 280,
-                  height: 72,
-                  backgroundColor: '#1B4D3E',
-                  borderRadius: 36,
-                  borderWidth: 2,
-                  borderColor: '#A3E635',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: '#FF4FD8',
-                  shadowOpacity: 0.82,
-                  shadowRadius: 20,
-                  shadowOffset: { width: 0, height: 0 },
-                  elevation: 18,
-                  opacity: pressed ? 0.88 : 1,
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                })}
-              >
-                <Text
-                  style={{
-                    color: '#FFFFFF',
-                    fontSize: 24,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    includeFontPadding: false,
-                    textAlignVertical: 'center',
-                  }}
-                >
-                  {heroLabel}
-                </Text>
-              </Pressable>
+              />
               {!tutorialDone ? (
                 <View
                   pointerEvents="none"
@@ -20056,7 +20043,7 @@ export function PlayModeChoiceScreen({
               ) : null}
             </View>
 
-            {/* ── 2. SECONDARY ROW: name input + language toggle + coins ── */}
+            {/* ── 2. SECONDARY ROW: name input + language toggle + guide ── */}
             <View
               style={{
                 flexDirection: 'row',
@@ -20142,29 +20129,27 @@ export function PlayModeChoiceScreen({
                 />
               </View>
 
-              {/* Coins / shop */}
-              <MenuCoinButton coins={totalCoins} testID="lobby-shop" onPress={onShop} />
+              <LulosButton
+                text={t('lobby.guideButton')}
+                color="orange"
+                width={MENU_CAPSULE_WIDTH}
+                height={MENU_CAPSULE_HEIGHT}
+                fontSize={MENU_CAPSULE_FONT_SIZE}
+                testID="lobby-tutorial"
+                onPress={onHowToPlay}
+              />
             </View>
 
-            {/* ── 3. ACTION BUTTONS: guide / feedback / auth ── */}
-            <LulosButton
-              text={t('lobby.guideButton')}
-              color="orange"
+            {/* ── 3. ACTION BUTTONS: shop / auth ── */}
+            <MenuCoinButton
+              coins={totalCoins}
               width={220}
               height={42}
-              fontSize={15}
-              testID="lobby-tutorial"
-              onPress={onHowToPlay}
-              style={{ marginBottom: 12, alignSelf: 'center' }}
-            />
-            <LulosButton
-              text={t('lobby.sendFeedback')}
-              color="blue"
-              width={220}
-              height={42}
-              fontSize={15}
-              testID="home-feedback-toggle"
-              onPress={() => setFeedbackOpen((prev) => !prev)}
+              labelFontSize={15}
+              coinSize={24}
+              iconWrapSize={30}
+              testID="lobby-shop"
+              onPress={onShop}
               style={{ marginBottom: 12, alignSelf: 'center' }}
             />
             <LulosButton
@@ -20179,7 +20164,7 @@ export function PlayModeChoiceScreen({
             />
 
             {/* Feedback card — inline expansion */}
-            {feedbackOpen ? (
+            {showAdminControls && feedbackOpen ? (
               <View style={{ width: '100%', alignItems: 'center', marginBottom: sectionGap }}>
                 <FeedbackMailCard
                   isRTL={locale === 'he'}
@@ -20202,9 +20187,19 @@ export function PlayModeChoiceScreen({
               </View>
             ) : null}
 
-            {/* ── 4. ADMIN BLOCK (unchanged) ── */}
-            {isFeedbackAdmin ? (
+            {/* ── 4. ADMIN BLOCK ── */}
+            {showAdminControls ? (
               <>
+                <LulosButton
+                  text={t('lobby.sendFeedback')}
+                  color="blue"
+                  width={220}
+                  height={42}
+                  fontSize={15}
+                  testID="home-feedback-toggle"
+                  onPress={() => setFeedbackOpen((prev) => !prev)}
+                  style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
+                />
                 <LulosButton
                   text={t('feedbackInbox.open')}
                   color="orange"
@@ -20213,7 +20208,7 @@ export function PlayModeChoiceScreen({
                   fontSize={14}
                   testID="home-feedback-inbox"
                   onPress={onOpenFeedbackInbox}
-                  style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
                 />
                 <LulosButton
                   text={adminCoinsLabel}
@@ -20237,10 +20232,12 @@ export function PlayModeChoiceScreen({
 
 function GameEntryChoiceScreen({
   onBack,
+  onSolo,
   onVsBot,
   onWithFriends,
 }: {
   onBack: () => void;
+  onSolo: () => void;
   onVsBot: () => void;
   onWithFriends: () => void;
 }) {
@@ -20316,6 +20313,14 @@ function GameEntryChoiceScreen({
           <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
             {t('gameEntry.title')}
           </Text>
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: 16 }}>
+            <MenuCapsuleButton
+              text={t('gameEntry.solo')}
+              color="green"
+              testID="lobby-play-solo"
+              onPress={onSolo}
+            />
+          </View>
           <View style={{ width: '100%', alignItems: 'center', marginBottom: buttonGap }}>
             <MenuCapsuleButton
               text={t('gameEntry.vsSalinda')}
@@ -20331,8 +20336,7 @@ function GameEntryChoiceScreen({
           </View>
           <MenuCapsuleButton
             text={t('gameEntry.withFriends')}
-            color="orange"
-            textColor="#FFFFFF"
+            color="green"
             testID="lobby-play-friends"
             onPress={onWithFriends}
           />
@@ -20426,15 +20430,14 @@ function FriendsChoiceScreen({
           </Text>
           <MenuCapsuleButton
             text={t('gameEntry.sameDevice')}
-            color="orange"
-            textColor="#FFFFFF"
+            color="green"
             testID="lobby-play-pass-and-play"
             onPress={onSameDevice}
             style={{ marginBottom: buttonGap }}
           />
           <MenuCapsuleButton
             text={t('gameEntry.online')}
-            color="blue"
+            color="green"
             testID="lobby-join-room"
             onPress={onOnline}
           />
@@ -21162,6 +21165,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     screen = (
       <GameEntryChoiceScreen
         onBack={() => setPlayMode('choose')}
+        onSolo={() => {
+          setSelectedLocalGameMode('solo');
+          setPlayMode('local');
+        }}
         onVsBot={() => {
           setSelectedLocalGameMode('vs-bot');
           setPlayMode('local');

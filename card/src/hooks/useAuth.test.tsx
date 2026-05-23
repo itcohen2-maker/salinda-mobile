@@ -10,7 +10,9 @@ import { performSocialSignIn } from '../auth/socialSignIn';
 import { supabase } from '../lib/supabase';
 
 jest.mock('../auth/socialSignIn', () => ({
+  createSessionFromUrl: jest.fn(),
   performSocialSignIn: jest.fn(),
+  SOCIAL_AUTH_CALLBACK_PATH: 'auth/callback',
 }));
 
 const profilesById: Record<string, PlayerProfile> = {
