@@ -62,6 +62,9 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
   const [hasError, setHasError] = useState(false);
   const [copiedFeedbackId, setCopiedFeedbackId] = useState<string | null>(null);
   const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeTab, setActiveTab] = useState<FeedbackSubmissionStatus>('new');
+  const [ascending, setAscending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadFeedbackItems = useCallback(async () => {
     if (!user?.id || !isFeedbackAdmin) {
@@ -71,6 +74,7 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
       return;
     }
 
+    setActionError(null);
     setLoading(true);
     setHasError(false);
     try {
@@ -79,8 +83,9 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
         .select(
           'id, username_snapshot, is_anonymous, locale, experience_kind, rating, comment, platform, app_version, status, created_at',
         )
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .eq('status', activeTab)
+        .order('created_at', { ascending })
+        .limit(200);
 
       if (queryError) {
         setFeedbackItems([]);
@@ -95,7 +100,7 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
     } finally {
       setLoading(false);
     }
-  }, [isFeedbackAdmin, user?.id]);
+  }, [isFeedbackAdmin, user?.id, activeTab, ascending]);
 
   useEffect(() => {
     void loadFeedbackItems();
@@ -134,6 +139,24 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
     }, 1600);
   }, []);
 
+  const handleUpdateStatus = useCallback(async (id: string, newStatus: FeedbackSubmissionStatus) => {
+    setFeedbackItems((prev) => prev.filter((item) => item.id !== id));
+    setActionError(null);
+    try {
+      const { error } = await supabase
+        .from('feedback_submissions')
+        .update({ status: newStatus })
+        .eq('id', id);
+      if (error) {
+        setActionError(t('feedbackInbox.actionError'));
+        void loadFeedbackItems();
+      }
+    } catch {
+      setActionError(t('feedbackInbox.actionError'));
+      void loadFeedbackItems();
+    }
+  }, [loadFeedbackItems, t]);
+
   if (adminLoading) {
     return (
       <View style={styles.loadingShell}>
@@ -170,7 +193,35 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.subtitle}>{t('feedbackInbox.subtitle')}</Text>
+      {/* Tab bar */}
+      <View style={[styles.tabBar, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        {(['new', 'reviewed', 'archived'] as FeedbackSubmissionStatus[]).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            onPress={() => setActiveTab(tab)}
+            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+          >
+            <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
+              {t(`feedbackInbox.status.${tab}`)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Sort toggle */}
+      <TouchableOpacity
+        onPress={() => setAscending((prev) => !prev)}
+        style={[styles.sortToggle, { alignSelf: isRTL ? 'flex-start' : 'flex-end' }]}
+      >
+        <Text style={styles.sortToggleText}>
+          {ascending ? t('feedbackInbox.sortOldest') : t('feedbackInbox.sortNewest')} ↕
+        </Text>
+      </TouchableOpacity>
+
+      {/* Action error banner */}
+      {actionError ? (
+        <Text style={styles.actionErrorText}>{actionError}</Text>
+      ) : null}
 
       {loading ? (
         <View style={styles.loadingShell}>
@@ -252,6 +303,26 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
                   <Text style={[styles.commentText, { textAlign: labelAlign, writingDirection: cardDirection }]}>
                     {item.comment.trim() || t('feedbackInbox.noComment')}
                   </Text>
+                  {activeTab !== 'archived' ? (
+                    <View style={[styles.actionRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                      {activeTab === 'new' ? (
+                        <TouchableOpacity
+                          onPress={() => void handleUpdateStatus(item.id, 'reviewed')}
+                          style={styles.actionButton}
+                          testID={`feedback-mark-reviewed-${item.id}`}
+                        >
+                          <Text style={styles.actionButtonText}>{t('feedbackInbox.markReviewed')}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={() => void handleUpdateStatus(item.id, 'archived')}
+                        style={[styles.actionButton, styles.actionButtonArchive]}
+                        testID={`feedback-archive-${item.id}`}
+                      >
+                        <Text style={styles.actionButtonText}>{t('feedbackInbox.archive')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
               );
             })
@@ -442,5 +513,73 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '600',
     marginTop: 10,
+  },
+  tabBar: {
+    marginTop: 14,
+    gap: 8,
+    justifyContent: 'center',
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15,23,42,0.76)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.22)',
+  },
+  tabButtonActive: {
+    backgroundColor: 'rgba(37,99,235,0.24)',
+    borderColor: 'rgba(96,165,250,0.52)',
+  },
+  tabButtonText: {
+    color: 'rgba(191,219,254,0.6)',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  tabButtonTextActive: {
+    color: '#BFDBFE',
+  },
+  sortToggle: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  sortToggleText: {
+    color: '#7DD3FC',
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  actionErrorText: {
+    marginTop: 8,
+    color: '#FCA5A5',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  actionRow: {
+    marginTop: 12,
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37,99,235,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.34)',
+  },
+  actionButtonArchive: {
+    backgroundColor: 'rgba(100,116,139,0.18)',
+    borderColor: 'rgba(148,163,184,0.34)',
+  },
+  actionButtonText: {
+    color: '#BFDBFE',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });
