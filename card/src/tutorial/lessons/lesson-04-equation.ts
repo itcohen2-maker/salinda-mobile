@@ -39,18 +39,26 @@ export const lesson04Equation: Lesson = {
         const target = cfg?.target ?? 5;
         const hand = cfg?.hand ?? [1, 2, 3, 4, 5];
         const targetIdx = hand.indexOf(target);
-        await api.wait(2800);
-        await api.eqPickDice(pickA);
-        await api.wait(200);
-        await api.eqSetOp(1, '+');
-        await api.wait(200);
-        await api.eqPickDice(pickB);
-        await api.wait(600);
-        await api.eqConfirm();
-        await api.wait(2400);
+        // Pause so the learner reads the "I'm looking at my cards" bubble.
+        await api.wait(2500);
+        // Scroll the fan to the target card FIRST — visually shows the bot
+        // "looking through" the hand before building, then slows at the target.
         if (targetIdx >= 0) {
-          await api.scrollFanTo(targetIdx, { durationMs: 600, easing: 'settle' });
-          await api.wait(300);
+          await api.scrollFanTo(targetIdx, { durationMs: 1400, easing: 'settle' });
+          await api.wait(1000);
+        }
+        // Build the equation — slower gaps for first-time learners.
+        await api.eqPickDice(pickA);
+        await api.wait(500);
+        await api.eqSetOp(1, '+');
+        await api.wait(500);
+        await api.eqPickDice(pickB);
+        await api.wait(900);
+        await api.eqConfirm();
+        // Hold the "result announced" state so the learner can read it.
+        await api.wait(2800);
+        // Pulse the target card to draw attention before staging.
+        if (targetIdx >= 0) {
           await api.pulseCard(targetIdx, 6000);
         }
         await api.stageCardByValue(target);

@@ -950,6 +950,9 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // drive ROLL_DICE, and the bot demo reads pickA/pickB/target to know
   // which dice to pick and what the correct card value is.
   const l4DiceRef = useRef<ReturnType<typeof rollL4Dice> | null>(null);
+  // Ref so event callbacks can read current gameState without stale closures.
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   // Brief green-V overlay when the bot taps the equation confirm button.
   const [showConfirmCheck, setShowConfirmCheck] = useState(false);
   const confirmCheckScale = useRef(new Animated.Value(0)).current;
@@ -1771,13 +1774,20 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL7 = engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX;
     return tutorialBus.subscribeUserEvent((evt) => {
       if (step.outcome(evt)) {
-        // L4.1: filter the played card out of the rigged hand so L4.2 starts clean.
+        // L4.1: filter the played card from the bus config (for L4.2) AND
+        // from gameState.hands so the fan visually shrinks immediately.
         if (engine.lessonIndex === 3 && engine.stepIndex === 0 && evt.kind === 'cardTapped') {
           const cfg = tutorialBus.getL4Config();
           const m = /^tut-l4-(?:bot-)?card-(\d+)(?:-|$)/.exec(evt.cardId);
           const playedValue = m ? parseInt(m[1], 10) : null;
           if (cfg?.hand && playedValue !== null) {
             tutorialBus.setL4Config({ ...cfg, hand: cfg.hand.filter((v) => v !== playedValue) });
+          }
+          const gs = gameStateRef.current;
+          if (gs) {
+            const botHand = (gs.players[0]?.hand ?? []).filter((c) => c.id !== evt.cardId);
+            const learnerHand = gs.players[1]?.hand ?? [];
+            gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [botHand, learnerHand] });
           }
         }
         dispatchEngine({ type: 'OUTCOME_MATCHED' });
@@ -4124,7 +4134,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : isL6WildCelebrate ? 'אתם מוכנים למשחק האמיתי!\nסיימתם את ההדרכה הבסיסית.'
     : engine.phase === 'bot-demo' ? (isL9Lesson ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
     : engine.phase === 'await-mimic'
-      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
+      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, currentStep.hintKey === 'tutorial.l4.hintTap' ? { result: String(gameState?.equationResult ?? '?') } : (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
     : engine.phase === 'celebrate'
       ? (hideL6OpenResultsBubble && engine.lessonIndex === 5 && engine.stepIndex === 0
           ? null
