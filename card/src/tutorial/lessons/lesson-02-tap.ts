@@ -18,8 +18,9 @@ export const lesson02Tap: Lesson = {
       botDemo: async (api) => {
         const n = api.fanLength();
         if (n <= 0) return;
-        // Move to a clearly central card and pulse it so the choice is
-        // unambiguous. floor((n-1)/2) is the same "middle" used in lesson 1.
+        // Pause so the "חוק הברזל" win-condition bubble has time to be read
+        // before the card animation starts.
+        await api.wait(3500);
         const mid = Math.floor((n - 1) / 2);
         await api.scrollFanTo(mid, { durationMs: 500, easing: 'settle' });
         await api.wait(200);
