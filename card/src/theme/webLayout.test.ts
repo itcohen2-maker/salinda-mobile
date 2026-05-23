@@ -40,9 +40,10 @@ describe('getWebGameLayout', () => {
     expect(layout.handBottom).toBe(155);
     expect(layout.fanCardHeight).toBe(140);
     expect(layout.fanViewportHeight).toBe(116);
-    // Gold button is BELOW the hand zone (hand zone ends at 900-155=745)
-    expect(layout.goldActionButtonTop).toBe(760); // = 900 - 140
-    expect(layout.goldActionButtonTop).toBeGreaterThan(900 - 155); // below hand zone bottom
+    // Gold button is above the hand zone on desktop: max(tableTop+tableHeight+20, handTop-70)
+    // handTop = 900 - (155 + 140) = 605; max(425, 535) = 535
+    expect(layout.goldActionButtonTop).toBe(535);
+    expect(layout.goldActionButtonTop).toBeLessThan(900 - (155 + 140)); // above hand zone top
     expect(layout.timerTop).toBe(layout.tableTop + layout.tableHeight + 32);
   });
 
@@ -130,9 +131,9 @@ describe('isWebMobileViewport', () => {
 
 describe('getWebTurnTransitionReadyButtonTop', () => {
   it('keeps the ready button in the same vertical band as the gold action button', () => {
-    // With new 900px canvas: goldActionButtonTop=760, handTop=605
-    expect(getWebTurnTransitionReadyButtonTop(760, 605, 48)).toBe(555); // Math.min(760, 605-48-2)=555
-    expect(getWebTurnTransitionReadyButtonTop(760, 700, 48)).toBe(650); // Math.min(760, 700-48-2)=650
+    // goldActionButtonTop=535 (above hand), handTop=605
+    expect(getWebTurnTransitionReadyButtonTop(535, 605, 48)).toBe(535); // min(535, 605-48-2=555) = 535
+    expect(getWebTurnTransitionReadyButtonTop(535, 580, 48)).toBe(530); // min(535, 580-48-2=530) = 530
   });
 
   it('falls back to 300 if handTop is very small', () => {
