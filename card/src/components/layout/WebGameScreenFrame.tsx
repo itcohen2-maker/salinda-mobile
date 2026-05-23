@@ -8,6 +8,7 @@ type WebGameScreenFrameProps = {
   width: number;
   frameHeight?: number;
   contentScale?: number;
+  snapToTop?: boolean;
   testID?: string;
   outerStyle?: StyleProp<ViewStyle>;
   innerStyle?: StyleProp<ViewStyle>;
@@ -18,6 +19,7 @@ export function WebGameScreenFrame({
   width,
   frameHeight,
   contentScale,
+  snapToTop = false,
   testID,
   outerStyle,
   innerStyle,
@@ -50,10 +52,11 @@ export function WebGameScreenFrame({
             {
               width: width * safeScale,
               height: visualHeight,
-              // Center vertically without justifyContent on the parent
-              // (avoids ResizeObserver loop on React Native Web).
-              marginTop: 'auto' as any,
-              marginBottom: 'auto' as any,
+              // On portrait mobile web, snap to the top so the iOS Safari URL
+              // bar cannot hide the bottom of the game canvas. On desktop the
+              // auto margins center the canvas in the taller browser window.
+              marginTop: snapToTop ? 0 : ('auto' as any),
+              marginBottom: snapToTop ? 0 : ('auto' as any),
             },
           ]}
         >

@@ -16,6 +16,7 @@ export type WebGameLayout = {
   frameHeight: number;
   contentScale: number;
   mobileCompactRatio: number;
+  portraitMobileWebViewport: boolean;
   playfieldWidth: number;
   contentWidth: number;
   tableWidth: number;
@@ -136,6 +137,7 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
     frameHeight,
     contentScale,
     mobileCompactRatio,
+    portraitMobileWebViewport,
     playfieldWidth,
     contentWidth,
     tableWidth,

@@ -14698,6 +14698,7 @@ function TurnTransition() {
       width={turnScreenWidth}
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
+      snapToTop={webGameLayout?.portraitMobileWebViewport ?? false}
       testID="turn-transition-playfield"
       outerStyle={{
         backgroundColor:
@@ -17531,6 +17532,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       width={gameScreenWidth}
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
+      snapToTop={webGameLayout?.portraitMobileWebViewport ?? false}
       testID="game-screen-playfield"
       outerStyle={{
         backgroundColor: state.isTutorial
@@ -18613,6 +18615,7 @@ function PreVictoryCoinAwardScreen() {
       width={screenWidth}
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
+      snapToTop={webGameLayout?.portraitMobileWebViewport ?? false}
       testID="pre-victory-coin-award-playfield"
       outerStyle={{ backgroundColor: '#0f172a' }}
     >
@@ -18682,6 +18685,7 @@ function GameOver({ onPlayVsBot, onBackToLobby }: { onPlayVsBot?: () => void; on
       width={gameOverWidth}
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
+      snapToTop={webGameLayout?.portraitMobileWebViewport ?? false}
       testID="game-over-playfield"
       outerStyle={{ backgroundColor: '#0f172a' }}
     >
@@ -19839,6 +19843,7 @@ function PlayerWaitingScreen({
       width={waitingScreenWidth}
       frameHeight={playfieldFrameHeight}
       contentScale={playfieldContentScale}
+      snapToTop={webGameLayout?.portraitMobileWebViewport ?? false}
       testID="player-waiting-playfield"
       outerStyle={{ backgroundColor: playerScreensGradientColors[0] }}
     >
