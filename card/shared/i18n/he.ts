@@ -1234,7 +1234,8 @@ export const he: Record<string, string> = {
   // שיעור 3 — הקוביות
   'tutorial.l3.title': 'הקוביות',
   'tutorial.l3.desc': 'אלה שלוש הקוביות שמהן נבנה מיד את התרגיל הבא.',
-  'tutorial.l3.botRoll': 'הטלת הקוביות תיתן לנו את המספרים לבניית התרגיל.',
+  'tutorial.l3.diceIntroTitle': 'נשתמש בקוביות!',
+  'tutorial.l3.botRoll': 'הטלת הקוביות תתן לנו את המספרים לבניית התרגיל.\nלחץ על הכפתור לגילגול הקוביות',
   'tutorial.l3.hintRoll': 'לחץ על הכפתור לגילגול הקוביות',
   'tutorial.l3.celebrate': 'יופי! עכשיו המטרה היא לקחת את המספרים האלה ולבנות תרגיל שיגיע בדיוק לקלף שנבחר.',
   'tutorial.l3.tipTitle': 'מרגישים תקועים?',

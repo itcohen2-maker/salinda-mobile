@@ -1228,7 +1228,8 @@ export const en: Record<string, string> = {
   // Lesson 3 — Dice
   'tutorial.l3.title': 'The Dice',
   'tutorial.l3.desc': 'These are the three dice we will use for the next exercise.',
-  'tutorial.l3.botRoll': 'Every turn you roll dice. Use them to build your equation.',
+  'tutorial.l3.diceIntroTitle': "Let's use the dice!",
+  'tutorial.l3.botRoll': 'Rolling the dice gives us numbers to build the equation.\nPress the button to roll the dice',
   'tutorial.l3.hintRoll': 'Tap the button to roll the dice',
   'tutorial.l3.celebrate': 'Use these numbers to build an equation. If it matches a card, you discard it!',
   'tutorial.l3.tipTitle': 'Feeling stuck?',

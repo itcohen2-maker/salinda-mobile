@@ -25,7 +25,7 @@ export const lesson03Dice: Lesson = {
       },
       outcome: (event) => event.kind === 'diceRolled',
       highlight: { target: 'dice', shape: 'ring' },
-      hintKey: 'tutorial.l3.hintRoll',
+      hintKey: 'tutorial.l3.botRoll',
       botHintKey: 'tutorial.l3.botRoll',
       celebrateKey: 'tutorial.l3.celebrate',
     },

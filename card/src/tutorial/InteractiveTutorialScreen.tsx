@@ -4149,12 +4149,16 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     l4Step3HintKey === 'tutorial.l4c.tryAgain';
   const isL2Active = engine.lessonIndex === 1 && (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
   const isL2BotDemo = engine.lessonIndex === 1 && engine.phase === 'bot-demo';
+  const isL3DiceIntro = engine.lessonIndex === 2 && engine.stepIndex === 0 &&
+    (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
   const bubbleTitle =
     isL4CardChoiceBubble
       ? String(gameState?.equationResult ?? '?')
       : isL2Active
         ? t('tutorial.l2.botTapTitle')
-        : undefined;
+        : isL3DiceIntro
+          ? t('tutorial.l3.diceIntroTitle')
+          : undefined;
   const bubbleTitleStyleOverride =
     isL4CardChoiceBubble
       ? {
@@ -6121,7 +6125,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         const bubbleAtTop =
           isEquationLesson ||
           (isOpCycleLesson && engine.stepIndex === 1) ||
-          (isDiceLesson && engine.phase !== 'bot-demo');
+          (isDiceLesson && engine.phase === 'celebrate');
         // Step 5.1 (place-op, await-mimic + celebrate): keep the bubble
         // anchored between the equation mockup and the fan ג€” never at the
         // top of the screen.
@@ -6184,9 +6188,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                     ? { position: 'absolute', top: tutorialCompactMidBubbleTop, alignItems: 'center', zIndex: 9200, ...tutorialTopBubbleInsets }
                     : isL5Step0Bubble
                       ? { position: 'absolute', bottom: L5_STEP0_BUBBLE_BOTTOM, left: 16, right: 16, alignItems: 'center', zIndex: 9200 }
-                      : bubbleAtTop
-                        ? { position: 'absolute', top: 55, alignItems: 'center', zIndex: 9200, ...tutorialTopBubbleInsets }
-                        : { position: 'absolute', bottom: BUBBLE_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9200 }
+                      : isL3DiceIntro
+                        ? { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', zIndex: 9200 }
+                        : bubbleAtTop
+                          ? { position: 'absolute', top: 55, alignItems: 'center', zIndex: 9200, ...tutorialTopBubbleInsets }
+                          : { position: 'absolute', bottom: BUBBLE_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9200 }
             }
           >
             <HappyBubble
@@ -6194,7 +6200,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               title={bubbleTitle}
               tone={bubbleTone}
               arrowSize='small'
-              withTail={!isL6Step1Bubble && !isL6OpenChipHintBubble && !isL6AfterResultsOpenBubble}
+              withTail={!isL3DiceIntro && !isL6Step1Bubble && !isL6OpenChipHintBubble && !isL6AfterResultsOpenBubble}
               size={isCompact ? 'compact' : 'normal'}
               maxWidth={isL6ReadExerciseBubble ? tutorialCompactBubbleMaxWidth : isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
               tailTop={false}
