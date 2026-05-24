@@ -1302,6 +1302,7 @@ export const en: Record<string, string> = {
   'tutorial.l5c.correctOne': 'Nice — now one more',
   'tutorial.l5c.wrong': 'Not quite — try a different sign',
   'tutorial.l5c.celebrate': 'Well done — you know your signs',
+  'tutorial.l5.tipCelebrate': 'I picked this option and got {{result}}!\nTap the {{result}} card in your fan to discard it',
   'tutorial.l5.jokerPickTitle': 'Pick a sign',
   'tutorial.l5.opCardLabel.plus': 'Plus',
   'tutorial.l5.opCardLabel.minus': 'Minus',

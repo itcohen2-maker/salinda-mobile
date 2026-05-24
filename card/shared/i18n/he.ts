@@ -1309,6 +1309,7 @@ export const he: Record<string, string> = {
   'tutorial.l5c.correctOne': 'יופי — ועכשיו עוד תרגיל',
   'tutorial.l5c.wrong': 'לא נכון — נסו סימן אחר',
   'tutorial.l5c.celebrate': 'כל הכבוד — הכרת את הסימנים',
+  'tutorial.l5.tipCelebrate': 'בחרתי באפשרות הזאת ויצא {{result}}!\nלחצו על קלף {{result}} במניפה כדי להעיף אותו מהיד',
   'tutorial.l5.jokerPickTitle': 'בחרו סימן',
   'tutorial.l5.opCardLabel.plus': 'חיבור',
   'tutorial.l5.opCardLabel.minus': 'חיסור',

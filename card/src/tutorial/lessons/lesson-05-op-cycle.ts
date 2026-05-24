@@ -73,6 +73,7 @@ export const lesson05OpCycle: Lesson = {
       outcome: (event) => event.kind === 'l3TipAck',
       hintKey: 'tutorial.l3.tipCta',
       botHintKey: 'tutorial.l3.tipBody',
+      celebrateKey: 'tutorial.l5.tipCelebrate',
     },
   ],
 };
