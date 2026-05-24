@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
 import { getWebGameLayout } from '../theme/webLayout';
 import { getNativeGameLayout } from '../theme/nativeGameLayout';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
@@ -6042,10 +6043,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             backgroundColor: 'rgba(15,23,42,0.96)',
             borderWidth: 2.5,
             borderColor: '#F59E0B',
-            paddingVertical: 22,
-            paddingHorizontal: 18,
+            paddingVertical: 19,
+            paddingHorizontal: 17,
             alignItems: 'center',
-            gap: 12,
+            gap: 11,
             ...Platform.select({
               ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 16 },
               android: { elevation: 14 },
@@ -6057,20 +6058,121 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             <Text style={{ color: '#FCD34D', fontSize: 25, fontWeight: '900', textAlign: 'center', lineHeight: 31 }}>
               {t('tutorial.identicalCard.title')}
             </Text>
-            <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(245,158,11,0.3)' }} />
-            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', lineHeight: 24 }}>
+            <Text style={{ color: '#F8FAFC', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22, writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
               {t('tutorial.identicalCard.desc')}
             </Text>
+            <View
+              style={{
+                position: 'relative',
+                width: '100%',
+                minHeight: 224,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Svg
+                width={260}
+                height={220}
+                viewBox="0 0 260 220"
+                pointerEvents="none"
+                style={{ position: 'absolute', top: 0 }}
+              >
+                <SvgPath
+                  d="M78 55 C35 78 35 139 83 160"
+                  stroke="#FCD34D"
+                  strokeWidth={5}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                <SvgPolygon points="71,149 94,160 75,178" fill="#FCD34D" />
+                <SvgPath
+                  d="M182 55 C220 78 217 139 178 160"
+                  stroke="#FCD34D"
+                  strokeWidth={5}
+                  strokeLinecap="round"
+                  fill="none"
+                  opacity={0.72}
+                />
+                <SvgPolygon points="188,149 166,160 185,178" fill="#FCD34D" opacity={0.72} />
+              </Svg>
+
+              <View style={{ position: 'absolute', right: 10, top: 88, width: 76, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 13, backgroundColor: 'rgba(22,163,74,0.18)', borderWidth: 1.5, borderColor: 'rgba(134,239,172,0.42)' }}>
+                <Text style={{ color: '#DCFCE7', fontSize: 12, lineHeight: 15, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                  {locale === 'he' ? 'אותו מספר' : 'Same number'}
+                </Text>
+              </View>
+
+              <View style={{ position: 'absolute', top: 6, left: 0, right: 0, alignItems: 'center' }}>
+                <Text style={{ color: '#DBEAFE', fontSize: 12, fontWeight: '900', textAlign: 'center', marginBottom: 4, writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                  {locale === 'he' ? 'קלף עליון בערימה' : 'Top card in pile'}
+                </Text>
+                <View style={{
+                  position: 'relative',
+                  width: 62,
+                  height: 76,
+                  borderRadius: 11,
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 3,
+                  borderColor: '#22C55E',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...Platform.select({
+                    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 8 },
+                    android: { elevation: 8 },
+                  }),
+                }}>
+                  <Text style={{ color: '#16A34A', fontSize: 30, fontWeight: '900', lineHeight: 34 }}>
+                    {String(l10TopDiscardValue)}
+                  </Text>
+                  <Text style={{ position: 'absolute', bottom: 8, color: '#9CA3AF', fontSize: 7, fontWeight: '800', textAlign: 'center' }}>
+                    {t('cardLabel.number')}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={{ position: 'absolute', top: 118, color: '#FCD34D', fontSize: 38, lineHeight: 42, fontWeight: '900', textAlign: 'center', textShadowColor: 'rgba(245,158,11,0.58)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 16 }}>
+                =
+              </Text>
+
+              <View style={{ position: 'absolute', top: 150, left: 0, right: 0, alignItems: 'center' }}>
+                <Text style={{ color: '#DBEAFE', fontSize: 12, fontWeight: '900', textAlign: 'center', marginBottom: 4, writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                  {locale === 'he' ? 'קלף תואם ביד' : 'Matching card in hand'}
+                </Text>
+                <View style={{
+                  position: 'relative',
+                  width: 76,
+                  height: 92,
+                  borderRadius: 12,
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 3.5,
+                  borderColor: '#22C55E',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...Platform.select({
+                    ios: { shadowColor: '#16A34A', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.65, shadowRadius: 12 },
+                    android: { elevation: 12 },
+                  }),
+                }}>
+                  <Text style={{ color: '#16A34A', fontSize: 38, fontWeight: '900', lineHeight: 42 }}>
+                    {String(l10TopDiscardValue)}
+                  </Text>
+                  <Text style={{ position: 'absolute', bottom: 8, color: '#9CA3AF', fontSize: 7, fontWeight: '800', textAlign: 'center' }}>
+                    {t('cardLabel.number')}
+                  </Text>
+                </View>
+              </View>
+            </View>
             <TouchableOpacity
               activeOpacity={0.8}
               style={{
-                marginTop: 4,
                 backgroundColor: '#F59E0B',
                 borderRadius: 20,
                 paddingVertical: 15,
                 paddingHorizontal: 32,
                 borderWidth: 2,
                 borderColor: '#FCD34D',
+                minWidth: 234,
+                alignItems: 'center',
                 ...Platform.select({
                   ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
                   android: { elevation: 12 },
@@ -6078,7 +6180,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               }}
               onPress={() => setIdenticalMockupApproved(true)}
             >
-              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900' }}>
+              <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
                 {t('tutorial.identicalCard.cta')}
               </Text>
             </TouchableOpacity>
@@ -6735,7 +6837,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* Green V flash when the bot taps the equation confirm button ג€”
           centered on the measured confirm button (same rect as the hint arrow). */}
-      {showConfirmCheck && isEquationLesson ? (() => {
+      {showConfirmCheck && isEquationLesson && confirmBtnRect ? (() => {
         const CHECK = 70;
         const half = CHECK / 2;
         const r = confirmBtnRect;
