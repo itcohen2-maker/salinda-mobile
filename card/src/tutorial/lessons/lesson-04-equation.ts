@@ -60,7 +60,7 @@ export const lesson04Equation: Lesson = {
         await api.wait(2800);
         // Pulse the target card to draw attention before staging.
         if (targetIdx >= 0) {
-          await api.pulseCard(targetIdx, 6000);
+          await api.pulseCard(targetIdx, 1500);
         }
         await api.stageCardByValue(target);
       },
