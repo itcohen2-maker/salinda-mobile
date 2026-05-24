@@ -953,6 +953,9 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // Ref so event callbacks can read current gameState without stale closures.
   const gameStateRef = useRef(gameState);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+  // L4 step 0: "תראה לי" gate — bot demo pauses here until the learner taps.
+  const l4ShowMeResolveRef = useRef<(() => void) | null>(null);
+  const [l4ShowMePending, setL4ShowMePending] = useState(false);
   // Brief green-V overlay when the bot taps the equation confirm button.
   const [showConfirmCheck, setShowConfirmCheck] = useState(false);
   const confirmCheckScale = useRef(new Animated.Value(0)).current;
@@ -1693,7 +1696,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // could fire while the learner is already on L5.1, clobbering its
     // pre-filled `4 ? 3 = 7` with stale indices (producing e.g. `4 + 9 = 13`).
     let cancelled = false;
-    const demo = createBotDemonstrator(() => cancelled);
+    const isL4Step0 = engine.lessonIndex === 3 && engine.stepIndex === 0;
+    const baseDemo = createBotDemonstrator(() => cancelled);
+    const demo: typeof baseDemo = isL4Step0 ? {
+      ...baseDemo,
+      waitForShowMe: () => {
+        if (cancelled) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          setL4ShowMePending(true);
+          l4ShowMeResolveRef.current = () => {
+            setL4ShowMePending(false);
+            resolve();
+          };
+        });
+      },
+    } : baseDemo;
     let fired = false;
     const fireOnce = () => {
       if (cancelled || fired) return;
@@ -1737,9 +1754,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       }
       fireOnce();
     })();
-    const fallback = setTimeout(fireOnce, 6000);
+    // L4 step 0 waits for "תראה לי" tap — give 2 min before auto-advancing.
+    const fallbackMs = isL4Step0 ? 120_000 : 6000;
+    const fallback = setTimeout(fireOnce, fallbackMs);
     return () => {
       cancelled = true;
+      // Resolve any pending "תראה לי" gate so the async chain can exit.
+      if (l4ShowMeResolveRef.current) {
+        l4ShowMeResolveRef.current();
+        l4ShowMeResolveRef.current = null;
+      }
+      setL4ShowMePending(false);
       clearTimeout(fallback);
     };
   }, [engine.phase, engine.lessonIndex, engine.stepIndex, parensMockupApproved, identicalMockupApproved, l11MockupApproved]);
@@ -6217,6 +6242,34 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           </View>
         );
       })() : null}
+
+      {/* "תראה לי" gate button — L4 step 0 only, shown while bot waits */}
+      {l4ShowMePending && (
+        <View
+          pointerEvents="auto"
+          style={{ position: 'absolute', top: 185, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
+        >
+          <TouchableOpacity
+            onPress={() => { l4ShowMeResolveRef.current?.(); }}
+            accessibilityRole="button"
+            style={{
+              backgroundColor: '#FACC15',
+              paddingHorizontal: 28,
+              paddingVertical: 12,
+              borderRadius: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.35,
+              shadowRadius: 6,
+              elevation: 6,
+            }}
+          >
+            <Text style={{ color: '#78350F', fontSize: 18, fontWeight: '900', textAlign: 'center' }}>
+              תראה לי
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {isL7Step1Await && !l7Step1MiniPicked ? (
         <View

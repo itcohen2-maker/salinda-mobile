@@ -39,8 +39,9 @@ export const lesson04Equation: Lesson = {
         const target = cfg?.target ?? 5;
         const hand = cfg?.hand ?? [1, 2, 3, 4, 5];
         const targetIdx = hand.indexOf(target);
-        // Pause so the learner reads the "I'm looking at my cards" bubble.
-        await api.wait(2500);
+        // Wait for the learner to tap "תראה לי" before starting the demo.
+        // Falls back gracefully (resolves immediately) when the hook isn't injected.
+        await api.waitForShowMe?.();
         // Scroll the fan to the target card FIRST — visually shows the bot
         // "looking through" the hand before building, then slows at the target.
         if (targetIdx >= 0) {

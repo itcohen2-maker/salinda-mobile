@@ -38,6 +38,9 @@ export type DemoApi = {
   tapMiniResult(idx: number): Promise<void>;
   l6CopyConfig(): { pickA: number; pickB: number; op: '+' | '-' | 'x' | '÷'; target: number } | null;
   l11Config(): { addA: number; addB: number; target: number } | null;
+  /** Optional — injected by InteractiveTutorialScreen for L4 step 0 only.
+   *  Pauses the bot demo until the learner taps "תראה לי". */
+  waitForShowMe?(): Promise<void>;
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
