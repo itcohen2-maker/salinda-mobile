@@ -57,7 +57,7 @@ export const lesson04Equation: Lesson = {
         await api.wait(900);
         await api.eqConfirm();
         // Hold the "result announced" state so the learner can read it.
-        await api.wait(2800);
+        await api.wait(1500);
         // Pulse the target card to draw attention before staging.
         if (targetIdx >= 0) {
           await api.pulseCard(targetIdx, 1500);
