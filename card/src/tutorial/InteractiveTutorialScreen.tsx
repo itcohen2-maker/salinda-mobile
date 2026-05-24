@@ -956,6 +956,7 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // L4 step 0: "תראה לי" gate — bot demo pauses here until the learner taps.
   const l4ShowMeResolveRef = useRef<(() => void) | null>(null);
   const [l4ShowMePending, setL4ShowMePending] = useState(false);
+  const [l2CelebratePending, setL2CelebratePending] = useState(false);
   // Brief green-V overlay when the bot taps the equation confirm button.
   const [showConfirmCheck, setShowConfirmCheck] = useState(false);
   const confirmCheckScale = useRef(new Animated.Value(0)).current;
@@ -1744,6 +1745,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         return;
       }
       fired = true;
+      // L4 step 0: seed lastEquationResult before await-mimic starts so the
+      // outcome check passes on the very first tap (the effect-based setter
+      // fires after the first render, causing a missed tap otherwise).
+      if (isL4Step0 && l4DiceRef.current) {
+        tutorialBus.setLastEquationResult(l4DiceRef.current.target);
+      }
       dispatchEngine({ type: 'BOT_DEMO_DONE' });
     };
     (async () => {
@@ -3838,6 +3845,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase !== 'celebrate') return;
     // Dice step 0 (roll-dice): wait for user to tap "׳”׳'׳ ׳×׳™" ג€” no auto-advance.
     if (engine.lessonIndex === 2 && engine.stepIndex === 0) return;
+    // L2 (tap-card): show explicit "בוא נמשיך" button instead of auto-advancing.
+    if (engine.lessonIndex === 1) {
+      setL2CelebratePending(true);
+      return () => setL2CelebratePending(false);
+    }
     // Lesson 4 step 3 ends with a blocking success modal; the learner moves
     // on only after explicitly acknowledging it.
     if (engine.lessonIndex === 3 && engine.stepIndex === 3) return;
@@ -4163,7 +4175,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : isL6WildCelebrate ? 'אתם מוכנים למשחק האמיתי!\nסיימתם את ההדרכה הבסיסית.'
     : engine.phase === 'bot-demo' ? (isL9Lesson ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
     : engine.phase === 'await-mimic'
-      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, currentStep.hintKey === 'tutorial.l4.hintTap' ? { result: String(gameState?.equationResult ?? '?') } : (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
+      ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, currentStep.hintKey === 'tutorial.l4.hintTap' ? { result: String(l4DiceRef.current?.target ?? gameState?.equationResult ?? '?') } : (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
     : isL5TipCelebrate
       ? t('tutorial.l5.tipCelebrate', { result: String(gameState?.equationResult ?? '?') })
     : engine.phase === 'celebrate'
@@ -6268,6 +6280,39 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           }}>
             <Text style={{ color: '#431407', fontSize: 17, lineHeight: 22, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', writingDirection: 'rtl', includeFontPadding: false }}>
               תראה לי
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* "בוא נמשיך" button — L2 celebrate only */}
+      {l2CelebratePending && engine.phase === 'celebrate' && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            setL2CelebratePending(false);
+            dispatchEngine({ type: 'CELEBRATE_DONE' });
+          }}
+          accessibilityRole="button"
+          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
+        >
+          <View style={{
+            backgroundColor: '#F59E0B',
+            borderRadius: 20,
+            minHeight: 62,
+            paddingVertical: 15,
+            paddingHorizontal: 42,
+            borderWidth: 2,
+            borderColor: '#FCD34D',
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...Platform.select({
+              ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+              android: { elevation: 12 },
+            }),
+          }}>
+            <Text style={{ color: '#431407', fontSize: 17, lineHeight: 22, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', writingDirection: 'rtl', includeFontPadding: false }}>
+              בוא נמשיך
             </Text>
           </View>
         </TouchableOpacity>
