@@ -1229,7 +1229,7 @@ export const he: Record<string, string> = {
   'tutorial.l2.hintTap': 'לחצו על כל קלף ונתקדם.',
   'tutorial.l2.botTapTitle': 'מנצחים כשנשארים לנו רק 2 קלפים!',
   'tutorial.l2.botTap': 'לחצו על כל קלף ונתקדם.',
-  'tutorial.l2.celebrate': 'מעולה! בחרנו קלף. עכשיו נראה איך בונים לו תרגיל כדי להעיף אותו ולהתקרב ל-2!',
+  'tutorial.l2.celebrate': 'מעולה! ככה בוחרים קלף. עכשיו נלמד איך בונים לו תרגיל כדי להעיף אותו ולהתקרב לניצחון',
 
   // שיעור 3 — הקוביות
   'tutorial.l3.title': 'הקוביות',

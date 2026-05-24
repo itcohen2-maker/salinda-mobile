@@ -1223,7 +1223,7 @@ export const en: Record<string, string> = {
   'tutorial.l2.hintTap': 'Try tapping a card',
   'tutorial.l2.botTapTitle': "You win when you're left with only 2 cards!",
   'tutorial.l2.botTap': 'Try tapping any card to continue.',
-  'tutorial.l2.celebrate': 'Nice — you picked a card',
+  'tutorial.l2.celebrate': "Nice! That's how you pick a card. Now let's learn how to build an equation to discard it and get closer to winning",
 
   // Lesson 3 — Dice
   'tutorial.l3.title': 'The Dice',
