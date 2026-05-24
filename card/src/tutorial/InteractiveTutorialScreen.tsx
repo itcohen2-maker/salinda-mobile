@@ -1774,9 +1774,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL7 = engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX;
     return tutorialBus.subscribeUserEvent((evt) => {
       if (step.outcome(evt)) {
-        // L4.1: filter the played card from the bus config (for L4.2) AND
-        // from gameState.hands so the fan visually shrinks immediately.
-        if (engine.lessonIndex === 3 && engine.stepIndex === 0 && evt.kind === 'cardTapped') {
+        // L4 steps 0 & 1: filter the played card from the bus config AND
+        // from gameState.hands so the fan visually shrinks immediately and
+        // the card is absent in the next step.
+        if (engine.lessonIndex === 3 && (engine.stepIndex === 0 || engine.stepIndex === 1) && evt.kind === 'cardTapped') {
           const cfg = tutorialBus.getL4Config();
           const m = /^tut-l4-(?:bot-)?card-(\d+)(?:-|$)/.exec(evt.cardId);
           const playedValue = m ? parseInt(m[1], 10) : null;
@@ -4119,6 +4120,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
     engine.stepIndex >= 3 &&
     (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
+  const isL5TipCelebrate = engine.lessonIndex === 4 && engine.stepIndex === 2 && engine.phase === 'celebrate';
   const bubbleText: string | null =
     isFracIntroActive ? null
     : isFracDefenseActive ? null
@@ -4135,6 +4137,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : engine.phase === 'bot-demo' ? (isL9Lesson ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
     : engine.phase === 'await-mimic'
       ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, currentStep.hintKey === 'tutorial.l4.hintTap' ? { result: String(gameState?.equationResult ?? '?') } : (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
+    : isL5TipCelebrate
+      ? t('tutorial.l5.tipCelebrate', { result: String(gameState?.equationResult ?? '?') })
     : engine.phase === 'celebrate'
       ? (hideL6OpenResultsBubble && engine.lessonIndex === 5 && engine.stepIndex === 0
           ? null
@@ -4216,6 +4220,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const bubbleTone: HappyBubbleTone =
     l4Step3HintKey === 'tutorial.l4c.hintPressPlay' ? 'buttonOrange'
     : l4Step3HintKey === 'tutorial.l4c.tryAgain' || l4CardMatchWrongKey === 'tutorial.l4c.tryAgain' ? 'buttonRed'
+    : isL5TipCelebrate ? 'demo'
     : engine.phase === 'celebrate' || engine.phase === 'lesson-done' || engine.phase === 'all-done' ? 'celebrate'
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
