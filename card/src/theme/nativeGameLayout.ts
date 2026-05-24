@@ -30,11 +30,7 @@ export function getNativeGameLayout(viewportHeight: number, platform: string): N
   const timerTop = Math.round(tableTop + tableHeight - 45 - compactRatio * 12);
   const bottomControlClearance = isAndroid ? 14 : 10;
   const bottomControlTop = Math.max(0, safeHeight - handBottom + bottomControlClearance);
-  // Anchor 100px below the fan strip bottom (safeHeight - handBottom).
-  // Cards overflow ~15px below the strip; 100px ensures ~85px clear space,
-  // placing the button near the bottom of the screen on tall phones.
-  // The old Min(680) cap landed inside the fan on tall phones (930px+).
-  const goldActionButtonTopBase = Math.max(96, safeHeight - Math.max(handBottom - 100, 60));
+  const goldActionButtonTopBase = Math.max(96, Math.min(680, safeHeight - Math.round(140 + compactRatio * 40)));
   const goldActionButtonTop = isAndroid
     ? Math.max(goldActionButtonTopBase, bottomControlTop)
     : goldActionButtonTopBase;
