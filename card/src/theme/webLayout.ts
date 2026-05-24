@@ -128,8 +128,11 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
     ? Math.round(tableTop + tableHeight - 45 - mobileCompactRatio * 12)
     : tableTop + tableHeight + 32;
   const handTopY = frameHeight - handZoneTop;
+  // Anchor 24px below the fan strip bottom (screenH - handBottom).
+  // On tall phones (930px+) the old Min(680) cap landed inside the fan zone.
+  // Max(handBottom-24, 60) ensures the button stays on-screen on tiny phones.
   const goldActionButtonTop = mobileWebViewport
-    ? Math.max(96, Math.min(680, frameHeight - Math.round(140 + mobileCompactRatio * 40)))
+    ? Math.max(96, frameHeight - Math.max(handBottom - 24, 60))
     : Math.max(tableTop + tableHeight + 20, handTopY - 70);
 
   return {

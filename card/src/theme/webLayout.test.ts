@@ -47,9 +47,9 @@ describe('getWebGameLayout', () => {
   });
 
   it.each([
-    { width: 390, height: 844, handBottom: 195, goldActionButtonTop: 680 },
+    { width: 390, height: 844, handBottom: 195, goldActionButtonTop: 673 },
     { width: 393, height: 851, handBottom: 195, goldActionButtonTop: 680 },
-    { width: WEB_MOBILE_VIEWPORT_MAX_WIDTH, height: 900, handBottom: 195, goldActionButtonTop: 680 },
+    { width: WEB_MOBILE_VIEWPORT_MAX_WIDTH, height: 900, handBottom: 195, goldActionButtonTop: 729 },
   ])('uses full-width native-style layout for tall portrait mobile web viewport %o', (viewport) => {
     const layout = getWebGameLayout(viewport);
 
@@ -69,9 +69,9 @@ describe('getWebGameLayout', () => {
   });
 
   it.each([
-    { width: 390, height: 568, ratio: 1, tableTop: 150, tableHeight: 210, handBottom: 40, resultsTop: 72, parensTop: 115, timerTop: 303, goldActionButtonTop: 388 },
-    { width: 390, height: 640, ratio: 204 / 276, tableTop: 164, tableHeight: 218, handBottom: 80, resultsTop: 75, parensTop: 129, timerTop: 328, goldActionButtonTop: 470 },
-    { width: 393, height: 688, ratio: 156 / 276, tableTop: 174, tableHeight: 223, handBottom: 107, resultsTop: 77, parensTop: 139, timerTop: 345, goldActionButtonTop: 525 },
+    { width: 390, height: 568, ratio: 1, tableTop: 150, tableHeight: 210, handBottom: 40, resultsTop: 72, parensTop: 115, timerTop: 303, goldActionButtonTop: 508 },
+    { width: 390, height: 640, ratio: 204 / 276, tableTop: 164, tableHeight: 218, handBottom: 80, resultsTop: 75, parensTop: 129, timerTop: 328, goldActionButtonTop: 580 },
+    { width: 393, height: 688, ratio: 156 / 276, tableTop: 174, tableHeight: 223, handBottom: 107, resultsTop: 77, parensTop: 139, timerTop: 345, goldActionButtonTop: 605 },
   ])('compacts short portrait mobile web viewport %o without crushing the table and hand', (viewport) => {
     const layout = getWebGameLayout(viewport);
 

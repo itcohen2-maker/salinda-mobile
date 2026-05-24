@@ -189,8 +189,9 @@ const SCREEN_W = Platform.OS === 'web' && !isWebMobileViewport(_SCREEN_W_RAW, SC
 const NATIVE_HAND_FAN = getNativeHandFanMetrics(Platform.OS);
 
 /** אותו top לכפתור הקוביות המוזהב (GameScreen) ולכפתור «אני מוכן» (TurnTransition).
- *  clamp תחתון: כש־SCREEN_H קטן, ‎SCREEN_H - 140‎ שלילי — מסך המעבר עם overflow:hidden חותך את הכפתור ("נעלם"). */
-const GOLD_ACTION_BUTTON_TOP = Math.max(96, Math.min(680, SCREEN_H - 140));
+ *  מעוגן 24px מתחת לתחתית strip המניפה (SCREEN_H - HAND_BOTTOM_OFFSET).
+ *  הפולבק הזה פעיל רק כשאין webGameLayout/nativeGameLayout; הערך האמיתי מגיע מהן. */
+const GOLD_ACTION_BUTTON_TOP = Math.max(96, SCREEN_H - Math.max(HAND_BOTTOM_OFFSET - 24, 60));
 
 /** גובה אזור היד (מניפה) — זהה במסך השחקן (TurnTransition) ובמסך המשחק (GameScreen)
  *  HAND_STRIP_HEIGHT = גובה כל האזור (כולל טקסט מעל היד אם יש)
@@ -13944,7 +13945,7 @@ function TurnTransition() {
   const handBottomOffset = webGameLayout?.handBottom ?? nativeGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
-  const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, responsive.height - 140));
+  const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, responsive.height - Math.max(HAND_BOTTOM_OFFSET - 24, 60));
   const handTop = turnScreenHeight - (handBottomOffset + handStripHeight);
   const compactAndroidReadyButton = Platform.OS === 'android';
   const compactIosReadyButton = Platform.OS === 'ios';
@@ -15668,7 +15669,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const resultsRight = webGameLayout?.resultsRight ?? 128;
   const parensTop = webGameLayout?.parensTop ?? nativeGameLayout?.parensTop ?? 170;
   const timerTop = webGameLayout?.timerTop ?? nativeGameLayout?.timerTop ?? 400;
-  const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, responsive.height - 140));
+  const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, responsive.height - Math.max(HAND_BOTTOM_OFFSET - 24, 60));
   const compactWebHud = Platform.OS === 'web' && !mobileWebViewport;
   const hudButtonWidth = compactWebHud ? clamp(Math.round(gameScreenWidth * 0.05), 64, 70) : 72;
   const hudButtonHeight = compactWebHud ? 30 : 32;

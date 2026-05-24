@@ -30,7 +30,9 @@ export function getNativeGameLayout(viewportHeight: number, platform: string): N
   const timerTop = Math.round(tableTop + tableHeight - 45 - compactRatio * 12);
   const bottomControlClearance = isAndroid ? 14 : 10;
   const bottomControlTop = Math.max(0, safeHeight - handBottom + bottomControlClearance);
-  const goldActionButtonTopBase = Math.max(96, Math.min(680, safeHeight - Math.round(140 + compactRatio * 40)));
+  // Anchor 24px below the fan strip bottom (safeHeight - handBottom).
+  // The old Min(680) cap landed inside the fan on tall phones (930px+).
+  const goldActionButtonTopBase = Math.max(96, safeHeight - Math.max(handBottom - 24, 60));
   const goldActionButtonTop = isAndroid
     ? Math.max(goldActionButtonTopBase, bottomControlTop)
     : goldActionButtonTopBase;
