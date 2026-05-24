@@ -12,7 +12,7 @@ describe('getNativeGameLayout', () => {
     expect(layout.parensTop).toBe(170);
     expect(layout.timerTop).toBe(400);
     expect(layout.bottomControlTop).toBe(663);
-    expect(layout.goldActionButtonTop).toBe(673);
+    expect(layout.goldActionButtonTop).toBe(709);
   });
 
   it('compacts the android layout on short screens so lower actions stay visible', () => {
@@ -26,7 +26,7 @@ describe('getNativeGameLayout', () => {
     expect(layout.parensTop).toBe(156);
     expect(layout.timerTop).toBe(348);
     expect(layout.bottomControlTop).toBe(579);
-    expect(layout.goldActionButtonTop).toBe(589);
+    expect(layout.goldActionButtonTop).toBe(625);
   });
 
   it('does not compact iOS layout with the android-only rule set', () => {
