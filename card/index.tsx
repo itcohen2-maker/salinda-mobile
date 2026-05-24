@@ -4,7 +4,10 @@
 // ============================================================
 
 import * as Sentry from '@sentry/react-native';
-Sentry.init({ dsn: 'https://2e289fe194f1d2fbbb13515d0b011dc6@o4511423830228992.ingest.de.sentry.io/4511423832064080' });
+Sentry.init({
+  dsn: 'https://2e289fe194f1d2fbbb13515d0b011dc6@o4511423830228992.ingest.de.sentry.io/4511423832064080',
+  enableAutoSessionTracking: true,
+});
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
@@ -99,10 +102,189 @@ import { SOUNDS_ENABLED_STORAGE_KEY, resolveStoredSoundsEnabled } from './src/au
 import { getAudioLoadStatus, getAudioReplayStatus } from './src/audio/playbackStatus';
 import { installAndroidTouchSoundWorkaround } from './src/utils/disableAndroidTouchSounds';
 import { resolveHandInitialCenterIdx } from './src/utils/resolveHandInitialCenterIdx';
-// TEMP: capture full stack trace for TypeError
-const _origConsoleError = console.error;
-const sendDebugLog = (hypothesisId: string, location: string, message: string, data: Record<string, unknown> = {}) => {
+type ClientDiagnosticLevel = 'info' | 'warn' | 'error';
+type ClientDiagnosticConsoleMode = 'dev' | 'always';
+type GlobalErrorUtils = {
+  getGlobalHandler?: () => ((error: Error, isFatal?: boolean) => void) | undefined;
+  setGlobalHandler?: (handler: (error: Error, isFatal?: boolean) => void) => void;
 };
+
+const clientBootId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const clientStartedAt = new Date().toISOString();
+const _origConsoleError = console.error;
+const _origConsoleWarn = console.warn;
+const _origConsoleLog = console.log;
+
+function normalizeClientError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: cause instanceof Error
+        ? {
+            name: cause.name,
+            message: cause.message,
+            stack: cause.stack,
+          }
+        : sanitizeDiagnosticValue(cause),
+    };
+  }
+
+  return {
+    type: typeof error,
+    value: sanitizeDiagnosticValue(error),
+  };
+}
+
+function sanitizeDiagnosticValue(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'function' || typeof value === 'symbol') return String(value);
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+  if (depth >= 3) return '[MaxDepth]';
+  if (typeof value !== 'object') return String(value);
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeDiagnosticValue(item, depth + 1, seen));
+  }
+
+  const output: Record<string, unknown> = {};
+  Object.entries(value as Record<string, unknown>).slice(0, 30).forEach(([key, item]) => {
+    output[key] = sanitizeDiagnosticValue(item, depth + 1, seen);
+  });
+  return output;
+}
+
+function writeClientDiagnostic(
+  level: ClientDiagnosticLevel,
+  event: string,
+  details: Record<string, unknown> = {},
+  error?: unknown,
+  options: { capture?: boolean; consoleMode?: ClientDiagnosticConsoleMode } = {},
+) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    event,
+    bootId: clientBootId,
+    startedAt: clientStartedAt,
+    platform: Platform.OS,
+    details: sanitizeDiagnosticValue(details),
+    ...(error === undefined ? {} : { error: normalizeClientError(error) }),
+  };
+
+  Sentry.addBreadcrumb({
+    category: 'client.diagnostics',
+    level: (level === 'warn' ? 'warning' : level) as any,
+    message: event,
+    data: sanitizeDiagnosticValue(payload) as Record<string, unknown>,
+  });
+
+  if (options.capture) {
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        tags: { clientBootId, diagnosticEvent: event },
+        extra: sanitizeDiagnosticValue(payload) as Record<string, unknown>,
+      });
+    } else if (error !== undefined) {
+      Sentry.captureException(new Error(`${event}: ${String(error)}`), {
+        tags: { clientBootId, diagnosticEvent: event },
+        extra: sanitizeDiagnosticValue(payload) as Record<string, unknown>,
+      });
+    } else {
+      Sentry.captureMessage(event, {
+        level: (level === 'warn' ? 'warning' : level) as any,
+        tags: { clientBootId, diagnosticEvent: event },
+        extra: sanitizeDiagnosticValue(payload) as Record<string, unknown>,
+      });
+    }
+  }
+
+  if (options.consoleMode === 'always' || __DEV__ || level !== 'info') {
+    const line = `[${event}] ${JSON.stringify(payload)}`;
+    if (level === 'error') {
+      _origConsoleError(line);
+    } else if (level === 'warn') {
+      _origConsoleWarn(line);
+    } else {
+      _origConsoleLog(line);
+    }
+  }
+}
+
+const sendDebugLog = (hypothesisId: string, location: string, message: string, data: Record<string, unknown> = {}) => {
+  writeClientDiagnostic('info', 'CLIENT_DEBUG', {
+    hypothesisId,
+    location,
+    message,
+    data,
+  });
+};
+
+function installClientCrashDiagnostics() {
+  Sentry.setTag('client_boot_id', clientBootId);
+  Sentry.setTag('platform', Platform.OS);
+  Sentry.setContext('client_boot', {
+    bootId: clientBootId,
+    startedAt: clientStartedAt,
+    platform: Platform.OS,
+  });
+
+  const maybeWindow = (globalThis as { window?: any }).window;
+  if (Platform.OS === 'web' && maybeWindow?.addEventListener) {
+    maybeWindow.addEventListener('error', (event: any) => {
+      const error = event?.error ?? (event?.message ? new Error(String(event.message)) : undefined);
+      writeClientDiagnostic('error', 'CLIENT_UNHANDLED_ERROR', {
+        message: event?.message,
+        source: event?.filename,
+        line: event?.lineno,
+        column: event?.colno,
+        href: maybeWindow?.location?.href,
+        userAgent: maybeWindow?.navigator?.userAgent,
+      }, error, { capture: true, consoleMode: 'always' });
+    });
+
+    maybeWindow.addEventListener('unhandledrejection', (event: any) => {
+      writeClientDiagnostic('error', 'CLIENT_UNHANDLED_REJECTION', {
+        reason: sanitizeDiagnosticValue(event?.reason),
+        href: maybeWindow?.location?.href,
+        userAgent: maybeWindow?.navigator?.userAgent,
+      }, event?.reason, { capture: true, consoleMode: 'always' });
+    });
+  }
+
+  const errorUtils = (globalThis as { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
+  if (errorUtils?.getGlobalHandler && errorUtils?.setGlobalHandler) {
+    const previousHandler = errorUtils.getGlobalHandler();
+    errorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+      writeClientDiagnostic(
+        isFatal ? 'error' : 'warn',
+        isFatal ? 'CLIENT_NATIVE_FATAL_ERROR' : 'CLIENT_NATIVE_UNHANDLED_ERROR',
+        { isFatal },
+        error,
+        { consoleMode: 'always' },
+      );
+      previousHandler?.(error, isFatal);
+    });
+  }
+
+  writeClientDiagnostic('info', 'APP_STARTED', {
+    href: maybeWindow?.location?.href,
+  }, undefined, { consoleMode: 'always' });
+}
+
+installClientCrashDiagnostics();
 console.error = (...args: any[]) => {
   const first = args[0];
   const err = first instanceof Error ? first : null;
@@ -22509,6 +22691,14 @@ function MobileWebFocusButton({
 function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowSplash: (v: boolean) => void }) {
   const insets = useSafeAreaInsets();
   const { locale } = useLocale();
+  const isRTL = locale === 'he';
+  const fullscreenApiSupported =
+    Platform.OS === 'web' &&
+    typeof document !== 'undefined' &&
+    !!(
+      document.documentElement.requestFullscreen ||
+      (document.documentElement as any).webkitRequestFullscreen
+    );
   const [activePlayMode, setActivePlayMode] = useState<ShellPlayMode>('choose');
   const viewport = useWebViewportSize();
   const [webFocusMode, setWebFocusMode] = useState(false);
@@ -22689,7 +22879,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const webSideGutter = mobileWebViewport ? 0 : Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
   const showWebChromeControls = dockedControls;
-  const showMobileWebFocusControl = false; // removed: fullscreen not reliable on all mobile browsers
+  const showMobileWebFocusControl = mobileWebViewport && fullscreenApiSupported;
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
   const webControlsAnchorStyle = dockedControls
     ? {
@@ -22787,7 +22977,8 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
               top: Math.max(10, (insets.top || 0) + 10),
               height: 44,
               zIndex: 31000,
-              alignItems: 'center',
+              alignItems: isRTL ? 'flex-start' : 'flex-end',
+              paddingHorizontal: 12,
             }}
           >
             <MobileWebFocusButton
