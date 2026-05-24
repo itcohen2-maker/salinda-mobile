@@ -2143,10 +2143,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
   // Lesson 5 step 3: tip/mockup overlay. Show it automatically, then wait
   // for the learner to press continue.
+  // Reset l3TipApproved on entry so re-runs of the tutorial always show the overlay.
   useEffect(() => {
     if (engine.lessonIndex !== 4 || engine.stepIndex !== 2) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     if (engine.phase === 'bot-demo') {
+      setL3TipApproved(false);
       timer = setTimeout(() => dispatchEngine({ type: 'BOT_DEMO_DONE' }), 120);
     } else if (engine.phase === 'await-mimic' && l3TipApproved) {
       timer = setTimeout(() => dispatchEngine({ type: 'OUTCOME_MATCHED' }), 120);
