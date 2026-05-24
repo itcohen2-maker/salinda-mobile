@@ -22967,6 +22967,9 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
             </View>
           </View>
         ) : null}
+        {mobileWebViewport ? (
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 60, right: 8, width: 18, height: 18, borderRadius: 4, backgroundColor: fullscreenApiSupported ? '#22c55e' : '#ef4444', zIndex: 99999, opacity: 0.85 }} />
+        ) : null}
         {showMobileWebFocusControl ? (
           <View
             pointerEvents="box-none"
