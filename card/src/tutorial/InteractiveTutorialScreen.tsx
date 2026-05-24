@@ -6245,30 +6245,32 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* "תראה לי" gate button — L4 step 0 only, shown while bot waits */}
       {l4ShowMePending && (
-        <View
-          pointerEvents="auto"
-          style={{ position: 'absolute', top: 185, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => { l4ShowMeResolveRef.current?.(); }}
+          accessibilityRole="button"
+          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
         >
-          <TouchableOpacity
-            onPress={() => { l4ShowMeResolveRef.current?.(); }}
-            accessibilityRole="button"
-            style={{
-              backgroundColor: '#FACC15',
-              paddingHorizontal: 28,
-              paddingVertical: 12,
-              borderRadius: 24,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.35,
-              shadowRadius: 6,
-              elevation: 6,
-            }}
-          >
-            <Text style={{ color: '#78350F', fontSize: 18, fontWeight: '900', textAlign: 'center' }}>
+          <View style={{
+            backgroundColor: '#F59E0B',
+            borderRadius: 20,
+            minHeight: 62,
+            paddingVertical: 15,
+            paddingHorizontal: 42,
+            borderWidth: 2,
+            borderColor: '#FCD34D',
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...Platform.select({
+              ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
+              android: { elevation: 12 },
+            }),
+          }}>
+            <Text style={{ color: '#431407', fontSize: 17, lineHeight: 22, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', writingDirection: 'rtl', includeFontPadding: false }}>
               תראה לי
             </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        </TouchableOpacity>
       )}
 
       {isL7Step1Await && !l7Step1MiniPicked ? (
