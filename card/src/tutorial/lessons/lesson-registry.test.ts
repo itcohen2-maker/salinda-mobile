@@ -98,7 +98,7 @@ describe('lesson registry smoke', () => {
     expect(step.outcome({ kind: 'l3TipAck' })).toBe(true);
     expect(step.outcome({ kind: 'l3SolvedAck' })).toBe(false);
   });
-  it('lesson 6 step 2 (tap-mini) advances only after the manual continue ack', () => {
+  it('lesson 6 legacy tap-mini fallback advances only after the manual continue ack', () => {
     const step = LESSONS[5].steps[1];
     expect(step.outcome({ kind: 'miniCardTapped', result: 5, equation: '2 + 3 = 5' })).toBe(false);
     expect(step.outcome({ kind: 'l6TapMiniAck' })).toBe(true);

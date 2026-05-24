@@ -1264,7 +1264,7 @@ export const he: Record<string, string> = {
   // שיעור 4ג — בניית תרגיל מלא
   'tutorial.l4c.botFull': 'עכשיו תורכם לעבוד חכם בדרך אל ה-2! הביטו בקלפים שלכם למטה וסמנו בראש קלף שאתם רוצים להעיף.',
   'tutorial.l4c.gotIt': 'הבנתי',
-  'tutorial.l4c.hintFull': 'סמנו קלף במחשבה, והרכיבו מהקוביות תרגיל שמתאים לו.',
+  'tutorial.l4c.hintFull': 'סמנו קלף במחשבה, והרכיבו מהקוביות תרגיל עם פעולת + שמתאים לו.',
   'tutorial.l4c.hintPickSecondDie': 'הוסיפו עוד קובייה לתרגיל',
   'tutorial.l4c.hintPickOperator': 'לחצו בין הקוביות כדי לבחור סימן פעולה',
   'tutorial.l4c.hintBuildProgress': 'לחצו על קלף ששווה למספר שבתוצאת התרגיל',
@@ -1310,7 +1310,7 @@ export const he: Record<string, string> = {
   'tutorial.l5c.wrong': 'לא נכון — נסו סימן אחר',
   'tutorial.l5c.celebrate': 'כל הכבוד — הכרת את הסימנים',
   'tutorial.l5.tipCelebrate': 'בחרתי באפשרות הזאת ויצא {{result}}!\nלחצו על קלף {{result}} במניפה כדי להעיף אותו מהיד',
-  'tutorial.l5.jokerPickTitle': 'בחרו סימן',
+  'tutorial.l5.jokerPickTitle': 'בחרו סימן שמתאים לתרגיל',
   'tutorial.l5.opCardLabel.plus': 'חיבור',
   'tutorial.l5.opCardLabel.minus': 'חיסור',
   'tutorial.l5.opCardLabel.mul': 'כפל',

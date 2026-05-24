@@ -25,14 +25,17 @@ Blueprint creates:
 | Service | Purpose | Example URL |
 |--------|---------|----------------|
 | `lolos-multiplayer` | Node + Socket.io API | `https://lolos-multiplayer.onrender.com` |
-| `salinda-web` | Static **Expo Web** (guest browser) | `https://salinda-web.onrender.com` |
+| `salinda-web` | Optional static **Expo Web** mirror | `https://salinda-web.onrender.com` |
 
 If your existing API is already at `https://lolos-mobile.onrender.com`, leave that URL in `eas.json` / static-site env `EXPO_PUBLIC_SERVER_URL`, or point the static site’s build env to the host you actually use.
+
+The active guest web client is currently Vercel: `https://salinda-mobile.vercel.app`.
+Use that value for `EXPO_PUBLIC_WEB_APP_URL` so native invite links open the working web build.
 
 After the static site first deploys, verify:
 
 - `GET https://salinda-web.onrender.com/` → HTML (Expo `index.html`), **not** JSON.
-- Open `https://salinda-web.onrender.com/?room=1234&server=https://lolos-mobile.onrender.com` → lobby should pre-fill join (Web client).
+- Open `https://salinda-mobile.vercel.app/?room=1234&server=https://lolos-mobile.onrender.com` → lobby should pre-fill join (Web client).
 
 Rebuild native production after URL changes: `eas build --platform all --profile production`.
 
@@ -55,4 +58,4 @@ Invite link format:
 Required env values in app/web build environment:
 
 - `EXPO_PUBLIC_SERVER_URL` = your Render socket server URL (example: `https://lolos-mobile.onrender.com`)
-- `EXPO_PUBLIC_WEB_APP_URL` = your real published web client URL (must return the game UI, not 404). Set this after you deploy Expo Web; there is no universal default hostname.
+- `EXPO_PUBLIC_WEB_APP_URL` = your real published web client URL (currently `https://salinda-mobile.vercel.app`; it must return the game UI, not 404).

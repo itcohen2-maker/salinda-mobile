@@ -76,6 +76,16 @@ describe('MimicEngine — step advance within a lesson', () => {
     expect(s.lessonIndex).toBe(0);
   });
 
+  it('CELEBRATE_DONE on L6 step 0 skips legacy tap-mini and opens the wild mockup', () => {
+    const shapes: LessonShape[] = [{ id: 'possible-results-basics', stepCount: 3 }];
+    const s = mimicReducer(
+      { phase: 'celebrate', lessonIndex: 0, stepIndex: 0 },
+      { type: 'CELEBRATE_DONE' },
+      shapes,
+    );
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 2 });
+  });
+
   it('CELEBRATE_DONE on L6 step 1 moves to intro on step 2', () => {
     const shapes: LessonShape[] = [{ id: 'possible-results-basics', stepCount: 3 }];
     const s = mimicReducer(
@@ -166,6 +176,18 @@ describe('MimicEngine — empty lessons edge case', () => {
 describe('MimicEngine — GO_BACK_LAYER', () => {
   const at = (phase: MimicState['phase'], lessonIndex = 0, stepIndex = 0): MimicState =>
     ({ phase, lessonIndex, stepIndex });
+
+  it('GO_BACK from L6 wild mockup skips legacy tap-mini and returns to step 0', () => {
+    const shapes: LessonShape[] = [{ id: 'possible-results-basics', stepCount: 3 }];
+    const s = mimicReducer(at('intro', 0, 2), { type: 'GO_BACK' }, shapes);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 0 });
+  });
+
+  it('GO_BACK_LAYER from L6 wild mockup skips legacy tap-mini and returns to step 0', () => {
+    const shapes: LessonShape[] = [{ id: 'possible-results-basics', stepCount: 3 }];
+    const s = mimicReducer(at('intro', 0, 2), { type: 'GO_BACK_LAYER' }, shapes);
+    expect(s).toEqual({ phase: 'intro', lessonIndex: 0, stepIndex: 0 });
+  });
 
   it('celebrate → await-mimic (same lesson/step)', () => {
     const s = mimicReducer(at('celebrate', 0, 1), { type: 'GO_BACK_LAYER' }, LESSONS);

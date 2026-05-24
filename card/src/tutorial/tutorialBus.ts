@@ -16,6 +16,7 @@ export type FanDemoCmd =
    *  specific operator (no cycling). Both no-op outside tutorial mode. */
   | { kind: 'eqPickDice'; idx: number }
   | { kind: 'eqSetOp'; which: 1 | 2; op: '+' | '-' | 'x' | '÷' }
+  | { kind: 'eqFillFromEquation'; equation: string }
   /** Tutorial-driven equation confirm (CONFIRM_EQUATION) and card staging
    *  (STAGE_CARD by hand-card value). The lesson host listens for both. */
   | { kind: 'eqConfirm' }
@@ -152,7 +153,7 @@ export type UserEvent =
 /** Named on-screen targets the tutorial can draw an arrow at. The real game
  *  UI reports the rect of each button via `setLayout`; the tutorial reads it
  *  via `getLayout` when rendering its `HighlightOverlay`. */
-export type LayoutKey = 'confirmEqBtn' | 'playCardsBtn' | 'resultsChip' | 'miniStrip';
+export type LayoutKey = 'confirmEqBtn' | 'playCardsBtn' | 'resultsChip' | 'miniStrip' | 'solveChip';
 export type LayoutRect = { top: number; left: number; width: number; height: number };
 
 type Listener<T> = (event: T) => void;
@@ -548,6 +549,7 @@ export const tutorialBus = {
     if (!on) {
       layouts.resultsChip = null;
       layouts.miniStrip = null;
+      layouts.solveChip = null;
     }
   },
   getL6GuidedMode(): boolean {
@@ -732,6 +734,7 @@ export const tutorialBus = {
     layouts.playCardsBtn = null;
     layouts.resultsChip = null;
     layouts.miniStrip = null;
+    layouts.solveChip = null;
     opButtonPulse = 0;
     opButtonPulseListeners.clear();
   },

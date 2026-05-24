@@ -7032,7 +7032,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     const cur = which === 1 ? op1 : op2;
     const idx = eqOpChoices.indexOf(cur);
     const safeIdx = idx === -1 ? 0 : idx;
-    const next = eqOpChoices[(safeIdx + 1) % eqOpChoices.length];
+    let next = eqOpChoices[(safeIdx + 1) % eqOpChoices.length];
+    // In tutorial mode, once an op is set never cycle back to null —
+    // it leaves the equation incomplete and breaks hint interpolation.
+    if (state.isTutorial && next === null && cur !== null) {
+      next = eqOpChoices.find(op => op !== null) ?? next;
+    }
     if (which === 1) setOp1(next);
     else setOp2(next);
     if (state.isTutorial && tutorialBus.getL5GuidedMode()) {
@@ -8539,13 +8544,23 @@ function ActionBar() {
     ? { justifyContent:'flex-end' as const, paddingBottom: Math.max(insets.bottom + 56, 72) }
     : undefined;
   const jokerModalBoxStyle = isTutorialJokerPicker
-    ? { paddingHorizontal: 16, paddingVertical: 18 }
+    ? {
+        paddingHorizontal: 24,
+        paddingVertical: 26,
+        borderWidth: 2.5,
+        borderColor: '#818CF8',
+        backgroundColor: '#0F172A',
+        borderRadius: 24,
+        ...(Platform.OS === 'ios'
+          ? { shadowColor: '#818CF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 20 }
+          : { elevation: 16 }),
+      }
     : undefined;
   const jokerModalTitle = isTutorialJokerPicker ? t('tutorial.l5.jokerPickTitle') : t('game.pickJokerOp');
-  const jokerButtonWidth = isTutorialJokerPicker ? 56 : 100;
-  const jokerButtonHeight = isTutorialJokerPicker ? 56 : 64;
-  const jokerButtonFontSize = isTutorialJokerPicker ? 26 : 30;
-  const jokerButtonGap = isTutorialJokerPicker ? 8 : 12;
+  const jokerButtonWidth = isTutorialJokerPicker ? 66 : 100;
+  const jokerButtonHeight = isTutorialJokerPicker ? 66 : 64;
+  const jokerButtonFontSize = isTutorialJokerPicker ? 30 : 30;
+  const jokerButtonGap = isTutorialJokerPicker ? 12 : 12;
   return (
     <View style={{width:'100%',gap:10}}>
       {canUseActiveTurnUi && (pr||bl||so)&&hp && !state.isTutorial && (

@@ -41,7 +41,7 @@ npx expo start --clear
 |---|---|
 | `EXPO_PUBLIC_SERVER_URL` | Remote Socket.IO server URL (prod on Render: `https://lolos-mobile.onrender.com`) |
 | `EXPO_PUBLIC_LOCAL_SOCKET_SERVER` | `1` = dev-only flag, forces client to use local LAN server (ignores `EXPO_PUBLIC_SERVER_URL` for online play). `0` = use cloud. |
-| `EXPO_PUBLIC_WEB_APP_URL` | Public web build URL (Render: `https://salinda-web.onrender.com`) |
+| `EXPO_PUBLIC_WEB_APP_URL` | Public web build URL (Vercel: `https://salinda-mobile.vercel.app`) |
 | `EXPO_PUBLIC_LOCK_ADVANCED_STAGES` | `1` = lock stages A–H (for future purchase/subscription gating) |
 
 Local dev flow: run `npm run server:dev`, set `EXPO_PUBLIC_LOCAL_SOCKET_SERVER=1`, Expo Go on the same Wi-Fi auto-discovers your PC IP (same as Metro).
@@ -49,7 +49,7 @@ Local dev flow: run `npm run server:dev`, set `EXPO_PUBLIC_LOCAL_SOCKET_SERVER=1
 ## Deploy targets
 
 - **Multiplayer server**: Render blueprint. Build command `npm run build --prefix server`, start `node dist/server/src/index.js`. See `docs/deploy-render.md`.
-- **Web app**: Render static site `salinda-web`.
+- **Web app**: Vercel project `salinda-mobile` (`https://salinda-mobile.vercel.app`). Render `salinda-web` is only an optional mirror.
 - **Mobile (iOS/Android)**: EAS Build. Production env injected via `eas.json` (`EXPO_PUBLIC_SERVER_URL`, `EXPO_PUBLIC_WEB_APP_URL`).
 
 ## Repo layout (key folders)
@@ -136,5 +136,6 @@ node scripts/research-simulate-0-10-15.js
 ## External services
 
 - **GitHub**: `itcohen2-maker/lolos-mobile` (main branch)
-- **Render**: multiplayer server (`lolos-mobile.onrender.com`) + web (`salinda-web.onrender.com`)
+- **Render**: multiplayer server (`lolos-mobile.onrender.com`)
+- **Vercel**: web client (`salinda-mobile.vercel.app`)
 - **EAS / Expo**: mobile builds (production env via `eas.json`)

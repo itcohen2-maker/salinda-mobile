@@ -10,7 +10,7 @@ export interface SocialSignInOptions {
   forceAccountPicker?: boolean;
 }
 
-export const SOCIAL_AUTH_SCHEME = 'salinda';
+export const SOCIAL_AUTH_SCHEME = process.env.EXPO_PUBLIC_AUTH_SCHEME ?? 'salinda';
 export const SOCIAL_AUTH_CALLBACK_PATH = 'auth/callback';
 export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
 export const SOCIAL_AUTH_RETURN_TO_STORAGE_KEY = 'salinda_social_auth_return_to';

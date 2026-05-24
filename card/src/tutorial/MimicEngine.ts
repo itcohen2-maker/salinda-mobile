@@ -40,7 +40,7 @@ export type MimicAction =
 
 /** Last core lesson index (0-based) before optional fractions branch.
  *  Core lessons: 0 fan, 1 tap, 2 dice, 3 equation, 4 op-cycle+joker,
- *  5 possible-results (chip + mini-cards + solve-chip copy). */
+ *  5 possible-results (chip + mini-cards + wild-card handoff). */
 export const MIMIC_LAST_CORE_LESSON_INDEX = 5;
 
 /** First optional fractions module lesson index (append after core lessons). */
@@ -66,6 +66,19 @@ export const INITIAL_MIMIC_STATE: MimicState = {
   stepIndex: 0,
 };
 
+const POSSIBLE_RESULTS_LESSON_ID = 'possible-results-basics';
+
+function isPossibleResultsLesson(state: MimicState, lessons: LessonShape[]): boolean {
+  return lessons[state.lessonIndex]?.id === POSSIBLE_RESULTS_LESSON_ID;
+}
+
+function getPreviousStepIndex(state: MimicState, lessons: LessonShape[]): number {
+  // L6 step 1 (tap-mini) stays in the registry for compatibility, but the
+  // active tutorial flow skips it. Back navigation must skip it too.
+  if (isPossibleResultsLesson(state, lessons) && state.stepIndex === 2) return 0;
+  return state.stepIndex - 1;
+}
+
 export function mimicReducer(
   state: MimicState,
   action: MimicAction,
@@ -74,6 +87,18 @@ export function mimicReducer(
   if (action.type === 'EXIT') return INITIAL_MIMIC_STATE;
 
   if (action.type === 'GO_BACK_LAYER') {
+    if (
+      isPossibleResultsLesson(state, lessons) &&
+      state.stepIndex === 2 &&
+      (
+        state.phase === 'intro' ||
+        state.phase === 'bot-demo' ||
+        state.phase === 'await-mimic' ||
+        state.phase === 'celebrate'
+      )
+    ) {
+      return { ...state, phase: 'intro', stepIndex: 0 };
+    }
     // celebrate → await-mimic: "layer back" — lets the learner retry without
     // losing the current step. All other phases use step-level back logic.
     if (state.phase === 'celebrate') return { ...state, phase: 'await-mimic' };
@@ -83,7 +108,7 @@ export function mimicReducer(
     // await-mimic + intro: step-level back (same logic as GO_BACK).
     if (state.phase === 'await-mimic' || state.phase === 'intro') {
       if (state.stepIndex > 0) {
-        return { ...state, phase: 'intro', stepIndex: state.stepIndex - 1 };
+        return { ...state, phase: 'intro', stepIndex: getPreviousStepIndex(state, lessons) };
       }
       if (state.lessonIndex === MIMIC_FIRST_FRACTION_LESSON_INDEX) {
         return { phase: 'post-signs-choice', lessonIndex: MIMIC_LAST_CORE_LESSON_INDEX, stepIndex: 0 };
@@ -99,6 +124,19 @@ export function mimicReducer(
   }
 
   if (action.type === 'GO_BACK') {
+    if (
+      isPossibleResultsLesson(state, lessons) &&
+      state.stepIndex === 2 &&
+      (
+        state.phase === 'intro' ||
+        state.phase === 'bot-demo' ||
+        state.phase === 'await-mimic' ||
+        state.phase === 'celebrate' ||
+        state.phase === 'lesson-done'
+      )
+    ) {
+      return { ...state, phase: 'intro', stepIndex: 0 };
+    }
     if (state.phase === 'post-signs-choice' || state.phase === 'core-complete') {
       const last = lessons[MIMIC_LAST_CORE_LESSON_INDEX];
       const lastStep = last ? Math.max(0, last.stepCount - 1) : 0;
@@ -114,7 +152,7 @@ export function mimicReducer(
     ) {
       // Go back one step within the current lesson.
       if (state.stepIndex > 0) {
-        return { ...state, phase: 'intro', stepIndex: state.stepIndex - 1 };
+        return { ...state, phase: 'intro', stepIndex: getPreviousStepIndex(state, lessons) };
       }
 
       // Step 0: go back to the previous lesson's LAST step.
@@ -188,8 +226,11 @@ export function mimicReducer(
     if (isLastStep) {
       return { ...state, phase: 'lesson-done' };
     }
-    if (lesson?.id === 'possible-results-basics' && state.stepIndex === 1) {
-      return { ...state, phase: 'intro', stepIndex: state.stepIndex + 1 };
+    if (lesson?.id === POSSIBLE_RESULTS_LESSON_ID && state.stepIndex === 0 && lesson.stepCount > 2) {
+      return { ...state, phase: 'intro', stepIndex: 2 };
+    }
+    if (lesson?.id === POSSIBLE_RESULTS_LESSON_ID && state.stepIndex === 1) {
+      return { ...state, phase: 'intro', stepIndex: 2 };
     }
     return { ...state, phase: 'bot-demo', stepIndex: state.stepIndex + 1 };
   }
@@ -197,7 +238,7 @@ export function mimicReducer(
   if (action.type === 'DISMISS_LESSON_DONE' && state.phase === 'lesson-done') {
     const atCoreEnd =
       state.lessonIndex === MIMIC_LAST_CORE_LESSON_INDEX &&
-      lessons[MIMIC_LAST_CORE_LESSON_INDEX]?.id === 'possible-results-basics';
+      lessons[MIMIC_LAST_CORE_LESSON_INDEX]?.id === POSSIBLE_RESULTS_LESSON_ID;
     if (atCoreEnd) {
       return { ...state, phase: 'core-complete' };
     }

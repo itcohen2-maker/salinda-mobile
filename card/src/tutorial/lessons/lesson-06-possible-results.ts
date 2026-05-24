@@ -1,6 +1,6 @@
 // ============================================================
 // lesson-06-possible-results.ts — Sixth lesson (core): possible
-// outcomes button + mini cards + red solve-exercise chip.
+// outcomes button + mini cards + wild-card handoff.
 //
 // Runs on the real game UI (ResultsChip + ResultsStripBelowTable +
 // SolveExerciseChip). Two short steps — the old "copy exercise"
@@ -14,11 +14,15 @@
 //     each mini-card is a reachable result.
 //     Outcome: `resultsChipTapped` user event.
 //
+// Active flow: after the 6.1 acknowledgement, MimicEngine skips the
+// legacy tap-mini step and opens 6.3 (wild-finish) immediately. Keep
+// tap-mini registered so existing stepIndex === 2 UI checks remain stable.
+//
 // 6.2 (tap-mini)  — one of the mini-cards pulses; the learner taps
 //     it to reveal the red SolveExerciseChip with the full
 //     equation behind the chosen result. Celebrate requires a
 //     manual "הבנתי" acknowledgement before the lesson advances.
-//     Outcome: `miniCardTapped` user event.
+//     Outcome: `l6TapMiniAck` after the learner explores a mini-card.
 // ============================================================
 
 import type { Lesson } from './types';
@@ -30,10 +34,8 @@ export const lesson06PossibleResults: Lesson = {
   steps: [
     {
       id: 'open-chip',
-      // Wait long enough so the 140ms TUTORIAL_FORCE_SOLVED rig has committed
-      // and the learner has a readable beat before control moves to them.
-      // fire before BOT_DEMO_DONE transitions to await-mimic. Without this delay
-      // there is a ~140ms window where the equation isn't shown yet on entry.
+      // Wait long enough for the solved reference equation to be readable
+      // before control moves to the learner.
       botDemo: async (api) => { await api.wait(900); },
       outcome: (e) => e.kind === 'resultsChipTapped',
       hintKey: 'tutorial.l6a.hintTapChip',

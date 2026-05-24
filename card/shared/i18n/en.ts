@@ -1256,7 +1256,7 @@ export const en: Record<string, string> = {
   // Lesson 4c — Full build on your own
   'tutorial.l4c.botFull': 'Your turn — build the whole exercise and pick the card',
   'tutorial.l4c.gotIt': 'Got it',
-  'tutorial.l4c.hintFull': 'Add dice and an operator to the equation',
+  'tutorial.l4c.hintFull': 'Think of a card and build an equation with + that fits it',
   'tutorial.l4c.hintPickSecondDie': 'Add one more die to the equation',
   'tutorial.l4c.hintPickOperator': 'Tap between the dice to choose an operator',
   'tutorial.l4c.hintBuildProgress': 'Tap a card that matches the result number',
@@ -1303,7 +1303,7 @@ export const en: Record<string, string> = {
   'tutorial.l5c.wrong': 'Not quite — try a different sign',
   'tutorial.l5c.celebrate': 'Well done — you know your signs',
   'tutorial.l5.tipCelebrate': 'I picked this option and got {{result}}!\nTap the {{result}} card in your fan to discard it',
-  'tutorial.l5.jokerPickTitle': 'Pick a sign',
+  'tutorial.l5.jokerPickTitle': 'Pick a sign that fits the exercise',
   'tutorial.l5.opCardLabel.plus': 'Plus',
   'tutorial.l5.opCardLabel.minus': 'Minus',
   'tutorial.l5.opCardLabel.mul': 'Times',
