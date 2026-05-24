@@ -128,12 +128,12 @@ export function getWebGameLayout(viewport: ViewportSize): WebGameLayout {
     ? Math.round(tableTop + tableHeight - 45 - mobileCompactRatio * 12)
     : tableTop + tableHeight + 32;
   const handTopY = frameHeight - handZoneTop;
-  // Anchor 60px below the fan strip bottom (screenH - handBottom).
-  // Cards overflow ~15px below the strip due to rotation; 60px gives ~45px
-  // clear space so the button is visually outside the fan on all screen heights.
+  // Anchor 90px below the fan strip bottom (screenH - handBottom).
+  // Cards overflow ~15px below the strip due to rotation; 90px gives ~75px
+  // clear space so the button sits comfortably below the fan on all screen heights.
   // The old Min(680) cap placed the button inside the fan on tall phones (930px+).
   const goldActionButtonTop = mobileWebViewport
-    ? Math.max(96, frameHeight - Math.max(handBottom - 60, 60))
+    ? Math.max(96, frameHeight - Math.max(handBottom - 90, 60))
     : Math.max(tableTop + tableHeight + 20, handTopY - 70);
 
   return {

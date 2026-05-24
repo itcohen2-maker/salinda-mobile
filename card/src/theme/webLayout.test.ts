@@ -47,9 +47,9 @@ describe('getWebGameLayout', () => {
   });
 
   it.each([
-    { width: 390, height: 844, handBottom: 195, goldActionButtonTop: 709 },
-    { width: 393, height: 851, handBottom: 195, goldActionButtonTop: 716 },
-    { width: WEB_MOBILE_VIEWPORT_MAX_WIDTH, height: 900, handBottom: 195, goldActionButtonTop: 765 },
+    { width: 390, height: 844, handBottom: 195, goldActionButtonTop: 739 },
+    { width: 393, height: 851, handBottom: 195, goldActionButtonTop: 746 },
+    { width: WEB_MOBILE_VIEWPORT_MAX_WIDTH, height: 900, handBottom: 195, goldActionButtonTop: 795 },
   ])('uses full-width native-style layout for tall portrait mobile web viewport %o', (viewport) => {
     const layout = getWebGameLayout(viewport);
 
