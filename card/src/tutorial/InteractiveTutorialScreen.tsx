@@ -20,7 +20,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
 import { getWebGameLayout } from '../theme/webLayout';
 import { getNativeGameLayout } from '../theme/nativeGameLayout';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';

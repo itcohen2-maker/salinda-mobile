@@ -370,11 +370,6 @@ const SCREEN_W = Platform.OS === 'web' && !isWebMobileViewport(_SCREEN_W_RAW, SC
   : _SCREEN_W_RAW;
 const NATIVE_HAND_FAN = getNativeHandFanMetrics(Platform.OS);
 
-/** אותו top לכפתור הקוביות המוזהב (GameScreen) ולכפתור «אני מוכן» (TurnTransition).
- *  מעוגן 90px מתחת לתחתית strip המניפה (SCREEN_H - HAND_BOTTOM_OFFSET).
- *  הפולבק הזה פעיל רק כשאין webGameLayout/nativeGameLayout; הערך האמיתי מגיע מהן. */
-const GOLD_ACTION_BUTTON_TOP = Math.max(96, SCREEN_H - Math.max(HAND_BOTTOM_OFFSET - 100, 60));
-
 /** גובה אזור היד (מניפה) — זהה במסך השחקן (TurnTransition) ובמסך המשחק (GameScreen)
  *  HAND_STRIP_HEIGHT = גובה כל האזור (כולל טקסט מעל היד אם יש)
  *  HAND_INNER_HEIGHT = גובה viewport של SimpleHand — חייב לשקף את fanH בפועל (אחרת המניפה בולטת מעל השולחן)
@@ -391,6 +386,11 @@ const HAND_STRIP_ABOVE_FAN = NATIVE_HAND_FAN.stripAboveFan;
 const HAND_STRIP_HEIGHT = NATIVE_HAND_FAN.stripHeight;
 /** מרחק (px) מתחתית המסך לתחתית פס היד — זהה ב־TurnTransition וב־GameScreen (195px); תואם origin/main ללא הרמה בתור בוט */
 const HAND_BOTTOM_OFFSET = 195;
+
+/** אותו top לכפתור הקוביות המוזהב (GameScreen) ולכפתור «אני מוכן» (TurnTransition).
+ *  מעוגן 90px מתחת לתחתית strip המניפה (SCREEN_H - HAND_BOTTOM_OFFSET).
+ *  הפולבק הזה פעיל רק כשאין webGameLayout/nativeGameLayout; הערך האמיתי מגיע מהן. */
+const GOLD_ACTION_BUTTON_TOP = Math.max(96, SCREEN_H - Math.max(HAND_BOTTOM_OFFSET - 100, 60));
 
 /** קצה עליון של אזור היד (מספר מרחק מהתחתית) — ליישור FuseTimer / מיני־תוצאות */
 const HAND_ZONE_TOP = HAND_BOTTOM_OFFSET + HAND_STRIP_HEIGHT;
