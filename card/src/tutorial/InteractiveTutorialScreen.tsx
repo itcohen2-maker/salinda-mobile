@@ -4563,7 +4563,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         dispatchEngine({ type: 'BOT_DEMO_DONE' });
         break;
       case 'await-mimic': dispatchEngine({ type: 'OUTCOME_MATCHED' }); break;
-      case 'celebrate': dispatchEngine({ type: 'CELEBRATE_DONE' }); break;
+      case 'celebrate': setL2CelebratePending(false); dispatchEngine({ type: 'CELEBRATE_DONE' }); break;
       case 'lesson-done': dispatchEngine({ type: 'DISMISS_LESSON_DONE' }); break;
       case 'core-complete': dispatchEngine({ type: 'DISMISS_CORE_COMPLETE' }); break;
       case 'post-signs-choice': dispatchEngine({ type: 'CHOOSE_FINISH_TUTORIAL' }); break;
