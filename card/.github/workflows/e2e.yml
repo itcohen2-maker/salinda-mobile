@@ -44,3 +44,23 @@ jobs:
           name: junit-results
           path: tests/results
           retention-days: 7
+
+  ota-update:
+    needs: playwright
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Push OTA update to mobile
+        run: npx eas-cli update --channel production --message "Auto OTA ${{ github.sha }}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
