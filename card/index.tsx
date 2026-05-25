@@ -20920,11 +20920,6 @@ function GameEntryChoiceScreen({
               testID="lobby-play-bot"
               onPress={onVsBot}
             />
-            <View style={{ marginTop: 6 }}>
-              <Text style={{ color: '#FCD34D', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
-                {t('gameEntry.recommended')}
-              </Text>
-            </View>
           </View>
           <MenuCapsuleButton
             text={t('gameEntry.withFriends')}
