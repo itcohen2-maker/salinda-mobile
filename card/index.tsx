@@ -11894,7 +11894,7 @@ function StartScreen({
               alignItems: topBackButtonAlignment,
               marginTop: -topActionsBackLift,
               marginBottom: topActionsRowGap,
-              direction: 'ltr',
+              writingDirection: 'ltr',
             }}
           >
             <LulosButton
@@ -20719,7 +20719,7 @@ export function PlayModeChoiceScreen({
               </LinearGradient>
 
               {/* Language toggle — compact */}
-              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', direction: 'ltr', gap: 6 }}>
+              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', writingDirection: 'ltr', gap: 6 }}>
                 <LulosButton
                   text={t('lang.he')}
                   color={locale === 'he' ? 'orange' : 'blue'}
@@ -22227,7 +22227,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   left: 0,
                   right: 0,
                   flexDirection: 'row',
-                  direction: 'ltr',
+                  writingDirection: 'ltr',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 8,
@@ -22257,7 +22257,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                 >
                   <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
                 </TouchableOpacity>
-                <View style={{ flexDirection: 'row', direction: 'ltr', alignItems: 'center', gap: 8 }}>
+                <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity
                     accessibilityRole="button"
                     accessibilityLabel={t('game.back')}

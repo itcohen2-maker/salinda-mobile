@@ -38,6 +38,7 @@ test.describe('Local draw button', () => {
   test('pass-and-play draw-forfeit button ends the turn', async ({ lobby, game, page }) => {
     await lobby.goto();
     await lobby.openGameMenu.click();
+    await page.getByTestId('lobby-play-friends').click();
     await lobby.playPassAndPlay.click();
     await page.getByTestId('start-lets-play').click();
     await dismissGuidanceAndAlerts(page);

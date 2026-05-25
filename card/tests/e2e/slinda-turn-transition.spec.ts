@@ -34,6 +34,7 @@ test.describe('Slinda turn-transition flow', () => {
 
     await lobby.goto();
     await lobby.playSinglePlayer.click();
+    await page.getByTestId('lobby-play-friends').click();
     await lobby.playPassAndPlay.click();
     await page.getByTestId('start-lets-play').click({ force: true });
     await page.getByTestId('start-guidance-skip').click({ force: true });

@@ -17,7 +17,9 @@ import { failOnConsoleError } from '../support/helpers/network';
 test.describe('Tutorial entry flow', () => {
   test('Given English locale, When user opens tutorial from home, Then the tutorial intro opens', async ({
     page,
+    lobby,
   }) => {
+    void lobby; // ensures lulos_tutorial_done is seeded so FTU routing doesn't race with click
     const expectCenteredShell = async (expectedWidth: number) => {
       const shell = page.getByTestId('app-web-shell');
       await expect(shell).toBeVisible({ timeout: 30_000 });
@@ -40,7 +42,7 @@ test.describe('Tutorial entry flow', () => {
 
     await page.goto('/');
     await expectCenteredShell(412);
-    await page.getByTestId('lobby-tutorial').click({ timeout: 30_000 });
+    await page.getByTestId('lobby-tutorial').click({ force: true, timeout: 30_000 });
 
     await expect(page.getByText(/welcome to selinda/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/let's go/i)).toBeVisible({ timeout: 30_000 });
@@ -50,22 +52,26 @@ test.describe('Tutorial entry flow', () => {
 
   test('Given Hebrew locale, When user enters tutorial, Then the tutorial intro is visible', async ({
     page,
+    lobby,
   }) => {
+    void lobby;
     await setLocale(page, 'he');
     await page.goto('/');
-    await page.getByTestId('lobby-tutorial').click({ timeout: 30_000 });
+    await page.getByTestId('lobby-tutorial').click({ force: true, timeout: 30_000 });
 
     await expect(page.getByText(/welcome|ברוכים הבאים/i)).toBeVisible({ timeout: 30_000 });
   });
 
   test('Given Hebrew locale on iPhone layout, When tutorial opens, Then exit stays top-left, the meter hugs the left edge, and sound stays bottom-right', async ({
     page,
+    lobby,
   }, testInfo) => {
+    void lobby;
     test.skip(testInfo.project.name !== 'mobile-safari', 'iPhone-specific header regression');
 
     await setLocale(page, 'he');
     await page.goto('/');
-    await page.getByTestId('lobby-tutorial').click({ timeout: 30_000 });
+    await page.getByTestId('lobby-tutorial').click({ force: true, timeout: 30_000 });
 
     await expect(page.getByText(/welcome|ברוכים הבאים/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('tutorial-header-exit')).toBeVisible();

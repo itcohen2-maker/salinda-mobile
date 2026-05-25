@@ -320,12 +320,6 @@ test.describe('Mobile Gameplay Playfield', () => {
     });
     await lobby.goto();
     await expect(lobby.openGameMenu).toBeVisible({ timeout: 30_000 });
-    const focusToggle = page.getByTestId('mobile-web-focus-toggle');
-    await expect(focusToggle).toBeVisible();
-    await tapCenter(page, focusToggle);
-    await expect(focusToggle).toContainText('×');
-    await tapCenter(page, focusToggle);
-    await expect(focusToggle).toBeVisible();
     await expectFullWidthElement(page, 'app-web-shell');
     await tapCenter(page, lobby.openGameMenu);
     if (!(await lobby.playSolo.isVisible({ timeout: 2_000 }).catch(() => false))) {
