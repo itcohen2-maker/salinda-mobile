@@ -43,6 +43,12 @@ export function WebGameScreenFrame({
 
   if (safeFrameHeight != null) {
     const visualHeight = safeFrameHeight * safeScale;
+    // Only apply CSS transform when actual scaling is needed. A transform:scale(1)
+    // is a visual no-op but promotes the element to a separate GPU compositing
+    // layer in iOS Safari and Chrome Android. This causes the game canvas and
+    // its absolute-positioned children (buttons) to move independently from
+    // the page during pull-to-refresh, making them appear "detached".
+    const needsScale = safeScale < 1;
     return (
       <View style={[styles.outer, outerStyle]}>
         <View
@@ -67,9 +73,9 @@ export function WebGameScreenFrame({
               {
                 width,
                 height: safeFrameHeight,
-                transform: [{ scale: safeScale }],
+                ...(needsScale ? { transform: [{ scale: safeScale }] } : {}),
               },
-              { transformOrigin: 'top center' } as any,
+              ...(needsScale ? [{ transformOrigin: 'top center' } as any] : []),
             ]}
           >
             {children}
