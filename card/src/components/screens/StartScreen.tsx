@@ -13,6 +13,7 @@ import SalindaLogoOption06 from '../branding/SalindaLogoOption06';
 import Button from '../ui/Button';
 import { useLocale } from '../../i18n/LocaleContext';
 import { CARDS_PER_PLAYER } from '../../../shared/gameConstants';
+import { LAST_PUSH } from '../../buildInfo';
 
 interface StartScreenProps {
   onBackToChoice?: () => void;
@@ -267,12 +268,14 @@ export default function StartScreen({
           </View>
         </View>
       )}
+      <Text style={styles.lastPush}>עדכון אחרון: {LAST_PUSH}</Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#111827' },
+  lastPush: { color: '#4B5563', fontSize: 10, textAlign: 'center', paddingBottom: 12, paddingTop: 4 },
   container: { padding: 24, paddingTop: 60, alignItems: 'stretch' },
   containerCompact: { padding: 16, paddingTop: 40 },
 
