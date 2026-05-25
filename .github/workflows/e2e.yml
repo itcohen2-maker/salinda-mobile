@@ -66,6 +66,7 @@ jobs:
         run: npm ci
 
       - name: Push OTA update to mobile
-        run: npx eas-cli update --channel production --message "Auto OTA ${{ github.sha }}" --non-interactive
+        run: npx eas-cli update --channel production --message "Auto OTA ${{ github.sha }}"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: '1'
