@@ -87,15 +87,30 @@ jobs:
         working-directory: card
         run: npm ci
 
+      - name: Pull Vercel project config
+        working-directory: card
+        run: npx vercel pull --yes --environment=production --token ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_re4UQDqRCpi3bqqW7uUkCNXu
+          VERCEL_PROJECT_ID: prj_e6fXMFDkJ7Awk3zpfzurIdO2uV7F
+
       - name: Build web
         working-directory: card
         run: npx expo export --platform web && node scripts/inject-og-tags.js
+
+      - name: Package dist into Vercel output format
+        working-directory: card
+        run: |
+          mkdir -p .vercel/output/static
+          cp -r dist/. .vercel/output/static/
+          echo '{"version":3}' > .vercel/output/config.json
 
       - name: Deploy to Vercel production
         id: vercel_deploy
         working-directory: card
         run: |
-          OUTPUT=$(npx vercel deploy dist --prod --yes --prebuilt --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
+          OUTPUT=$(npx vercel deploy --prod --yes --prebuilt --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
           echo "$OUTPUT"
           DEPLOY_URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9-]+\.vercel\.app' | tail -1)
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
