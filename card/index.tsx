@@ -22944,7 +22944,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const webSideGutter = mobileWebViewport ? 0 : Math.max(0, (viewport.width - webShellWidth) / 2);
   const dockedControls = webSideGutter >= 176;
   const showWebChromeControls = dockedControls;
-  const showMobileWebFocusControl = mobileWebViewport && fullscreenApiSupported;
+  const showMobileWebFocusControl = false;
   const canUseBrowserHistoryBack = typeof window !== 'undefined' && window.history.length > 1;
   const webControlsAnchorStyle = dockedControls
     ? {
