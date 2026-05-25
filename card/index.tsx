@@ -2386,7 +2386,7 @@ const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
   2: 66,
   3: 100,
 };
-const EXCELLENCE_METER_FULL_REWARD_COINS = 1;
+const EXCELLENCE_METER_FULL_REWARD_COINS = SALINDA_GAMEPLAY_REWARDS.excellence_meter_full;
 const PRE_VICTORY_COIN_AWARD_HOLD_MS = 1500;
 const BOT_TURN_COIN_CELEBRATION_HOLD_MS = 1800;
 
@@ -9204,6 +9204,9 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     lastClientX: number;
     lastMoveAt: number;
   } | null>(null);
+  // dx already accumulated before PanResponder claims the gesture (threshold artifacts).
+  // Subtracting this from gs.dx in applyFanDrag prevents the jump at gesture start.
+  const grantDxRef = useRef(0);
 
   const getResponderTouches = useCallback((evt: any) => {
     const touches = evt?.nativeEvent?.touches;
@@ -9230,6 +9233,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     scrollX.stopAnimation();
     dragStartVal.current = scrollRef.current;
     velocityRef.current = 0;
+    grantDxRef.current = 0;
     isPinching.current = false;
     pinchLoggedRef.current = false;
     userScrollGestureRef.current = true;
@@ -9240,7 +9244,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   }, [scrollX]);
 
   const applyFanDrag = useCallback((deltaX: number) => {
-    const cardsDragged = deltaX / (fanCardW * 0.8);
+    const cardsDragged = (deltaX - grantDxRef.current) / (fanCardW * 0.8);
     let next = dragStartVal.current + cardsDragged;
     const mx = maxIdxRef.current;
     if (next < 0) next = next * 0.3;
@@ -9323,7 +9327,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     // before our 20px threshold and the gesture is silently dropped.
     const fanEl = fanRootEl as HTMLElement;
     const prevFanTouchAction = fanEl.style?.touchAction ?? '';
-    if (fanEl.style) fanEl.style.touchAction = 'pan-y';
+    if (fanEl.style) fanEl.style.touchAction = 'none';
     const fanContains = fanRootEl.contains.bind(fanRootEl);
 
     const isInsideFan = (target: EventTarget | null) => {
@@ -9553,8 +9557,9 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         const dragThreshold = getFanTouchDragThreshold(evt);
         return Math.abs(gs.dx) > dragThreshold && Math.abs(gs.dx) > Math.abs(gs.dy) * 0.35;
       },
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (_, gs) => {
         beginFanGesture();
+        grantDxRef.current = gs.dx;
       },
       onPanResponderMove: (evt, gs) => {
         if (interactionLockedRef.current) return;
@@ -22728,30 +22733,21 @@ function MobileWebFocusButton({
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      activeOpacity={0.88}
+      activeOpacity={0.75}
       style={{
-        minWidth: 116,
-        height: 40,
-        borderRadius: 20,
-        paddingHorizontal: 13,
-        flexDirection: 'row',
-        gap: 7,
+        width: 34,
+        height: 34,
+        borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor,
         borderWidth: 1,
         borderColor,
-        shadowColor: lightBackdrop ? '#64748B' : '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
+        opacity: active ? 1 : 0.55,
       }}
     >
-      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 19, fontWeight: '900', lineHeight: 21 }}>
-        {active ? '×' : '⛶'}
-      </Text>
-      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 13, fontWeight: '900', lineHeight: 15 }}>
-        {label}
+      <Text allowFontScaling={false} style={{ color: iconColor, fontSize: 16, fontWeight: '900', lineHeight: 18 }}>
+        {active ? '✕' : '⛶'}
       </Text>
     </TouchableOpacity>
   );
@@ -23041,13 +23037,9 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
             pointerEvents="box-none"
             style={{
               position: 'absolute',
-              left: 0,
-              right: 0,
-              top: Math.max(10, (insets.top || 0) + 10),
-              height: 44,
+              right: 12,
+              bottom: Math.max(16, (insets.bottom || 0) + 12),
               zIndex: 31000,
-              alignItems: isRTL ? 'flex-start' : 'flex-end',
-              paddingHorizontal: 12,
             }}
           >
             <MobileWebFocusButton

@@ -35,7 +35,7 @@ import { initializeSfx, isSfxMuted, setSfxMuted } from '../audio/sfx';
 import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatus';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { generateTutorialHand } from './generateTutorialHand';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
 
 
 const diceRollSound = require('../../assets/dice_roll.mp3');
@@ -80,7 +80,7 @@ import {
   MIMIC_MULTI_PLAY_LESSON_INDEX,
 } from './MimicEngine';
 import type { Card, Fraction } from '../../shared/types';
-import { SALINDA_TUTORIAL_REWARDS } from '../../shared/salindaEconomy';
+import { SALINDA_COIN_SOURCES, SALINDA_TUTORIAL_REWARDS } from '../../shared/salindaEconomy';
 import { createBotDemonstrator } from './BotDemonstrator';
 import { isL6WildTutorialSelectionReady } from './l6WildSelection';
 import { tutorialBus, type LayoutRect } from './tutorialBus';
@@ -914,6 +914,7 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
 
 export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispatch, gameState }: Props): React.ReactElement | null {
   const { t, locale } = useLocale();
+  const { awardCoins: awardTutorialCoins } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: tutorialWindowWidth } = useWindowDimensions();
   const tutorialViewport = useWebViewportSize();
@@ -1205,11 +1206,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
-      void supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.basic, p_source: 'tutorial_core' });
+      void awardTutorialCoins(SALINDA_TUTORIAL_REWARDS.basic, SALINDA_COIN_SOURCES.tutorial_core);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
+  }, [awardTutorialCoins, engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
 
   // ג”€ג”€ Advanced-tutorial completion: award 20 coins when all advanced lessons done ג”€ג”€
   const advancedCompleteProcessedRef = useRef(false);
@@ -1227,11 +1228,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
-      void supabase.rpc('award_coins', { p_amount: SALINDA_TUTORIAL_REWARDS.advanced, p_source: 'tutorial_advanced' });
+      void awardTutorialCoins(SALINDA_TUTORIAL_REWARDS.advanced, SALINDA_COIN_SOURCES.tutorial_advanced);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
+  }, [awardTutorialCoins, engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
 
 
   // ג”€ג”€ Lesson 5c (solve-for-op) state ג”€ג”€
@@ -2538,7 +2539,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
   // ג”€ג”€ Pulse the tutorial-owned dice button during dice-lesson bot-demo. ג”€ג”€
   useEffect(() => {
-    const isPulsing = engine.phase === 'bot-demo' && engine.lessonIndex === 2 && engine.stepIndex === 0;
+    const isPulsing = (engine.phase === 'bot-demo' || engine.phase === 'await-mimic') && engine.lessonIndex === 2 && engine.stepIndex === 0;
     if (!isPulsing) {
       dicePulse.setValue(0);
       return;
@@ -2551,7 +2552,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     );
     loop.start();
     return () => loop.stop();
-  }, [engine.phase, engine.lessonIndex, dicePulse]);
+  }, [engine.phase, engine.lessonIndex, engine.stepIndex, dicePulse]);
 
   // ג”€ג”€ Lesson 5: pick a fresh (a, b) pair on entry + reset per-lesson state
   //    (cycled signs, pending joker op, modal) so each run starts clean. ג”€ג”€
@@ -2650,8 +2651,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   //    strongly to draw attention. We rig a safe random setup so the chip
   //    always has possible targets to show, and
   //    enable showPossibleResults on the game state (the boot defaults it
-  //    to false so the chip stays hidden during earlier lessons). Runs once
-  //    per L6 entry (reset on lesson exit via the ref below). ג”€ג”€
+  //    to false so the chip stays hidden during earlier lessons). Rigging
+  //    starts on intro so the transition from L5 never exposes the old hand. ג”€ג”€
   const l6RiggedRef = useRef(false);
   const l6PossibleResultsSetupRef = useRef<L6PossibleResultsSetup | null>(null);
   const l6WildRiggedRef = useRef(false);
@@ -2662,24 +2663,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       l6PossibleResultsSetupRef.current = null;
       return;
     }
-    // Re-arm the rigging on every re-entry into step 0 (GO_BACK flows the
-    // engine through `intro` before landing on `bot-demo`, and the shared
-    // `intro` useEffect at the top of this file clears equationHandSlots +
-    // runs eqReset). Without this, returning to step 0 after a back-nav
-    // leaves the equation empty and validTargets stale.
-    if (engine.phase === 'intro' && engine.stepIndex === 0) {
+    const isL6OpenChipEntry =
+      engine.stepIndex === 0 &&
+      (engine.phase === 'intro' || engine.phase === 'bot-demo');
+    if (!isL6OpenChipEntry) return;
+    if (engine.phase === 'intro') {
       l6RiggedRef.current = false;
       l6PossibleResultsSetupRef.current = null;
-      return;
     }
-    if (engine.phase !== 'bot-demo' || engine.stepIndex !== 0) return;
     if (l6RiggedRef.current) return;
     l6RiggedRef.current = true;
 
     const setup = buildL6PossibleResultsSetup();
     l6PossibleResultsSetupRef.current = setup;
     gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+'] });
-    gameDispatch({ type: 'ROLL_DICE', values: setup.dice });
+    gameDispatch({ type: 'TUTORIAL_SET_DICE', values: setup.dice });
     gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand] });
 
     // Enable the ResultsChip (boot defaults it to false so it stays hidden
@@ -2728,7 +2726,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
     gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+'] });
-    gameDispatch({ type: 'ROLL_DICE', values: setup.dice });
+    gameDispatch({ type: 'TUTORIAL_SET_DICE', values: setup.dice });
     gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand] });
     gameDispatch({
       type: 'TUTORIAL_FORCE_SOLVED',
@@ -3853,6 +3851,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // Lesson 4 step 3 ends with a blocking success modal; the learner moves
     // on only after explicitly acknowledging it.
     if (engine.lessonIndex === 3 && engine.stepIndex === 3) return;
+    // L5.3 is only a bridge into the possible-results lesson. Do not linger on
+    // the previous operator/Slinda board after the learner taps "תראו לי".
+    if (engine.lessonIndex === 4 && engine.stepIndex === 2) {
+      dispatchEngine({ type: 'CELEBRATE_DONE' });
+      return;
+    }
     // L6.1 (open possible results): this is a key concept, so do not
     // auto-advance. The learner continues with the explicit "Got it" button.
     if (engine.lessonIndex === 5 && engine.stepIndex === 0) {
@@ -4177,7 +4181,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : engine.phase === 'await-mimic'
       ? (l9SelectMiniKey ? t(l9SelectMiniKey) : l9BuildEqKey ? t(l9BuildEqKey) : l9MismatchHintKey ? t(l9MismatchHintKey) : l9ChooseCardKey ? t(l9ChooseCardKey) : l4CardMatchWrongKey ? t(l4CardMatchWrongKey) : l4bHintKey ? t(l4bHintKey) : l4Step3HintKey ? t(l4Step3HintKey) : l5PlaceHintKey ? t(l5PlaceHintKey, l5PlaceHintParams) : l5bHintKey ? t(l5bHintKey) : l6TapMiniHintKey ? t(l6TapMiniHintKey) : l6WildHintKey ? t(l6WildHintKey) : l7MismatchHintKey ? t(l7MismatchHintKey) : (engine.lessonIndex === MIMIC_IDENTICAL_LESSON_INDEX ? null : (currentStep?.hintKey ? t(currentStep.hintKey, currentStep.hintKey === 'tutorial.l4.hintTap' ? { result: String(l4DiceRef.current?.target ?? gameState?.equationResult ?? '?') } : (currentStep.hintKey === 'tutorial.multiPlayExercise.hint' || currentStep.hintKey === 'tutorial.multiPlayExerciseMore.hint') ? l11HintParams : undefined) : null)))
     : isL5TipCelebrate
-      ? t('tutorial.l5.tipCelebrate', { result: String(gameState?.equationResult ?? '?') })
+      ? null
     : engine.phase === 'celebrate'
       ? (hideL6OpenResultsBubble && engine.lessonIndex === 5 && engine.stepIndex === 0
           ? null
@@ -5276,19 +5280,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               <Text style={{ color: '#FCD34D', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
                 {t('tutorial.signCard.title')}
               </Text>
-              {/* Mini operation-card visual */}
-              <View style={{
-                width: 64, height: 80, borderRadius: 14,
-                backgroundColor: '#312E81',
-                borderWidth: 2.5, borderColor: '#818CF8',
-                alignItems: 'center', justifyContent: 'center',
-                ...Platform.select({
-                  ios: { shadowColor: '#818CF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12 },
-                  android: { elevation: 10 },
-                }),
-              }}>
-                <Text style={{ fontSize: 30, color: '#FFF', fontWeight: '900', lineHeight: 36 }}>{'+'}</Text>
-                <Text style={{ fontSize: 9, color: '#C7D2FE', fontWeight: '800', letterSpacing: 0.5, marginTop: 2 }}>{'׳¡׳™׳׳'}</Text>
+              {/* Mini operation-cards visual */}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['+', '−', '×', '÷'] as const).map((op, i) => {
+                  const opColors = ['#EA4335', '#FBBC05', '#34A853', '#2196F3'];
+                  return (
+                    <View key={op} style={{
+                      width: 56, height: 72, borderRadius: 12,
+                      backgroundColor: '#1E1B4B',
+                      borderWidth: 2, borderColor: opColors[i],
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Text style={{ fontSize: 28, color: opColors[i], fontWeight: '900' }}>{op}</Text>
+                    </View>
+                  );
+                })}
               </View>
               {/* Body */}
               <Text style={{ color: '#F8FAFC', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 26 }}>

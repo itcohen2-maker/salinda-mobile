@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SalindaLogoOption06 from './branding/SalindaLogoOption06';
@@ -36,7 +36,37 @@ function BigVisual({ type }: { type: Slide['visual'] }) {
   if (type === 'dice') return <Text style={styles.bigVisual}>🎲 5  4  1</Text>;
   if (type === 'equation') return <Text style={styles.bigVisual}>5 + 4 = 9</Text>;
   if (type === 'cards') return <Text style={styles.bigVisual}>4 + 5</Text>;
-  return <Text style={styles.bigVisual}>★  פרא   1/2  שבר</Text>;
+  if (type === 'special') {
+    const miniCards = [
+      { symbol: '🃏', label: 'JOKER', border: '#FBBC05' },
+      { symbol: '★', label: '0-25', border: '#A78BFA' },
+      { symbol: '½', label: '1/2', border: '#2196F3' },
+    ];
+    return (
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {miniCards.map((c, i) => (
+          <View
+            key={i}
+            style={{
+              width: 76,
+              height: 104,
+              borderRadius: 14,
+              borderWidth: 2,
+              borderColor: c.border,
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <Text style={{ fontSize: 34, color: c.border }}>{c.symbol}</Text>
+            <Text style={{ fontSize: 12, color: c.border, fontWeight: '800', letterSpacing: 0.5 }}>{c.label}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  return null;
 }
 
 export default function GameplayPreviewTeaser({ t, onSkip, onComplete }: GameplayPreviewTeaserProps) {
