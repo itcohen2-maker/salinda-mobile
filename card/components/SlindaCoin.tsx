@@ -39,9 +39,14 @@ export function SlindaCoin({ size = 32, pulseKey, spin = false, style }: Props) 
     return () => loop.stop();
   }, [spin, spinAnim]);
 
-  // Bounce on pulseKey
+  // Bounce on pulseKey — also fires on first mount when pulseKey is provided,
+  // because CoinAwardCelebrationCard re-mounts on every appearance and the
+  // pulseKey value never changes while the card is visible.
   useEffect(() => {
-    if (!mounted.current) { mounted.current = true; return; }
+    if (!mounted.current) {
+      mounted.current = true;
+      if (pulseKey == null) return;
+    }
     if (pulseKey == null) return;
     Animated.sequence([
       Animated.timing(bounceY, { toValue: -size * 0.45, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),

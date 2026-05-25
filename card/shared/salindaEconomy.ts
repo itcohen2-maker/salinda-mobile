@@ -4,8 +4,8 @@ export const SALINDA_TUTORIAL_REWARDS = {
 } as const;
 
 export const SALINDA_GAMEPLAY_REWARDS = {
+  excellence_meter_full: 5,
   standard_win: 10,
-  perfect_win: 15,
 } as const;
 
 export const SALINDA_CATALOG = {
@@ -38,7 +38,6 @@ export const SALINDA_CATALOG = {
 export const SALINDA_COIN_SOURCES = {
   game_courage: 'game_courage',
   game_standard_win: 'game_standard_win',
-  game_perfect_win: 'game_perfect_win',
   excellence_meter_full: 'excellence_meter_full',
   tutorial_core: 'tutorial_core',
   tutorial_advanced: 'tutorial_advanced',

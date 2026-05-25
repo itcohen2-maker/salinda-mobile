@@ -476,14 +476,14 @@ const TUTORIAL_WELCOME_COPY = {
   rulePair: 'כמה קלפים',
   ruleSuffix: ' כדי להיפטר מהם.',
   rewardBasicPrefix: 'בסיום ההדרכה תרוויחו ',
-  rewardBasicValue: '10 מטבעות!',
+  rewardBasicValue: `${SALINDA_TUTORIAL_REWARDS.basic} מטבעות!`,
   rewardHookPrefix: 'המשיכו ללמוד איך מנצחים בהדרכה המתקדמת ותרוויחו עוד ',
   rewardHookTitle: '',
   rewardHookMiddle: '',
-  rewardHookValue: '20 מטבעות',
+  rewardHookValue: `${SALINDA_TUTORIAL_REWARDS.advanced} מטבעות`,
   start: 'בואו נתחיל',
   advanced: 'הדרכת מתקדמים',
-} as const;
+};
 
 type TutorialWelcomeModalProps = {
   topInset: number;

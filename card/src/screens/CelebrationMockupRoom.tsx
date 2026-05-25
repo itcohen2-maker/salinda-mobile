@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { initializeSfx, playMeterCelebrateSequence, playSfx } from '../audio/sfx';
 import { CoinAwardCelebrationCard } from '../components/CoinAwardCelebrationCard';
 import { getScreenSafeTop } from '../theme/screenInsets';
+import { SALINDA_GAMEPLAY_REWARDS } from '../../shared/salindaEconomy';
 
 type Props = {
   onBack: () => void;
@@ -109,7 +110,7 @@ export function CelebrationMockupRoom({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const safeTop = getScreenSafeTop(insets.top);
   const [fillStep, setFillStep] = useState(0);
-  const [rewardCoins, setRewardCoins] = useState(25);
+  const [rewardCoins, setRewardCoins] = useState(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full);
   const [totalCoins, setTotalCoins] = useState(128);
   const [showCelebration, setShowCelebration] = useState(false);
 
