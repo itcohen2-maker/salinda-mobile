@@ -9370,15 +9370,6 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     const handlePointerDown = (evt: PointerEvent) => {
       try {
         handleMouseDownLike(evt);
-        // iOS Safari fires pointercancel (aborting the drag) when touch-action:auto
-        // is on any ancestor and it detects a horizontal swipe. Call preventDefault()
-        // on touch pointerdown — only after drag state was set (i.e. touch is inside
-        // the fan area) — to tell iOS "I'm handling this, skip scroll/cancel logic."
-        // pointermove and pointerup still fire normally; RNW onPress uses pointerup
-        // so card taps are not affected.
-        if (webMouseDragRef.current && evt.pointerType === 'touch' && evt.cancelable) {
-          evt.preventDefault();
-        }
       } catch (error) {
         resetWebMouseDragState();
         console.warn('[hand-web] pointerdown failed', error);
