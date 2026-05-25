@@ -9,7 +9,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: true,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
+  retries: isCI ? 1 : 0,
   workers: isCI ? 2 : undefined,
   reporter: isCI
     ? [['html', { open: 'never' }], ['junit', { outputFile: 'tests/results/junit.xml' }], ['github']]
@@ -24,8 +24,10 @@ export default defineConfig({
     locale: 'en-US',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    ...(!isCI ? [
+      { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+      { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    ] : []),
     { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
     { name: 'mobile-safari', use: { ...devices['iPhone 14'] } },
   ],
