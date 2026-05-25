@@ -20910,6 +20910,9 @@ function GameEntryChoiceScreen({
           />
         </View>
         <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
+          <Text style={{ color: '#FACC15', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 12, letterSpacing: 2 }}>
+            ITZIK COHEN
+          </Text>
           <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
             {t('gameEntry.title')}
           </Text>
