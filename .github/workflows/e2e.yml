@@ -87,11 +87,15 @@ jobs:
         working-directory: card
         run: npm ci
 
+      - name: Build web
+        working-directory: card
+        run: npx expo export --platform web && node scripts/inject-og-tags.js
+
       - name: Deploy to Vercel production
         id: vercel_deploy
         working-directory: card
         run: |
-          OUTPUT=$(npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
+          OUTPUT=$(npx vercel deploy dist --prod --yes --prebuilt --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
           echo "$OUTPUT"
           DEPLOY_URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9-]+\.vercel\.app' | tail -1)
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
