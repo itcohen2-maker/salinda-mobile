@@ -316,7 +316,7 @@ const salindaPuzzleGameLogoImg = require('./assets/branding/salinda-puzzle-game-
 const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
-import { AuthProvider, useAuth } from './src/hooks/useAuth';
+import { AuthProvider, isRegisteredAuthUser, useAuth } from './src/hooks/useAuth';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { LobbyScreen, parseJoinParamsFromUrl } from './src/screens/OnlineTableScreens';
 import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
@@ -20910,9 +20910,6 @@ function GameEntryChoiceScreen({
           />
         </View>
         <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
-          <Text style={{ color: '#FACC15', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 12, letterSpacing: 2 }}>
-            ITZIK COHEN
-          </Text>
           <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
             {t('gameEntry.title')}
           </Text>
@@ -21058,7 +21055,7 @@ function FriendsChoiceScreen({
 function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellPlayMode) => void }) {
   const mp = useMultiplayerOptional();
   const { state, dispatch } = useGame();
-  const { profile, user, isAnonymous } = useAuth();
+  const { profile, user } = useAuth();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
@@ -21337,7 +21334,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     setPlayMode(mockupReturnMode);
   }, [mockupReturnMode]);
 
-  const isRegisteredUser = !!user && !isAnonymous;
+  const isRegisteredUser = isRegisteredAuthUser(user);
 
   const openAccountAuth = useCallback(() => {
     setAuthReturnMode(null);

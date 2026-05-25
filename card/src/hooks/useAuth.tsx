@@ -85,6 +85,57 @@ function localWildOwnedKey(userId: string): string {
   return `${LOCAL_WILD_OWNED_KEY_PREFIX}${userId}`;
 }
 
+function normalizeProvider(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+export function isAnonymousAuthUser(user: User | null): boolean {
+  if (!user) return false;
+  if (user.is_anonymous === true) return true;
+
+  const provider = normalizeProvider(user.app_metadata?.provider);
+  if (provider === 'anonymous') return true;
+
+  const providers = Array.isArray(user.app_metadata?.providers)
+    ? user.app_metadata.providers.map(normalizeProvider).filter(Boolean)
+    : [];
+  if (providers.length > 0 && providers.every((item) => item === 'anonymous')) {
+    return true;
+  }
+
+  const identityProviders = Array.isArray(user.identities)
+    ? user.identities.map((identity) => normalizeProvider(identity.provider)).filter(Boolean)
+    : [];
+  if (identityProviders.length > 0 && identityProviders.every((item) => item === 'anonymous')) {
+    return true;
+  }
+
+  const hasContactIdentity = Boolean(user.email?.trim() || user.phone?.trim());
+  const hasProviderIdentity = Boolean(provider || providers.length > 0 || identityProviders.length > 0);
+  if (!hasContactIdentity && !hasProviderIdentity) return true;
+
+  return false;
+}
+
+export function isRegisteredAuthUser(user: User | null): boolean {
+  if (!user || isAnonymousAuthUser(user)) return false;
+
+  if (user.email?.trim() || user.phone?.trim()) return true;
+
+  const provider = normalizeProvider(user.app_metadata?.provider);
+  if (provider && provider !== 'anonymous') return true;
+
+  const providers = Array.isArray(user.app_metadata?.providers)
+    ? user.app_metadata.providers.map(normalizeProvider).filter(Boolean)
+    : [];
+  if (providers.some((item) => item !== 'anonymous')) return true;
+
+  const identityProviders = Array.isArray(user.identities)
+    ? user.identities.map((identity) => normalizeProvider(identity.provider)).filter(Boolean)
+    : [];
+  return identityProviders.some((item) => item !== 'anonymous');
+}
+
 export async function ensureMinimumProfileCoins(_userId: string, currentCoins: number): Promise<number> {
   const normalizedCoins = Number(currentCoins);
   if (!Number.isFinite(normalizedCoins)) return 0;
@@ -125,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const user = session?.user ?? null;
   const isAuthenticated = !!session;
-  const isAnonymous = user?.is_anonymous === true;
+  const isAnonymous = isAnonymousAuthUser(user);
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -254,7 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * If for some reason there is no session, falls back to a fresh sign-up.
    */
   const signUp = useCallback(async (email: string, password: string, username: string) => {
-    if (user?.is_anonymous) {
+    if (isAnonymous) {
       // Link identity — keeps the same profile row
       const { error } = await supabase.auth.updateUser({ email, password });
       if (error) return { error: error.message };
@@ -271,7 +322,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) return { error: error.message };
     return { error: null };
-  }, [user, refreshProfile]);
+  }, [isAnonymous, refreshProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

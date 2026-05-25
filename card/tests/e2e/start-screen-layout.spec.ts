@@ -83,7 +83,7 @@ test.describe('Start screen layout', () => {
     await expect(page.getByTestId('lobby-play-friends')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('keeps the online room browser centered inside the narrow web shell', async ({ page, lobby }) => {
+  test('keeps anonymous players on the online sign-in gate inside the narrow web shell', async ({ page, lobby }) => {
     const shell = page.getByTestId('app-web-shell');
     await seedReturningUser(page);
     await lobby.goto();
@@ -92,17 +92,19 @@ test.describe('Start screen layout', () => {
     await lobby.playSinglePlayer.click();
     await page.getByTestId('lobby-play-friends').click();
     await lobby.joinRoom.click();
-    await expect(page.getByTestId('table-card-empty-1')).toBeVisible({ timeout: 15_000 });
+    const googleSignIn = page.getByTestId('auth-social-google-button');
+    await expect(googleSignIn).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('table-card-empty-1')).toBeHidden();
 
     const shellBox = await shell.boundingBox();
-    const cardBox = await page.getByTestId('table-card-empty-1').boundingBox();
+    const signInBox = await googleSignIn.boundingBox();
 
     expect(shellBox).not.toBeNull();
-    expect(cardBox).not.toBeNull();
+    expect(signInBox).not.toBeNull();
 
-    if (shellBox && cardBox) {
-      expect(cardBox.x).toBeGreaterThanOrEqual(shellBox.x - 1);
-      expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(shellBox.x + shellBox.width + 1);
+    if (shellBox && signInBox) {
+      expect(signInBox.x).toBeGreaterThanOrEqual(shellBox.x - 1);
+      expect(signInBox.x + signInBox.width).toBeLessThanOrEqual(shellBox.x + shellBox.width + 1);
     }
   });
 });

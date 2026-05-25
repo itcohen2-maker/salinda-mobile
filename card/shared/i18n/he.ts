@@ -1467,7 +1467,7 @@ export const he: Record<string, string> = {
   'auth.linkBtn': 'שמירת ההתקדמות',
   'auth.signInTitle': 'כניסה',
   'auth.signInSubtitle': 'היכנסו כדי לשחזר את המטבעות והדירוג שלכם',
-  'auth.onlineRequiredTitle': 'כניסה כדי לשחק ברשת',
+  'auth.onlineRequiredTitle': 'כניסה כדי לשחק עם חברים',
   'auth.onlineRequiredSubtitle': 'משחקים ברשת זמינים רק לחשבון רשום עם Google או אימייל.',
   'auth.onlineRequiredError': 'כדי לשחק ברשת צריך להיכנס עם Google או אימייל.',
   'auth.usernamePlaceholder': 'שם משתמש (2-15 תווים)',

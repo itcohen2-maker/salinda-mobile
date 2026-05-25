@@ -70,3 +70,42 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: '1'
+
+  deploy-web:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: card/package-lock.json
+
+      - name: Install dependencies
+        working-directory: card
+        run: npm ci
+
+      - name: Deploy to Vercel production
+        id: vercel_deploy
+        run: |
+          DEPLOY_URL=$(npx vercel --prod --yes \
+            --token ${{ secrets.VERCEL_TOKEN }} 2>&1 | tail -1)
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_re4UQDqRCpi3bqqW7uUkCNXu
+          VERCEL_PROJECT_ID: prj_e6fXMFDkJ7Awk3zpfzurIdO2uV7F
+
+      - name: Alias to production domain
+        run: |
+          npx vercel alias set ${{ steps.vercel_deploy.outputs.url }} salinda-mobile.vercel.app \
+            --token ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_re4UQDqRCpi3bqqW7uUkCNXu
+          VERCEL_PROJECT_ID: prj_e6fXMFDkJ7Awk3zpfzurIdO2uV7F

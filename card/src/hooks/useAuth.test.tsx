@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 
 import {
   AuthProvider,
+  isAnonymousAuthUser,
+  isRegisteredAuthUser,
   useAuth,
   type PlayerProfile,
 } from './useAuth';
@@ -70,6 +72,44 @@ const mockSupabase = supabase as unknown as {
 };
 const platformRef = Platform as typeof Platform & { OS: string };
 const originalPlatform = platformRef.OS;
+
+describe('auth user classification', () => {
+  it('treats provider-only anonymous sessions as guests', () => {
+    const user = {
+      id: 'anon-1',
+      app_metadata: { provider: 'anonymous', providers: ['anonymous'] },
+      identities: [{ provider: 'anonymous' }],
+    } as never;
+
+    expect(isAnonymousAuthUser(user)).toBe(true);
+    expect(isRegisteredAuthUser(user)).toBe(false);
+  });
+
+  it('does not treat a bare no-email session as registered', () => {
+    const user = {
+      id: 'anon-legacy',
+      app_metadata: {},
+      identities: [],
+    } as never;
+
+    expect(isAnonymousAuthUser(user)).toBe(true);
+    expect(isRegisteredAuthUser(user)).toBe(false);
+  });
+
+  it('treats email or social sessions as registered users', () => {
+    expect(isRegisteredAuthUser({
+      id: 'email-1',
+      email: 'lea@example.com',
+      app_metadata: { provider: 'email', providers: ['email'] },
+    } as never)).toBe(true);
+
+    expect(isRegisteredAuthUser({
+      id: 'google-1',
+      app_metadata: { provider: 'google', providers: ['google'] },
+      identities: [{ provider: 'google' }],
+    } as never)).toBe(true);
+  });
+});
 
 function createProfileQuery() {
   let selectedUserId = '';
