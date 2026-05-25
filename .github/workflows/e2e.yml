@@ -89,17 +89,17 @@ jobs:
 
       - name: Deploy to Vercel production
         id: vercel_deploy
-        working-directory: .
+        working-directory: card
         run: |
-          OUTPUT=$(npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
+          OUTPUT=$(npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }} 2>&1) || { echo "$OUTPUT"; exit 1; }
           echo "$OUTPUT"
-          DEPLOY_URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9-]+\.vercel\.app' | grep -v 'lolos-mobile' | tail -1)
+          DEPLOY_URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9-]+\.vercel\.app' | tail -1)
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Alias to production domain
-        working-directory: .
+        working-directory: card
         run: |
           npx vercel alias set ${{ steps.vercel_deploy.outputs.url }} salinda-mobile.vercel.app \
             --token ${{ secrets.VERCEL_TOKEN }}
