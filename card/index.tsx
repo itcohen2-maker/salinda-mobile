@@ -13704,11 +13704,13 @@ function StartTurnCountdownCircle({
 
   useEffect(() => {
     if (!soundEnabled) { tickLastSecondRef.current = null; return; }
-    if (sec < 1 || sec > 3) return;
+    if (sec < 1 || sec > 10) return;
     if (tickLastSecondRef.current === sec) return;
     tickLastSecondRef.current = sec;
     const key = sec === 1 ? 'timerEnd' : 'timerTick';
-    void playSfx(key, { cooldownMs: 0, volumeOverride: 0.55 });
+    // Gentle crescendo: quiet ticks far from deadline, louder as time runs out
+    const vol = sec >= 6 ? 0.3 : sec >= 2 ? 0.55 : 0.65;
+    void playSfx(key, { cooldownMs: 0, volumeOverride: vol });
   }, [sec, soundEnabled]);
 
   const bubblePulse = useRef(new Animated.Value(0)).current;
