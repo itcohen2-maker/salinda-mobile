@@ -30,7 +30,7 @@ export function TutorialSpeechBubble({ text, visible }: TutorialSpeechBubbleProp
   if (!visible && !text) return null;
 
   return (
-    <Animated.View style={[styles.container, { opacity, transform: [{ translateY }] }]}>
+    <Animated.View pointerEvents="none" style={[styles.container, { opacity, transform: [{ translateY }] }]}>
       <View style={styles.bubble}>
         <Text style={styles.botLabel}>🤖</Text>
         <Text style={styles.text}>{text}</Text>
@@ -48,7 +48,6 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 10000,
     alignItems: 'center',
-    pointerEvents: 'none',
   },
   bubble: {
     backgroundColor: 'rgba(15, 40, 64, 0.95)',

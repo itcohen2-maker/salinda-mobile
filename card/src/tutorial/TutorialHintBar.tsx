@@ -37,6 +37,7 @@ export function TutorialHintBar({ text, visible, isWarning }: TutorialHintBarPro
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         styles.container,
         { opacity, transform: [{ scale: pulse }] },
@@ -55,7 +56,6 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     zIndex: 10000,
-    pointerEvents: 'none',
     backgroundColor: 'rgba(15, 40, 64, 0.92)',
     borderRadius: 12,
     borderWidth: 2,

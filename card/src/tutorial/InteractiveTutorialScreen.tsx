@@ -1620,7 +1620,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   }, [gameState?.isTutorial, gameState?.phase, engine.lessonIndex, engine.phase, gameDispatch]);
 
   // ג”€ג”€ Identical-card lesson: auto-dismiss the identicalAlert modal so the
-  //    tutorial never shows the "player X placed card Y" overlay.
+  //    tutorial never shows the “player X placed card Y” overlay.
   //    Exception: MIMIC_SINGLE_IDENTICAL_LESSON_INDEX step 1 (the teaching
   //    step) ג€” let the alert show so the learner gets visual feedback. ג”€ג”€
   useEffect(() => {
@@ -1629,6 +1629,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       engine.lessonIndex !== MIMIC_IDENTICAL_LESSON_INDEX &&
       engine.lessonIndex !== MIMIC_SINGLE_IDENTICAL_LESSON_INDEX
     ) return;
+    // Step 1 of the teaching lesson: keep the alert visible for feedback
+    if (engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX && engine.stepIndex === 1) return;
     gameDispatch({ type: 'DISMISS_IDENTICAL_ALERT' });
   }, [gameState?.identicalAlert, engine.lessonIndex, engine.stepIndex, gameDispatch]);
 
