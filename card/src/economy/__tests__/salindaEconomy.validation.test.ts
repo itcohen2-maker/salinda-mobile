@@ -27,35 +27,17 @@ describe('Salinda economy validation suite', () => {
       action: 'Basic Tutorial Completed',
       reward: SALINDA_TUTORIAL_REWARDS.basic,
     }));
-    expect(state.balance).toBe(10);
+    expect(state.balance).toBe(150);
 
     commit(applyRewardTransaction(state, {
       txId: 'TX_002',
       action: 'Advanced Tutorial Completed',
       reward: SALINDA_TUTORIAL_REWARDS.advanced,
     }));
-    expect(state.balance).toBe(30);
-
-    const blockedTable = applyPurchaseTransaction(state, {
-      txId: 'TX_003',
-      action: 'Purchase Table Design',
-      itemId: 'table_design',
-    });
-    commit(blockedTable);
-    expect(blockedTable.approved).toBe(false);
-    expect(blockedTable.reason).toBe('insufficient_funds');
-    expect(state.balance).toBe(30);
-    expect(state.inventory.poker_red).toBeUndefined();
-
-    commit(applyRewardTransaction(state, {
-      txId: 'TX_004',
-      action: 'Standard Win',
-      reward: SALINDA_GAMEPLAY_REWARDS.standard_win,
-    }));
-    expect(state.balance).toBe(40);
+    expect(state.balance).toBe(400);
 
     const tablePurchase = applyPurchaseTransaction(state, {
-      txId: 'TX_005',
+      txId: 'TX_003',
       action: 'Purchase Table Design',
       itemId: 'table_design',
     });
@@ -65,7 +47,7 @@ describe('Salinda economy validation suite', () => {
     expect(state.inventory.poker_red).toEqual({ isUnlocked: true });
 
     const blockedBackground = applyPurchaseTransaction(state, {
-      txId: 'TX_006',
+      txId: 'TX_004',
       action: 'Purchase Background Design',
       itemId: 'background_design',
     });
@@ -73,18 +55,19 @@ describe('Salinda economy validation suite', () => {
     expect(blockedBackground.approved).toBe(false);
     expect(blockedBackground.reason).toBe('insufficient_funds');
     expect(state.balance).toBe(0);
+    expect(state.inventory.royal).toBeUndefined();
 
     for (let i = 0; i < 5; i += 1) {
       commit(applyRewardTransaction(state, {
-        txId: `TX_${String(7 + i).padStart(3, '0')}`,
+        txId: `TX_${String(5 + i).padStart(3, '0')}`,
         action: 'Standard Win',
         reward: SALINDA_GAMEPLAY_REWARDS.standard_win,
       }));
     }
-    expect(state.balance).toBe(50);
+    expect(state.balance).toBe(500);
 
     const backgroundPurchase = applyPurchaseTransaction(state, {
-      txId: 'TX_012',
+      txId: 'TX_010',
       action: 'Purchase Background Design',
       itemId: 'background_design',
     });
@@ -95,15 +78,15 @@ describe('Salinda economy validation suite', () => {
 
     for (let i = 0; i < 15; i += 1) {
       commit(applyRewardTransaction(state, {
-        txId: `TX_${String(13 + i).padStart(3, '0')}`,
+        txId: `TX_${String(11 + i).padStart(3, '0')}`,
         action: 'Standard Win',
         reward: SALINDA_GAMEPLAY_REWARDS.standard_win,
       }));
     }
-    expect(state.balance).toBe(150);
+    expect(state.balance).toBe(1500);
 
     const salindaPurchase = applyPurchaseTransaction(state, {
-      txId: 'TX_028',
+      txId: 'TX_026',
       action: 'Purchase Salinda Card',
       itemId: 'salinda_card',
     });
@@ -114,15 +97,15 @@ describe('Salinda economy validation suite', () => {
 
     for (let i = 0; i < 20; i += 1) {
       commit(applyRewardTransaction(state, {
-        txId: `TX_${String(29 + i).padStart(3, '0')}`,
+        txId: `TX_${String(27 + i).padStart(3, '0')}`,
         action: 'Standard Win',
         reward: SALINDA_GAMEPLAY_REWARDS.standard_win,
       }));
     }
-    expect(state.balance).toBe(200);
+    expect(state.balance).toBe(2000);
 
     const wildPurchase = applyPurchaseTransaction(state, {
-      txId: 'TX_049',
+      txId: 'TX_047',
       action: 'Purchase Wild Card',
       itemId: 'wild_card',
     });
@@ -134,28 +117,28 @@ describe('Salinda economy validation suite', () => {
     expect(logs[0]).toBe([
       '[TX_001] Action: Basic Tutorial Completed',
       '  - Initial Balance: 0',
-      '  - Cost/Reward: 10',
-      '  - Final Expected Balance: 10',
+      '  - Cost/Reward: 150',
+      '  - Final Expected Balance: 150',
       '  - Inventory Delta: {}',
       '  - Validation Status: [PASSED]',
     ].join('\n'));
-    expect(logs[2]).toContain('  - Final Expected Balance: 30');
-    expect(logs[4]).toContain('  - Inventory Delta: {"poker_red":{"isUnlocked":true}}');
-    expect(logs[48]).toContain('  - Inventory Delta: {"wild_card":{"isUnlocked":true}}');
+    expect(logs[2]).toContain('  - Final Expected Balance: 0');
+    expect(logs[2]).toContain('  - Inventory Delta: {"poker_red":{"isUnlocked":true}}');
+    expect(logs[46]).toContain('  - Inventory Delta: {"wild_card":{"isUnlocked":true}}');
 
     // Required audit output: one exact verification log per transaction.
     console.log(logs.join('\n'));
   });
 
-it('awards 5 coins when the excellence meter fills during gameplay', () => {
+  it('awards 50 coins when the excellence meter fills during gameplay', () => {
     const tx = applyRewardTransaction(createEconomyState(0), {
       txId: 'TX_EXCELLENCE',
       action: 'Excellence Meter Full',
       reward: SALINDA_GAMEPLAY_REWARDS.excellence_meter_full,
     });
 
-    expect(tx.state.balance).toBe(5);
-    expect(tx.entry.costOrReward).toBe(5);
+    expect(tx.state.balance).toBe(50);
+    expect(tx.entry.costOrReward).toBe(50);
   });
 
   it('keeps catalog prices aligned with production catalog definitions', () => {
@@ -163,8 +146,8 @@ it('awards 5 coins when the excellence meter fills during gameplay', () => {
     expect(SALINDA_CATALOG.table_design.price).toBe(TABLE_SKINS.poker_red.price);
     expect(SALINDA_CATALOG.background_design.assetId).toBe('royal');
     expect(SALINDA_CATALOG.background_design.price).toBe(THEMES.royal.price);
-    expect(SALINDA_CATALOG.salinda_card.price).toBe(150);
-    expect(SALINDA_CATALOG.wild_card.price).toBe(200);
+    expect(SALINDA_CATALOG.salinda_card.price).toBe(1500);
+    expect(SALINDA_CATALOG.wild_card.price).toBe(2000);
   });
 
   it('blocks purchases without allowing negative balances', () => {
