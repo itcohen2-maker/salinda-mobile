@@ -93,8 +93,9 @@ jobs:
       - name: Deploy to Vercel production
         id: vercel_deploy
         run: |
-          DEPLOY_URL=$(npx vercel --prod --yes \
-            --token ${{ secrets.VERCEL_TOKEN }} 2>&1 | tail -1)
+          OUTPUT=$(npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
+          echo "$OUTPUT"
+          DEPLOY_URL=$(echo "$OUTPUT" | grep -oE 'https://[a-zA-Z0-9-]+\.vercel\.app' | tail -1)
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
