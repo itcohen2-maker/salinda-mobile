@@ -9318,6 +9318,12 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
           ? (queriedFanRoot as HTMLElement)
           : null;
     if (!fanRootEl || typeof fanRootEl.contains !== 'function') return;
+    // Tell iOS Safari: horizontal swipes here belong to JS (fan drag), not
+    // browser scroll. Without this, iOS fires pointercancel on horizontal touch
+    // before our 20px threshold and the gesture is silently dropped.
+    const fanEl = fanRootEl as HTMLElement;
+    const prevFanTouchAction = fanEl.style?.touchAction ?? '';
+    if (fanEl.style) fanEl.style.touchAction = 'pan-y';
     const fanContains = fanRootEl.contains.bind(fanRootEl);
 
     const isInsideFan = (target: EventTarget | null) => {
@@ -9522,6 +9528,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       document.removeEventListener('mouseup', handleMouseUp, true);
       document.removeEventListener('pointercancel', handlePointerUp, true);
       window.removeEventListener('blur', handleWindowBlur);
+      if (fanEl.style) fanEl.style.touchAction = prevFanTouchAction;
       if (wheelSnapTimerRef.current) {
         clearTimeout(wheelSnapTimerRef.current);
         wheelSnapTimerRef.current = null;

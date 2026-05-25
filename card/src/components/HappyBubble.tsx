@@ -6,7 +6,7 @@
 // ============================================================
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 export type HappyBubbleTone = 'demo' | 'turn' | 'celebrate' | 'welcome' | 'buttonRed' | 'buttonOrange';
 
@@ -71,21 +71,27 @@ export function HappyBubble({
         <View style={{ marginBottom: -2, width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 14, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: palette.border }} />
       ) : null}
       <Animated.View
-        style={{
-          backgroundColor: palette.bg,
-          borderColor: palette.border,
-          borderWidth: compact ? 2 : 3,
-          paddingHorizontal: compact ? 14 : 22,
-          paddingVertical: compact ? 8 : 14,
-          borderRadius: compact ? 18 : 28,
-          maxWidth: maxWidth as number,
-          transform: [{ scale }],
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.25,
-          shadowRadius: 10,
-          elevation: 8,
-        }}
+        style={[
+          {
+            backgroundColor: palette.bg,
+            borderColor: palette.border,
+            borderWidth: compact ? 2 : 3,
+            paddingHorizontal: compact ? 14 : 22,
+            paddingVertical: compact ? 8 : 14,
+            borderRadius: compact ? 18 : 28,
+            maxWidth: maxWidth as number,
+            transform: [{ scale }],
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            elevation: 8,
+          },
+          // On web: tell iOS Safari not to intercept horizontal touch gestures
+          // on the bubble. Without this, iOS fires pointercancel on horizontal
+          // swipes even when the bubble sits above the fan, which kills fan drag.
+          Platform.OS === 'web' && ({ touchAction: 'pan-y' } as any),
+        ]}
       >
         {title ? (
           <Text
