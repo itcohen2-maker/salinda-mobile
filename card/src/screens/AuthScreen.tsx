@@ -17,11 +17,12 @@ import { useLocale } from '../i18n/LocaleContext';
 interface Props {
   onSuccess: () => void;
   onBack: () => void;
+  intent?: 'account' | 'online-required';
 }
 
 type EmailAuthMode = 'link' | 'signin';
 
-export function AuthScreen({ onSuccess, onBack }: Props) {
+export function AuthScreen({ onSuccess, onBack, intent = 'account' }: Props) {
   const { t } = useLocale();
   const {
     signUp,
@@ -41,15 +42,16 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onlineRequired = intent === 'online-required';
 
   const chooserCopy = useMemo(() => ({
-    title: t('auth.homeButton'),
-    subtitle: t('auth.chooserSubtitle'),
+    title: onlineRequired ? t('auth.onlineRequiredTitle') : t('auth.homeButton'),
+    subtitle: onlineRequired ? t('auth.onlineRequiredSubtitle') : t('auth.chooserSubtitle'),
     helper: t('auth.socialHelper'),
     google: t('auth.continueWithGoogle'),
     email: t('auth.continueWithEmail'),
     backToOptions: t('auth.backToOptions'),
-  }), [t]);
+  }), [onlineRequired, t]);
 
   const currentAccountName = profile?.username?.trim() || user?.email || t('auth.accountMenuTitle');
   const showAccountMenu = isSignedInUser;
@@ -247,10 +249,14 @@ export function AuthScreen({ onSuccess, onBack }: Props) {
         ) : (
           <>
             <Text style={styles.title}>
-              {mode === 'link' ? t('auth.linkTitle') : t('auth.signInTitle')}
+              {onlineRequired
+                ? t('auth.onlineRequiredTitle')
+                : mode === 'link' ? t('auth.linkTitle') : t('auth.signInTitle')}
             </Text>
             <Text style={styles.subtitle}>
-              {mode === 'link' ? t('auth.linkSubtitle') : t('auth.signInSubtitle')}
+              {onlineRequired
+                ? t('auth.onlineRequiredSubtitle')
+                : mode === 'link' ? t('auth.linkSubtitle') : t('auth.signInSubtitle')}
             </Text>
 
             {mode === 'link' ? (

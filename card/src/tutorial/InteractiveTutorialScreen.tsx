@@ -5615,14 +5615,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   includeFontPadding: false,
                 }}
               >
-                {t('tutorial.l6c.turnModalTitle')}
+                {t('wildCard.title')}
               </Text>
               <TutorialWildMiniCard />
               <Text
                 style={{
                   color: '#FFFFFF',
                   fontSize: 16,
-                  fontWeight: '500',
+                  fontWeight: '400',
                   textAlign: 'center',
                   textAlignVertical: 'center',
                   writingDirection: locale === 'he' ? 'rtl' : 'ltr',
@@ -5630,15 +5630,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   includeFontPadding: false,
                 }}
               >
-                {t('tutorial.l6c.turnModalBodyBeforeCards')}
-                <Text style={{ color: '#FFDF00', fontWeight: '900' }}>
-                  {t('tutorial.l6c.turnModalBodyCards')}
-                </Text>
-                {t('tutorial.l6c.turnModalBodyAfterCards')}
-                <Text style={{ color: '#FFDF00', fontWeight: '900' }}>
-                  {t('tutorial.l6c.turnModalBodyBuild')}
-                </Text>
-                {t('tutorial.l6c.turnModalBodyAfterBuild')}
+                {t('wildCard.body')}
               </Text>
             </View>
           </View>
@@ -5675,7 +5667,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   includeFontPadding: false,
                 }}
               >
-                {t('tutorial.l6c.turnModalCta')}
+                {t('wildCard.button')}
               </Text>
             </View>
           </TouchableOpacity>

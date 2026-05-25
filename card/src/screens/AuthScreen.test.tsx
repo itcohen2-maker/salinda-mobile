@@ -30,6 +30,9 @@ jest.mock('../i18n/LocaleContext', () => ({
         'auth.linkBtn': 'Save Progress',
         'auth.signInTitle': 'Sign In',
         'auth.signInSubtitle': 'Sign in to restore your coins and rating',
+        'auth.onlineRequiredTitle': 'Sign in to play online',
+        'auth.onlineRequiredSubtitle': 'Online games are available only to registered Google or email accounts.',
+        'auth.onlineRequiredError': 'Sign in with Google or email to play online.',
         'auth.usernamePlaceholder': 'Username (2-15 characters)',
         'auth.emailPlaceholder': 'Email',
         'auth.passwordPlaceholder': 'Password',
@@ -125,6 +128,14 @@ describe('AuthScreen', () => {
     expect(screen.getByTestId('auth-social-google-button')).toBeTruthy();
     expect(screen.getByTestId('auth-email-fallback-button')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Email')).toBeNull();
+  });
+
+  it('shows online-required copy when opened from the online gate', () => {
+    render(<AuthScreen intent="online-required" onBack={onBack} onSuccess={onSuccess} />);
+
+    expect(screen.getByText('Sign in to play online')).toBeTruthy();
+    expect(screen.getByText('Online games are available only to registered Google or email accounts.')).toBeTruthy();
+    expect(screen.getByTestId('auth-social-google-button')).toBeTruthy();
   });
 
   it('reveals the email form from the native chooser', () => {

@@ -108,6 +108,16 @@ type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 const BOT_OFFER_DELAY_MS = 0;
 const BOT_DIFF_LEVELS: BotDifficulty[] = ['easy', 'medium', 'hard'];
 
+function isRegisteredOnlineSocket(socket: IOSocket): boolean {
+  return socket.data.isRegisteredUser === true && typeof socket.data.userId === 'string';
+}
+
+function requireRegisteredOnline(socket: IOSocket, locale: AppLocale): boolean {
+  if (isRegisteredOnlineSocket(socket)) return true;
+  socket.emit('error', { message: t(locale, 'auth.onlineRequiredError') });
+  return false;
+}
+
 /** לקוחות ישנים שעדיין שולחים beginner */
 function normalizeBotDifficulty(raw: unknown): BotDifficulty {
   if (raw === 'easy' || raw === 'medium' || raw === 'hard') return raw;
@@ -1032,12 +1042,13 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
   socket.on('create_table', ({ playerName, locale }) => {
     if (rateLimited()) return;
+    const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     const name = sanitizePlayerName(playerName);
     if (!name) {
       socket.emit('error', { message: 'Invalid player name' });
       return;
     }
-    const loc = validateLocale(locale);
     const { room, playerId } = createRoom(name, socket.id, loc);
     const creatingPlayer = room.players.find((p) => p.id === playerId);
     if (creatingPlayer) creatingPlayer.supabaseUserId = socket.data.userId ?? undefined;
@@ -1054,6 +1065,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const diff = validateDifficulty(difficulty);
     const info = getRoomBySocket(socket.id);
     const loc = info ? playerLocale(info.room, info.playerId) : 'he';
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!diff) {
       socket.emit('error', { message: 'Invalid difficulty' });
       return;
@@ -1084,6 +1096,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const code = validateRoomCode(roomCode);
     const name = sanitizePlayerName(playerName);
     const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!code) {
       socket.emit('error', { message: t(loc, 'room.notFound') });
       return;
@@ -1115,6 +1128,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const safeInvite = String(inviteCode ?? '').trim();
     const name = sanitizePlayerName(playerName);
     const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!code) {
       socket.emit('error', { message: t(loc, 'room.notFound') });
       return;
@@ -1143,6 +1157,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     if (rateLimited()) return;
     const info = getRoomBySocket(socket.id);
     const loc = info ? playerLocale(info.room, info.playerId) : 'he';
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!info) {
       socket.emit('error', { message: t(loc, 'game.noRoom') });
       return;
@@ -1173,12 +1188,13 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
   socket.on('create_room', ({ playerName, locale }) => {
     if (rateLimited()) return;
+    const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     const name = sanitizePlayerName(playerName);
     if (!name) {
       socket.emit('error', { message: 'Invalid player name' });
       return;
     }
-    const loc = validateLocale(locale);
     const { room, playerId } = createRoom(name, socket.id, loc);
     const creatingPlayer = room.players.find((p) => p.id === playerId);
     if (creatingPlayer) creatingPlayer.supabaseUserId = socket.data.userId ?? undefined;
@@ -1194,6 +1210,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const code = validateRoomCode(roomCode);
     const name = sanitizePlayerName(playerName);
     const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!code) {
       socket.emit('error', { message: t(loc, 'room.notFound') });
       return;
@@ -1249,6 +1266,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     const code = validateRoomCode(roomCode);
     const pid = validatePlayerId(playerId);
     const loc = validateLocale(locale);
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!code || !pid) {
       console.warn(`[SECURITY] Invalid reconnect attempt: room=${roomCode} player=${playerId} socket=${socket.id}`);
       socket.emit('error', { message: t(loc, 'room.notFound') });
@@ -1293,12 +1311,13 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
   socket.on('start_game', ({ difficulty, gameSettings }) => {
     if (rateLimited()) return;
     const diff = validateDifficulty(difficulty);
+    const info = getRoomBySocket(socket.id);
+    const loc = info ? playerLocale(info.room, info.playerId) : 'he';
+    if (!requireRegisteredOnline(socket, loc)) return;
     if (!diff) {
       socket.emit('error', { message: 'Invalid difficulty' });
       return;
     }
-    const info = getRoomBySocket(socket.id);
-    const loc = info ? playerLocale(info.room, info.playerId) : 'he';
     if (!info) {
       socket.emit('error', { message: t(loc, 'game.noRoom') });
       return;
@@ -1322,17 +1341,23 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
 
   socket.on('start_bot_game', async ({ difficulty, gameSettings }, ack) => {
     if (rateLimited()) return;
-    const diff = validateDifficulty(difficulty);
     const reply = (result: StartBotGameAck) => {
       if (typeof ack === 'function') ack(result);
     };
+    const info = getRoomBySocket(socket.id);
+    const loc = info ? playerLocale(info.room, info.playerId) : 'he';
+    if (!isRegisteredOnlineSocket(socket)) {
+      const message = t(loc, 'auth.onlineRequiredError');
+      socket.emit('error', { message });
+      reply({ ok: false, message });
+      return;
+    }
+    const diff = validateDifficulty(difficulty);
     if (!diff) {
       socket.emit('error', { message: 'Invalid difficulty' });
       reply({ ok: false, message: 'Invalid difficulty' });
       return;
     }
-    const info = getRoomBySocket(socket.id);
-    const loc = info ? playerLocale(info.room, info.playerId) : 'he';
     if (!info) {
       const message = t(loc, 'game.noRoom');
       socket.emit('error', { message });

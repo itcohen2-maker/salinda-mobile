@@ -318,7 +318,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
 import { AuthProvider, useAuth } from './src/hooks/useAuth';
 import { ShopScreen } from './src/screens/ShopScreen';
-import { LobbyScreen, LanguageToggle, parseJoinParamsFromUrl } from './src/screens/OnlineTableScreens';
+import { LobbyScreen, parseJoinParamsFromUrl } from './src/screens/OnlineTableScreens';
 import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
 import { CelebrationMockupRoom } from './src/screens/CelebrationMockupRoom';
 import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
@@ -2338,8 +2338,32 @@ function endTurnWithMeterCheck(
   const meterAdvanced = (baseResult.courageRewardPulseId ?? 0) > originalPulse;
 
   if (meterAdvanced && !currentPlayer?.isBot) {
+    // Copy updated courage fields from baseResult so ExcellenceMeter's pulseKey
+    // changes in the intermediate state and fires its animation. Without this,
+    // spreading ...st leaves the OLD courageRewardPulseId on both the global
+    // state and the player object, so pulseKey never changes, onAnimationComplete
+    // is never called, and meterAnimationPending stays true forever.
+    const cpIdx = st.currentPlayerIndex;
+    const updatedPlayers = st.players.map((p, i) => {
+      if (i !== cpIdx) return p;
+      const bp = baseResult.players[i];
+      return {
+        ...p,
+        courageRewardPulseId: bp.courageRewardPulseId,
+        courageMeterPercent: bp.courageMeterPercent,
+        courageMeterStep: bp.courageMeterStep,
+        courageCoins: bp.courageCoins,
+      };
+    });
     return {
       ...st,
+      players: updatedPlayers,
+      courageRewardPulseId: baseResult.courageRewardPulseId,
+      courageMeterPercent: baseResult.courageMeterPercent,
+      courageMeterStep: baseResult.courageMeterStep,
+      courageCoins: baseResult.courageCoins,
+      lastCourageCoinsAwarded: baseResult.lastCourageCoinsAwarded,
+      lastCourageRewardReason: baseResult.lastCourageRewardReason,
       meterAnimationPending: true,
       pendingTurnState: {
         ...baseResult,
@@ -5771,7 +5795,6 @@ function DrawPile() {
     (state.phase === 'pre-roll' || state.phase === 'building' || state.phase === 'solved') &&
     !state.hasPlayedCards &&
     !state.hasDrawnCard &&
-    (state.players[state.currentPlayerIndex]?.hand?.length ?? 0) < OVERFLOW_SWAP_THRESHOLD &&
     state.pendingFractionTarget === null;
   const count = state.drawPile.length;
   const layers = Math.min(count, 4);
@@ -9176,6 +9199,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     pointerDown: boolean;
     dragging: boolean;
     pointerId: number | null;
+    pointerType: string;
     startClientX: number;
     lastClientX: number;
     lastMoveAt: number;
@@ -9301,16 +9325,28 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       return fanContains(target);
     };
 
+    // Returns true if the event coordinates fall within the fan's visual bounding box.
+    // Used as a fallback when a tutorial overlay covers the fan: the overlay element
+    // becomes evt.target, so isInsideFan() returns false even though the user is
+    // clearly touching the fan area.
+    const isWithinFanBounds = (evt: MouseEvent | PointerEvent) => {
+      if (typeof (fanRootEl as HTMLElement).getBoundingClientRect !== 'function') return false;
+      const r = (fanRootEl as HTMLElement).getBoundingClientRect();
+      return evt.clientX >= r.left && evt.clientX <= r.right && evt.clientY >= r.top && evt.clientY <= r.bottom;
+    };
+
     const resetWebMouseDragState = () => {
       webMouseDragRef.current = null;
       releaseUserGestureFlagSoon();
     };
 
     const handleMouseDownLike = (evt: MouseEvent | PointerEvent) => {
-      if (!isInsideFan(evt.target)) return;
+      if (!isInsideFan(evt.target) && !isWithinFanBounds(evt)) return;
       if (interactionLockedRef.current) return;
-      if ('pointerType' in evt && evt.pointerType !== 'mouse') return;
-      if (evt.button !== 0) return;
+      const evtPointerType = 'pointerType' in evt ? evt.pointerType : 'mouse';
+      // Allow mouse and touch; reject pen/stylus to avoid unintended drags
+      if (evtPointerType !== 'mouse' && evtPointerType !== 'touch') return;
+      if (evtPointerType === 'mouse' && evt.button !== 0) return;
       const now = typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
         : Date.now();
@@ -9318,6 +9354,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         pointerDown: true,
         dragging: false,
         pointerId: 'pointerId' in evt ? evt.pointerId : null,
+        pointerType: evtPointerType,
         startClientX: evt.clientX,
         lastClientX: evt.clientX,
         lastMoveAt: now,
@@ -9387,7 +9424,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       const totalDx = evt.clientX - dragState.startClientX;
 
       if (!dragState.dragging) {
-        if (Math.abs(totalDx) <= FAN_MOUSE_DRAG_START_DX) return;
+        const startDx = dragState.pointerType === 'touch' ? FAN_TOUCH_DRAG_START_DX : FAN_MOUSE_DRAG_START_DX;
+        if (Math.abs(totalDx) <= startDx) return;
         dragState.dragging = true;
         beginFanGesture();
       }
@@ -12379,10 +12417,6 @@ function StartScreen({
           scrollEventThrottle={16}
         >
         <View style={[hsS.settings, isRTL && Platform.OS === 'web' ? { direction: 'rtl' } : null]}>
-          <View style={{ alignItems: isRTL ? 'flex-end' : 'flex-start', width: '100%', marginBottom: 8 }}>
-            <LanguageToggle />
-          </View>
-
           {/* 1. מצב משחק: מקומי / מול בוט (ברירת מחדל: בוט) */}
           {showModeRow && modeWheelIndex != null ? (
             <WheelRow index={modeWheelIndex}>
@@ -18481,8 +18515,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         const showFallback = totalBtns === 0 && canUseActiveTurnUi && (pr||bl||so) && !state.isTutorial && !actionButtonsLocked;
         const barPaddingBottom = Math.max(24, safe.insets.bottom + 20);
         const BOTTOM_BAR_HEIGHT = 180;
-        const cpHandLen = state.players[state.currentPlayerIndex]?.hand?.length ?? 0;
-        const drawVisible = canUseActiveTurnUi && shouldShowDrawForfeitButton(state, canRoll) && cpHandLen < OVERFLOW_SWAP_THRESHOLD;
+        const drawVisible = canUseActiveTurnUi && shouldShowDrawForfeitButton(state, canRoll);
         const showSolvedRow = so && !state.hasPlayedCards;
         const hasStaged = showSolvedRow && state.stagedCards.length > 0;
         const showBackToEquation =
@@ -21006,7 +21039,7 @@ function FriendsChoiceScreen({
 function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellPlayMode) => void }) {
   const mp = useMultiplayerOptional();
   const { state, dispatch } = useGame();
-  const { profile, user } = useAuth();
+  const { profile, user, isAnonymous } = useAuth();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
@@ -21016,6 +21049,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const webPresentation = useContext(WebPresentationContext);
   // Web starts at the home/choose screen like mobile; URL-based room joins still work via the effect below.
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
+  const [authReturnMode, setAuthReturnMode] = useState<'online' | null>(null);
   // FTU routing: new users (lulos_tutorial_done not set) are sent to tutorial automatically
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
@@ -21284,11 +21318,40 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     setPlayMode(mockupReturnMode);
   }, [mockupReturnMode]);
 
+  const isRegisteredUser = !!user && !isAnonymous;
+
+  const openAccountAuth = useCallback(() => {
+    setAuthReturnMode(null);
+    setPlayMode('auth');
+  }, []);
+
+  const openOnline = useCallback(() => {
+    if (isRegisteredUser) {
+      setAuthReturnMode(null);
+      setPlayMode('online');
+      return;
+    }
+    setAuthReturnMode('online');
+    setPlayMode('auth');
+  }, [isRegisteredUser]);
+
+  const closeAuthScreen = useCallback(() => {
+    const fallbackMode: ShellPlayMode = authReturnMode === 'online' ? 'friends-choice' : 'choose';
+    setAuthReturnMode(null);
+    setPlayMode(fallbackMode);
+  }, [authReturnMode]);
+
+  const handleAuthSuccess = useCallback(() => {
+    const nextMode: ShellPlayMode = authReturnMode === 'online' ? 'online' : 'choose';
+    setAuthReturnMode(null);
+    setPlayMode(nextMode);
+  }, [authReturnMode]);
+
   useEffect(() => {
     if (Platform.OS !== 'web' || playMode !== 'choose') return;
     const { roomCode } = parseJoinParamsFromUrl();
-    if (roomCode) setPlayMode('online');
-  }, [playMode]);
+    if (roomCode) openOnline();
+  }, [openOnline, playMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -21306,6 +21369,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     let cancelled = false;
     AsyncStorage.getItem('lulos_tutorial_done').then((v) => {
       if (cancelled) return;
+      if (Platform.OS === 'web' && parseJoinParamsFromUrl().roomCode) return;
       if (v === null) {
         // First-time user — route directly to tutorial
         setPlayMode('tutorial');
@@ -21656,7 +21720,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       return;
     }
     if (playMode === 'auth') {
-      setPlayMode('choose');
+      closeAuthScreen();
       return;
     }
     if (playMode === 'classroom-game') {
@@ -21680,6 +21744,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     }
   }, [
     closeCelebrationMockupRoom,
+    closeAuthScreen,
     dispatch,
     mp,
     playMode,
@@ -21702,7 +21767,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     screen = (
         <PlayModeChoiceScreen
           onPlay={openGameEntry}
-          onOpenAuth={() => setPlayMode('auth')}
+          onOpenAuth={openAccountAuth}
           onHowToPlay={() => setPlayMode('tutorial')}
           onShop={() => setShowShop(true)}
           onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
@@ -21735,14 +21800,15 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           setSelectedLocalGameMode('pass-and-play');
           setPlayMode('local');
         }}
-        onOnline={() => setPlayMode('online')}
+        onOnline={openOnline}
       />
     );
   } else if (playMode === 'auth') {
     screen = (
       <AuthScreen
-        onBack={() => setPlayMode('choose')}
-        onSuccess={() => setPlayMode('choose')}
+        intent={authReturnMode === 'online' ? 'online-required' : 'account'}
+        onBack={closeAuthScreen}
+        onSuccess={handleAuthSuccess}
       />
     );
   } else if (playMode === 'classroom') {

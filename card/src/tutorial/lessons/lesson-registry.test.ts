@@ -45,6 +45,42 @@ describe('lesson registry smoke', () => {
     expect(step.outcome({ kind: 'diceRolled' })).toBe(false);
     tutorialBus._reset();
   });
+  it('lesson 4 step 1 bot demo reads the rigged exercise after the show-me gate', async () => {
+    let showMeResolved = false;
+    const step = LESSONS[3].steps[0];
+    const api = {
+      waitForShowMe: jest.fn(async () => {
+        showMeResolved = true;
+      }),
+      l4Config: jest.fn(() => (
+        showMeResolved
+          ? { pickA: 2, pickB: 0, target: 9, hand: [4, 9, 1] }
+          : null
+      )),
+      scrollFanTo: jest.fn(async () => undefined),
+      pulseCard: jest.fn(async () => undefined),
+      pulseDiceBtn: jest.fn(async () => undefined),
+      eqPickDice: jest.fn(async () => undefined),
+      eqSetOp: jest.fn(async () => undefined),
+      eqConfirm: jest.fn(async () => undefined),
+      eqReset: jest.fn(async () => undefined),
+      stageCardByValue: jest.fn(async () => undefined),
+      wait: jest.fn(async () => undefined),
+      fanLength: jest.fn(() => 0),
+      openResultsChip: jest.fn(async () => undefined),
+      tapMiniResult: jest.fn(async () => undefined),
+      l6CopyConfig: jest.fn(() => null),
+      l11Config: jest.fn(() => null),
+    };
+
+    await step.botDemo(api);
+
+    expect(api.waitForShowMe).toHaveBeenCalledTimes(1);
+    expect(api.l4Config).toHaveBeenCalledTimes(1);
+    expect(api.scrollFanTo).toHaveBeenCalledWith(1, { durationMs: 1400, easing: 'settle' });
+    expect(api.eqPickDice.mock.calls.map(([idx]) => idx)).toEqual([2, 0]);
+    expect(api.stageCardByValue).toHaveBeenCalledWith(9);
+  });
   it('lesson 4 step 2 (fill-missing-die) outcome: card matching lastEquationResult', () => {
     tutorialBus.setLastEquationResult(9);
     const step = LESSONS[3].steps[1];

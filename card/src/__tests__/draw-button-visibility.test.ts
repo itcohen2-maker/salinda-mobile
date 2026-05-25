@@ -30,6 +30,30 @@ describe('shouldShowDrawForfeitButton', () => {
     },
   );
 
+  it('keeps the draw button visible with a full hand so drawing can open overflow swap', () => {
+    const state = makeState({
+      mode: 'solo',
+      players: [
+        {
+          id: 'p0',
+          name: 'T',
+          hand: Array.from({ length: 9 }, (_, i) => ({ id: `n-${i}`, type: 'number' as const, value: i })),
+          calledLolos: false,
+          isConnected: true,
+          isHost: true,
+          isBot: false,
+          afkWarnings: 0,
+          isEliminated: false,
+          isSpectator: false,
+          locale: 'he',
+        },
+      ],
+      currentPlayerIndex: 0,
+    });
+
+    expect(shouldShowDrawForfeitButton(state, false)).toBe(true);
+  });
+
   it('hides the draw button after a draw already started an overflow swap', () => {
     const state = makeState({
       mode: 'solo',

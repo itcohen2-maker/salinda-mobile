@@ -33,15 +33,14 @@ export const lesson04Equation: Lesson = {
       // The learner must tap the CORRECT target card to advance; wrong
       // taps are rejected so the learner can't breeze past a mistake.
       botDemo: async (api) => {
+        // Read the rigged exercise only after the show-me gate has resolved.
+        await api.waitForShowMe?.();
         const cfg = api.l4Config();
         const pickA = cfg?.pickA ?? 0;
         const pickB = cfg?.pickB ?? 1;
         const target = cfg?.target ?? 5;
         const hand = cfg?.hand ?? [1, 2, 3, 4, 5];
         const targetIdx = hand.indexOf(target);
-        // Wait for the learner to tap "תראה לי" before starting the demo.
-        // Falls back gracefully (resolves immediately) when the hook isn't injected.
-        await api.waitForShowMe?.();
         // Scroll the fan to the target card FIRST — visually shows the bot
         // "looking through" the hand before building, then slows at the target.
         if (targetIdx >= 0) {

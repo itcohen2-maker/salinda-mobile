@@ -9,10 +9,19 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 import { registerSocketHandlers } from './socketHandlers';
+import { authMiddleware } from './authMiddleware';
 import { cleanupStaleRooms } from './roomManager';
 import { cleanupStaleClassSessions } from './classroomManager';
+import {
+  installHttpDiagnostics,
+  installProcessDiagnostics,
+  serverBootId,
+  serverStartedAt,
+  writeServerDiagnostic,
+} from './diagnostics';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
+installProcessDiagnostics();
 
 // Production: set CORS_ORIGINS env (comma-separated list) to lock the server
 // down to known web origins. Dev (no env var) keeps the open policy that
@@ -46,10 +55,36 @@ app.use(express.json());
 
 // Health check
 app.get('/', (_req, res) => {
-  res.json({ status: 'ok', game: 'lolos', timestamp: Date.now() });
+  res.json({
+    status: 'ok',
+    game: 'lolos',
+    timestamp: Date.now(),
+    bootId: serverBootId,
+    startedAt: serverStartedAt.toISOString(),
+    uptimeMs: Math.round(process.uptime() * 1000),
+  });
+});
+
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  writeServerDiagnostic('error', 'SERVER_HTTP_UNHANDLED_ERROR', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+  }, err);
+
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  res.status(500).json({
+    error: 'internal_server_error',
+    bootId: serverBootId,
+  });
 });
 
 const server = http.createServer(app);
+installHttpDiagnostics(server);
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   cors: {
@@ -60,8 +95,25 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   pingTimeout: 5000,
 });
 
+io.use(authMiddleware);
+
+io.engine.on('connection_error', (err) => {
+  writeServerDiagnostic('warn', 'SOCKET_CONNECTION_ERROR', {
+    code: err.code,
+    message: err.message,
+    context: err.context,
+  }, err);
+});
+
 io.on('connection', (socket) => {
   console.log(`[CONNECT] ${socket.id}`);
+  writeServerDiagnostic('info', 'SOCKET_CONNECTED', {
+    socketId: socket.id,
+    transport: socket.conn.transport.name,
+  });
+  socket.on('error', (err) => {
+    writeServerDiagnostic('error', 'SOCKET_ERROR', { socketId: socket.id }, err);
+  });
   registerSocketHandlers(io, socket);
 });
 
@@ -73,5 +125,12 @@ setInterval(() => {
 
 // 0.0.0.0 — טלפון/אמולטור ברשת המקומית מתחברים ל־http://<IP-המחשב>:PORT
 server.listen(PORT, '0.0.0.0', () => {
+  writeServerDiagnostic('info', 'SERVER_STARTED', {
+    host: '0.0.0.0',
+    port: PORT,
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV ?? null,
+    corsOrigins: ALLOWED_ORIGINS ?? 'dev-permissive',
+  });
   console.log(`🎴 Lolos server listening on 0.0.0.0:${PORT} (LAN: use this PC's IP)`);
 });

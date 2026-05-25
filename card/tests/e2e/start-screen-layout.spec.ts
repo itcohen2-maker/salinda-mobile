@@ -1,4 +1,11 @@
-import { test, expect } from '../support/fixtures';
+import { test, expect, type Page } from '../support/fixtures';
+
+async function seedReturningUser(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('lulos_tutorial_done', 'true');
+    window.localStorage.setItem('lulos_welcome_player_screen_seen', 'true');
+  });
+}
 
 test.describe('Start screen layout', () => {
   test('keeps the top header actions and parks the Slinda hero opposite the back button', async ({ page, lobby }) => {
@@ -24,9 +31,11 @@ test.describe('Start screen layout', () => {
       await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15_000 }).catch(() => {});
     };
 
+    await seedReturningUser(page);
     await lobby.goto();
     await expectCenteredShell(412);
     await lobby.playSinglePlayer.click();
+    await page.getByTestId('lobby-play-friends').click();
     await lobby.playPassAndPlay.click();
     await dismissGuidanceDialogIfVisible();
     await expectCenteredShell(412);
@@ -35,7 +44,6 @@ test.describe('Start screen layout', () => {
     const backButton = page.getByTestId('start-back-to-games');
     const hero = page.getByTestId('start-slinda-hero');
     const letsPlay = page.getByTestId('start-lets-play');
-    const languageButton = page.getByText('English').first();
 
     await expect(topActions).toBeVisible({ timeout: 30_000 });
     await expect(backButton).toBeVisible();
@@ -47,19 +55,16 @@ test.describe('Start screen layout', () => {
     const topActionsBox = await topActions.boundingBox();
     const backButtonBox = await backButton.boundingBox();
     const heroBox = await hero.boundingBox();
-    const languageBox = await languageButton.boundingBox();
     const viewport = page.viewportSize();
 
     expect(topActionsBox).not.toBeNull();
     expect(backButtonBox).not.toBeNull();
     expect(heroBox).not.toBeNull();
-    expect(languageBox).not.toBeNull();
     expect(viewport).not.toBeNull();
 
-    if (topActionsBox && backButtonBox && heroBox && languageBox && viewport) {
+    if (topActionsBox && backButtonBox && heroBox && viewport) {
       expect(heroBox.y).toBeGreaterThanOrEqual(topActionsBox.y - 6);
       expect(heroBox.y + heroBox.height).toBeLessThanOrEqual(topActionsBox.y + topActionsBox.height + 6);
-      expect(languageBox.y).toBeGreaterThanOrEqual(topActionsBox.y + topActionsBox.height - 2);
 
       const backCenterX = backButtonBox.x + backButtonBox.width / 2;
       const heroCenterX = heroBox.x + heroBox.width / 2;
@@ -75,14 +80,17 @@ test.describe('Start screen layout', () => {
 
     await dismissGuidanceDialogIfVisible();
     await backButton.click({ force: true });
-    await expect(lobby.playPassAndPlay).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('lobby-play-friends')).toBeVisible({ timeout: 15_000 });
   });
 
   test('keeps the online room browser centered inside the narrow web shell', async ({ page, lobby }) => {
     const shell = page.getByTestId('app-web-shell');
+    await seedReturningUser(page);
     await lobby.goto();
     await expect(shell).toBeVisible({ timeout: 30_000 });
 
+    await lobby.playSinglePlayer.click();
+    await page.getByTestId('lobby-play-friends').click();
     await lobby.joinRoom.click();
     await expect(page.getByTestId('table-card-empty-1')).toBeVisible({ timeout: 15_000 });
 

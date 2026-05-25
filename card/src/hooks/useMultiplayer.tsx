@@ -559,6 +559,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [eliminationNotice, setEliminationNotice] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
+  const lastSocketTokenRef = useRef<string | null>(null);
   /** כתובת ה-io האחרונה — לזיהוי החלפת שרת מול socket ישן */
   const lastSocketUrlRef = useRef<string | null>(null);
   const playerIdRef = useRef<string | null>(null);
@@ -626,6 +627,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       socketRef.current = null;
     }
     lastSocketUrlRef.current = null;
+    lastSocketTokenRef.current = null;
     setConnected(false);
     clearSessionAfterDisconnect();
   }, [clearSessionAfterDisconnect]);
@@ -640,15 +642,21 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(() => {
     const want = normalizeServerUrl(serverUrl.trim() || getServerUrl());
     if (socketRef.current) {
-      if (lastSocketUrlRef.current === want && (socketRef.current.connected || socketRef.current.active)) return;
+      if (
+        lastSocketUrlRef.current === want &&
+        lastSocketTokenRef.current === sessionTokenRef.current &&
+        (socketRef.current.connected || socketRef.current.active)
+      ) return;
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
       socketRef.current = null;
       lastSocketUrlRef.current = null;
+      lastSocketTokenRef.current = null;
       setConnected(false);
       clearSessionAfterDisconnect();
     }
     lastSocketUrlRef.current = want;
+    lastSocketTokenRef.current = sessionTokenRef.current;
     const socket = io(want, {
       transports: ['websocket', 'polling'],
       reconnection: true,
