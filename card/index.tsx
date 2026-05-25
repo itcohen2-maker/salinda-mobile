@@ -20594,18 +20594,16 @@ export function PlayModeChoiceScreen({
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
       <AmbientBackground playMode="choose" forceVisible />
-      <ScrollView
-        style={{ flex: 1, width: '100%' }}
-        contentContainerStyle={{
-          flexGrow: 1,
+      <View
+        style={{
+          flex: 1,
+          width: '100%',
+          alignItems: 'center',
           paddingHorizontal: 24,
           paddingTop: menuTopPadding,
           paddingBottom: menuBottomPadding,
-          minHeight: responsive.height,
+          overflow: 'hidden',
         }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentInsetAdjustmentBehavior="always"
       >
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
@@ -20829,7 +20827,7 @@ export function PlayModeChoiceScreen({
 
           </View>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
