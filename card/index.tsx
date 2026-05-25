@@ -9322,9 +9322,19 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
           ? (queriedFanRoot as HTMLElement)
           : null;
     if (!fanRootEl || typeof fanRootEl.contains !== 'function') return;
-    // Tell iOS Safari: horizontal swipes here belong to JS (fan drag), not
-    // browser scroll. Without this, iOS fires pointercancel on horizontal touch
-    // before our 20px threshold and the gesture is silently dropped.
+    // `touch-action` is NOT inherited in CSS (MDN: "Inherited: no"). Setting it
+    // only on the fan root leaves every card child at `touch-action: auto`, so
+    // mobile browsers fire `pointercancel` on the first 20px before our drag
+    // threshold is reached, silently aborting both fan drag and card taps.
+    // Fix: inject a <style> rule that sets touch-action: none on the root AND
+    // every descendant, so no browser gesture interception can occur on any
+    // element inside the fan.
+    const fanTouchStyle = document.createElement('style');
+    fanTouchStyle.setAttribute('data-fan-touch-fix', 'true');
+    fanTouchStyle.textContent =
+      `[data-testid="${SIMPLE_HAND_FAN_TEST_ID}"],` +
+      `[data-testid="${SIMPLE_HAND_FAN_TEST_ID}"] * { touch-action: none; }`;
+    document.head.appendChild(fanTouchStyle);
     const fanEl = fanRootEl as HTMLElement;
     const prevFanTouchAction = fanEl.style?.touchAction ?? '';
     if (fanEl.style) fanEl.style.touchAction = 'none';
@@ -9524,6 +9534,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       document.removeEventListener('pointercancel', handlePointerUp, true);
       window.removeEventListener('blur', handleWindowBlur);
       if (fanEl.style) fanEl.style.touchAction = prevFanTouchAction;
+      fanTouchStyle.remove();
       if (wheelSnapTimerRef.current) {
         clearTimeout(wheelSnapTimerRef.current);
         wheelSnapTimerRef.current = null;
