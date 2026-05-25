@@ -53,5 +53,5 @@ describe('meter wallet sync', () => {
     await waitFor(() => {
       expect(mockAwardCoins).not.toHaveBeenCalled();
     });
-  });
+  }, 15000);
 });

@@ -79,12 +79,16 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
     setLoading(true);
     setHasError(false);
     try {
-      const { data, error: queryError } = await supabase
+      let query = supabase
         .from('feedback_submissions')
         .select(
           'id, username_snapshot, is_anonymous, locale, experience_kind, rating, comment, platform, app_version, status, created_at',
-        )
-        .eq('status', activeTab)
+        );
+      query = activeTab === 'archived'
+        ? query.in('status', ['reviewed', 'archived'])
+        : query.eq('status', activeTab);
+
+      const { data, error: queryError } = await query
         .order('created_at', { ascending })
         .limit(200);
 
@@ -148,6 +152,31 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
       const { error } = await supabase
         .from('feedback_submissions')
         .update({ status: newStatus })
+        .eq('id', id);
+      if (error) {
+        setActionError(t('feedbackInbox.actionError'));
+        void loadFeedbackItems();
+      }
+    } catch {
+      setActionError(t('feedbackInbox.actionError'));
+      void loadFeedbackItems();
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }, [loadFeedbackItems, t]);
+
+  const handleDeleteFeedback = useCallback(async (id: string) => {
+    setUpdatingIds((prev) => new Set(prev).add(id));
+    setFeedbackItems((prev) => prev.filter((item) => item.id !== id));
+    setActionError(null);
+    try {
+      const { error } = await supabase
+        .from('feedback_submissions')
+        .delete()
         .eq('id', id);
       if (error) {
         setActionError(t('feedbackInbox.actionError'));
@@ -332,7 +361,20 @@ export function FeedbackInboxScreen({ onBack, onOpenAdminCoinGifts }: FeedbackIn
                         <Text style={styles.actionButtonText}>{t('feedbackInbox.archive')}</Text>
                       </TouchableOpacity>
                     </View>
-                  ) : null}
+                  ) : (
+                    <View style={[styles.actionRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                      <TouchableOpacity
+                        onPress={() => void handleDeleteFeedback(item.id)}
+                        style={[styles.actionButton, styles.actionButtonDelete, updatingIds.has(item.id) && styles.actionButtonDisabled]}
+                        disabled={updatingIds.has(item.id)}
+                        testID={`feedback-delete-${item.id}`}
+                      >
+                        <Text style={[styles.actionButtonText, styles.actionButtonDeleteText]}>
+                          {t('feedbackInbox.delete')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -587,5 +629,12 @@ const styles = StyleSheet.create({
     color: '#BFDBFE',
     fontSize: 12,
     fontWeight: '800',
+  },
+  actionButtonDelete: {
+    backgroundColor: 'rgba(127,29,29,0.26)',
+    borderColor: 'rgba(248,113,113,0.44)',
+  },
+  actionButtonDeleteText: {
+    color: '#FECACA',
   },
 });

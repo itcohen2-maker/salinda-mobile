@@ -1,11 +1,4 @@
-import { test, expect, type Page } from '../support/fixtures';
-
-async function seedReturningUser(page: Page) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('lulos_tutorial_done', 'true');
-    window.localStorage.setItem('lulos_welcome_player_screen_seen', 'true');
-  });
-}
+import { test, expect } from '../support/fixtures';
 
 test.describe('Start screen layout', () => {
   test('keeps the top header actions and parks the Slinda hero opposite the back button', async ({ page, lobby }) => {
@@ -31,7 +24,6 @@ test.describe('Start screen layout', () => {
       await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15_000 }).catch(() => {});
     };
 
-    await seedReturningUser(page);
     await lobby.goto();
     await expectCenteredShell(412);
     await lobby.playSinglePlayer.click();
@@ -55,14 +47,18 @@ test.describe('Start screen layout', () => {
     const topActionsBox = await topActions.boundingBox();
     const backButtonBox = await backButton.boundingBox();
     const heroBox = await hero.boundingBox();
+    const shellBox = await page.getByTestId('app-web-shell').boundingBox();
     const viewport = page.viewportSize();
 
     expect(topActionsBox).not.toBeNull();
     expect(backButtonBox).not.toBeNull();
     expect(heroBox).not.toBeNull();
+    expect(shellBox).not.toBeNull();
     expect(viewport).not.toBeNull();
 
-    if (topActionsBox && backButtonBox && heroBox && viewport) {
+    if (topActionsBox && backButtonBox && heroBox && shellBox && viewport) {
+      expect(backButtonBox.y).toBeGreaterThanOrEqual(shellBox.y + 1);
+      expect(backButtonBox.y + backButtonBox.height).toBeLessThanOrEqual(shellBox.y + shellBox.height - 1);
       expect(heroBox.y).toBeGreaterThanOrEqual(topActionsBox.y - 6);
       expect(heroBox.y + heroBox.height).toBeLessThanOrEqual(topActionsBox.y + topActionsBox.height + 6);
 
@@ -85,7 +81,6 @@ test.describe('Start screen layout', () => {
 
   test('keeps anonymous players on the online sign-in gate inside the narrow web shell', async ({ page, lobby }) => {
     const shell = page.getByTestId('app-web-shell');
-    await seedReturningUser(page);
     await lobby.goto();
     await expect(shell).toBeVisible({ timeout: 30_000 });
 

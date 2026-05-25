@@ -8,8 +8,13 @@ const mockUseFeedbackAdmin = jest.fn();
 const mockSetStringAsync = jest.fn();
 const mockLimit = jest.fn();
 const mockOrder = jest.fn();
-const mockEq = jest.fn();
+const mockFilterEq = jest.fn();
+const mockFilterIn = jest.fn();
+const mockUpdateEq = jest.fn();
+const mockDeleteEq = jest.fn();
 const mockSelect = jest.fn();
+const mockUpdate = jest.fn();
+const mockDelete = jest.fn();
 const mockFrom = jest.fn();
 
 jest.mock('../hooks/useAuth', () => ({
@@ -62,6 +67,7 @@ jest.mock('../i18n/LocaleContext', () => ({
         'feedbackInbox.sortOldest': 'Oldest first',
         'feedbackInbox.markReviewed': 'Mark reviewed',
         'feedbackInbox.archive': 'Archive',
+        'feedbackInbox.delete': 'Delete',
         'feedbackInbox.actionError': 'Action failed. Please try again.',
       };
       return copy[key] ?? key;
@@ -75,8 +81,13 @@ describe('FeedbackInboxScreen', () => {
   beforeEach(() => {
     mockLimit.mockReset();
     mockOrder.mockReset();
-    mockEq.mockReset();
+    mockFilterEq.mockReset();
+    mockFilterIn.mockReset();
+    mockUpdateEq.mockReset();
+    mockDeleteEq.mockReset();
     mockSelect.mockReset();
+    mockUpdate.mockReset();
+    mockDelete.mockReset();
     mockFrom.mockReset();
     mockUseAuth.mockReset();
     mockUseFeedbackAdmin.mockReset();
@@ -84,9 +95,14 @@ describe('FeedbackInboxScreen', () => {
     openAdminCoinGifts.mockReset();
 
     mockOrder.mockReturnValue({ limit: mockLimit });
-    mockEq.mockReturnValue({ order: mockOrder });
-    mockSelect.mockReturnValue({ eq: mockEq });
-    mockFrom.mockReturnValue({ select: mockSelect });
+    mockFilterEq.mockReturnValue({ order: mockOrder });
+    mockFilterIn.mockReturnValue({ order: mockOrder });
+    mockUpdateEq.mockResolvedValue({ error: null });
+    mockDeleteEq.mockResolvedValue({ error: null });
+    mockUpdate.mockReturnValue({ eq: mockUpdateEq });
+    mockDelete.mockReturnValue({ eq: mockDeleteEq });
+    mockSelect.mockReturnValue({ eq: mockFilterEq, in: mockFilterIn });
+    mockFrom.mockReturnValue({ select: mockSelect, update: mockUpdate, delete: mockDelete });
     mockSetStringAsync.mockResolvedValue(undefined);
   });
 
@@ -225,6 +241,84 @@ describe('FeedbackInboxScreen', () => {
     await waitFor(() => {
       expect(mockSetStringAsync).toHaveBeenCalledWith('Noa');
       expect(screen.getByText('Copied')).toBeTruthy();
+    });
+  });
+
+  it('marks feedback reviewed so it appears in the archive workflow', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'admin-1' } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true, loading: false });
+    mockLimit.mockResolvedValue({
+      data: [
+        {
+          id: 'fb-review',
+          username_snapshot: 'Noa',
+          is_anonymous: false,
+          locale: 'en',
+          experience_kind: 'general',
+          rating: 4,
+          comment: 'Needs polish',
+          platform: 'web',
+          app_version: '1.0.0',
+          status: 'new',
+          created_at: '2026-05-20T12:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
+
+    const markReviewedButton = await screen.findByTestId('feedback-mark-reviewed-fb-review');
+    fireEvent.press(markReviewedButton);
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith({ status: 'reviewed' });
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', 'fb-review');
+    });
+  });
+
+  it('loads reviewed feedback in the archive tab and lets admins delete it', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'admin-1' } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true, loading: false });
+    mockLimit
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'fb-archive',
+            username_snapshot: 'Noa',
+            is_anonymous: false,
+            locale: 'en',
+            experience_kind: 'game',
+            rating: 5,
+            comment: 'Archived note',
+            platform: 'android',
+            app_version: '1.0.0',
+            status: 'reviewed',
+            created_at: '2026-05-20T12:00:00.000Z',
+          },
+        ],
+        error: null,
+      });
+
+    render(<FeedbackInboxScreen onBack={jest.fn()} onOpenAdminCoinGifts={openAdminCoinGifts} />);
+
+    await waitFor(() => {
+      expect(mockFilterEq).toHaveBeenCalledWith('status', 'new');
+    });
+
+    fireEvent.press(screen.getByText('Archived'));
+
+    await waitFor(() => {
+      expect(mockFilterIn).toHaveBeenCalledWith('status', ['reviewed', 'archived']);
+      expect(screen.getByText('Archived note')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('feedback-delete-fb-archive'));
+
+    await waitFor(() => {
+      expect(mockDelete).toHaveBeenCalled();
+      expect(mockDeleteEq).toHaveBeenCalledWith('id', 'fb-archive');
     });
   });
 });

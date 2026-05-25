@@ -202,7 +202,7 @@ describe('courage meter reducer rules', () => {
     expect(n2.courageMeterPercent).toBe(66);
   });
 
-  it('auto-resets at full and grants 1 coin', () => {
+  it('auto-resets at full and grants 5 coins', () => {
     const st = solvedConfirmState({
       courageMeterStep: 2,
       courageMeterPercent: 66,
@@ -212,8 +212,8 @@ describe('courage meter reducer rules', () => {
     const next = gameReducer(st, { type: 'CONFIRM_STAGED' } as GameAction, tf);
     expect(next.courageMeterStep).toBe(0);
     expect(next.courageMeterPercent).toBe(0);
-    expect(next.courageCoins).toBe(8);
-    expect(next.turnCoinsEarned).toBe(1);
+    expect(next.courageCoins).toBe(12);
+    expect(next.turnCoinsEarned).toBe(5);
     expect(next.courageDiscardSuccessStreak).toBe(1);
     expect(next.courageRewardPulseId).toBe(5);
   });
