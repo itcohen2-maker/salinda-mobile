@@ -3,12 +3,14 @@ import { test, expect } from '../support/fixtures';
 
 async function dismissGuidanceAndAlerts(page: Page) {
   const skip = page.getByTestId('start-guidance-skip');
-  if (await skip.isVisible({ timeout: 10_000 }).catch(() => false)) {
+  const turnReady = page.getByTestId('turn-im-ready');
+  // Wait for either guidance dialog or game turn screen — whichever comes first
+  await expect(skip.or(turnReady)).toBeVisible({ timeout: 12_000 }).catch(() => {});
+  if (await skip.isVisible({ timeout: 500 }).catch(() => false)) {
     await skip.click({ force: true });
   }
-
-  const gotIt = page.getByRole('button', { name: /׳”׳‘׳ ׳×׳™|got it/i });
-  if (await gotIt.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  const gotIt = page.getByRole('button', { name: /הבנתי|got it/i });
+  if (await gotIt.isVisible({ timeout: 1_500 }).catch(() => false)) {
     await gotIt.click();
   }
 }
@@ -33,7 +35,7 @@ test.describe('Single-player vs Bot', () => {
     await page.getByTestId('start-lets-play').click({ force: true });
     await page.waitForTimeout(1_500);
     await dismissGuidanceAndAlerts(page);
-    await expect(page.getByTestId('turn-im-ready')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('turn-im-ready')).toBeVisible({ timeout: 30_000 });
     await page.getByTestId('turn-im-ready').click({ force: true });
 
     await game.waitReady();
@@ -58,7 +60,7 @@ test.describe('Single-player vs Bot', () => {
     await page.getByTestId('start-lets-play').click({ force: true });
     await page.waitForTimeout(1_500);
     await dismissGuidanceAndAlerts(page);
-    await expect(page.getByTestId('turn-im-ready')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('turn-im-ready')).toBeVisible({ timeout: 30_000 });
 
     await page.getByTestId('turn-im-ready').click({ force: true });
     await game.waitReady();

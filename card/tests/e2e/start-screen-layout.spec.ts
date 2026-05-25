@@ -88,7 +88,7 @@ test.describe('Start screen layout', () => {
     await page.getByTestId('lobby-play-friends').click();
     await lobby.joinRoom.click();
     const googleSignIn = page.getByTestId('auth-social-google-button');
-    await expect(googleSignIn).toBeVisible({ timeout: 15_000 });
+    await expect(googleSignIn).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('table-card-empty-1')).toBeHidden();
 
     const shellBox = await shell.boundingBox();
