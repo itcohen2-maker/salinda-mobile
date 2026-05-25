@@ -61,7 +61,7 @@ interface AuthContextValue {
   purchaseSlinda: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
   /** Consume owned Slinda after activating it in-game. */
   consumeSlinda: () => Promise<'ok' | 'not_owned' | 'error'>;
-  /** Purchase the Wild card for 200 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
+  /** Purchase the Wild card for 2,000 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
   purchaseWild: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
   /** Consume owned Wild after activating it in-game. */
   consumeWild: () => Promise<'ok' | 'not_owned' | 'error'>;
