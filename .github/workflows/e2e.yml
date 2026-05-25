@@ -74,9 +74,6 @@ jobs:
   deploy-web:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
       - uses: actions/checkout@v4
 
@@ -92,6 +89,7 @@ jobs:
 
       - name: Deploy to Vercel production
         id: vercel_deploy
+        working-directory: card
         run: |
           OUTPUT=$(npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }} 2>&1)
           echo "$OUTPUT"
@@ -103,6 +101,7 @@ jobs:
           VERCEL_PROJECT_ID: prj_e6fXMFDkJ7Awk3zpfzurIdO2uV7F
 
       - name: Alias to production domain
+        working-directory: card
         run: |
           npx vercel alias set ${{ steps.vercel_deploy.outputs.url }} salinda-mobile.vercel.app \
             --token ${{ secrets.VERCEL_TOKEN }}
