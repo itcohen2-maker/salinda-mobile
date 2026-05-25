@@ -11341,7 +11341,11 @@ function StartScreen({
   const topActionsBackWidth = 128;
   const topActionsBackHeight = 38;
   const topActionsBackFontSize = 13;
-  const topActionsBackLift = compactStartScreen ? 18 : 20;
+  const requestedTopActionsBackLift = compactStartScreen ? 18 : 20;
+  const topActionsBackLift = Math.min(
+    requestedTopActionsBackLift,
+    Math.max(0, TOP_ACTIONS_TOP - 8),
+  );
   const topActionsPrimaryWidth = compactStartScreen ? 168 : 184;
   const topActionsSecondaryWidth = compactStartScreen ? 108 : 120;
   const topActionsButtonHeight = compactStartScreen ? 38 : 42;
@@ -20859,21 +20863,18 @@ function GameEntryChoiceScreen({
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
       <AmbientBackground playMode="game-entry" forceVisible />
-      <ScrollView
-        style={{ flex: 1, width: '100%' }}
-        contentContainerStyle={{
-          flexGrow: 1,
+      <View
+        style={{
+          flex: 1,
+          width: '100%',
           alignItems: 'center',
           paddingHorizontal: 24,
           paddingTop: menuTopPadding,
           paddingBottom: menuBottomPadding,
-          minHeight: responsive.height,
+          overflow: 'hidden',
         }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentInsetAdjustmentBehavior="always"
       >
-        <View style={{ width: '100%', maxWidth: 360, alignItems: 'center', position: 'relative' }}>
+        <View style={{ width: '100%', maxWidth: 360, alignItems: 'center', position: 'relative', flex: 1 }}>
         <View
           style={{
             position: 'absolute',
@@ -20942,7 +20943,7 @@ function GameEntryChoiceScreen({
           />
         </View>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
