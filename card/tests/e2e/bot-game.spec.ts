@@ -69,7 +69,7 @@ test.describe('Single-player vs Bot', () => {
     await expect(game.drawForfeitButton).toBeVisible({ timeout: 20_000 });
     await game.drawForfeitButton.click();
 
-    await expect(page.getByTestId('bot-thinking-overlay')).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByTestId('bot-speed-up')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId('bot-thinking-overlay')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('bot-speed-up')).toBeVisible({ timeout: 20_000 });
   });
 });

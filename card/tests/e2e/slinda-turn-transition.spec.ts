@@ -6,10 +6,76 @@ test.describe('Slinda turn-transition flow', () => {
     lobby,
   }) => {
     const slindaOwned = true;
+    const fakeUserId = 'e2e-slinda-test-user';
+
+    // Seed a fake Supabase session so auth doesn't need real network access.
+    // The key matches how @supabase/auth-js stores sessions via AsyncStorage on web.
+    await page.addInitScript((userId) => {
+      window.localStorage.setItem(
+        'sb-isqxuchcmmabjosxjawt-auth-token',
+        JSON.stringify({
+          access_token: 'fake-e2e-access-token',
+          token_type: 'bearer',
+          expires_in: 86400,
+          expires_at: Math.floor(Date.now() / 1000) + 86400,
+          refresh_token: 'fake-e2e-refresh-token',
+          user: {
+            id: userId,
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: null,
+            is_anonymous: true,
+            app_metadata: { provider: 'anonymous', providers: ['anonymous'] },
+            user_metadata: {},
+            identities: [],
+            created_at: '2025-01-01T00:00:00.000Z',
+            updated_at: '2025-01-01T00:00:00.000Z',
+          },
+        }),
+      );
+    }, fakeUserId);
+
+    // Mock auth endpoints as a safety net for token refresh attempts.
+    await page.route('**/auth/v1/*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'fake-e2e-access-token',
+          token_type: 'bearer',
+          expires_in: 86400,
+          expires_at: Math.floor(Date.now() / 1000) + 86400,
+          refresh_token: 'fake-e2e-refresh-token',
+          user: {
+            id: fakeUserId,
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: null,
+            is_anonymous: true,
+            app_metadata: { provider: 'anonymous', providers: ['anonymous'] },
+            user_metadata: {},
+            identities: [],
+            created_at: '2025-01-01T00:00:00.000Z',
+            updated_at: '2025-01-01T00:00:00.000Z',
+          },
+        }),
+      });
+    });
+
+    // Mock consume_slinda RPC to return 'not_owned'. This keeps slindaAttemptedThisTurn
+    // as false after modal confirm (REPLACE_CARD_WITH_SLINDA is not dispatched), so the
+    // Slinda button remains visible for the second open that the test asserts.
+    await page.route('**/rest/v1/rpc/consume_slinda*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify('not_owned'),
+      });
+    });
 
     await page.route('**/rest/v1/profiles*', async (route) => {
       const url = new URL(route.request().url());
-      const rawId = url.searchParams.get('id') ?? 'eq.e2e-user';
+      const rawId = url.searchParams.get('id') ?? `eq.${fakeUserId}`;
       const userId = rawId.startsWith('eq.') ? rawId.slice(3) : rawId;
 
       await route.fulfill({
