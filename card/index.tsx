@@ -56,6 +56,7 @@ import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as 
 import { GoldDieFace } from './AnimatedDice';
 import { InteractiveTutorialScreen, type TutorialProgressPayload } from './src/tutorial/InteractiveTutorialScreen';
 import { isL6WildTutorialSelectionReady } from './src/tutorial/l6WildSelection';
+import type { L4EquationProgressMissing } from './src/tutorial/l4EquationProgress';
 import { tutorialBus } from './src/tutorial/tutorialBus';
 import { HappyBubble } from './src/components/HappyBubble';
 import { CoinAwardCelebrationCard } from './src/components/CoinAwardCelebrationCard';
@@ -69,7 +70,7 @@ import FuseTimer from './components/FuseTimer';
 import ExcellenceMeter from './components/ExcellenceMeter';
 import TutorialProgressMeter from './components/TutorialProgressMeter';
 import { SlindaCoin } from './components/SlindaCoin';
-import { HorizontalOptionWheel, type HorizontalWheelOption } from './components/HorizontalOptionWheel';
+import type { HorizontalWheelOption } from './components/HorizontalOptionWheel';
 import { AdSlot } from './src/components/AdSlot';
 import { FeedbackMailCard } from './src/components/feedback/FeedbackMailCard';
 import * as Localization from 'expo-localization';
@@ -325,6 +326,11 @@ import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
 import { AdminCoinGiftsScreen } from './src/screens/AdminCoinGiftsScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { FeedbackInboxScreen } from './src/screens/FeedbackInboxScreen';
+import {
+  useSessionTrackingInternal,
+  SessionTrackingContext,
+  useTrackEvent,
+} from './src/hooks/useSessionTracking';
 import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } from './shared/gameConstants';
 import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
@@ -1475,7 +1481,7 @@ type GameAction =
   | { type: 'USE_POSSIBLE_RESULTS_INFO' }
   | { type: 'BOT_STEP' }
   | { type: 'RESET_GAME' }
-  | { type: 'TUTORIAL_SET_HANDS'; hands: Card[][]; drawPile?: Card[]; discardPile?: Card[] }
+  | { type: 'TUTORIAL_SET_HANDS'; hands: Card[][]; drawPile?: Card[]; discardPile?: Card[]; currentPlayerIndex?: number }
   | { type: 'TUTORIAL_SET_DICE'; values: DiceResult }
   | { type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS'; value: boolean }
   | { type: 'TUTORIAL_SET_SHOW_SOLVE_EXERCISE'; value: boolean }
@@ -3917,6 +3923,7 @@ function gameReducer(
       return {
         ...st,
         players: newPlayers,
+        ...(typeof action.currentPlayerIndex === 'number' ? { currentPlayerIndex: action.currentPlayerIndex } : {}),
         ...(action.drawPile ? { drawPile: action.drawPile } : {}),
         ...(action.discardPile ? { discardPile: action.discardPile } : {}),
       };
@@ -7190,21 +7197,21 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     setOp2(null);
   }, [state.isTutorial, state.phase, state.dice, l5UiTick, dice1, dice2, dice3, op1, op2, state.equationHandSlots]);
 
-  // L6 (possible-results guided): pre-fill all three dice so the learner can
-  // see the dice values while exploring mini cards.
+  // L6 (possible-results guided): pre-fill all three dice indices when guided
+  // mode is active so the learner sees the roll values in the equation slots.
   useEffect(() => {
     if (!state.isTutorial) return;
     if (state.phase !== 'building') return;
     if (!state.dice) return;
     if (!tutorialBus.getL6GuidedMode()) return;
+    if (!state.showPossibleResults) return;
     if (dice1 !== null || dice2 !== null || dice3 !== null) return;
     setDice1(0); dice1Ref.current = 0;
     setDice2(1); dice2Ref.current = 1;
     setDice3(2); dice3Ref.current = 2;
     setOp1(null);
     setOp2(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.isTutorial, state.phase, state.dice, l5UiTick, dice1, dice2, dice3]);
+  }, [state.isTutorial, state.phase, state.dice, state.showPossibleResults, dice1, dice2, dice3]);
 
   // Remove dice from a specific slot
   const removeDice = (slot: 1 | 2 | 3) => {
@@ -7241,7 +7248,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     let next = eqOpChoices[(safeIdx + 1) % eqOpChoices.length];
     // In tutorial mode, once an op is set never cycle back to null —
     // it leaves the equation incomplete and breaks hint interpolation.
-    if (state.isTutorial && next === null && cur !== null) {
+    if (state.isTutorial && !tutorialBus.getL4Step3Mode() && next === null && cur !== null) {
       next = eqOpChoices.find(op => op !== null) ?? next;
     }
     if (which === 1) setOp1(next);
@@ -7545,6 +7552,32 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     eqOpReady &&
     jokerCommitReady;
 
+  const l4GuidedOpCount = [effectiveOp1, effectiveOp2].filter((op) => op !== null).length;
+  const l4GuidedMissing: L4EquationProgressMissing =
+    filledCount === 3 && effectiveOp1 !== null && effectiveOp2 === null
+      ? 'secondOperator'
+      : filledCount === 2 && effectiveOp1 !== null && effectiveOp2 !== null && dice3 === null
+        ? 'thirdDieOrCancelSecondOperator'
+        : null;
+  const l4ProgressKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state.isTutorial || !tutorialBus.getL4Step3Mode() || isSolved) {
+      l4ProgressKeyRef.current = null;
+      return;
+    }
+    const key = `${filledCount}|${l4GuidedOpCount}|${finalResult ?? 'x'}|${ok ? 1 : 0}|${l4GuidedMissing ?? 'none'}`;
+    if (l4ProgressKeyRef.current === key) return;
+    l4ProgressKeyRef.current = key;
+    tutorialBus.emitUserEvent({
+      kind: 'l4EquationProgress',
+      diceCount: filledCount,
+      opCount: l4GuidedOpCount,
+      hasResult: finalResult !== null,
+      ok,
+      missing: l4GuidedMissing,
+    });
+  }, [state.isTutorial, isSolved, filledCount, l4GuidedOpCount, finalResult, ok, l4GuidedMissing]);
+
   // Tutorial pulse halo around the green result box, looping while
   // `ok && isTutorial` so the result stays visually drawing the eye.
   // Also: auto-confirm the equation when it becomes valid — the learner
@@ -7698,10 +7731,20 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 
   // Pulse on empty op-slot — must be before early return (Rules of Hooks)
   const needsSignPulse = useRef(new Animated.Value(0)).current;
+  const l4NeedsSecondOperatorPulse =
+    state.isTutorial &&
+    tutorialBus.getL4Step3Mode() &&
+    !isSolved &&
+    l4GuidedMissing === 'secondOperator';
+  const l4NeedsThirdDiePulse =
+    state.isTutorial &&
+    tutorialBus.getL4Step3Mode() &&
+    !isSolved &&
+    l4GuidedMissing === 'thirdDieOrCancelSecondOperator';
   useEffect(() => {
     const needsOp1 = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
     const needsOp2 = !isSolved && !state.isTutorial && dice3 !== null && !effectiveOp2;
-    const needs = needsOp1 || needsOp2;
+    const needs = needsOp1 || needsOp2 || l4NeedsSecondOperatorPulse || l4NeedsThirdDiePulse;
     if (!needs) { needsSignPulse.setValue(0); return; }
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(needsSignPulse, { toValue: 1, duration: 480, useNativeDriver: true }),
@@ -7709,7 +7752,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     ]));
     loop.start();
     return () => loop.stop();
-  }, [isSolved, state.isTutorial, dice1, dice2, dice3, effectiveOp1, effectiveOp2, needsSignPulse]);
+  }, [isSolved, state.isTutorial, dice1, dice2, dice3, effectiveOp1, effectiveOp2, l4NeedsSecondOperatorPulse, l4NeedsThirdDiePulse, needsSignPulse]);
 
   if (!showBuilder) return null;
 
@@ -7759,13 +7802,23 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       ? '#FFFFFF'
       : neutralResultTextColor;
   const needsOp1Pulse = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
-  const needsOp2Pulse = !isSolved && !state.isTutorial && show3rd && dice3 !== null && !effectiveOp2;
+  const needsOp2Pulse =
+    (!isSolved && !state.isTutorial && show3rd && dice3 !== null && !effectiveOp2) ||
+    l4NeedsSecondOperatorPulse;
 
   // ?? Render helpers ??
   const renderDiceSlot = (slotValue: number | null, slotNum: 1 | 2 | 3) => (
     <TouchableOpacity
       testID={`equation-dice-slot-${slotNum}`}
-      style={[eqS.slot, slotValue !== null ? eqS.slotFilled : eqS.slotEmpty]}
+      style={[
+        eqS.slot,
+        slotValue !== null ? eqS.slotFilled : eqS.slotEmpty,
+        l4NeedsThirdDiePulse && slotNum === 3 && slotValue === null && {
+          borderColor: '#FCD34D',
+          borderWidth: 3,
+          backgroundColor: 'rgba(252,211,77,0.18)',
+        },
+      ]}
       onPress={() => slotValue !== null && removeDice(slotNum)}
       activeOpacity={0.7}
       disabled={isSolved}
@@ -8182,6 +8235,16 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
           .map((value, index) => ({ value, index }))
           .filter(({ index }) => index === l4bTargetDieIndex)
     : diceValues.map((value, index) => ({ value, index }));
+  const showL6DiceResultsOnly =
+    state.isTutorial &&
+    tutorialBus.getL6GuidedMode() &&
+    state.phase === 'building' &&
+    state.showPossibleResults &&
+    dice1 === null &&
+    dice2 === null &&
+    dice3 === null &&
+    op1 === null &&
+    op2 === null;
 
   return (
     <View style={[
@@ -8281,6 +8344,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
         </View>
       )}
 
+      {!showL6DiceResultsOnly ? (
+      <>
       {/* ??? שורת משוואה: מצב סוגריים משמאל או מימין לפי parensRight ???
           Uniform slot layout — every cell exists in BOTH modes and keeps the
           same width; only which cells are visible differs. This guarantees
@@ -8457,6 +8522,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
           {t('equation.twoDiceOnly')}
         </Text>
       )}
+      </>
+      ) : null}
     </View>
   );
 });
@@ -11043,10 +11110,10 @@ function StartScreen({
   const [teacherRecommendation, setTeacherRecommendation] = useState('');
   const [teacherActionLog, setTeacherActionLog] = useState<string[]>([]);
   const timerWheelOptions = useMemo((): HorizontalWheelOption[] => [
-    { key: 'off', label: t('lobby.off'), accessibilityLabel: t('start.timerA11y.off') },
+    { key: 'custom', label: t('lobby.timerCustom'), accessibilityLabel: t('start.timerA11y.custom') },
     { key: '60', label: t('lobby.timerMin'), accessibilityLabel: t('start.timerA11y.min1') },
     { key: '90', label: t('lobby.timerMinHalf'), accessibilityLabel: t('start.timerA11y.minHalf') },
-    { key: 'custom', label: t('lobby.timerCustom'), accessibilityLabel: t('start.timerA11y.custom') },
+    { key: 'off', label: t('lobby.off'), accessibilityLabel: t('start.timerA11y.off') },
   ], [t]);
   const minuteTimerPickerSection = {
     key: 'min',
@@ -12178,15 +12245,13 @@ function StartScreen({
 
           <View style={hsS.advSection}>
             <AdvancedSetupSectionHeading
-              badge="02"
               title={t('start.advancedSetup.sectionNumbersHeading')}
-              colors={['#38bdf8', '#818cf8']}
             />
           <LinearGradient colors={['#1a73e8', '#4285F4']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
             <View style={[hsS.rowStackToggle, hsS.rowRange, { alignItems: 'center' }]}>
               <Text style={[hsS.rowLabel, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.wheel.numberRange')}</Text>
               <View style={[hsS.toggleGroupFull, { justifyContent: 'center', alignSelf: 'center' }]}>
-                {([['full', '0-25'], ['easy', '0-12']] as const).map(([key, label]) => (
+                {([['easy', '0-12'], ['full', '0-25']] as const).map(([key, label]) => (
                   <TouchableOpacity key={key} onPress={() => setNumberRange(key)} activeOpacity={0.7}
                     style={[hsS.toggleBtn, numberRange === key ? hsS.toggleOn : hsS.toggleOff]}>
                     <Text style={numberRange === key ? hsS.toggleOnTxt : hsS.toggleOffTxt}>{label}</Text>
@@ -12203,8 +12268,8 @@ function StartScreen({
               <Text style={[hsS.rowLabel, { textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.fractions')}</Text>
               <View style={[hsS.toggleGroupFull, { justifyContent: 'center', alignSelf: 'center' }]}>
                 {([
-                  [true, t('lobby.withFractions')],
                   [false, t('lobby.noFractions')],
+                  [true, t('lobby.withFractions')],
                 ] as const).map(([key, label]) => (
                   <TouchableOpacity key={String(key)} onPress={() => setFractions(key as boolean)} activeOpacity={0.7}
                     style={[hsS.toggleBtn, fractions === key ? hsS.toggleOn : hsS.toggleOff]}>
@@ -12268,7 +12333,7 @@ function StartScreen({
               <Text style={{ color: 'rgba(226,232,240,0.92)', fontSize: 12, fontWeight: '700', textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }}>
                 {t('start.advancedSetup.operatorsTitle')}
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr', gap: 8, justifyContent: 'center' }}>
                 {([
                   ['plusMinus', ['+', '-'] as Operation[], 'start.advancedSetup.operators.plusMinus.label'],
                   ['all', ['+', '-', 'x', '÷'] as Operation[], 'start.advancedSetup.operators.all.label'],
@@ -12310,17 +12375,15 @@ function StartScreen({
 
           <View style={hsS.advSection}>
             <AdvancedSetupSectionHeading
-              badge="03"
               title={t('start.advancedSetup.sectionHelpersHeading')}
-              colors={['#34d399', '#22c55e']}
             />
           <LinearGradient colors={['#d93025', '#EA4335']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
             <View style={[hsS.rowStackToggle, hsS.rowPossibleResults, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.possibleResults')}</Text>
               <View style={[hsS.toggleGroupFull, isRTL ? { justifyContent: 'flex-end', alignSelf: 'flex-end' } : null]}>
                 {([
-                  [true, t('lobby.show')],
                   [false, t('lobby.hide')],
+                  [true, t('lobby.show')],
                 ] as const).map(([key, label]) => (
                   <TouchableOpacity key={String(key)} onPress={() => {
                     const v = key as boolean;
@@ -12342,8 +12405,8 @@ function StartScreen({
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('lobby.solveExercise')}</Text>
               <View style={[hsS.toggleGroupFull, isRTL ? { justifyContent: 'flex-end', alignSelf: 'flex-end' } : null]}>
                 {([
-                  [true, t('lobby.on')],
                   [false, t('lobby.off')],
+                  [true, t('lobby.on')],
                 ] as const).map(([key, label]) => (
                   <TouchableOpacity key={String(key)} onPress={() => {
                     if (key && !showPossibleResults) return;
@@ -12367,23 +12430,25 @@ function StartScreen({
 
           <View style={hsS.advSection}>
             <AdvancedSetupSectionHeading
-              badge="04"
               title={t('start.advancedSetup.sectionTimerHeading')}
-              colors={['#fb7185', '#fb923c']}
             />
           <LinearGradient colors={['#EA4335', '#f28b82']} start={{ x: isRTL ? 1 : 0, y: 0 }} end={{ x: isRTL ? 0 : 1, y: 1 }} style={hsS.rowGradientOuter}>
             <View style={[hsS.rowStackToggle, hsS.rowTimer, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
               <Text style={[hsS.rowLabel, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>{t('start.wheel.timerRow')}</Text>
-              <View style={[hsS.timerWheelWrap, { width: '100%', marginStart: 0 }]}>
-                <HorizontalOptionWheel
-                  options={timerWheelOptions}
-                  selectedKey={timer}
-                  snapFocus="leading"
-                  scrollAfterSelect={(key) => key !== 'custom'}
-                  onSelect={(key) => {
-                    setTimer(key as '60' | '90' | 'off' | 'custom');
-                  }}
-                />
+              <View style={[hsS.toggleGroupFull, { justifyContent: 'center', alignSelf: 'center' }]}>
+                {timerWheelOptions.map((option) => (
+                  <TouchableOpacity
+                    key={option.key}
+                    onPress={() => setTimer(option.key as '60' | '90' | 'off' | 'custom')}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={option.accessibilityLabel}
+                    accessibilityState={{ selected: timer === option.key }}
+                    style={[hsS.toggleBtn, timer === option.key ? hsS.toggleOn : hsS.toggleOff]}
+                  >
+                    <Text style={timer === option.key ? hsS.toggleOnTxt : hsS.toggleOffTxt}>{option.label}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
           </LinearGradient>
@@ -12553,7 +12618,7 @@ function StartScreen({
               {t('start.wheel.numberRange')}
             </Text>
             <View style={hsS.toggleGroup}>
-              {([['full', '0-25'], ['easy', '0-12']] as const).map(([key, label]) => (
+              {([['easy', '0-12'], ['full', '0-25']] as const).map(([key, label]) => (
                 <TouchableOpacity key={key} onPress={() => setNumberRange(key)} activeOpacity={0.7}
                   style={[hsS.toggleBtn, numberRange === key ? hsS.toggleOn : hsS.toggleOff]}>
                   <Text style={numberRange === key ? hsS.toggleOnTxt : hsS.toggleOffTxt}>{label}</Text>
@@ -12851,6 +12916,7 @@ const hsS = StyleSheet.create({
     flexWrap: 'wrap',
     alignSelf: 'stretch',
     justifyContent: 'flex-start',
+    direction: 'ltr',
     gap: 5,
   },
   // מעטפת חיצונית לגרדיאנט של שורות נבחרות
@@ -12883,6 +12949,7 @@ const hsS = StyleSheet.create({
   },
   guidanceToggleWrapper: {
     flexDirection: 'row',
+    direction: 'ltr',
     backgroundColor: '#1e293b',
     borderRadius: 8,
     padding: 2,
@@ -12924,8 +12991,6 @@ const hsS = StyleSheet.create({
   rowSolveExercise: { backgroundColor: 'rgba(52,168,83,0.92)' },
   rowTimer: { backgroundColor: 'rgba(234,67,53,0.92)' },
   rowGuidance: { backgroundColor: 'rgba(15,118,110,0.92)' },
-  /** מיכל לגלגלת טיימר — snapFocus=leading מצמיד את הצ'יפ הצהוב ליד התווית */
-  timerWheelWrap: { flex: 1, minWidth: 0, marginStart: 4 },
   /** קטעים במודאל «מתקדמים» */
   advSection: {
     marginBottom: 16,
@@ -13015,22 +13080,6 @@ const hsS = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
   },
-  advSectionBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: { shadowColor: '#020617', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 8 },
-      android: { elevation: 3 },
-    }),
-  },
-  advSectionBadgeTxt: {
-    color: '#0f172a',
-    fontSize: 12,
-    fontWeight: '900',
-  },
   advSectionCopy: {
     flex: 1,
     minWidth: 0,
@@ -13050,8 +13099,8 @@ const hsS = StyleSheet.create({
   rowLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '600', flexShrink: 0 },
   rowHint: { color: 'rgba(255,255,255,0.72)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   rowSubHint: { color: 'rgba(255,255,255,0.88)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
-  // LTR: ברירת מחדל (האופציה הראשונה בכל מערך) תמיד משמאל גם תחת forceRTL
-  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  // LTR physical order: the last option in each array sits on the right.
+  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr', gap: 5 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
   toggleOn: {
     backgroundColor: '#FBBF24', borderColor: '#92400E', borderWidth: 2,
@@ -13294,29 +13343,17 @@ function AdvancedSetupPreviewChip({
 }
 
 function AdvancedSetupSectionHeading({
-  badge,
   title,
   intro,
-  colors,
 }: {
-  badge: string;
   title: string;
   intro?: string;
-  colors: readonly [string, string, ...string[]];
 }) {
   const { isRTL } = useLocale();
   const rtlRow = 'row' as const;
   return (
     <View style={hsS.advSectionHdr}>
       <View style={[hsS.advSectionHeaderRow, { flexDirection: rtlRow }]}>
-        <LinearGradient
-          colors={colors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={hsS.advSectionBadge}
-        >
-          <Text style={hsS.advSectionBadgeTxt}>{badge}</Text>
-        </LinearGradient>
         <View style={hsS.advSectionCopy}>
           <Text
             style={[
@@ -15981,11 +16018,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const [parensRight, setParensRight] = useState<boolean>(false);
   const [parensToggleTouched, setParensToggleTouched] = useState(false);
   const [parensToggleNeedsAttention, setParensToggleNeedsAttention] = useState(false);
+  const hideParensToggleForL6Results =
+    state.isTutorial &&
+    tutorialBus.getL6GuidedMode() &&
+    state.showPossibleResults;
   const showParensToggle =
     state.phase === 'building' &&
     !state.hasPlayedCards &&
     state.dice !== null &&
-    !tutorialBus.getFracGuidedMode();
+    !tutorialBus.getFracGuidedMode() &&
+    !hideParensToggleForL6Results;
   // אתחול בכל שלב building חדש
   useEffect(() => { if (state.phase === 'building') setParensRight(false); }, [state.diceRollSeq, state.phase]);
   useEffect(() => {
@@ -19458,300 +19500,6 @@ function BotMissionStrip(
 
 function BotThinkingOverlay({ topOffset: _topOffset }: { topOffset: number }) {
   return null;
-  const current = state.players[state.currentPlayerIndex];
-  if (!current || !state.botConfig.playerIds.includes(current.id)) return null;
-  if (state.phase === 'game-over') return null;
-  /** כפתור זירוז — מדלג על ההמתנה של שעון הבוט ומפעיל מיידית את הצעד הבא */
-  const onSpeedUp = () => dispatch({ type: 'BOT_STEP' });
-  const handReserve =
-    (webGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET) +
-    (webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT) +
-    Math.max(insets.bottom, 12);
-  // Hide mission mockup so the actual EquationBuilder remains the only focus.
-  const showMission = false;
-  const teaching = getBotTurnTeachingState(state);
-  const teachingPhase = getBotTeachingPhase(state);
-  const overlayFade = useRef(new Animated.Value(1)).current;
-  const overlayLift = useRef(new Animated.Value(0)).current;
-  const prevPhaseRef = useRef<BotTeachingPhase | null>(null);
-  useEffect(() => {
-    const prev = prevPhaseRef.current;
-    if (prev === null || prev === teachingPhase) {
-      prevPhaseRef.current = teachingPhase;
-      return;
-    }
-    prevPhaseRef.current = teachingPhase;
-    overlayFade.setValue(0.55);
-    overlayLift.setValue(8);
-    Animated.parallel([
-      Animated.timing(overlayFade, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }),
-      Animated.timing(overlayLift, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }),
-    ]).start();
-  }, [teachingPhase, overlayFade, overlayLift]);
-  const teachingLabel = t(teaching.titleKey, {
-    name: current.name,
-    d1: String(state.dice?.die1 ?? ''),
-    d2: String(state.dice?.die2 ?? ''),
-    d3: String(state.dice?.die3 ?? ''),
-  });
-  const teachingBody = t(teaching.bodyKey, {
-    name: current.name,
-    d1: String(state.dice?.die1 ?? ''),
-    d2: String(state.dice?.die2 ?? ''),
-    d3: String(state.dice?.die3 ?? ''),
-  });
-  const showDiceSummary =
-    state.phase === 'building' &&
-    state.dice != null &&
-    state.botDicePausePending &&
-    !state.botNoSolutionDrawPending;
-  const parseEqNumbers = (display: string): number[] => {
-    const lhs = display.split('=')[0] ?? display;
-    const nums = lhs.match(/\d+/g);
-    if (!nums) return [];
-    return nums.map((n) => Number(n));
-  };
-  const missionNumbers = showMission ? parseEqNumbers(state.lastEquationDisplay!) : [];
-  const stagedNums = state.stagedCards.filter((card) => card.type === 'number').map((card) => card.value ?? 0);
-  const stagedWildCount = state.stagedCards.filter((card) => card.type === 'wild').length;
-  const matchedCounts = new Map<number, number>();
-  for (const val of stagedNums) matchedCounts.set(val, (matchedCounts.get(val) ?? 0) + 1);
-  let consumedWild = 0;
-  const missionMatch = missionNumbers.map((num) => {
-    const have = matchedCounts.get(num) ?? 0;
-    if (have > 0) {
-      matchedCounts.set(num, have - 1);
-      return true;
-    }
-    if (consumedWild < stagedWildCount) {
-      consumedWild += 1;
-      return true;
-    }
-    return false;
-  });
-  const progress = missionNumbers.length === 0
-    ? 0
-    : Math.min(
-      missionNumbers.length,
-      missionMatch.filter(Boolean).length + Math.max(0, stagedWildCount - consumedWild),
-    );
-  const progressText = showMission
-    ? `${progress}/${missionNumbers.length}`
-    : null;
-  const missionPopRef = useRef<Record<string, Animated.Value>>({});
-  const missionPrevRef = useRef<Record<string, boolean>>({});
-  useEffect(() => {
-    if (!showMission) {
-      missionPrevRef.current = {};
-      missionPopRef.current = {};
-      return;
-    }
-    for (let idx = 0; idx < missionMatch.length; idx++) {
-      const key = `mission-${idx}`;
-      if (!missionPopRef.current[key]) missionPopRef.current[key] = new Animated.Value(1);
-      const now = missionMatch[idx] === true;
-      const prev = missionPrevRef.current[key] === true;
-      if (now && !prev) {
-        missionPopRef.current[key]!.setValue(0.88);
-        Animated.sequence([
-          Animated.timing(missionPopRef.current[key]!, {
-            toValue: 1.12,
-            duration: 130,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad),
-          }),
-          Animated.timing(missionPopRef.current[key]!, {
-            toValue: 1,
-            duration: 120,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad),
-          }),
-        ]).start();
-      }
-      missionPrevRef.current[key] = now;
-    }
-  }, [showMission, missionMatch]);
-  return (
-    <Animated.View
-      testID="bot-thinking-overlay"
-      pointerEvents="auto"
-      style={[
-        botOverlayStyles.botThinkingOverlay,
-        {
-          top: topOffset,
-          bottom: handReserve,
-          opacity: overlayFade,
-          transform: [{ translateY: overlayLift }],
-        },
-      ]}
-    >
-      <Text style={[botOverlayStyles.botThinkingText, { writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-        {teachingLabel}
-      </Text>
-      <Text
-        style={{
-          marginTop: 4,
-          color: 'rgba(226,232,240,0.96)',
-          fontSize: 11,
-          fontWeight: '700',
-          textAlign: 'center',
-          backgroundColor: 'rgba(15,23,42,0.62)',
-          borderRadius: 10,
-          paddingHorizontal: 10,
-          paddingVertical: 5,
-          maxWidth: 430,
-          writingDirection: isRTL ? 'rtl' : 'ltr',
-        }}
-      >
-        {teachingBody}
-      </Text>
-      <TouchableOpacity
-        testID="bot-speed-up"
-        onPress={onSpeedUp}
-        activeOpacity={0.72}
-        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
-        style={{
-          marginTop: 8,
-          paddingHorizontal: 14,
-          paddingVertical: 6,
-          borderRadius: 999,
-          backgroundColor: 'rgba(250,204,21,0.95)',
-          borderWidth: 1.5,
-          borderColor: 'rgba(161,98,7,0.9)',
-        }}
-      >
-        <Text style={{ fontSize: 12, fontWeight: '900', color: '#111827' }}>
-          {isRTL ? '? זרז תור' : '? Speed up'}
-        </Text>
-      </TouchableOpacity>
-      {showDiceSummary ? (
-        <View
-          style={{
-            marginTop: 6,
-            width: '92%',
-            maxWidth: 420,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: 'rgba(147,197,253,0.55)',
-            backgroundColor: 'rgba(15,23,42,0.82)',
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-          }}
-        >
-          <Text
-            style={{
-              color: '#DBEAFE',
-              fontSize: 11,
-              fontWeight: '800',
-              textAlign: 'center',
-              writingDirection: isRTL ? 'rtl' : 'ltr',
-            }}
-          >
-            {t('previewDemo.dicePoolLabel')}
-          </Text>
-          <Text
-            style={{
-              marginTop: 2,
-              color: '#F8FAFC',
-              fontSize: 18,
-              fontWeight: '900',
-              textAlign: 'center',
-              writingDirection: 'ltr',
-            }}
-          >
-            {`\u2066${state.dice!.die1} · ${state.dice!.die2} · ${state.dice!.die3}\u2069`}
-          </Text>
-        </View>
-      ) : null}
-      {showMission ? (
-        <View
-          style={{
-            marginTop: 6,
-            width: '92%',
-            maxWidth: 420,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: 'rgba(248,113,113,0.7)',
-            backgroundColor: 'rgba(60,12,12,0.9)',
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-          }}
-        >
-          <Text
-            style={{
-              color: '#DBEAFE',
-              fontSize: 11,
-              fontWeight: '800',
-              textAlign: 'center',
-              writingDirection: isRTL ? 'rtl' : 'ltr',
-            }}
-          >
-            {t('game.botEquationRevealTitle', { name: current.name })}
-          </Text>
-          <Text
-            style={{
-              marginTop: 3,
-              color: '#FECACA',
-              fontSize: 17,
-              fontWeight: '900',
-              textAlign: 'center',
-              writingDirection: 'ltr',
-              textShadowColor: 'rgba(0,0,0,0.8)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 2,
-            }}
-          >
-            {'\u2066'}
-            {formatEquationForDisplay(state.lastEquationDisplay ?? '')}
-            {'\u2069'}
-          </Text>
-          <Text
-            style={{
-              marginTop: 2,
-              color: '#BFDBFE',
-              fontSize: 12,
-              fontWeight: '800',
-              textAlign: 'center',
-              writingDirection: isRTL ? 'rtl' : 'ltr',
-            }}
-          >
-            {`${t('game.botEquationRevealResult', { n: String(state.equationResult) })}  •  ${progressText}`}
-          </Text>
-          <View style={{ marginTop: 7, flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }}>
-            {missionNumbers.map((num, idx) => (
-              <Animated.View
-                key={`mission-${idx}-${num}`}
-                style={{
-                  minWidth: 30,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                  borderRadius: 9,
-                  borderWidth: 1,
-                  borderColor: missionMatch[idx] ? 'rgba(52,211,153,0.8)' : 'rgba(148,163,184,0.6)',
-                  backgroundColor: missionMatch[idx] ? 'rgba(16,185,129,0.24)' : 'rgba(51,65,85,0.5)',
-                  transform: [{ scale: missionPopRef.current[`mission-${idx}`] ?? 1 }],
-                }}
-              >
-                <Text style={{ color: '#E2E8F0', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>
-                  {num}
-                </Text>
-              </Animated.View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-    </Animated.View>
-  );
 }
 
 // ???????????????????????????????????????????????????????????????
@@ -22233,37 +21981,68 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   gap: 8,
                 }}
               >
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={t('tutorial.exit')}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  onPress={tutorialExit}
-                  testID="tutorial-header-exit"
-                  style={{
-                    minWidth: tutorialHeaderActionMinWidth,
-                    paddingVertical: tutorialHeaderActionPaddingVertical,
-                    paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
-                    borderRadius: 14,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: 'rgba(127, 29, 29, 0.96)',
-                    borderWidth: 1.5,
-                    borderColor: 'rgba(254, 202, 202, 0.7)',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.28,
-                    shadowRadius: 6,
-                  }}
-                >
-                  <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
-                </TouchableOpacity>
-                <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
+                {Platform.OS === 'android' ? (
+                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={t('game.back')}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      onPress={tutorialBack}
+                      testID="tutorial-header-back"
+                      style={{
+                        minWidth: tutorialHeaderActionMinWidth,
+                        paddingVertical: tutorialHeaderActionPaddingVertical,
+                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(71,85,105,0.92)',
+                        borderWidth: 1.5,
+                        borderColor: 'rgba(148,163,184,0.7)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.28,
+                        shadowRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
+                        {locale === 'he' ? '‹ חזור' : '‹ Back'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={t('previewTeaser.skip')}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      onPress={tutorialSkip}
+                      testID="tutorial-header-skip"
+                      style={{
+                        minWidth: tutorialHeaderActionMinWidth,
+                        paddingVertical: tutorialHeaderActionPaddingVertical,
+                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(90,95,105,0.92)',
+                        borderWidth: 1.5,
+                        borderColor: 'rgba(180,185,195,0.6)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.28,
+                        shadowRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
+                        {t('previewTeaser.skip')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={t('game.back')}
+                    accessibilityLabel={t('tutorial.exit')}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                    onPress={tutorialBack}
-                    testID="tutorial-header-back"
+                    onPress={tutorialExit}
+                    testID="tutorial-header-exit"
                     style={{
                       minWidth: tutorialHeaderActionMinWidth,
                       paddingVertical: tutorialHeaderActionPaddingVertical,
@@ -22271,25 +22050,25 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: 'rgba(71,85,105,0.92)',
+                      backgroundColor: 'rgba(127, 29, 29, 0.96)',
                       borderWidth: 1.5,
-                      borderColor: 'rgba(148,163,184,0.7)',
+                      borderColor: 'rgba(254, 202, 202, 0.7)',
                       shadowColor: '#000',
                       shadowOffset: { width: 0, height: 4 },
                       shadowOpacity: 0.28,
                       shadowRadius: 6,
                     }}
                   >
-                    <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                      {locale === 'he' ? '‹ חזור' : '‹ Back'}
-                    </Text>
+                    <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
                   </TouchableOpacity>
+                )}
+                {Platform.OS === 'android' ? (
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={t('previewTeaser.skip')}
+                    accessibilityLabel={t('tutorial.exit')}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                    onPress={tutorialSkip}
-                    testID="tutorial-header-skip"
+                    onPress={tutorialExit}
+                    testID="tutorial-header-exit"
                     style={{
                       minWidth: tutorialHeaderActionMinWidth,
                       paddingVertical: tutorialHeaderActionPaddingVertical,
@@ -22297,20 +22076,73 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                       borderRadius: 14,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      backgroundColor: 'rgba(90,95,105,0.92)',
+                      backgroundColor: 'rgba(127, 29, 29, 0.96)',
                       borderWidth: 1.5,
-                      borderColor: 'rgba(180,185,195,0.6)',
+                      borderColor: 'rgba(254, 202, 202, 0.7)',
                       shadowColor: '#000',
                       shadowOffset: { width: 0, height: 4 },
                       shadowOpacity: 0.28,
                       shadowRadius: 6,
                     }}
                   >
-                    <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                      {t('previewTeaser.skip')}
-                    </Text>
+                    <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
                   </TouchableOpacity>
-                </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={t('game.back')}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      onPress={tutorialBack}
+                      testID="tutorial-header-back"
+                      style={{
+                        minWidth: tutorialHeaderActionMinWidth,
+                        paddingVertical: tutorialHeaderActionPaddingVertical,
+                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(71,85,105,0.92)',
+                        borderWidth: 1.5,
+                        borderColor: 'rgba(148,163,184,0.7)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.28,
+                        shadowRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
+                        {locale === 'he' ? '‹ חזור' : '‹ Back'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={t('previewTeaser.skip')}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      onPress={tutorialSkip}
+                      testID="tutorial-header-skip"
+                      style={{
+                        minWidth: tutorialHeaderActionMinWidth,
+                        paddingVertical: tutorialHeaderActionPaddingVertical,
+                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(90,95,105,0.92)',
+                        borderWidth: 1.5,
+                        borderColor: 'rgba(180,185,195,0.6)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.28,
+                        shadowRadius: 6,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
+                        {t('previewTeaser.skip')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
               <View
                 style={{
@@ -22921,6 +22753,21 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     setBackAction: setWebBackAction,
   }), [webBackdropTone, webFocusMode, webFullscreenActive]);
 
+  const { state: gameState } = useGame();
+  const trackEvent = useTrackEvent();
+  const prevGamePhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (gameState.phase === 'game-over' && prevGamePhaseRef.current !== 'game-over') {
+      const won = gameState.currentPlayerIndex === 0;
+      const mode: 'local' | 'online' | 'bot' =
+        activePlayMode === 'online' ? 'online'
+        : gameState.botConfig ? 'bot'
+        : 'local';
+      trackEvent('game_played', { won, mode });
+    }
+    prevGamePhaseRef.current = gameState.phase;
+  }, [gameState.phase, gameState.currentPlayerIndex, gameState.botConfig, activePlayMode, trackEvent]);
+
   const gameContent = (
     <>
       <StatusBar style="light" backgroundColor="#0a1628" />
@@ -23080,6 +22927,16 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   );
 }
 
+function AppWithTracking({ children }: { children: ReactNode }) {
+  const { locale } = useLocale();
+  const tracking = useSessionTrackingInternal(locale);
+  return (
+    <SessionTrackingContext.Provider value={tracking}>
+      {children}
+    </SessionTrackingContext.Provider>
+  );
+}
+
 function App() {
   const [fontsLoaded, fontError] = useFonts({ Fredoka_700Bold });
   const [showSplash, setShowSplash] = useState(true);
@@ -23092,11 +22949,13 @@ function App() {
     <AuthProvider>
       <LocaleProvider>
         <ThemeProvider>
-          <MultiplayerProvider>
-            <GameProvider>
-              <AppShell showSplash={showSplash} setShowSplash={setShowSplash} />
-            </GameProvider>
-          </MultiplayerProvider>
+          <AppWithTracking>
+            <MultiplayerProvider>
+              <GameProvider>
+                <AppShell showSplash={showSplash} setShowSplash={setShowSplash} />
+              </GameProvider>
+            </MultiplayerProvider>
+          </AppWithTracking>
         </ThemeProvider>
       </LocaleProvider>
     </AuthProvider>

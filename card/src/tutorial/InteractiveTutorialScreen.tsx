@@ -19,6 +19,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getWebGameLayout } from '../theme/webLayout';
 import { getNativeGameLayout } from '../theme/nativeGameLayout';
@@ -36,6 +37,7 @@ import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatu
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { generateTutorialHand } from './generateTutorialHand';
 import { useAuth } from '../hooks/useAuth';
+import { useTrackEvent } from '../hooks/useSessionTracking';
 
 
 const diceRollSound = require('../../assets/dice_roll.mp3');
@@ -83,7 +85,9 @@ import type { Card, Fraction } from '../../shared/types';
 import { SALINDA_COIN_SOURCES, SALINDA_TUTORIAL_REWARDS } from '../../shared/salindaEconomy';
 import { createBotDemonstrator } from './BotDemonstrator';
 import { isL6WildTutorialSelectionReady } from './l6WildSelection';
+import { isL11MultiPlayBoardReady } from './l11MultiPlayReadiness';
 import { tutorialBus, type LayoutRect } from './tutorialBus';
+import { resolveL4Step3PhaseFromProgress, type L4Step3Phase } from './l4EquationProgress';
 import { LESSONS } from './lessons';
 import {
   getTutorialRewardOutcome,
@@ -465,25 +469,6 @@ interface Props {
   gameState: any;
 }
 
-const TUTORIAL_WELCOME_COPY = {
-  title: 'ברוכים הבאים לסלינדה',
-  goalPrefix: 'מתחילים עם 7 קלפים, ',
-  goalHighlight: 'ומנצחים שנשארים רק עם 2 קלפים!',
-  action: 'בכל תור בונים תרגיל מ-2 או 3 קוביות.',
-  rulePrefix: 'התוצאה חייבת להיות ',
-  ruleMatch: 'שווה לקלף ביד',
-  ruleMiddle: ' או לחיבור של ',
-  rulePair: 'כמה קלפים',
-  ruleSuffix: ' כדי להיפטר מהם.',
-  rewardBasicPrefix: 'בסיום ההדרכה תרוויחו ',
-  rewardBasicValue: `${SALINDA_TUTORIAL_REWARDS.basic} מטבעות!`,
-  rewardHookPrefix: 'המשיכו ללמוד איך מנצחים בהדרכה המתקדמת ותרוויחו עוד ',
-  rewardHookTitle: '',
-  rewardHookMiddle: '',
-  rewardHookValue: `${SALINDA_TUTORIAL_REWARDS.advanced} מטבעות`,
-  start: 'בואו נתחיל',
-  advanced: 'הדרכת מתקדמים',
-};
 
 type TutorialWelcomeModalProps = {
   topInset: number;
@@ -498,6 +483,7 @@ type TutorialWelcomeModalProps = {
   borderWidth: number;
   onStart: () => void;
   onAdvanced: () => void;
+  t: (key: string) => string;
 };
 
 function TutorialWelcomeModal({
@@ -513,6 +499,7 @@ function TutorialWelcomeModal({
   borderWidth,
   onStart,
   onAdvanced,
+  t,
 }: TutorialWelcomeModalProps) {
   return (
     <View
@@ -541,48 +528,35 @@ function TutorialWelcomeModal({
         ]}
       >
         <View style={[styles.tutorialWelcomeTextBlock, { gap: cardGap }]}>
-          <Text style={styles.tutorialWelcomeTitle}>{TUTORIAL_WELCOME_COPY.title}</Text>
+          <Text style={styles.tutorialWelcomeTitle}>{t('tutorial.welcome.title')}</Text>
 
           <Text style={styles.tutorialWelcomeBodyText}>
-            {TUTORIAL_WELCOME_COPY.goalPrefix}
+            {t('tutorial.welcome.headline')}
+            {' '}
             <Text style={styles.tutorialWelcomeGoldStrong}>
-              {TUTORIAL_WELCOME_COPY.goalHighlight}
+              {t('tutorial.welcome.headlineSub')}
             </Text>
           </Text>
 
-          <Text style={styles.tutorialWelcomeBodyText}>{TUTORIAL_WELCOME_COPY.action}</Text>
+          <Text style={styles.tutorialWelcomeBodyText}>{t('tutorial.welcome.tagline')}</Text>
 
-          <Text style={styles.tutorialWelcomeBodyText}>
-            {TUTORIAL_WELCOME_COPY.rulePrefix}
-            <Text style={styles.tutorialWelcomeGoldStrong}>
-              {TUTORIAL_WELCOME_COPY.ruleMatch}
-            </Text>
-            {TUTORIAL_WELCOME_COPY.ruleMiddle}
-            <Text style={styles.tutorialWelcomeGoldStrong}>
-              {TUTORIAL_WELCOME_COPY.rulePair}
-            </Text>
-            <Text style={styles.tutorialWelcomeWhiteStrong}>
-              {TUTORIAL_WELCOME_COPY.ruleSuffix}
-            </Text>
-          </Text>
+          <Text style={styles.tutorialWelcomeBodyText}>{t('tutorial.welcome.body')}</Text>
         </View>
 
         <View style={styles.tutorialWelcomeRewardBlock}>
           <Text style={styles.tutorialWelcomeRewardText}>
-            {TUTORIAL_WELCOME_COPY.rewardBasicPrefix}
+            {t('tutorial.welcome.coreRewardPrefix')}
             <Text style={styles.tutorialWelcomeRewardGold}>
-              {TUTORIAL_WELCOME_COPY.rewardBasicValue}
+              {t('tutorial.welcome.coreRewardValue')}
             </Text>
+            {t('tutorial.welcome.coreRewardSuffix')}
           </Text>
           <Text style={styles.tutorialWelcomeRewardText}>
-            {TUTORIAL_WELCOME_COPY.rewardHookPrefix}
+            {t('tutorial.welcome.advancedRewardPrefix')}
             <Text style={styles.tutorialWelcomeRewardGold}>
-              {TUTORIAL_WELCOME_COPY.rewardHookTitle}
+              {t('tutorial.welcome.advancedRewardValue')}
             </Text>
-            {TUTORIAL_WELCOME_COPY.rewardHookMiddle}
-            <Text style={styles.tutorialWelcomeRewardGold}>
-              {TUTORIAL_WELCOME_COPY.rewardHookValue}
-            </Text>
+            {t('tutorial.welcome.advancedRewardSuffix')}
           </Text>
         </View>
 
@@ -590,22 +564,22 @@ function TutorialWelcomeModal({
           <TouchableOpacity
             onPress={onStart}
             accessibilityRole="button"
-            accessibilityLabel={TUTORIAL_WELCOME_COPY.start}
+            accessibilityLabel={t('tutorial.welcome.start')}
             style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeStartButton]}
           >
             <Text style={styles.tutorialWelcomeButtonText}>
-              {TUTORIAL_WELCOME_COPY.start}
+              {t('tutorial.welcome.start')}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={onAdvanced}
             accessibilityRole="button"
-            accessibilityLabel={TUTORIAL_WELCOME_COPY.advanced}
+            accessibilityLabel={t('tutorial.welcome.advancedBtn')}
             style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeAdvancedButton]}
           >
             <Text style={styles.tutorialWelcomeButtonText}>
-              {TUTORIAL_WELCOME_COPY.advanced}
+              {t('tutorial.welcome.advancedBtn')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -915,6 +889,7 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
 export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispatch, gameState }: Props): React.ReactElement | null {
   const { t, locale } = useLocale();
   const { awardCoins: awardTutorialCoins } = useAuth();
+  const trackEvent = useTrackEvent();
   const insets = useSafeAreaInsets();
   const { width: tutorialWindowWidth } = useWindowDimensions();
   const tutorialViewport = useWebViewportSize();
@@ -978,14 +953,6 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   //        -> pickCard -> pressPlay
   // Wrong card taps briefly detour into `wrongCard` and then bounce back to
   // `pickCard`, keeping the learner on the happy path.
-  type L4Step3Phase =
-    | 'intro'
-    | 'pickFirstDie'
-    | 'pickSecondDie'
-    | 'pickOperator'
-    | 'pickCard'
-    | 'wrongCard'
-    | 'pressPlay';
   type L4bHintPhase = 'pickDie' | 'pickCard';
   const l4Step1RiggedRef = useRef(false);
   const [l4bHintPhase, setL4bHintPhase] = useState<L4bHintPhase>('pickDie');
@@ -994,8 +961,6 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   const [l4Step3Phase, setL4Step3Phase] = useState<L4Step3Phase>('intro');
   const [l4Step3IntroApproved, setL4Step3IntroApproved] = useState(false);
   const [l4Step3FinishApproved, setL4Step3FinishApproved] = useState(false);
-  const l4Step3DicePickCountRef = useRef(0);
-  const l4Step3OperatorPickedRef = useRef(false);
   const l4Step3WrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Measured rects of the "אשר את התרגיל" / "בחרתי" buttons ג€” updated by the
   // real game UI via tutorialBus.setLayout.
@@ -1386,6 +1351,18 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase !== 'lesson-done') return;
     dispatchEngine({ type: 'DISMISS_LESSON_DONE' });
   }, [engine.phase, engine.lessonIndex]);
+
+  useEffect(() => {
+    if (engine.phase === 'lesson-done') {
+      trackEvent('tutorial_lesson_complete', { lesson_index: engine.lessonIndex });
+    }
+  }, [engine.phase, engine.lessonIndex, trackEvent]);
+
+  useEffect(() => {
+    if (engine.phase === 'core-complete' || engine.phase === 'all-done') {
+      trackEvent('tutorial_complete', { advanced: engine.phase === 'all-done' });
+    }
+  }, [engine.phase, trackEvent]);
 
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_PARENS_LESSON_INDEX) {
@@ -1821,7 +1798,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           }
           const gs = gameStateRef.current;
           if (gs) {
-            const botHand = (gs.players[0]?.hand ?? []).filter((c) => c.id !== evt.cardId);
+            const botHand = (gs.players[0]?.hand ?? []).filter((c: Card) => c.id !== evt.cardId);
             const learnerHand = gs.players[1]?.hand ?? [];
             gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [botHand, learnerHand] });
           }
@@ -1921,8 +1898,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       setL4Step3Phase('intro');
       setL4Step3IntroApproved(false);
       setL4Step3FinishApproved(false);
-      l4Step3DicePickCountRef.current = 0;
-      l4Step3OperatorPickedRef.current = false;
       if (l4Step3WrongTimerRef.current) {
         clearTimeout(l4Step3WrongTimerRef.current);
         l4Step3WrongTimerRef.current = null;
@@ -2245,23 +2220,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
     if (!isL4Step3 || !l4Step3IntroApproved) return;
     return tutorialBus.subscribeUserEvent((evt) => {
-      if (evt.kind === 'eqUserPickedDice') {
-        const nextCount = Math.min(2, l4Step3DicePickCountRef.current + 1);
-        l4Step3DicePickCountRef.current = nextCount;
-        setL4Step3Phase(
-          nextCount >= 2 && l4Step3OperatorPickedRef.current
-            ? 'pickCard'
-            : nextCount >= 2
-              ? 'pickOperator'
-              : 'pickSecondDie',
-        );
-        return;
-      }
-      if (evt.kind === 'opSelected') {
-        l4Step3OperatorPickedRef.current = true;
-        if (l4Step3DicePickCountRef.current >= 2) {
-          setL4Step3Phase('pickCard');
-        }
+      if (evt.kind === 'l4EquationProgress') {
+        setL4Step3Phase(resolveL4Step3PhaseFromProgress(evt));
         return;
       }
       if (evt.kind === 'eqReadyToConfirm') {
@@ -2648,9 +2608,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => tutorialBus.setTutorialPreserveHandOrder(false);
   }, [engine.lessonIndex, engine.stepIndex]);
 
-  // ג”€ג”€ Lesson 6 (possible-results) rigging: on entry, the learner sees a
-  //    fully-filled equation and a full hand ג€” the green ResultsChip pulses
-  //    strongly to draw attention. We rig a safe random setup so the chip
+  // ג”€ג”€ Lesson 6 (possible-results) rigging: on entry, the learner sees
+  //    only the rolled dice/results context and a full hand ג€” the green
+  //    ResultsChip pulses strongly to draw attention. We rig a safe random setup so the chip
   //    always has possible targets to show, and
   //    enable showPossibleResults on the game state (the boot defaults it
   //    to false so the chip stays hidden during earlier lessons). Rigging
@@ -2679,32 +2639,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const setup = buildL6PossibleResultsSetup();
     l6PossibleResultsSetupRef.current = setup;
     gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+'] });
-    gameDispatch({ type: 'TUTORIAL_SET_DICE', values: setup.dice });
-    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand] });
+    gameDispatch({ type: 'ROLL_DICE', values: setup.dice });
+    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand], currentPlayerIndex: 1 });
 
     // Enable the ResultsChip (boot defaults it to false so it stays hidden
     // in L1ג€“L5). Must be dispatched after the dice so validTargets is ready.
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
 
-    // Show a solved equation so the learner sees a concrete result while
-    // learning that the chip reveals OTHER possible outcomes for the same dice.
-    // showPossibleResults stays true (spread via TUTORIAL_FORCE_SOLVED) so the
-    // chip remains visible in solved phase.
-    // Chip starts CLOSED ג€” user taps it in step 6.1 to open the mini-strip.
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
-    gameDispatch({
-      type: 'TUTORIAL_FORCE_SOLVED',
-      equationResult: setup.target,
-      dice: setup.dice,
-      equationDisplay: setup.equationDisplay,
-      playerHand: setup.playerHand,
-      botHand: setup.botHand,
-    });
+    tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
 
-  // Layer 48 safety net: the learner must see the solved reference equation
-  // before tapping the green possible-results button.
+  // Layer 48 safety net: the learner must see dice results only before
+  // tapping the green possible-results button. Do not pre-build a solved
+  // equation here; the equation appears only after a mini-result is chosen.
   useEffect(() => {
     const isL6OpenChipAwait =
       engine.lessonIndex === 5 &&
@@ -2716,33 +2665,34 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       setup = buildL6PossibleResultsSetup();
       l6PossibleResultsSetupRef.current = setup;
     }
-    const needsReference =
-      gameState?.phase !== 'solved' ||
-      gameState?.equationResult == null ||
-      !gameState?.lastEquationDisplay ||
+    const diceMismatch =
+      gameState?.dice?.die1 !== setup.dice.die1 ||
+      gameState?.dice?.die2 !== setup.dice.die2 ||
+      gameState?.dice?.die3 !== setup.dice.die3;
+    const needsDiceResultsOnly =
+      gameState?.phase !== 'building' ||
+      diceMismatch ||
+      gameState?.equationResult != null ||
+      !!gameState?.lastEquationDisplay ||
       (gameState?.validTargets?.length ?? 0) === 0;
     if (gameState?.showPossibleResults !== true) {
       gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
     }
-    if (!needsReference) return;
+    if (!needsDiceResultsOnly) return;
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
     gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+'] });
-    gameDispatch({ type: 'TUTORIAL_SET_DICE', values: setup.dice });
-    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand] });
-    gameDispatch({
-      type: 'TUTORIAL_FORCE_SOLVED',
-      equationResult: setup.target,
-      dice: setup.dice,
-      equationDisplay: setup.equationDisplay,
-      playerHand: setup.playerHand,
-      botHand: setup.botHand,
-    });
+    gameDispatch({ type: 'ROLL_DICE', values: setup.dice });
+    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [setup.botHand, setup.playerHand], currentPlayerIndex: 1 });
   }, [
     engine.lessonIndex,
     engine.stepIndex,
     engine.phase,
     gameState?.phase,
+    gameState?.dice?.die1,
+    gameState?.dice?.die2,
+    gameState?.dice?.die3,
     gameState?.equationResult,
     gameState?.lastEquationDisplay,
     gameState?.validTargets?.length,
@@ -3193,7 +3143,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     tutorialBus.emitFanDemo({ kind: 'disarmResultsChipPulse' });
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
-    if (gameState?.phase === 'solved' && gameState?.equationResult === cfg.target) {
+    const boardAlreadyReady = isL11MultiPlayBoardReady(gameState, cfg.target, [cfg.addA, cfg.addB]);
+    if (boardAlreadyReady) {
       l11Step0AwaitRiggedRef.current = true;
       return;
     }
@@ -3211,7 +3162,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       botHand,
       discardPile: [discardCard],
     });
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.equationResult, gameDispatch]);
+  }, [
+    engine.lessonIndex,
+    engine.stepIndex,
+    engine.phase,
+    gameState?.phase,
+    gameState?.equationResult,
+    gameState?.hasPlayedCards,
+    gameState?.currentPlayerIndex,
+    gameState?.players,
+    gameDispatch,
+  ]);
 
   // ג”€ג”€ L11 step 1 await-mimic: re-rig solved state so the learner gets a fresh
   //    hand after the bot demo consumed the previous game state (CONFIRM_STAGED). ג”€ג”€
@@ -3226,7 +3187,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     tutorialBus.emitFanDemo({ kind: 'disarmResultsChipPulse' });
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
-    if (gameState?.phase === 'solved' && gameState?.equationResult === cfg.target) {
+    const boardAlreadyReady = isL11MultiPlayBoardReady(
+      gameState,
+      cfg.target,
+      [cfg.addA, cfg.addB],
+      { requireWild: true },
+    );
+    if (boardAlreadyReady) {
       l11AwaitRiggedRef.current = true;
       return;
     }
@@ -3244,7 +3211,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       botHand,
       discardPile: [discardCard],
     });
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.equationResult, gameDispatch]);
+  }, [
+    engine.lessonIndex,
+    engine.stepIndex,
+    engine.phase,
+    gameState?.phase,
+    gameState?.equationResult,
+    gameState?.hasPlayedCards,
+    gameState?.currentPlayerIndex,
+    gameState?.players,
+    gameDispatch,
+  ]);
 
   // ג”€ג”€ L6.3 wild-finish await-mimic: always rig TUTORIAL_FORCE_SOLVED once with 7-card
   //    wild hand. No early-exit on “already solved” — the hand must always be replaced. ג”€ג”€
@@ -3881,7 +3858,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && engine.stepIndex === 0) {
       const id = setTimeout(() => {
         dispatchEngine({ type: 'CELEBRATE_DONE' });
-        setTimeout(() => dispatchEngine({ type: 'BOT_DEMO_DONE' }), 0);
       }, 900);
       return () => clearTimeout(id);
     }
@@ -4068,6 +4044,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     ? (l4Step3Phase === 'pickFirstDie' ? 'tutorial.l4c.hintFull'
        : l4Step3Phase === 'pickSecondDie' ? 'tutorial.l4c.hintPickSecondDie'
        : l4Step3Phase === 'pickOperator' ? 'tutorial.l4c.hintPickOperator'
+       : l4Step3Phase === 'missingSecondOperator' ? 'tutorial.l4c.hintMissingSecondOperator'
+       : l4Step3Phase === 'missingThirdDieOrCancelOperator' ? 'tutorial.l4c.hintAddNumberOrCancelSign'
        : l4Step3Phase === 'pickCard' ? 'tutorial.l4c.hintBuildProgress'
        : l4Step3Phase === 'wrongCard' ? 'tutorial.l4c.tryAgain'
        : l4Step3Phase === 'pressPlay' ? 'tutorial.l4c.hintPressPlay'
@@ -4318,6 +4296,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
     engine.stepIndex === 1 &&
     engine.phase === 'await-mimic';
+  const isL11AwaitBoardReady =
+    isL11PlayStep &&
+    engine.phase === 'await-mimic' &&
+    gameState?.phase === 'solved' &&
+    gameState?.hasPlayedCards === false &&
+    (gameState?.equationResult ?? l11Target) != null;
   const l11TopHintKey =
     engine.stepIndex === 0
       ? 'tutorial.multiPlayExercise.hint'
@@ -4412,7 +4396,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const isAndroidTutorialUi = Platform.OS === 'android';
   const tutorialTopControlRight = isAndroidTutorialUi ? 106 : 12;
   const tutorialTopBubbleInsets = isAndroidTutorialUi
-    ? { left: 104, right: 12 }
+    ? { left: 12, right: 104 }
     : { left: 16, right: 16 };
   const tutorialCompactBubbleMaxWidth = isAndroidTutorialUi ? 236 : 300;
   const tutorialNormalBubbleMaxWidth = isAndroidTutorialUi ? 276 : undefined;
@@ -5888,10 +5872,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         </View>
       )}
 
-      {engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX &&
-       (engine.stepIndex === 0 || engine.stepIndex === 1) &&
-       engine.phase === 'await-mimic' &&
-       !gameState?.hasPlayedCards && (
+      {isL11AwaitBoardReady && (
         <View
           pointerEvents="none"
           style={{
@@ -6899,6 +6880,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           cardGap={tutorialMockupCardGap}
           borderRadius={scaleTutorialWelcome(22, 11)}
           borderWidth={scaleTutorialWelcome(3, 1)}
+          t={t}
           onStart={() => {
             advancedStartedFromWelcomeRef.current = false;
             setShowWelcomeBubble(false);
