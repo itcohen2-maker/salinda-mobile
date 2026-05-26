@@ -14,6 +14,7 @@ import Button from '../ui/Button';
 import { useLocale } from '../../i18n/LocaleContext';
 import { CARDS_PER_PLAYER } from '../../../shared/gameConstants';
 import { LAST_PUSH } from '../../buildInfo';
+import { useAdminAccess } from '../../admin/useAdminAccess';
 
 interface StartScreenProps {
   onBackToChoice?: () => void;
@@ -41,6 +42,7 @@ export default function StartScreen({
   });
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [showRules, setShowRules] = useState(false);
+  const { isAdmin } = useAdminAccess();
 
   const maxPlayers = difficulty === 'easy' ? 8 : 10;
   const ta = isRTL ? 'right' : 'left';
@@ -268,14 +270,14 @@ export default function StartScreen({
           </View>
         </View>
       )}
-      <Text style={styles.lastPush}>עדכון אחרון: {LAST_PUSH}</Text>
+      {isAdmin && <Text style={styles.lastPush}>⚙ {LAST_PUSH}</Text>}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#111827' },
-  lastPush: { color: '#4B5563', fontSize: 10, textAlign: 'center', paddingBottom: 12, paddingTop: 4 },
+  lastPush: { color: '#6B7280', fontSize: 11, textAlign: 'center', paddingBottom: 12, paddingTop: 4 },
   container: { padding: 24, paddingTop: 60, alignItems: 'stretch' },
   containerCompact: { padding: 16, paddingTop: 40 },
 
