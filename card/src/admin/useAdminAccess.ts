@@ -16,7 +16,7 @@ export function useAdminAccess(): UseAdminAccessResult {
   useEffect(() => {
     let cancelled = false;
 
-    if (!user?.id) {
+    if (!user?.id || user.is_anonymous) {
       setIsAdmin(false);
       setLoading(false);
       return () => {
