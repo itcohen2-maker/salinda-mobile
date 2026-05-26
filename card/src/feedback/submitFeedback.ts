@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import type { PlayerProfile } from '../hooks/useAuth';
+import { LAST_PUSH } from '../buildInfo';
 import { supabase } from '../lib/supabase';
 import type { FeedbackExperienceKind } from './promptState';
 
@@ -19,9 +20,10 @@ interface SubmitFeedbackArgs {
 
 function resolveAppVersion(): string | null {
   const appVersion = Constants.expoConfig?.version;
-  return typeof appVersion === 'string' && appVersion.trim().length > 0
+  const base = typeof appVersion === 'string' && appVersion.trim().length > 0
     ? appVersion.trim()
     : null;
+  return base ? `${base} (${LAST_PUSH})` : LAST_PUSH || null;
 }
 
 function resolveUsernameSnapshot(user: User | null, profile: PlayerProfile | null): string | null {
