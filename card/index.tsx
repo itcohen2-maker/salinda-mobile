@@ -326,6 +326,7 @@ import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
 import { AdminCoinGiftsScreen } from './src/screens/AdminCoinGiftsScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { FeedbackInboxScreen } from './src/screens/FeedbackInboxScreen';
+import { AnalyticsScreen } from './src/screens/AnalyticsScreen';
 import {
   useSessionTrackingInternal,
   SessionTrackingContext,
@@ -10901,7 +10902,7 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth';
+type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth' | 'analytics';
 
 type WebBackdropTone = 'black' | 'white';
 
@@ -10919,7 +10920,7 @@ const WebPresentationContext = createContext<WebPresentationContextValue | null>
 
 function shouldShowAmbientBackground(playMode: ShellPlayMode, phase: GameState['phase']) {
   if (playMode === 'tutorial') return false;
-  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom' || playMode === 'feedback-inbox' || playMode === 'admin-coins') return true;
+  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom' || playMode === 'feedback-inbox' || playMode === 'admin-coins' || playMode === 'analytics') return true;
   return (playMode === 'local' || playMode === 'classroom-game') && (phase === 'turn-transition' || phase === 'game-over');
 }
 
@@ -20287,6 +20288,7 @@ export function PlayModeChoiceScreen({
   onShop,
   onOpenFeedbackInbox,
   onOpenAdminCoinGifts,
+  onOpenAnalytics,
   preferredName,
   onPreferredNameChange,
   onFeedbackSubmit,
@@ -20297,6 +20299,7 @@ export function PlayModeChoiceScreen({
   onShop: () => void;
   onOpenFeedbackInbox: () => void;
   onOpenAdminCoinGifts: () => void;
+  onOpenAnalytics: () => void;
   preferredName: string;
   onPreferredNameChange: (name: string) => void;
   onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
@@ -20567,6 +20570,16 @@ export function PlayModeChoiceScreen({
                   fontSize={14}
                   testID="home-feedback-inbox"
                   onPress={onOpenFeedbackInbox}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
+                />
+                <LulosButton
+                  text={locale === 'he' ? 'אנליטיקס' : 'Analytics'}
+                  color="orange"
+                  width={220}
+                  height={42}
+                  fontSize={14}
+                  testID="home-analytics"
+                  onPress={onOpenAnalytics}
                   style={{ marginTop: 12, alignSelf: 'center' }}
                 />
                 <LulosButton
@@ -21481,6 +21494,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       setPlayMode('choose');
       return;
     }
+    if (playMode === 'analytics') {
+      setPlayMode('choose');
+      return;
+    }
     if (playMode === 'admin-coins') {
       setAdminCoinGiftUsername(null);
       setPlayMode('choose');
@@ -21539,6 +21556,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           onShop={() => setShowShop(true)}
           onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
           onOpenAdminCoinGifts={() => openAdminCoinGifts()}
+          onOpenAnalytics={() => setPlayMode('analytics')}
           preferredName={preferredName}
           onPreferredNameChange={setPreferredName}
           onFeedbackSubmit={submitFeedbackFromPrompt}
@@ -21596,6 +21614,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         onBack={() => setPlayMode('choose')}
         onOpenAdminCoinGifts={openAdminCoinGifts}
       />
+    );
+  } else if (playMode === 'analytics') {
+    screen = (
+      <AnalyticsScreen onBack={() => setPlayMode('choose')} />
     );
   } else if (playMode === 'admin-coins') {
     screen = (
