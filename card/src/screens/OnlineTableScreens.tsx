@@ -751,8 +751,8 @@ export function LobbyScreen({
     isRTL ? styles.setupFieldLabelRtl : null,
   ];
   const setupPlayersLabelStyle = isRTL ? [styles.label, styles.labelRtl] : styles.label;
-  const setupRowStyle = [styles.row, styles.setupFieldRow];
-  const setupCountRowStyle = [styles.countRow, styles.setupFieldRow];
+  const setupRowStyle = [styles.row, styles.setupFieldRow, styles.optionOrderLtr];
+  const setupCountRowStyle = [styles.countRow, styles.setupFieldRow, styles.optionOrderLtr];
   const setupChipWrapStyle = [styles.chipWrap, styles.setupFieldRow];
   const setupHintStyle = [
     styles.hint,
@@ -761,7 +761,7 @@ export function LobbyScreen({
   ];
   const setupSecondaryBtnStyle = [styles.secondaryBtn, styles.setupActionBtn];
   const setupPrimaryBtnStyle = [styles.primaryBtn, styles.setupActionBtn];
-  const setupTimerGridStyle = [styles.timerGrid, styles.setupFieldRow];
+  const setupTimerGridStyle = [styles.timerGrid, styles.setupFieldRow, styles.optionOrderLtr];
   const setupTimerCustomRowStyle = [styles.timerCustomRow, styles.setupFieldRow];
   const minuteTimerStepper = {
     key: 'min',
@@ -923,21 +923,21 @@ export function LobbyScreen({
           <View testID="lobby-config-panel" style={setupPanelStyle}>
           <Text testID="lobby-config-number-range-label" style={setupLabelStyle}>{t('start.wheel.numberRange')}</Text>
           <View testID="lobby-config-number-range-row" style={setupRowStyle}>
-            <TouchableOpacity style={[styles.optionBtn, difficulty === 'full' && styles.optionBtnActive]} onPress={() => setDifficulty('full')}>
-              <Text style={[styles.optionBtnText, difficulty === 'full' && styles.optionBtnTextActive]}>0-25</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[styles.optionBtn, difficulty === 'easy' && styles.optionBtnActive]} onPress={() => setDifficulty('easy')}>
               <Text style={[styles.optionBtnText, difficulty === 'easy' && styles.optionBtnTextActive]}>0-12</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.optionBtn, difficulty === 'full' && styles.optionBtnActive]} onPress={() => setDifficulty('full')}>
+              <Text style={[styles.optionBtnText, difficulty === 'full' && styles.optionBtnTextActive]}>0-25</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={setupLabelStyle}>{t('lobby.privateToggle')}</Text>
           <View style={setupRowStyle}>
-            <TouchableOpacity style={[styles.optionBtn, visibility === 'public' && styles.optionBtnActive]} onPress={() => setVisibility('public')}>
-              <Text style={[styles.optionBtnText, visibility === 'public' && styles.optionBtnTextActive]}>{t('lobby.tablePublic')}</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[styles.optionBtn, visibility === 'private_locked' && styles.optionBtnActive]} onPress={() => setVisibility('private_locked')}>
               <Text style={[styles.optionBtnText, visibility === 'private_locked' && styles.optionBtnTextActive]}>{t('lobby.tablePrivate')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.optionBtn, visibility === 'public' && styles.optionBtnActive]} onPress={() => setVisibility('public')}>
+              <Text style={[styles.optionBtnText, visibility === 'public' && styles.optionBtnTextActive]}>{t('lobby.tablePublic')}</Text>
             </TouchableOpacity>
           </View>
           <Text style={setupHintStyle}>{t('lobby.privateHint')}</Text>
@@ -959,11 +959,11 @@ export function LobbyScreen({
             <>
               <Text style={setupLabelStyle}>{t('lobby.fractions')}</Text>
               <View style={setupRowStyle}>
-                <TouchableOpacity style={[styles.optionBtn, showFractions && styles.optionBtnActive]} onPress={() => setShowFractions(true)}>
-                  <Text style={[styles.optionBtnText, showFractions && styles.optionBtnTextActive]}>{t('lobby.withFractions')}</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={[styles.optionBtn, !showFractions && styles.optionBtnActive]} onPress={() => setShowFractions(false)}>
                   <Text style={[styles.optionBtnText, !showFractions && styles.optionBtnTextActive]}>{t('lobby.noFractions')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.optionBtn, showFractions && styles.optionBtnActive]} onPress={() => setShowFractions(true)}>
+                  <Text style={[styles.optionBtnText, showFractions && styles.optionBtnTextActive]}>{t('lobby.withFractions')}</Text>
                 </TouchableOpacity>
               </View>
               {showFractions && (
@@ -991,27 +991,27 @@ export function LobbyScreen({
 
               <Text style={setupLabelStyle}>{t('lobby.possibleResults')}</Text>
               <View style={setupRowStyle}>
-                <TouchableOpacity style={[styles.optionBtn, showPossibleResults && styles.optionBtnActive]} onPress={() => setShowPossibleResults(true)}>
-                  <Text style={[styles.optionBtnText, showPossibleResults && styles.optionBtnTextActive]}>{t('lobby.show')}</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={[styles.optionBtn, !showPossibleResults && styles.optionBtnActive]} onPress={() => setShowPossibleResults(false)}>
                   <Text style={[styles.optionBtnText, !showPossibleResults && styles.optionBtnTextActive]}>{t('lobby.hide')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.optionBtn, showPossibleResults && styles.optionBtnActive]} onPress={() => setShowPossibleResults(true)}>
+                  <Text style={[styles.optionBtnText, showPossibleResults && styles.optionBtnTextActive]}>{t('lobby.show')}</Text>
                 </TouchableOpacity>
               </View>
 
               <Text style={setupLabelStyle}>{t('lobby.solveExercise')}</Text>
               <View style={setupRowStyle}>
-                <TouchableOpacity style={[styles.optionBtn, showSolveExercise && styles.optionBtnActive]} onPress={() => setShowSolveExercise(true)}>
-                  <Text style={[styles.optionBtnText, showSolveExercise && styles.optionBtnTextActive]}>{t('lobby.on')}</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={[styles.optionBtn, !showSolveExercise && styles.optionBtnActive]} onPress={() => setShowSolveExercise(false)}>
                   <Text style={[styles.optionBtnText, !showSolveExercise && styles.optionBtnTextActive]}>{t('lobby.off')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.optionBtn, showSolveExercise && styles.optionBtnActive]} onPress={() => setShowSolveExercise(true)}>
+                  <Text style={[styles.optionBtnText, showSolveExercise && styles.optionBtnTextActive]}>{t('lobby.on')}</Text>
                 </TouchableOpacity>
               </View>
 
               <Text style={setupLabelStyle}>{t('lobby.turnTimer')}</Text>
               <View style={setupTimerGridStyle}>
-                {(['off', '15', '60', '90', 'custom'] as const).map((value) => (
+                {(['custom', '60', '90', 'off'] as const).map((value) => (
                   <TouchableOpacity
                     key={value}
                     style={[styles.timerChip, timerSetting === value && styles.optionBtnActive]}
@@ -1020,13 +1020,11 @@ export function LobbyScreen({
                     <Text style={[styles.optionBtnText, timerSetting === value && styles.optionBtnTextActive]}>
                       {value === 'off'
                         ? t('lobby.timerOff')
-                        : value === '15'
-                          ? t('lobby.timerSec', { n: 15 })
-                          : value === '60'
-                            ? t('lobby.timerMin')
-                            : value === '90'
-                              ? t('lobby.timerMinHalf')
-                              : t('lobby.timerCustom')}
+                        : value === '60'
+                          ? t('lobby.timerMin')
+                          : value === '90'
+                            ? t('lobby.timerMinHalf')
+                            : t('lobby.timerCustom')}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1230,6 +1228,7 @@ const styles = StyleSheet.create({
   setupFieldHintRtl: { writingDirection: 'rtl' },
   setupFieldRow: { width: '100%', maxWidth: 420, alignSelf: 'center', justifyContent: 'center' },
   setupActionBtn: { width: '100%', maxWidth: 420, alignSelf: 'center' },
+  optionOrderLtr: { direction: 'ltr' },
   sectionHeaderRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   refreshBtn: { backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
   refreshBtnText: { color: ACTION_GOLD, fontSize: 16, fontWeight: '700' },

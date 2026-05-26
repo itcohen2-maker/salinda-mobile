@@ -4433,6 +4433,18 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     Math.max(tutorialL6ReadExerciseFallbackTop, tutorialL6BubbleFrameHeight - 320),
   );
   const tutorialSideHintBubbleTop = tutorialWebAboveTableBubbleTop ?? 340;
+  const tutorialL5aSignTipFrameHeight =
+    webTutorialLayout?.frameHeight ?? tutorialViewport.height ?? 844;
+  const tutorialL5aTableBottom =
+    webTutorialLayout
+      ? webTutorialLayout.tableTop + webTutorialLayout.tableHeight
+      : nativeTutorialLayout
+        ? nativeTutorialLayout.tableTop + nativeTutorialLayout.tableHeight
+        : 445;
+  const tutorialL5aSignTipTop = Math.min(
+    Math.max(tutorialL5aTableBottom + 18, tutorialSafeTop + 156),
+    Math.max(tutorialSafeTop + 156, tutorialL5aSignTipFrameHeight - 330),
+  );
 
   // ג”€ג”€ Skip button: pushes the engine forward one phase. Lets us walk
   //    through the tutorial without performing every action. ג”€ג”€
@@ -5234,28 +5246,30 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         <>
           <View
             pointerEvents="auto"
+            testID="tutorial-l5a-sign-tip-scrim"
             style={{
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(5,10,22,0.90)',
+              backgroundColor: 'rgba(5,10,22,0.44)',
               zIndex: 9250,
             }}
           />
           <View
             pointerEvents="none"
             style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              alignItems: 'center', justifyContent: 'center',
+              position: 'absolute', top: tutorialL5aSignTipTop, left: 0, right: 0,
+              alignItems: 'center',
               paddingHorizontal: 24, zIndex: 9260,
             }}
           >
             <View
+              testID="tutorial-l5a-sign-tip-card"
               style={{
                 maxWidth: 360, width: '100%',
-                borderRadius: 24,
-                backgroundColor: 'rgba(15,23,42,0.97)',
+                borderRadius: 18,
+                backgroundColor: '#0F172A',
                 borderWidth: 2.5, borderColor: '#818CF8',
-                paddingVertical: 24, paddingHorizontal: 20,
-                gap: 14, alignItems: 'center',
+                paddingVertical: 14, paddingHorizontal: 16,
+                gap: 8, alignItems: 'center',
                 ...Platform.select({
                   ios: { shadowColor: '#818CF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 18 },
                   android: { elevation: 14 },
@@ -5263,7 +5277,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               }}
             >
               {/* ׳›׳•׳×׳¨׳× */}
-              <Text style={{ color: '#FCD34D', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+              <Text style={{ color: '#FCD34D', fontSize: 18, lineHeight: 22, fontWeight: '900', textAlign: 'center' }}>
                 {t('tutorial.signCard.title')}
               </Text>
               {/* Mini operation-cards visual */}
@@ -5272,18 +5286,18 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   const opColors = ['#EA4335', '#FBBC05', '#34A853', '#2196F3'];
                   return (
                     <View key={op} style={{
-                      width: 56, height: 72, borderRadius: 12,
+                      width: 44, height: 56, borderRadius: 10,
                       backgroundColor: '#1E1B4B',
                       borderWidth: 2, borderColor: opColors[i],
                       alignItems: 'center', justifyContent: 'center',
                     }}>
-                      <Text style={{ fontSize: 28, color: opColors[i], fontWeight: '900' }}>{op}</Text>
+                      <Text style={{ fontSize: 23, color: opColors[i], fontWeight: '900' }}>{op}</Text>
                     </View>
                   );
                 })}
               </View>
               {/* Body */}
-              <Text style={{ color: '#F8FAFC', fontSize: 17, fontWeight: '800', textAlign: 'center', lineHeight: 26 }}>
+              <Text style={{ color: '#F8FAFC', fontSize: 14, fontWeight: '800', textAlign: 'center', lineHeight: 19 }}>
                 {t('tutorial.signCard.body')}
               </Text>
             </View>

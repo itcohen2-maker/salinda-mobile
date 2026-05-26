@@ -5,6 +5,8 @@
 // Outside tutorial mode, nothing subscribes, so emit is a no-op.
 // ============================================================
 
+import type { L4EquationProgress } from './l4EquationProgress';
+
 export type FanDemoEasing = 'sweep' | 'settle';
 
 export type FanDemoCmd =
@@ -60,6 +62,7 @@ export type UserEvent =
   /** Fired when the learner manually taps a die in the EquationBuilder
    *  (NOT via tutorialBus). Lessons can match on a specific die index. */
   | { kind: 'eqUserPickedDice'; idx: number }
+  | ({ kind: 'l4EquationProgress' } & L4EquationProgress)
   /** Lesson 5: learner chose an operation for the scratch equation slot
    *  (by tapping the slot to cycle, or by picking one in the joker modal). */
   | { kind: 'opSelected'; op: '+' | '-' | 'x' | '÷'; via: 'cycle' | 'joker' }

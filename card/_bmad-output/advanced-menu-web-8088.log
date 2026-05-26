@@ -1,8 +1,0 @@
-
-> salinda-game@1.0.0 web
-> expo start --web --port 8088
-
-env: load .env
-env: export EXPO_PUBLIC_LOCAL_SOCKET_SERVER EXPO_PUBLIC_SERVER_URL EXPO_PUBLIC_WEB_APP_URL EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
-Starting project at C:\Users\asus\bmad\card
-Starting Metro Bundler

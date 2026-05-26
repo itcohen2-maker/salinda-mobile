@@ -7,7 +7,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SlindaCoin } from '../../components/SlindaCoin';
-import { SpinningCard } from '../components/SpinningCard';
 import { ThemePreview } from '../components/ThemePreview';
 import { THEMES, THEME_IDS, type ThemeId } from '../theme/themes';
 import { TABLE_SKINS, TABLE_SKIN_IDS, type TableSkinId } from '../theme/tableSkins';
@@ -18,12 +17,8 @@ import { useWebViewportSize } from '../hooks/useWebViewportSize';
 import { getWebContentWidth } from '../theme/webLayout';
 import { activateTableSkin } from '../theme/activateTableSkin';
 import { getScreenSafeTop } from '../theme/screenInsets';
-import { SALINDA_CATALOG } from '../../shared/salindaEconomy';
 
-const SALINDA_IMAGE = require('../../assets/salinda-transparent.png');
 const CLASSIC_TABLE_IMAGE = require('../../assets/table_green_default.png');
-const SLINDA_PRICE = SALINDA_CATALOG.salinda_card.price;
-const WILD_PRICE = SALINDA_CATALOG.wild_card.price;
 
 type FeedbackTone = 'success' | 'error';
 
@@ -40,38 +35,9 @@ function isTableSkinId(value: string | null | undefined): value is TableSkinId {
   return !!value && TABLE_SKIN_IDS.includes(value as TableSkinId);
 }
 
-function WildPreviewFace({ width }: { width: number }) {
-  const height = Math.round(width * (3.5 / 2.5));
-  return (
-    <View style={{ width, height, borderRadius: 14, overflow: 'hidden' }}>
-      <LinearGradient
-        colors={['#7C3AED', '#5B21B6', '#4C1D95', '#6D28D9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ flex: 1, padding: 3 }}
-      >
-        <View style={styles.wildPreviewInner}>
-          <LinearGradient
-            colors={['#EDE9FE', '#DDD6FE', '#C4B5FD']}
-            locations={[0, 0.5, 1]}
-            start={{ x: 0.3, y: 0 }}
-            end={{ x: 0.7, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.wildPreviewGlow} />
-          <View style={styles.wildPreviewCenter}>
-            <Text style={styles.wildPreviewStar}>★</Text>
-            <Text style={styles.wildPreviewRange}>0-25</Text>
-          </View>
-        </View>
-      </LinearGradient>
-    </View>
-  );
-}
-
 export function ShopScreen({ visible, onClose }: Props) {
   const { t, locale, isRTL } = useLocale();
-  const { profile, purchaseSlinda, purchaseWild, purchaseTheme, purchaseTableSkin, setActiveSkin } = useAuth();
+  const { profile, purchaseTheme, purchaseTableSkin, setActiveSkin } = useAuth();
   const { background } = useActiveTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -84,8 +50,6 @@ export function ShopScreen({ visible, onClose }: Props) {
   const headerTopPadding = Platform.OS === 'ios' ? 16 : 16;
   const shouldRightAlignTitle = isRTL && (Platform.OS === 'android' || Platform.OS === 'ios');
   const shouldRightAlignAll = isRTL && Platform.OS === 'ios';
-  const [slindaLoading, setSlindaLoading] = useState(false);
-  const [wildLoading, setWildLoading] = useState(false);
   const [themeLoading, setThemeLoading] = useState<ThemeId | null>(null);
   const [tableSkinLoading, setTableSkinLoading] = useState<TableSkinId | null>(null);
   const [activationLoading, setActivationLoading] = useState<string | null>(null);
@@ -95,8 +59,6 @@ export function ShopScreen({ visible, onClose }: Props) {
   const [previewTableSkin, setPreviewTableSkin] = useState<TableSkinId | 'none' | null>(null);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
 
-  const slindaOwned = profile?.slinda_owned ?? false;
-  const wildOwned = profile?.wild_owned ?? false;
   const rawOwnedThemes = profile?.themes_owned ?? ['classic'];
   const ownedThemes = THEME_IDS.filter((themeId) => themeId === 'classic' || rawOwnedThemes.includes(themeId));
   const rawOwnedTableSkins = profile?.table_skins_owned ?? [];
@@ -142,44 +104,6 @@ export function ShopScreen({ visible, onClose }: Props) {
 
   function isThemeFullyActive(themeId: ThemeId) {
     return activeBackgroundThemeId === themeId && activeTableThemeId === themeId;
-  }
-
-  async function handleBuySlinda() {
-    if (slindaOwned || slindaLoading) return;
-    if (coins < SLINDA_PRICE) {
-      clearFeedback();
-      showError(t('shop.insufficientCoins'));
-      return;
-    }
-    setSlindaLoading(true);
-    clearFeedback();
-    try {
-      const result = await purchaseSlinda();
-      if (result === 'ok') showSuccess(t('shop.purchaseSuccess'));
-      else if (result === 'insufficient_coins') showError(t('shop.insufficientCoins'));
-      else if (result !== 'already_owned') showError(t('shop.purchaseError'));
-    } finally {
-      setSlindaLoading(false);
-    }
-  }
-
-  async function handleBuyWild() {
-    if (wildOwned || wildLoading) return;
-    if (coins < WILD_PRICE) {
-      clearFeedback();
-      showError(t('shop.insufficientCoins'));
-      return;
-    }
-    setWildLoading(true);
-    clearFeedback();
-    try {
-      const result = await purchaseWild();
-      if (result === 'ok') showSuccess(t('shop.purchaseSuccess'));
-      else if (result === 'insufficient_coins') showError(t('shop.insufficientCoins'));
-      else if (result !== 'already_owned') showError(t('shop.purchaseError'));
-    } finally {
-      setWildLoading(false);
-    }
   }
 
   async function handleBuyTheme(themeId: ThemeId) {
@@ -258,104 +182,6 @@ export function ShopScreen({ visible, onClose }: Props) {
     } finally {
       setActivationLoading(null);
     }
-  }
-  function renderSpecialCard({
-    kind,
-    name,
-    description,
-    price,
-    owned,
-    loading,
-    onBuy,
-  }: {
-    kind: 'slinda' | 'wild';
-    name: string;
-    description: string;
-    price: number;
-    owned: boolean;
-    loading: boolean;
-    onBuy: () => void;
-  }) {
-    const canAfford = coins >= price;
-    const btnDisabled = owned || loading;
-    const btnStyle = owned ? styles.btnOwned : !canAfford ? styles.btnLocked : styles.btnBuy;
-    const preview = kind === 'slinda'
-      ? (
-          <SpinningCard
-            frontSource={SALINDA_IMAGE}
-            width={104}
-            speed={28}
-            backLabel={name}
-            active={visible}
-          />
-        )
-      : (
-          <SpinningCard
-            width={104}
-            speed={28}
-            backLabel={name}
-            active={visible}
-            front={<WildPreviewFace width={104} />}
-          />
-        );
-
-    return (
-      <View style={styles.specialCard}>
-        <LinearGradient
-          colors={['rgba(252,211,77,0.08)', 'rgba(252,211,77,0.03)', 'transparent']}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.specialCardInner}>
-          <View style={styles.cardCol}>
-            {preview}
-          </View>
-          <View style={styles.infoCol}>
-            <View style={styles.infoTop}>
-              <View style={[styles.itemBadge, shouldRightAlignAll ? styles.itemBadgeRtl : null]}>
-                <Text style={[styles.itemBadgeText, shouldRightAlignAll ? styles.rtlText : null]}>
-                  {t('shop.specialCardBadge')}
-                </Text>
-              </View>
-              <Text style={[styles.cardName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
-                {name}
-              </Text>
-              <Text style={[styles.cardType, shouldRightAlignAll ? styles.rtlTextFull : null]}>
-                {description}
-              </Text>
-            </View>
-            <View style={styles.specialCardBottom}>
-              <View style={styles.infoSep} />
-              <View style={[styles.priceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
-                <SlindaCoin size={16} />
-                <Text style={styles.priceValue}>{price}</Text>
-                <Text style={[styles.priceMeta, shouldRightAlignAll ? styles.rtlText : null]}>
-                  {t('shop.coinsUnit')}
-                </Text>
-              </View>
-              {!owned && !canAfford && (
-                <Text style={[styles.shortfall, shouldRightAlignAll ? styles.rtlTextFull : null]}>
-                  {t('shop.shortfall', { count: price - coins })}
-                </Text>
-              )}
-              <TouchableOpacity
-                style={[styles.btn, btnStyle]}
-                onPress={onBuy}
-                disabled={btnDisabled}
-                activeOpacity={0.8}
-                testID={`shop-${kind}-buy`}
-              >
-                {loading
-                  ? <ActivityIndicator color="#FFF" size="small" />
-                  : <Text style={styles.btnText}>
-                      {owned ? t('shop.ownedButton') : !canAfford ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}
-                    </Text>
-                }
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
   }
 
   function handleClose() {
@@ -576,27 +402,6 @@ export function ShopScreen({ visible, onClose }: Props) {
               scrollEventThrottle={16}
               contentContainerStyle={styles.scrollBody}
             >
-            <View style={styles.specialProductsWrap}>
-              {renderSpecialCard({
-                kind: 'slinda',
-                name: t('shop.slindaCard.name'),
-                description: t('shop.slindaCard.description'),
-                price: SLINDA_PRICE,
-                owned: slindaOwned,
-                loading: slindaLoading,
-                onBuy: handleBuySlinda,
-              })}
-              {renderSpecialCard({
-                kind: 'wild',
-                name: t('shop.wildCard.name'),
-                description: t('shop.wildCard.description'),
-                price: WILD_PRICE,
-                owned: wildOwned,
-                loading: wildLoading,
-                onBuy: handleBuyWild,
-              })}
-            </View>
-
             <SectionHeader title={t('shop.themesSection')} rightAligned={shouldRightAlignAll} />
             <Text style={[styles.subsectionTitle, shouldRightAlignAll ? styles.rtlTextFull : null]}>
               {t('shop.backgroundsTitle')}
@@ -880,7 +685,6 @@ const sectionHeaderStyles = StyleSheet.create({
 
 const GOLD = '#FCD34D';
 const GOLD_LIGHT = '#FDE68A';
-const GOLD_DIM = 'rgba(252,211,77,0.6)';
 
 const styles = StyleSheet.create({
   overlay: {
@@ -992,71 +796,9 @@ const styles = StyleSheet.create({
   dividerGradient: { height: 1, width: '100%', marginBottom: 4 },
   scrollBody: { paddingBottom: 10 },
 
-  specialProductsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'stretch',
-    gap: 12,
-    paddingHorizontal: 16,
-    marginTop: 20,
-  },
-  specialCard: {
-    flexGrow: 1,
-    flexBasis: 0,
-    minWidth: 300,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(252,211,77,0.2)',
-    overflow: 'hidden',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 4px 32px rgba(252,211,77,0.08)' } as any
-      : { shadowColor: GOLD, shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 4 }, elevation: 8 }),
-  },
-  specialCardInner: { flexDirection: 'row', alignItems: 'stretch', padding: 20, gap: 16, minHeight: 236 },
-  cardCol: { alignItems: 'center', justifyContent: 'center' },
-  infoCol: { flex: 1, paddingTop: 2, justifyContent: 'space-between' },
-  infoTop: { gap: 6 },
-  specialCardBottom: { gap: 6 },
-  itemBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(252,211,77,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(252,211,77,0.3)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 2,
-  },
-  itemBadgeText: { color: GOLD_DIM, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  cardName: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', letterSpacing: 0.3 },
-  cardType: { color: 'rgba(253,230,138,0.7)', fontSize: 12, fontWeight: '500', fontStyle: 'italic' },
-  infoSep: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 4 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   priceRowRtl: { alignSelf: 'flex-end' },
-  priceValue: { color: GOLD, fontSize: 16, fontWeight: '900' },
-  priceMeta: { color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: '500' },
-  shortfall: { color: '#F87171', fontSize: 11, fontWeight: '700' },
-  btn: { borderRadius: 10, paddingVertical: 11, alignItems: 'center', marginTop: 4 },
-  btnBuy: { backgroundColor: '#15803D' },
-  btnOwned: { backgroundColor: 'rgba(255,255,255,0.08)' },
-  btnLocked: { backgroundColor: 'rgba(255,255,255,0.06)', opacity: 0.7 },
-  btnText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
-  itemBadgeRtl: { alignSelf: 'flex-end' },
   rtlText: { textAlign: 'right', writingDirection: 'rtl' },
   rtlTextFull: { width: '100%', textAlign: 'right', writingDirection: 'rtl' },
-  wildPreviewInner: { flex: 1, borderRadius: 11, overflow: 'hidden' },
-  wildPreviewGlow: {
-    position: 'absolute',
-    top: '-12%',
-    left: '10%',
-    width: '80%',
-    height: '40%',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  wildPreviewCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  wildPreviewStar: { color: '#5B21B6', fontSize: 28, fontWeight: '900', textAlign: 'center' },
-  wildPreviewRange: { color: '#6D28D9', fontSize: 12, fontWeight: '800', marginTop: 2, textAlign: 'center' },
 
   horizontalList: { paddingHorizontal: 16, paddingBottom: 4, gap: 10 },
   subsectionTitle: {

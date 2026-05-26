@@ -598,18 +598,18 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
       {isHost && (
         <>
           <Text style={styles.label}>{t('start.wheel.numberRange')}</Text>
-          <View style={styles.diffRow}>
-            <TouchableOpacity
-              style={[styles.diffBtn, difficulty === 'full' && styles.diffBtnActive]}
-              onPress={() => setDifficulty('full')}
-            >
-              <Text style={[styles.diffText, difficulty === 'full' && styles.diffTextActive]}>0-25</Text>
-            </TouchableOpacity>
+          <View style={[styles.diffRow, styles.optionOrderLtr]}>
             <TouchableOpacity
               style={[styles.diffBtn, difficulty === 'easy' && styles.diffBtnActive]}
               onPress={() => setDifficulty('easy')}
             >
               <Text style={[styles.diffText, difficulty === 'easy' && styles.diffTextActive]}>0-12</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.diffBtn, difficulty === 'full' && styles.diffBtnActive]}
+              onPress={() => setDifficulty('full')}
+            >
+              <Text style={[styles.diffText, difficulty === 'full' && styles.diffTextActive]}>0-25</Text>
             </TouchableOpacity>
           </View>
 
@@ -646,18 +646,18 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
           </View>
 
           <Text style={styles.label}>{t('lobby.fractions')}</Text>
-          <View style={styles.diffRow}>
-            <TouchableOpacity
-              style={[styles.diffBtn, showFractions && styles.diffBtnActive]}
-              onPress={() => setShowFractions(true)}
-            >
-              <Text style={[styles.diffText, showFractions && styles.diffTextActive]}>{t('lobby.withFractions')}</Text>
-            </TouchableOpacity>
+          <View style={[styles.diffRow, styles.optionOrderLtr]}>
             <TouchableOpacity
               style={[styles.diffBtn, !showFractions && styles.diffBtnActive]}
               onPress={() => setShowFractions(false)}
             >
               <Text style={[styles.diffText, !showFractions && styles.diffTextActive]}>{t('lobby.noFractions')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.diffBtn, showFractions && styles.diffBtnActive]}
+              onPress={() => setShowFractions(true)}
+            >
+              <Text style={[styles.diffText, showFractions && styles.diffTextActive]}>{t('lobby.withFractions')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -683,13 +683,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
           )}
 
           <Text style={styles.label}>{t('lobby.possibleResults')}</Text>
-          <View style={styles.diffRow}>
-            <TouchableOpacity
-              style={[styles.diffBtn, showPossibleResults && styles.diffBtnActive]}
-              onPress={() => setShowPossibleResults(true)}
-            >
-              <Text style={[styles.diffText, showPossibleResults && styles.diffTextActive]}>{t('lobby.show')}</Text>
-            </TouchableOpacity>
+          <View style={[styles.diffRow, styles.optionOrderLtr]}>
             <TouchableOpacity
               style={[styles.diffBtn, !showPossibleResults && styles.diffBtnActive]}
               onPress={() => {
@@ -699,33 +693,38 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
             >
               <Text style={[styles.diffText, !showPossibleResults && styles.diffTextActive]}>{t('lobby.hide')}</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.diffBtn, showPossibleResults && styles.diffBtnActive]}
+              onPress={() => setShowPossibleResults(true)}
+            >
+              <Text style={[styles.diffText, showPossibleResults && styles.diffTextActive]}>{t('lobby.show')}</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.label}>{t('lobby.solveExercise')}</Text>
-          <View style={styles.diffRow}>
-            <TouchableOpacity
-              style={[styles.diffBtn, showSolveExercise && styles.diffBtnActive, !showPossibleResults && styles.diffBtnDisabled]}
-              onPress={() => showPossibleResults && setShowSolveExercise(true)}
-            >
-              <Text style={[styles.diffText, showSolveExercise && styles.diffTextActive]}>{t('lobby.on')}</Text>
-            </TouchableOpacity>
+          <View style={[styles.diffRow, styles.optionOrderLtr]}>
             <TouchableOpacity
               style={[styles.diffBtn, !showSolveExercise && styles.diffBtnActive]}
               onPress={() => setShowSolveExercise(false)}
             >
               <Text style={[styles.diffText, !showSolveExercise && styles.diffTextActive]}>{t('lobby.off')}</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.diffBtn, showSolveExercise && styles.diffBtnActive, !showPossibleResults && styles.diffBtnDisabled]}
+              onPress={() => showPossibleResults && setShowSolveExercise(true)}
+            >
+              <Text style={[styles.diffText, showSolveExercise && styles.diffTextActive]}>{t('lobby.on')}</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={styles.label}>{t('lobby.turnTimer')}</Text>
-          <View style={styles.timerGrid}>
+          <View style={[styles.timerGrid, styles.optionOrderLtr]}>
             {(
               [
-                ['off', t('lobby.timerOff')] as const,
-                ['15', t('lobby.timerSec', { n: 15 })] as const,
+                ['custom', t('lobby.timerCustom')] as const,
                 ['60', t('lobby.timerMin')] as const,
                 ['90', t('lobby.timerMinHalf')] as const,
-                ['custom', t('lobby.timerCustom')] as const,
+                ['off', t('lobby.timerOff')] as const,
               ]
             ).map(([key, label]) => (
               <TouchableOpacity
@@ -957,6 +956,7 @@ const styles = StyleSheet.create({
   botBadge: { backgroundColor: 'rgba(34,211,238,0.18)', color: brand.cyan, fontSize: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
   disconnectedBadge: { color: '#EF4444', fontSize: 10 },
   diffRow: { flexDirection: 'row', gap: 10, width: '100%', marginBottom: 8 },
+  optionOrderLtr: { direction: 'ltr' },
   diffBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
   diffBtnActive: { backgroundColor: brand.gold },
   diffBtnDisabled: { opacity: 0.45 },

@@ -50,6 +50,8 @@ const NEW_TUTORIAL_KEYS = [
   'tutorial.l4c.hintFull',
   'tutorial.l4c.hintPickSecondDie',
   'tutorial.l4c.hintPickOperator',
+  'tutorial.l4c.hintMissingSecondOperator',
+  'tutorial.l4c.hintAddNumberOrCancelSign',
   'tutorial.l4c.hintBuildProgress',
   'tutorial.l4c.hintPressPlay',
   'tutorial.l4c.tryAgain',

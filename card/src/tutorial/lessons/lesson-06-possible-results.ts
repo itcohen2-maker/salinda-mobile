@@ -34,8 +34,8 @@ export const lesson06PossibleResults: Lesson = {
   steps: [
     {
       id: 'open-chip',
-      // Wait long enough for the solved reference equation to be readable
-      // before control moves to the learner.
+      // Wait long enough for the rolled dice results to be readable before
+      // control moves to the learner.
       botDemo: async (api) => { await api.wait(900); },
       outcome: (e) => e.kind === 'resultsChipTapped',
       hintKey: 'tutorial.l6a.hintTapChip',
