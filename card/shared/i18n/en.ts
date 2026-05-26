@@ -1395,10 +1395,10 @@ export const en: Record<string, string> = {
   'tutorial.l7.theory.hint': 'Tap Continue once you understand the mechanic.',
   'tutorial.l7.theory.celebrate': 'Let\'s test it out!',
   'tutorial.l7.attackHalf.bot': 'The pile number is divisible by 2. Play one-half (½) to attack!',
-  'tutorial.l7.attackHalf.hint': 'Select a matching fraction card.',
+  'tutorial.l7.attackHalf.hint': 'Choose a matching fraction card.',
   'tutorial.l7.attackHalf.celebrate': '🎉 Perfect strike! Attack launched — now for exercise two.',
   'tutorial.l7.attackThird.bot': 'The pile number is divisible by 3. Play one-third (⅓) to attack!',
-  'tutorial.l7.attackThird.hint': 'Select a matching fraction card.',
+  'tutorial.l7.attackThird.hint': 'Choose a matching fraction card.',
   'tutorial.l7.attackThird.celebrate': 'Phenomenal! Both fraction strikes are down. Ready to handle incoming ones?',
   'tutorial.l7.defendHalf.bot': 'A ½ attack is incoming! Intercept it with a number divisible by 2 (e.g., 4, 6, 8).',
   'tutorial.l7.defendHalf.hint': 'Tap a valid number card to defend your hand.',
@@ -1417,7 +1417,7 @@ export const en: Record<string, string> = {
   'tutorial.l8.bot': 'Take note: the orange button shifts the parentheses rules.',
   'tutorial.l8.hint': 'Tap the orange button to reposition the parentheses to hit the objective.',
   'tutorial.l8.copyFullExercise': 'Replicate the exact equation layout to match the red chip.',
-  'tutorial.l8.continueParens': 'Next up: deploy the orange button to slide parentheses into position.',
+  'tutorial.l8.continueParens': 'Use the orange button to move the parentheses.',
   'tutorial.l8.secondExerciseHint': 'Select a mini card and copy its complete equation syntax.',
   'tutorial.l8.celebrate': 'Superb — you shifted the parentheses perfectly!',
   'tutorial.l8.mismatch': 'Not quite — audit the parentheses slots and try again.',
@@ -1608,8 +1608,61 @@ export const en: Record<string, string> = {
   'courage.coinAward.body': 'Excellence meter peaked — 1 gold credit routed to your profile vault.',
 
   // Accessibility labels (E.3, E.4)
-  'game.swapBrackets': 'Shift parentheses layout anchors',
+  'game.swapBrackets': 'Move parentheses',
   'a11y.card': 'Card data block {{value}}',
   'a11y.die': 'Active die face reading {{value}}',
   'a11y.joker': 'Slinda core card unit',
+
+  'analytics.title': 'Analytics',
+  'analytics.back': 'Back',
+  'analytics.refresh': 'Refresh',
+
+  'analytics.liveTitle': 'Online now',
+  'analytics.liveBadge': 'LIVE',
+  'analytics.onlineNow': 'Active users',
+
+  'analytics.entriesTitle': 'App entries',
+  'analytics.lastHour': 'Last hour',
+  'analytics.today': 'Today',
+  'analytics.last7d': '7 days',
+  'analytics.last30d': '30 days',
+
+  'analytics.totalsTitle': 'Total sessions',
+  'analytics.total': 'Total',
+  'analytics.anonymous': 'Anonymous',
+  'analytics.registered': 'Registered',
+  'analytics.avgDuration': 'Avg duration',
+
+  'analytics.platformTitle': 'By platform',
+  'analytics.platformWeb': 'Web',
+  'analytics.platformAndroid': 'Android',
+  'analytics.platformIos': 'iOS',
+
+  'analytics.activityTitle': 'Activity',
+  'analytics.gamesPlayed': 'Games',
+  'analytics.tutorialsCompleted': 'Tutorials',
+  'analytics.feedbacks': 'Feedbacks',
+  'analytics.registrations': 'Registrations',
+  'analytics.appOpens': 'App opens',
+  'analytics.lessonCompletes': 'Lessons',
+
+  'analytics.autoRefreshHint': 'Auto-refreshing',
+  'analytics.updatedAt': 'Updated',
+
+  'analytics.filterAll': 'All',
+  'analytics.filterAllUsers': 'All users',
+  'analytics.filterAnonymous': 'Anonymous',
+  'analytics.filterRegistered': 'Registered',
+
+  'analytics.badgeAnonymous': 'Anonymous',
+  'analytics.badgeRegistered': 'Registered',
+
+  'analytics.durationLabel': 'Duration',
+  'analytics.eventsLabel': 'events',
+
+  'analytics.empty': 'No sessions found.',
+  'analytics.error': 'Could not load sessions. Please try again.',
+  'analytics.statsError': 'Could not load statistics.',
+  'analytics.noAccess': 'Access restricted',
+  'analytics.noAccessBody': 'This screen is only available to allowlisted admins.',
 };

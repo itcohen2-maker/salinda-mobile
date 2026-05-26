@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +28,21 @@ interface AppSession {
   session_end: string | null;
   last_seen_at: string;
   event_count: number;
+}
+
+interface AdminAnalytics {
+  online_now: number;
+  online_by_platform: Record<string, number>;
+  entries_last_hour: number;
+  entries_today: number;
+  entries_7d: number;
+  entries_30d: number;
+  total: number;
+  anonymous: number;
+  registered: number;
+  avg_duration_seconds: number | null;
+  by_platform: Record<string, number>;
+  by_activity: Record<string, number>;
 }
 
 interface AnalyticsScreenProps {
@@ -56,8 +72,16 @@ function platformBadgeStyle(platform: string) {
   return styles.badgeWeb;
 }
 
+function formatAvgDuration(seconds: number | null): string {
+  if (seconds === null || seconds === undefined) return '—';
+  const s = Math.round(seconds);
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m === 0 ? `${rem}s` : `${m}m ${rem}s`;
+}
+
 export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
-  const { isRTL } = useLocale();
+  const { t, isRTL } = useLocale();
   const { isAdmin, loading: adminLoading } = useAdminAccess();
 
   const [sessions, setSessions] = useState<AppSession[]>([]);
@@ -66,6 +90,23 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
 
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [userTypeFilter, setUserTypeFilter] = useState<UserTypeFilter>('all');
+
+  const [stats, setStats] = useState<AdminAnalytics | null>(null);
+  const [statsError, setStatsError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const liveOpacity = React.useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(liveOpacity, { toValue: 0.3, duration: 750, useNativeDriver: true }),
+        Animated.timing(liveOpacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [liveOpacity]);
 
   const loadSessions = useCallback(async () => {
     if (!isAdmin) {
@@ -117,6 +158,26 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
     void loadSessions();
   }, [loadSessions]);
 
+  const loadStats = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const { data, error } = await supabase.rpc('get_admin_analytics');
+      if (error || !data) { setStatsError(true); return; }
+      setStats(data as AdminAnalytics);
+      setStatsError(false);
+      setLastUpdated(new Date());
+    } catch {
+      setStatsError(true);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadStats();
+    const interval = setInterval(() => { void loadStats(); }, 10_000);
+    return () => clearInterval(interval);
+  }, [isAdmin, loadStats]);
+
   if (adminLoading) {
     return (
       <View style={styles.loadingShell}>
@@ -134,39 +195,36 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
             style={styles.headerButton}
             testID="analytics-back-button"
           >
-            <Text style={styles.headerButtonText}>Back</Text>
+            <Text style={styles.headerButtonText}>{t('analytics.back')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.centerCard}>
-          <Text style={styles.centerTitle}>Access restricted</Text>
-          <Text style={styles.centerBody}>
-            This screen is only available to allowlisted admins.
-          </Text>
+          <Text style={styles.centerTitle}>{t('analytics.noAccess')}</Text>
+          <Text style={styles.centerBody}>{t('analytics.noAccessBody')}</Text>
         </View>
       </View>
     );
   }
 
-  // Compute summary stats
-  const totalCount = sessions.length;
-  const anonymousCount = sessions.filter((s) => s.is_anonymous).length;
-  const registeredCount = totalCount - anonymousCount;
-  const completedSessions = sessions.filter((s) => s.session_end !== null);
-  let avgDurationLabel = '—';
-  if (completedSessions.length > 0) {
-    const totalMs = completedSessions.reduce((acc, s) => {
-      const diff = new Date(s.session_end!).getTime() - new Date(s.session_start).getTime();
-      return acc + (Number.isNaN(diff) || diff < 0 ? 0 : diff);
-    }, 0);
-    const avgMs = totalMs / completedSessions.length;
-    const avgSeconds = Math.floor(avgMs / 1000);
-    const avgMin = Math.floor(avgSeconds / 60);
-    const avgSec = avgSeconds % 60;
-    avgDurationLabel = avgMin === 0 ? `${avgSec}s` : `${avgMin}m ${avgSec}s`;
-  }
-
   const platformOptions: PlatformFilter[] = ['all', 'android', 'ios', 'web'];
   const userTypeOptions: UserTypeFilter[] = ['all', 'anonymous', 'registered'];
+
+  const onlinePlatformText = stats
+    ? [
+        `${t('analytics.platformWeb')}: ${stats.online_by_platform['web'] ?? 0}`,
+        `${t('analytics.platformAndroid')}: ${stats.online_by_platform['android'] ?? 0}`,
+        `${t('analytics.platformIos')}: ${stats.online_by_platform['ios'] ?? 0}`,
+      ].join('  ')
+    : '';
+
+  const activityKeys: Array<{ key: string; label: string }> = [
+    { key: 'game_played', label: t('analytics.gamesPlayed') },
+    { key: 'tutorial_complete', label: t('analytics.tutorialsCompleted') },
+    { key: 'feedback_submitted', label: t('analytics.feedbacks') },
+    { key: 'user_registered', label: t('analytics.registrations') },
+    { key: 'app_open', label: t('analytics.appOpens') },
+    { key: 'tutorial_lesson_complete', label: t('analytics.lessonCompletes') },
+  ];
 
   return (
     <View style={styles.screen}>
@@ -177,92 +235,180 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
           style={styles.headerButton}
           testID="analytics-back-button"
         >
-          <Text style={styles.headerButtonText}>Back</Text>
+          <Text style={styles.headerButtonText}>{t('analytics.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Analytics</Text>
+        <Text style={styles.headerTitle}>{t('analytics.title')}</Text>
         <TouchableOpacity onPress={() => void loadSessions()} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>Refresh</Text>
+          <Text style={styles.headerButtonText}>{t('analytics.refresh')}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Summary chips */}
-      <View style={[styles.summaryRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>{totalCount}</Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>{anonymousCount}</Text>
-          <Text style={styles.statLabel}>Anonymous</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>{registeredCount}</Text>
-          <Text style={styles.statLabel}>Registered</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Text style={styles.statValue}>{avgDurationLabel}</Text>
-          <Text style={styles.statLabel}>Avg duration</Text>
-        </View>
-      </View>
-
-      {/* Platform filter */}
-      <View style={[styles.filterRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        {platformOptions.map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            onPress={() => setPlatformFilter(opt)}
-            style={[styles.filterChip, platformFilter === opt && styles.filterChipActive]}
-          >
-            <Text
-              style={[styles.filterChipText, platformFilter === opt && styles.filterChipTextActive]}
-            >
-              {opt === 'all' ? 'All' : opt}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* User type filter */}
-      <View style={[styles.filterRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        {userTypeOptions.map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            onPress={() => setUserTypeFilter(opt)}
-            style={[styles.filterChip, userTypeFilter === opt && styles.filterChipActive]}
-          >
-            <Text
-              style={[styles.filterChipText, userTypeFilter === opt && styles.filterChipTextActive]}
-            >
-              {opt === 'all' ? 'All users' : opt === 'anonymous' ? 'Anonymous' : 'Registered'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Session list */}
-      {loading ? (
-        <View style={styles.loadingShell}>
-          <ActivityIndicator size="large" color="#FACC15" />
-        </View>
-      ) : hasError ? (
-        <View style={styles.centerCard}>
-          <Text style={styles.centerBody}>Could not load sessions. Please try again.</Text>
-        </View>
-      ) : (
-        <ScrollView
-          testID="analytics-session-list"
-          style={styles.scroll}
-          contentContainerStyle={sessions.length > 0 ? styles.scrollContent : styles.emptyContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {sessions.length === 0 ? (
-            <View style={styles.centerCard}>
-              <Text style={styles.centerBody}>No sessions found.</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.outerScroll}
+        contentContainerStyle={styles.outerScrollContent}
+      >
+        {/* Live panel */}
+        <Text style={styles.sectionTitle}>{t('analytics.liveTitle')}</Text>
+        <View testID="analytics-live-panel" style={styles.livePanel}>
+          <View style={styles.liveBadgeRow}>
+            <Text style={styles.livePanelTitle}>{t('analytics.liveTitle')}</Text>
+            <View style={styles.liveBadgeInner}>
+              <Animated.View style={[styles.liveDot, { opacity: liveOpacity }]} />
+              <Text style={styles.liveBadgeText}>{t('analytics.liveBadge')}</Text>
             </View>
+          </View>
+          {statsError ? (
+            <Text style={styles.liveSubText}>{t('analytics.statsError')}</Text>
           ) : (
-            sessions.map((session) => (
+            <>
+              <Text style={styles.liveNumber}>{stats ? stats.online_now : '—'}</Text>
+              <Text style={styles.liveSubText}>{t('analytics.onlineNow')}</Text>
+              {stats && (
+                <Text style={styles.liveSubText}>{onlinePlatformText}</Text>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Entries by time */}
+        <Text style={styles.sectionTitle}>{t('analytics.entriesTitle')}</Text>
+        <View style={styles.summaryRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.entries_last_hour : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.lastHour')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.entries_today : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.today')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.entries_7d : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.last7d')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.entries_30d : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.last30d')}</Text>
+          </View>
+        </View>
+
+        {/* Totals */}
+        <Text style={styles.sectionTitle}>{t('analytics.totalsTitle')}</Text>
+        <View style={styles.summaryRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.total : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.total')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.anonymous : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.anonymous')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? stats.registered : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.registered')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? formatAvgDuration(stats.avg_duration_seconds) : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.avgDuration')}</Text>
+          </View>
+        </View>
+
+        {/* By platform */}
+        <Text style={styles.sectionTitle}>{t('analytics.platformTitle')}</Text>
+        <View style={styles.summaryRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? (stats.by_platform['web'] ?? 0) : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.platformWeb')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? (stats.by_platform['android'] ?? 0) : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.platformAndroid')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{stats ? (stats.by_platform['ios'] ?? 0) : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.platformIos')}</Text>
+          </View>
+        </View>
+
+        {/* By activity */}
+        <Text style={styles.sectionTitle}>{t('analytics.activityTitle')}</Text>
+        <View style={styles.summaryRow}>
+          {activityKeys.map(({ key, label }) => (
+            <View key={key} style={styles.statChip}>
+              <Text style={styles.statValue}>{stats ? (stats.by_activity[key] ?? 0) : '—'}</Text>
+              <Text style={styles.statLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Auto-refresh hint */}
+        <Text style={styles.autoRefreshText}>
+          {`${t('analytics.autoRefreshHint')} · ${t('analytics.updatedAt')} ${lastUpdated ? lastUpdated.toLocaleTimeString('he-IL') : '—'}`}
+        </Text>
+
+        {/* Platform filter */}
+        <View style={styles.filterRow}>
+          {platformOptions.map((opt) => (
+            <TouchableOpacity
+              key={opt}
+              onPress={() => setPlatformFilter(opt)}
+              style={[styles.filterChip, platformFilter === opt && styles.filterChipActive]}
+            >
+              <Text
+                style={[styles.filterChipText, platformFilter === opt && styles.filterChipTextActive]}
+              >
+                {opt === 'all' ? t('analytics.filterAll') : opt === 'web' ? t('analytics.platformWeb') : opt === 'android' ? t('analytics.platformAndroid') : t('analytics.platformIos')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* User type filter */}
+        <View style={styles.filterRow}>
+          {userTypeOptions.map((opt) => (
+            <TouchableOpacity
+              key={opt}
+              onPress={() => setUserTypeFilter(opt)}
+              style={[styles.filterChip, userTypeFilter === opt && styles.filterChipActive]}
+            >
+              <Text
+                style={[styles.filterChipText, userTypeFilter === opt && styles.filterChipTextActive]}
+              >
+                {opt === 'all'
+                  ? t('analytics.filterAllUsers')
+                  : opt === 'anonymous'
+                  ? t('analytics.filterAnonymous')
+                  : t('analytics.filterRegistered')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Session list */}
+        {loading ? (
+          <View style={styles.loadingShell}>
+            <ActivityIndicator size="large" color="#FACC15" />
+          </View>
+        ) : hasError ? (
+          <View style={styles.centerCard}>
+            <Text style={styles.centerBody}>{t('analytics.error')}</Text>
+          </View>
+        ) : sessions.length === 0 ? (
+          <View style={styles.centerCard}>
+            <Text style={styles.centerBody}>{t('analytics.empty')}</Text>
+          </View>
+        ) : (
+          <ScrollView
+            testID="analytics-session-list"
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={false}
+            nestedScrollEnabled
+          >
+            {sessions.map((session) => (
               <View key={session.id} style={styles.card}>
-                <View style={[styles.cardHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View style={styles.cardHeader}>
                   <View style={[styles.platformBadge, platformBadgeStyle(session.platform)]}>
                     <Text style={styles.platformBadgeText}>{session.platform}</Text>
                   </View>
@@ -273,13 +419,13 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
                     ]}
                   >
                     <Text style={styles.userTypeText}>
-                      {session.is_anonymous ? 'Anonymous' : 'Registered'}
+                      {session.is_anonymous ? t('analytics.badgeAnonymous') : t('analytics.badgeRegistered')}
                     </Text>
                   </View>
                 </View>
 
                 <Text style={styles.durationText}>
-                  {`Duration: ${formatDuration(session.session_start, session.session_end)}`}
+                  {`${t('analytics.durationLabel')}: ${formatDuration(session.session_start, session.session_end)}`}
                 </Text>
 
                 <Text style={styles.metaText}>
@@ -288,14 +434,14 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
 
                 {session.event_count > 0 ? (
                   <Text style={styles.eventCountText}>
-                    {`${session.event_count} events`}
+                    {`${session.event_count} ${t('analytics.eventsLabel')}`}
                   </Text>
                 ) : null}
               </View>
-            ))
-          )}
-        </ScrollView>
-      )}
+            ))}
+          </ScrollView>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -308,8 +454,14 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 24,
   },
+  outerScroll: {
+    flex: 1,
+  },
+  outerScrollContent: {
+    paddingBottom: 24,
+  },
   headerRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
@@ -329,16 +481,89 @@ const styles = StyleSheet.create({
     color: '#BFDBFE',
     fontSize: 13,
     fontWeight: '800',
+    textAlign: 'right',
   },
   headerTitle: {
     flex: 1,
     color: '#F8FAFC',
     fontSize: 22,
     fontWeight: '900',
-    textAlign: 'center',
+    textAlign: 'right',
+  },
+  sectionTitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 14,
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  livePanel: {
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(15,23,42,0.92)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(74,222,128,0.34)',
+    marginTop: 12,
+    alignItems: 'flex-end',
+  },
+  liveBadgeRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  liveBadgeInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4ADE80',
+  },
+  liveBadgeText: {
+    color: '#4ADE80',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  livePanelTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'right',
+    flex: 1,
+  },
+  liveNumber: {
+    color: '#FACC15',
+    fontSize: 40,
+    fontWeight: '900',
+    textAlign: 'right',
+    lineHeight: 48,
+    marginTop: 2,
+  },
+  liveSubText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  autoRefreshText: {
+    color: '#475569',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'right',
+    marginTop: 8,
   },
   summaryRow: {
-    marginTop: 16,
+    flexDirection: 'row-reverse',
     gap: 8,
     flexWrap: 'wrap',
   },
@@ -357,6 +582,7 @@ const styles = StyleSheet.create({
     color: '#FACC15',
     fontSize: 18,
     fontWeight: '900',
+    textAlign: 'right',
   },
   statLabel: {
     color: '#CBD5E1',
@@ -366,6 +592,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   filterRow: {
+    flexDirection: 'row-reverse',
     marginTop: 10,
     gap: 6,
     flexWrap: 'wrap',
@@ -409,6 +636,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 40,
   },
   centerCard: {
     borderRadius: 20,
@@ -417,20 +645,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.85)',
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.22)',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
+    marginTop: 16,
   },
   centerTitle: {
     color: '#F8FAFC',
     fontSize: 18,
     fontWeight: '900',
-    textAlign: 'center',
+    textAlign: 'right',
   },
   centerBody: {
     color: '#CBD5E1',
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
+    textAlign: 'right',
     marginTop: 8,
   },
   card: {
@@ -440,8 +669,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(9,23,43,0.92)',
     borderWidth: 1,
     borderColor: 'rgba(125,211,252,0.24)',
+    marginBottom: 12,
   },
   cardHeader: {
+    flexDirection: 'row-reverse',
     gap: 8,
     alignItems: 'center',
     flexWrap: 'wrap',
@@ -468,6 +699,7 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontSize: 11,
     fontWeight: '800',
+    textAlign: 'right',
   },
   userTypeBadge: {
     borderRadius: 999,
@@ -487,23 +719,27 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontSize: 11,
     fontWeight: '800',
+    textAlign: 'right',
   },
   durationText: {
     color: '#BFDBFE',
     fontSize: 13,
     fontWeight: '800',
     marginTop: 10,
+    textAlign: 'right',
   },
   metaText: {
     color: '#93C5FD',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
+    textAlign: 'right',
   },
   eventCountText: {
     color: '#FCD34D',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
+    textAlign: 'right',
   },
 });

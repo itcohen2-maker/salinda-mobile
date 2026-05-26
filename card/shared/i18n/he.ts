@@ -1620,5 +1620,58 @@ export const he: Record<string, string> = {
   'a11y.die': 'קוביה מראה {{value}}',
   'a11y.joker': 'קלף סלינדה',
 
+  'analytics.title': 'אנליטיקה',
+  'analytics.back': 'חזרה',
+  'analytics.refresh': 'רענון',
+
+  'analytics.liveTitle': 'מחוברים עכשיו',
+  'analytics.liveBadge': 'LIVE',
+  'analytics.onlineNow': 'משתמשים פעילים',
+
+  'analytics.entriesTitle': 'כניסות לאפליקציה',
+  'analytics.lastHour': 'שעה אחרונה',
+  'analytics.today': 'היום',
+  'analytics.last7d': '7 ימים',
+  'analytics.last30d': '30 ימים',
+
+  'analytics.totalsTitle': 'סה״כ סשנים',
+  'analytics.total': 'סה״כ',
+  'analytics.anonymous': 'אנונימיים',
+  'analytics.registered': 'רשומים',
+  'analytics.avgDuration': 'משך ממוצע',
+
+  'analytics.platformTitle': 'פילוח לפי פלטפורמה',
+  'analytics.platformWeb': 'דפדפן',
+  'analytics.platformAndroid': 'אנדרואיד',
+  'analytics.platformIos': 'iOS',
+
+  'analytics.activityTitle': 'פעילויות',
+  'analytics.gamesPlayed': 'משחקים',
+  'analytics.tutorialsCompleted': 'מדריכים',
+  'analytics.feedbacks': 'פידבקים',
+  'analytics.registrations': 'הרשמות',
+  'analytics.appOpens': 'פתיחות אפליקציה',
+  'analytics.lessonCompletes': 'שיעורים',
+
+  'analytics.autoRefreshHint': 'מתעדכן אוטומטית',
+  'analytics.updatedAt': 'עודכן',
+
+  'analytics.filterAll': 'הכל',
+  'analytics.filterAllUsers': 'כל המשתמשים',
+  'analytics.filterAnonymous': 'אנונימיים',
+  'analytics.filterRegistered': 'רשומים',
+
+  'analytics.badgeAnonymous': 'אנונימי',
+  'analytics.badgeRegistered': 'רשום',
+
+  'analytics.durationLabel': 'משך',
+  'analytics.eventsLabel': 'אירועים',
+
+  'analytics.empty': 'לא נמצאו סשנים.',
+  'analytics.error': 'לא ניתן לטעון את הנתונים. נסה שוב.',
+  'analytics.statsError': 'לא ניתן לטעון סטטיסטיקות.',
+  'analytics.noAccess': 'אין גישה',
+  'analytics.noAccessBody': 'מסך זה זמין לאדמינים בלבד.',
+
   ...heLateOverrides,
 };
