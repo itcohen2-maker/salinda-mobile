@@ -473,6 +473,7 @@ export const en: Record<string, string> = {
   'game.preVictoryCoinAward.one': 'You received one more coin',
   'game.preVictoryCoinAward.other': 'You received {{count}} more coins',
   'game.preVictoryCoinAward.subtitle': 'Moving to the victory screen…',
+  'game.turnCoinCelebration.exclamation': 'Excellent!',
   'game.turnCoinCelebration.badge': 'End-of-turn bonus',
   'game.turnCoinCelebration.one': 'You received a new coin',
   'game.turnCoinCelebration.other': 'You received {{count}} new coins',
@@ -1340,6 +1341,10 @@ export const en: Record<string, string> = {
   'tutorial.coreComplete.advancedBtn': 'Continue to Advanced',
   'tutorial.coreComplete.realGameBtn': 'Ready for the real game!',
   'tutorial.coreComplete.ack': 'Got it',
+  'tutorial.cardMatchReminder.title': 'Remember',
+  'tutorial.cardMatchReminder.exercise': 'Matching exercise',
+  'tutorial.cardMatchReminder.card': 'Card',
+  'tutorial.cardMatchReminder.ack': 'Got it',
   'tutorial.stepProgress': 'Step {{n}} / {{total}}',
 
   // After signs — optional fractions branch
@@ -1367,6 +1372,8 @@ export const en: Record<string, string> = {
   'tutorial.l6b.celebrate': 'Exactly! Play like a pro: evaluate your ready target paths first, then assemble the matching math.',
   'tutorial.l6b.demoContinue': 'Got it! Now I\'ll try ›',
   'tutorial.l6b.continue': 'Got it! Let\'s continue ›',
+  'tutorial.l6b.continueTap0': 'Tap a mini card',
+  'tutorial.l6b.continueTap1': 'Try one more',
   // 6.3 — finish a move with a wild card
   'tutorial.l6c.botIntro': 'Your turn — employ your Wild Card to nail the final target!',
   'tutorial.l6c.turnModalTitle': 'Your turn!',
@@ -1478,6 +1485,7 @@ export const en: Record<string, string> = {
   'auth.usernameMinLength': 'Usernames must span at least 2 characters.',
   'auth.homeButton': 'Sign In',
   'auth.switchUserButton': 'Switch profile',
+  'auth.continueAsGuest': 'Continue without account',
   'auth.homeHelper': 'Log in to retrieve your tactical match history, coin vaults, and game parameters.',
   'auth.chooserSubtitle': 'Select a portal to access your profile settings.',
   'auth.socialHelper': 'Google integration loads your pre-existing profile dataset. Current guest session benchmarks won\'t merge automatically.',

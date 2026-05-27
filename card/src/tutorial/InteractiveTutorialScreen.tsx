@@ -32,7 +32,7 @@ import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { HappyBubble, type HappyBubbleTone } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
 import { GoldDiceButton } from '../../components/GoldDiceButton';
-import { initializeSfx, isSfxMuted, setSfxMuted } from '../audio/sfx';
+import { initializeSfx, isSfxMuted, playSfx, setSfxMuted } from '../audio/sfx';
 import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatus';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { generateTutorialHand } from './generateTutorialHand';
@@ -471,6 +471,8 @@ interface Props {
 }
 
 
+type CardMatchReminderTarget = 'advanced' | 'real-game';
+
 type TutorialWelcomeModalProps = {
   topInset: number;
   bottomInset: number;
@@ -584,6 +586,286 @@ function TutorialWelcomeModal({
             </Text>
           </TouchableOpacity>
         </View>
+      </View>
+    </View>
+  );
+}
+
+type TutorialCardMatchReminderModalProps = {
+  target: CardMatchReminderTarget;
+  onAck: (target: CardMatchReminderTarget) => void;
+  t: (key: string) => string;
+};
+
+function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchReminderModalProps) {
+  const { width, height } = useWindowDimensions();
+  const isCompact = height < 720 || width < 360;
+  const contentWidth = Math.min(Math.max(width - 36, 280), isCompact ? 330 : 360);
+  const panelPaddingHorizontal = isCompact ? 22 : 26;
+  const topTileWidth = Math.min(contentWidth - panelPaddingHorizontal * 2 - 20, isCompact ? 218 : 244);
+  const topTileHeight = isCompact ? 78 : 88;
+  const cardWidth = isCompact ? 124 : 144;
+  const cardHeight = isCompact ? 182 : 212;
+  const titleFontSize = isCompact ? 40 : 48;
+  const ackText = t('tutorial.cardMatchReminder.ack');
+  const ackHandledRef = useRef(false);
+  const handleAck = useCallback(() => {
+    if (ackHandledRef.current) return;
+    ackHandledRef.current = true;
+    void playSfx('combo', { cooldownMs: 0, volumeOverride: 0.42 });
+    onAck(target);
+  }, [onAck, target]);
+  const attachWebAckHandlers = useCallback((node: unknown) => {
+    const button = node as any;
+    if (!button) return;
+    button.onclick = handleAck;
+    button.onpointerup = handleAck;
+  }, [handleAck]);
+
+  return (
+    <View
+      pointerEvents="auto"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 16000,
+        backgroundColor: 'rgba(0,0,0,0.68)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 18,
+      }}
+    >
+      <View style={{ width: contentWidth, alignItems: 'center', gap: isCompact ? 14 : 18 }}>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+          style={{
+            color: '#FACC15',
+            fontSize: titleFontSize,
+            lineHeight: titleFontSize + 6,
+            fontWeight: '900',
+            textAlign: 'center',
+            textShadowColor: '#92400E',
+            textShadowOffset: { width: 0, height: 4 },
+            textShadowRadius: 1,
+            includeFontPadding: false,
+          }}
+        >
+          {t('tutorial.cardMatchReminder.title')}
+        </Text>
+
+        <View
+          style={{
+            width: contentWidth,
+            borderRadius: 28,
+            backgroundColor: '#78350F',
+            borderWidth: 3,
+            borderColor: '#FACC15',
+            paddingVertical: isCompact ? 22 : 28,
+            paddingHorizontal: panelPaddingHorizontal,
+            alignItems: 'center',
+            gap: isCompact ? 16 : 20,
+            ...Platform.select({
+              ios: { shadowColor: '#FACC15', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.72, shadowRadius: 20 },
+              android: { elevation: 16 },
+            }),
+          }}
+        >
+          <View
+            style={{
+              width: topTileWidth,
+              height: topTileHeight,
+              borderRadius: 18,
+              backgroundColor: '#D97706',
+              padding: 4,
+              ...Platform.select({
+                ios: { shadowColor: '#0EA5E9', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.45, shadowRadius: 0 },
+                android: { elevation: 10 },
+              }),
+            }}
+          >
+            <LinearGradient
+              colors={['#FACC15', '#F59E0B', '#B45309']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ flex: 1, borderRadius: 15, padding: 4 }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  backgroundColor: '#FEF3C7',
+                  borderWidth: 1,
+                  borderColor: '#FFFFFF',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  style={{
+                    color: '#4A2507',
+                    fontSize: isCompact ? 26 : 29,
+                    lineHeight: isCompact ? 30 : 34,
+                    fontWeight: '900',
+                    textAlign: 'center',
+                    includeFontPadding: false,
+                  }}
+                >
+                  {t('tutorial.cardMatchReminder.exercise')}
+                </Text>
+              </View>
+            </LinearGradient>
+          </View>
+
+          <Text
+            style={{
+              color: '#FACC15',
+              fontSize: isCompact ? 52 : 60,
+              lineHeight: isCompact ? 52 : 60,
+              fontWeight: '900',
+              textAlign: 'center',
+              textShadowColor: '#92400E',
+              textShadowOffset: { width: 0, height: 3 },
+              textShadowRadius: 1,
+              includeFontPadding: false,
+            }}
+          >
+            =
+          </Text>
+
+          <View
+            style={{
+              width: cardWidth,
+              height: cardHeight,
+              borderRadius: 20,
+              backgroundColor: '#D97706',
+              padding: 4,
+              ...Platform.select({
+                ios: { shadowColor: '#0EA5E9', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.42, shadowRadius: 0 },
+                android: { elevation: 12 },
+              }),
+            }}
+          >
+            <LinearGradient
+              colors={['#FACC15', '#F59E0B', '#B45309']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ flex: 1, borderRadius: 17, padding: 4 }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  backgroundColor: '#FEF3C7',
+                  borderWidth: 1,
+                  borderColor: '#FFFFFF',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['rgba(255,255,255,0.82)', 'rgba(255,255,255,0.10)', 'rgba(251,191,36,0.18)']}
+                  locations={[0, 0.42, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  style={{
+                    color: '#4A2507',
+                    fontSize: isCompact ? 36 : 42,
+                    lineHeight: isCompact ? 42 : 48,
+                    fontWeight: '900',
+                    textAlign: 'center',
+                    includeFontPadding: false,
+                  }}
+                >
+                  {t('tutorial.cardMatchReminder.card')}
+                </Text>
+              </View>
+            </LinearGradient>
+          </View>
+        </View>
+
+        {Platform.OS === 'web'
+          ? React.createElement(
+              'button',
+              {
+                type: 'button',
+                ref: attachWebAckHandlers,
+                onClick: handleAck,
+                onPointerUp: handleAck,
+                'aria-label': ackText,
+                style: {
+                  width: '100%',
+                  minHeight: 58,
+                  borderRadius: 22,
+                  backgroundColor: '#10B981',
+                  border: '2px solid #34D399',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '14px 26px',
+                  boxShadow: '0 0 16px rgba(16,185,129,0.78)',
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                } as any,
+              },
+              React.createElement(
+                'span',
+                {
+                  style: {
+                    color: '#FFFFFF',
+                    fontSize: 20,
+                    lineHeight: '24px',
+                    fontWeight: 900,
+                    textAlign: 'center',
+                    fontFamily: 'inherit',
+                  } as any,
+                },
+                ackText,
+              ),
+            )
+          : (
+            <TouchableOpacity
+              onPress={handleAck}
+              activeOpacity={0.84}
+              accessibilityRole="button"
+              accessibilityLabel={ackText}
+              style={{
+                width: '100%',
+                minHeight: 58,
+                borderRadius: 22,
+                backgroundColor: '#10B981',
+                borderWidth: 2,
+                borderColor: '#34D399',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 14,
+                paddingHorizontal: 26,
+                ...Platform.select({
+                  ios: { shadowColor: '#10B981', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.78, shadowRadius: 16 },
+                  android: { elevation: 14 },
+                }),
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 20, lineHeight: 24, fontWeight: '900', textAlign: 'center' }}>
+                {ackText}
+              </Text>
+            </TouchableOpacity>
+          )}
       </View>
     </View>
   );
@@ -1020,6 +1302,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // L6.2 (tap-mini) await-mimic: "׳”׳'׳ ׳×׳™" button appears ~1.5s after the hint
   // bubble so the learner has time to read "׳׳—׳¦׳• ׳¢׳ ׳׳™׳ ׳™ ׳§׳׳£" before the button shows.
   const [showL6TapMiniContinue, setShowL6TapMiniContinue] = useState(false);
+  // L6 step 0 celebrate: counts mini-card taps to unlock the "הבנתי" button.
+  const [l6CelebrateMiniTapCount, setL6CelebrateMiniTapCount] = useState(0);
   const [hideL6OpenResultsBubble, setHideL6OpenResultsBubble] = useState(false);
   const [l6MiniDemoPendingAdvance, setL6MiniDemoPendingAdvance] = useState(false);
   // L6.3 mismatch feedback: shown while the staged cards still don't match the red target.
@@ -1142,6 +1426,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // the core-complete popup shows "no coins" instead of the 10-coin reward.
   const [skipCount, setSkipCount] = useState(0);
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(true);
+  const [pendingCardMatchReminder, setPendingCardMatchReminder] = useState<CardMatchReminderTarget | null>(null);
   // Persistent count of tutorial runs where coins were actually earned.
   // Caps at 2 ג€” registered-user infrastructure: once a user has earned
   // tutorial coins twice, subsequent completions show "no coins".
@@ -1209,6 +1494,19 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awardTutorialCoins, engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
+
+  const openCardMatchReminder = useCallback((target: CardMatchReminderTarget) => {
+    setPendingCardMatchReminder(target);
+  }, []);
+
+  const handleCardMatchReminderAck = useCallback((target: CardMatchReminderTarget) => {
+    setPendingCardMatchReminder(null);
+    if (target === 'advanced') {
+      dispatchEngine({ type: 'CHOOSE_ADVANCED_FRACTIONS' });
+      return;
+    }
+    onExit();
+  }, [onExit]);
 
 
   // ג”€ג”€ Lesson 5c (solve-for-op) state ג”€ג”€
@@ -3911,7 +4209,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // own tap is the action that reveals it (teaching point of the step).
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
     tutorialBus.setL6MiniLocked(true);
-    setShowL6TapMiniContinue(false);
     const id = setTimeout(() => tutorialBus.setL6MiniLocked(false), 1500);
     return () => { clearTimeout(id); tutorialBus.setL6MiniLocked(false); };
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, showL6TapMiniContinue]);
@@ -3923,11 +4220,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       engine.phase === 'celebrate';
     if (!isL6OpenResultsCelebrate) {
       setHideL6OpenResultsBubble(false);
+      setL6CelebrateMiniTapCount(0);
       return;
     }
     return tutorialBus.subscribeUserEvent((evt) => {
       if (evt.kind === 'miniCardTapped') {
         setHideL6OpenResultsBubble(true);
+        setL6CelebrateMiniTapCount((c) => c + 1);
       }
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
@@ -4405,7 +4704,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // L5.1 bubble sits just above the fan cards (below equation mockup).
   // FAN_BOTTOM + FAN_STRIP_H is the fan strip container top without the 30px
   // safety margin, keeping the bubble below the equation on all screen sizes.
-  const L5_STEP0_BUBBLE_BOTTOM = FAN_BOTTOM + FAN_STRIP_H;
+  // iOS + Android: add 50px so the bubble doesn't overlap the equation result
+  // displayed just below the golden dice pill.
+  const L5_STEP0_BUBBLE_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + (Platform.OS !== 'web' ? 50 : 0);
   const isAndroidTutorialUi = Platform.OS === 'android';
   const tutorialTopControlRight = isAndroidTutorialUi ? 106 : 12;
   const tutorialTopBubbleInsets = isAndroidTutorialUi
@@ -4580,8 +4881,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       case 'await-mimic': dispatchEngine({ type: 'OUTCOME_MATCHED' }); break;
       case 'celebrate': setL2CelebratePending(false); dispatchEngine({ type: 'CELEBRATE_DONE' }); break;
       case 'lesson-done': dispatchEngine({ type: 'DISMISS_LESSON_DONE' }); break;
-      case 'core-complete': dispatchEngine({ type: 'DISMISS_CORE_COMPLETE' }); break;
-      case 'post-signs-choice': dispatchEngine({ type: 'CHOOSE_FINISH_TUTORIAL' }); break;
+      case 'core-complete': openCardMatchReminder('real-game'); break;
+      case 'post-signs-choice': openCardMatchReminder('real-game'); break;
       case 'advanced-complete': dispatchEngine({ type: 'DISMISS_ADVANCED_COMPLETE' }); onExit(); break;
       case 'all-done': onExit(); break;
       default: break;
@@ -4593,6 +4894,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     identicalMockupApproved,
     l11MockupApproved,
     onExit,
+    openCardMatchReminder,
     parensMockupApproved,
     showWelcomeBubble,
   ]);
@@ -5147,7 +5449,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         </TouchableOpacity>
         {!isAndroidTutorialUi ? (
           <TouchableOpacity
-            onPress={skipForward}
+            onPress={
+              engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2
+                ? undefined
+                : skipForward
+            }
+            disabled={engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2}
             style={{
               paddingVertical: 8,
               paddingHorizontal: 12,
@@ -5158,6 +5465,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               borderRadius: 14,
               borderWidth: 1.5,
               borderColor: 'rgba(180,185,195,0.6)',
+              opacity: engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2 ? 0.3 : 1,
             }}
           >
             <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
@@ -5166,6 +5474,40 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           </TouchableOpacity>
         ) : null}
       </View>
+      ) : null}
+
+      {/* L6 step 0 celebrate: progressive "הבנתי" button gated on mini-card taps. */}
+      {engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' ? (
+        <TouchableOpacity
+          activeOpacity={l6CelebrateMiniTapCount >= 2 ? 0.8 : 1}
+          onPress={() => {
+            if (l6CelebrateMiniTapCount < 2) return;
+            skipForward();
+          }}
+          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+        >
+          <View style={{
+            backgroundColor: l6CelebrateMiniTapCount >= 2 ? '#15803D' : '#1E3A5F',
+            borderRadius: 20,
+            paddingVertical: 15,
+            paddingHorizontal: 42,
+            borderWidth: 2,
+            borderColor: l6CelebrateMiniTapCount >= 2 ? '#86EFAC' : '#3B82F6',
+            opacity: l6CelebrateMiniTapCount >= 2 ? 1 : 0.85,
+            ...Platform.select({
+              ios: { shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: l6CelebrateMiniTapCount >= 2 ? 0.55 : 0, shadowRadius: 14 },
+              android: { elevation: l6CelebrateMiniTapCount >= 2 ? 12 : 4 },
+            }),
+          }}>
+            <Text style={{ color: '#F0FDF4', fontSize: 17, fontWeight: '900' }}>
+              {l6CelebrateMiniTapCount === 0
+                ? t('tutorial.l6b.continueTap0')
+                : l6CelebrateMiniTapCount === 1
+                ? t('tutorial.l6b.continueTap1')
+                : t('tutorial.l6b.continue')}
+            </Text>
+          </View>
+        </TouchableOpacity>
       ) : null}
 
       {/* Lesson 5.3: tip/mockup after Slinda and before lesson 6. */}
@@ -5552,37 +5894,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           }}>
             <Text style={{ color: '#F0FDF4', fontSize: 17, fontWeight: '900' }}>
               {t('tutorial.l6b.demoContinue')}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      ) : null}
-
-      {engine.lessonIndex === 5 &&
-       engine.stepIndex === 1 &&
-       engine.phase === 'await-mimic' &&
-       showL6TapMiniContinue ? (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => {
-            setShowL6TapMiniContinue(false);
-            tutorialBus.emitUserEvent({ kind: 'l6TapMiniAck' });
-          }}
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
-        >
-          <View style={{
-            backgroundColor: '#15803D',
-            borderRadius: 20,
-            paddingVertical: 15,
-            paddingHorizontal: 42,
-            borderWidth: 2,
-            borderColor: '#86EFAC',
-            ...Platform.select({
-              ios: { shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 14 },
-              android: { elevation: 12 },
-            }),
-          }}>
-            <Text style={{ color: '#F0FDF4', fontSize: 17, fontWeight: '900' }}>
-              {t('tutorial.l6b.continue')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -6983,7 +7294,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             {/* Advanced fractions option */}
             <TouchableOpacity
               onPress={() => {
-                dispatchEngine({ type: 'CHOOSE_ADVANCED_FRACTIONS' });
+                openCardMatchReminder('advanced');
               }}
               accessibilityLabel={locale === 'he'
                 ? 'המשיכו למתקדמים ותרוויחו 20 מטבעות סלינדה'
@@ -6999,19 +7310,24 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 alignItems: 'center',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 }}>
+                <Text
+                  style={{ color: '#431407', fontWeight: '900', fontSize: Platform.OS === 'android' ? 14 : 17 }}
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                  minimumFontScale={0.75}
+                >
                   {t('tutorial.coreComplete.advancedBtn')}
                 </Text>
-                <SlindaCoin size={20} />
-                <Text style={{ color: '#431407', fontWeight: '900', fontSize: 17 }}>
+                <SlindaCoin size={Platform.OS === 'android' ? 17 : 20} />
+                <Text style={{ color: '#431407', fontWeight: '900', fontSize: Platform.OS === 'android' ? 14 : 17 }}>
                   20
                 </Text>
               </View>
             </TouchableOpacity>
             {/* Real game ג€” exits tutorial */}
             <TouchableOpacity
-              onPress={onExit}
+              onPress={() => openCardMatchReminder('real-game')}
               style={{
                 paddingVertical: 15,
                 paddingHorizontal: 28,
@@ -7190,6 +7506,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           </TouchableOpacity>
         </View>
       ) : null}
+
+      {pendingCardMatchReminder ? (
+        <TutorialCardMatchReminderModal
+          t={t}
+          target={pendingCardMatchReminder}
+          onAck={handleCardMatchReminderAck}
+        />
+      ) : null}
     </View>
   );
 
@@ -7217,6 +7541,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           snapToTop={webTutorialLayout.portraitMobileWebViewport}
           outerStyle={{ backgroundColor: 'transparent' }}
           innerStyle={{ backgroundColor: 'transparent' }}
+          containerPointerEvents="box-none"
         >
           {tutorialOverlay}
         </WebGameScreenFrame>

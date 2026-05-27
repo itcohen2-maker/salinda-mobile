@@ -474,6 +474,7 @@ export const he: Record<string, string> = {
   'game.preVictoryCoinAward.one': 'קיבלת מטבע נוסף',
   'game.preVictoryCoinAward.other': 'קיבלת {{count}} מטבעות נוספים',
   'game.preVictoryCoinAward.subtitle': 'מיד עוברים למסך הניצחון…',
+  'game.turnCoinCelebration.exclamation': 'מצוין!',
   'game.turnCoinCelebration.badge': 'בונוס בסיום התור',
   'game.turnCoinCelebration.one': 'קיבלת מטבע חדש',
   'game.turnCoinCelebration.other': 'קיבלת {{count}} מטבעות חדשים',
@@ -1347,6 +1348,10 @@ export const he: Record<string, string> = {
   'tutorial.coreComplete.advancedBtn': 'המשיכו למתקדמים',
   'tutorial.coreComplete.realGameBtn': 'מוכנים למשחק האמיתי!',
   'tutorial.coreComplete.ack': 'הבנתי',
+  'tutorial.cardMatchReminder.title': 'תיזכרו',
+  'tutorial.cardMatchReminder.exercise': 'תרגיל מתאים',
+  'tutorial.cardMatchReminder.card': 'קלף',
+  'tutorial.cardMatchReminder.ack': 'הבנתי',
   'tutorial.stepProgress': 'שלב {{n}} / {{total}}',
 
   // אחרי סימנים — ענף שברים אופציונלי
@@ -1373,6 +1378,8 @@ export const he: Record<string, string> = {
   'tutorial.l6b.celebrate': 'בדיוק! ככה עובדים חכם: רואים פתרון מוכן לקלף, ומעתיקים אותו ללוח!',
   'tutorial.l6b.demoContinue': 'הבנתי — עכשיו אני מנסה ›',
   'tutorial.l6b.continue': 'הבנתי — בוא נמשיך ›',
+  'tutorial.l6b.continueTap0': 'לחץ על המיני קלפים',
+  'tutorial.l6b.continueTap1': 'נסה עוד אחד',
   // 6.3 — מסיימים מהלך עם קלף פרא
   'tutorial.l6c.botIntro': 'עכשיו תורכם — סיימו את המהלך עם קלף פרא כדי להגיע לתוצאה',
   'tutorial.l6c.turnModalTitle': 'עכשיו תורכם!',
@@ -1486,6 +1493,7 @@ export const he: Record<string, string> = {
   // ── Table Browser ──
   'auth.homeButton': 'כניסת משתמש',
   'auth.switchUserButton': 'החלף משתמש',
+  'auth.continueAsGuest': 'המשך ללא חשבון',
   'auth.homeHelper': 'היכנסו כדי לטעון את ההיסטוריה, הבנק וההגדרות שלכם.',
   'auth.chooserSubtitle': 'בחרו איך להיכנס לחשבון שלכם.',
   'auth.socialHelper': 'כניסה עם Google תטען את ההיסטוריה של החשבון הקיים. ההתקדמות האורחת הנוכחית לא מתמזגת אוטומטית.',
