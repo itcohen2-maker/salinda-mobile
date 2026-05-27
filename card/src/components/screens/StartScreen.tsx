@@ -16,6 +16,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { CARDS_PER_PLAYER } from '../../../shared/gameConstants';
 import { LAST_PUSH } from '../../buildInfo';
 import { useAdminAccess } from '../../admin/useAdminAccess';
+import * as Updates from 'expo-updates';
 
 interface StartScreenProps {
   onBackToChoice?: () => void;
@@ -44,6 +45,12 @@ export default function StartScreen({
   const [difficulty, setDifficulty] = useState<'easy' | 'full'>('full');
   const [showRules, setShowRules] = useState(false);
   const { isAdmin } = useAdminAccess();
+  const updatesState = Updates.useUpdates();
+  const isDownloading = Platform.OS !== 'web' && updatesState.isDownloading;
+  const downloadProgress = Platform.OS !== 'web' ? updatesState.downloadProgress : undefined;
+  const isUpdatePending = Platform.OS !== 'web' && updatesState.isUpdatePending;
+  const isChecking = Platform.OS !== 'web' && updatesState.isChecking;
+  const isUpdateAvailable = Platform.OS !== 'web' && updatesState.isUpdateAvailable;
 
   const maxPlayers = difficulty === 'easy' ? 8 : 10;
   const ta = isRTL ? 'right' : 'left';
@@ -271,14 +278,38 @@ export default function StartScreen({
           </View>
         </View>
       )}
-      {isAdmin && <Text style={styles.lastPush}>⚙ {LAST_PUSH}</Text>}
+      {isAdmin && (
+        <View style={styles.adminPanel}>
+          <Text style={styles.lastPush}>⚙ {LAST_PUSH}</Text>
+          {isDownloading && (
+            <View style={styles.updateProgressWrap}>
+              <View style={[styles.updateProgressBar, { width: `${Math.round((downloadProgress ?? 0) * 100)}%` as any }]} />
+              <Text style={styles.updateProgressText}>מוריד עדכון… {Math.round((downloadProgress ?? 0) * 100)}%</Text>
+            </View>
+          )}
+          {isChecking && !isDownloading && (
+            <Text style={styles.updateStatus}>🔍 בודק עדכונים…</Text>
+          )}
+          {isUpdatePending && !isDownloading && (
+            <Text style={styles.updateStatus}>✅ עדכון מוכן — הפעל מחדש</Text>
+          )}
+          {isUpdateAvailable && !isUpdatePending && !isDownloading && (
+            <Text style={styles.updateStatus}>⬇️ עדכון זמין</Text>
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#111827' },
-  lastPush: { color: '#6B7280', fontSize: 11, textAlign: 'center', paddingBottom: 12, paddingTop: 4 },
+  adminPanel: { alignItems: 'center', paddingBottom: 12, paddingTop: 4, gap: 6 },
+  lastPush: { color: '#6B7280', fontSize: 11, textAlign: 'center' },
+  updateProgressWrap: { width: '80%', height: 18, backgroundColor: '#1F2937', borderRadius: 9, overflow: 'hidden', justifyContent: 'center' },
+  updateProgressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#F59E0B', borderRadius: 9 },
+  updateProgressText: { color: '#FCD34D', fontSize: 10, fontWeight: '700', textAlign: 'center', zIndex: 1 },
+  updateStatus: { color: '#9CA3AF', fontSize: 11, textAlign: 'center' },
   container: { padding: 24, paddingTop: 60, alignItems: 'stretch' },
   containerCompact: { padding: 16, paddingTop: 40 },
 
