@@ -9,6 +9,7 @@ Sentry.init({
   enableAutoSessionTracking: true,
 });
 
+import { LAST_PUSH } from './src/buildInfo';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
@@ -20470,7 +20471,7 @@ export function PlayModeChoiceScreen({
 
             {/* TEST BANNER - REMOVE LATER */}
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ color: '#FF6B00', fontSize: 26, fontWeight: '900', letterSpacing: 3 }}>FUCK ענת</Text>
+              <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
             </View>
 
             {/* ── 1. HERO BUTTON ── */}
