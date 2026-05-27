@@ -175,9 +175,9 @@ describe('lesson registry smoke', () => {
     expect(rollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(false);
     expect(previewStep.outcome({ kind: 'l3SolvedAck' })).toBe(true);
   });
-  it('scroll-fan outcome accepts fanScrolled, rejects cardTapped', () => {
+  it('scroll-fan outcome accepts fanScrolled or cardTapped', () => {
     const [scrollStep] = LESSONS[0].steps;
     expect(scrollStep.outcome({ kind: 'fanScrolled', toIdx: 1 })).toBe(true);
-    expect(scrollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(false);
+    expect(scrollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(true);
   });
 });

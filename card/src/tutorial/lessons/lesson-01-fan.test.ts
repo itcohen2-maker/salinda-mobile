@@ -67,4 +67,12 @@ describe('lesson-01-fan botDemo — right → left → center sweep', () => {
       expect(waitCalls).toEqual([]);
     }
   });
+
+  it('accepts either a fan scroll or a direct card tap', () => {
+    const [step] = lesson01Fan.steps;
+
+    expect(step.outcome({ kind: 'fanScrolled', toIdx: 1 })).toBe(true);
+    expect(step.outcome({ kind: 'cardTapped', cardId: 'hand-card-1' })).toBe(true);
+    expect(step.outcome({ kind: 'diceRolled' })).toBe(false);
+  });
 });

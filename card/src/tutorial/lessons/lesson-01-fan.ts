@@ -30,7 +30,7 @@ export const lesson01Fan: Lesson = {
         await api.wait(PAUSE_MS);
         await api.scrollFanTo(mid, { durationMs: SETTLE_MS, easing: 'settle' });
       },
-      outcome: (event) => event.kind === 'fanScrolled',
+      outcome: (event) => event.kind === 'fanScrolled' || event.kind === 'cardTapped',
       highlight: { target: 'fan', shape: 'arrow' },
       hintKey: 'tutorial.l1.hintScroll',
       botHintKey: 'tutorial.l1.botScroll',

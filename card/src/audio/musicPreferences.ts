@@ -1,4 +1,4 @@
-export const DEFAULT_SALINDA_VOLUME_RATIO = 0.45;
+export const DEFAULT_SALINDA_VOLUME_RATIO = 0;
 
 export function getDefaultSalindaVolume(maxVolume: number): number {
   return Math.round(Math.max(0, maxVolume) * DEFAULT_SALINDA_VOLUME_RATIO * 100) / 100;

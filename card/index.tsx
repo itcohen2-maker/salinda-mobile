@@ -4965,15 +4965,16 @@ const MINI_W = 36;
 const MINI_H = 48;
 const MINI_R = 8;
 function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopPulse = false, highlighted = false, onPress }: { value: number; fractionLabel?: string; index?: number; pulseToken?: number; loopPulse?: boolean; highlighted?: boolean; onPress?: () => void }) {
+  const numberColors = getNumColors(value);
   const cl = fractionLabel
     ? (() => {
         const den = fractionLabel.split('/')[1] ?? '2';
         const fc = fracColors[den] ?? numRed;
         return { border: fc.dark, face: fc.face };
       })()
-    : getNumColors(value);
+    : numberColors;
   const label = fractionLabel ? getFractionDisplay(fractionLabel) : String(value);
-  const labelColor = fractionLabel ? cl.face : cl.dark;
+  const labelColor = fractionLabel ? cl.face : numberColors.dark;
   const labelFontSize = fractionLabel ? 16 : value >= 10 ? 16 : 18;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   // Stronger "pop" animation (no translateY to avoid clipping)
@@ -6866,6 +6867,10 @@ export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType
 const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data: { onConfirm: () => void } | null) => void; onResultChange?: (data: { result: number | null; ok: boolean; hasError: boolean } | null) => void; onBuildStarted?: () => void; timerProgress?: number | null; interactive?: boolean; parensRight?: boolean; onParensRightChange?: (v: boolean) => void }>(function EquationBuilder({ onConfirmChange, onResultChange, onBuildStarted, timerProgress = null, interactive = true, parensRight: parensRightProp, onParensRightChange }, ref) {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
+  const equationTouchViewport = useWebViewportSize();
+  const tutorialMobileTouch =
+    state.isTutorial &&
+    (Platform.OS !== 'web' || equationTouchViewport.width <= 700);
 
   // Lesson 5 is the "all four signs" lesson — the whole point is cycling
   // through +, ?, ×, ÷. The tutorial game starts with enabledOperators=['+']
@@ -8315,7 +8320,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                       borderWidth: 3,
                     },
                   ]}
-                  disabled={isFace}>
+                  disabled={isFace && !tutorialMobileTouch}>
                   {isFace ? (
                     <GoldDieFace value={dv} size={52} />
                   ) : (() => {
@@ -9166,6 +9171,14 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   const [centerIdx, setCenterIdx] = useState(0);
   const interactionLockedRef = useRef(interactionLocked);
   interactionLockedRef.current = interactionLocked;
+  const onTapRef = useRef(onTap);
+  onTapRef.current = onTap;
+  const waitingModeRef = useRef(waitingMode);
+  waitingModeRef.current = waitingMode;
+  const cardPressDisabledRef = useRef(cardPressDisabled);
+  cardPressDisabledRef.current = cardPressDisabled;
+  const defenseValidCardIdsRef = useRef(defenseValidCardIds);
+  defenseValidCardIdsRef.current = defenseValidCardIds;
   const cardIdsSignature = useMemo(() => cards.map((c) => c.id).join('|'), [cards]);
   const initialCenterIdx = useMemo(
     () => resolveHandInitialCenterIdx(cards, centerCardId),
@@ -9269,7 +9282,9 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     pointerId: number | null;
     pointerType: string;
     startClientX: number;
+    startClientY: number;
     lastClientX: number;
+    lastClientY: number;
     lastMoveAt: number;
   } | null>(null);
   // dx already accumulated before PanResponder claims the gesture (threshold artifacts).
@@ -9379,6 +9394,40 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     releaseUserGestureFlagSoon();
   }, [fanCardW, releaseUserGestureFlagSoon, scrollX]);
 
+  const triggerWebFanTapAt = useCallback((clientX: number, clientY: number) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return false;
+    if (interactionLockedRef.current || waitingModeRef.current || cardPressDisabledRef.current) return false;
+    const elements = Array.from(document.querySelectorAll('[data-testid^="hand-card-"]')) as HTMLElement[];
+    let best: { card: Card; score: number } | null = null;
+    for (const el of elements) {
+      const testId = el.getAttribute('data-testid') ?? '';
+      const cardId = testId.startsWith('hand-card-') ? testId.slice('hand-card-'.length) : null;
+      if (!cardId) continue;
+      const card = cardsRef.current.find((candidate) => candidate.id === cardId);
+      if (!card) continue;
+      const defenseSet = defenseValidCardIdsRef.current;
+      if (defenseSet !== null && !defenseSet.has(card.id)) continue;
+      const rect = el.getBoundingClientRect();
+      const hitPad = 12;
+      if (
+        clientX < rect.left - hitPad ||
+        clientX > rect.right + hitPad ||
+        clientY < rect.top - hitPad ||
+        clientY > rect.bottom + hitPad
+      ) continue;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const score = Math.abs(clientX - centerX) + Math.abs(clientY - centerY);
+      if (!best || score < best.score) best = { card, score };
+    }
+    if (!best) return false;
+    suppressClickUntilRef.current = Date.now() + 260;
+    setPressedCardId(null);
+    tutorialBus.emitUserEvent({ kind: 'cardTapped', cardId: best.card.id });
+    onTapRef.current(best.card);
+    return true;
+  }, []);
+
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     const fanRootCandidate = fanRootRef.current as { contains?: (node: Node | null) => boolean } | null;
@@ -9444,7 +9493,9 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         pointerId: 'pointerId' in evt ? evt.pointerId : null,
         pointerType: evtPointerType,
         startClientX: evt.clientX,
+        startClientY: evt.clientY,
         lastClientX: evt.clientX,
+        lastClientY: evt.clientY,
         lastMoveAt: now,
       };
     };
@@ -9468,7 +9519,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     };
 
     const handleClickCapture = (evt: MouseEvent) => {
-      if (!isInsideFan(evt.target)) return;
+      if (!isInsideFan(evt.target) && !isWithinFanBounds(evt)) return;
       if (Date.now() < suppressClickUntilRef.current) {
         evt.preventDefault();
         evt.stopPropagation();
@@ -9519,6 +9570,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       }
 
       dragState.lastClientX = evt.clientX;
+      dragState.lastClientY = evt.clientY;
       dragState.lastMoveAt = typeof performance !== 'undefined' && typeof performance.now === 'function'
         ? performance.now()
         : Date.now();
@@ -9549,7 +9601,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       if (!dragState) return;
       if (evt && 'pointerId' in evt && dragState.pointerId != null && evt.pointerId !== dragState.pointerId) return;
       webMouseDragRef.current = null;
-      if (!dragState.dragging) return;
+      if (!dragState.dragging) {
+        if (evt) triggerWebFanTapAt(dragState.startClientX, dragState.startClientY);
+        return;
+      }
       suppressClickUntilRef.current = Date.now() + 260;
       snapDraggedMouseGesture(dragState);
     };
@@ -9608,7 +9663,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         wheelSnapTimerRef.current = null;
       }
     };
-  }, [applyFanDrag, beginFanGesture, releaseUserGestureFlagSoon, snapDraggedMouseGesture]);
+  }, [applyFanDrag, beginFanGesture, releaseUserGestureFlagSoon, snapDraggedMouseGesture, triggerWebFanTapAt]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -11963,7 +12018,7 @@ function StartScreen({
               marginTop: -topActionsBackLift,
               marginBottom: topActionsRowGap,
               writingDirection: 'ltr',
-            }}
+            } as any}
           >
             <LulosButton
               text={backButtonLabel}
@@ -18195,7 +18250,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   </>
                 )}
               </View>
-              <Text allowFontScaling={false} style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.78}
+                style={{ fontSize: 11, fontWeight: '800', color: '#FFF', maxWidth: 118, flexShrink: 1 }}
+              >
                 {t('game.swapBrackets')}
               </Text>
             </Animated.View>
@@ -20470,7 +20531,7 @@ export function PlayModeChoiceScreen({
               </LinearGradient>
 
               {/* Language toggle — compact */}
-              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', writingDirection: 'ltr', gap: 6 }}>
+              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', writingDirection: 'ltr', gap: 6 } as any}>
                 <LulosButton
                   text={t('lang.he')}
                   color={locale === 'he' ? 'orange' : 'blue'}
@@ -21273,9 +21334,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       try {
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
-          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
           staysActiveInBackground: false,
-          shouldDuckAndroid: false,
+          shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
         });
         const { sound } = await Audio.Sound.createAsync(
@@ -21976,6 +22037,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       {showTutorialHeader ? (
         <>
           <View
+            pointerEvents="box-none"
             style={{
               position: 'absolute',
               top: tutorialHeaderTop,
@@ -21983,12 +22045,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
               left: 12,
               zIndex: tutorialHeaderZIndex,
               elevation: 24,
-              pointerEvents: 'box-none',
             }}
           >
             <View
               testID="tutorial-header-row"
-              style={{ minHeight: 156, position: 'relative', pointerEvents: 'box-none' }}
+              pointerEvents="box-none"
+              style={{ minHeight: 156, position: 'relative' }}
             >
               <View
                 style={{
@@ -22001,10 +22063,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 8,
-                }}
+                } as any}
               >
                 {Platform.OS === 'android' ? (
-                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 } as any}>
                     <TouchableOpacity
                       accessibilityRole="button"
                       accessibilityLabel={t('game.back')}
@@ -22110,7 +22172,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                     <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
                   </TouchableOpacity>
                 ) : (
-                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 } as any}>
                     <TouchableOpacity
                       accessibilityRole="button"
                       accessibilityLabel={t('game.back')}
@@ -22167,6 +22229,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                 )}
               </View>
               <View
+                pointerEvents="none"
                 style={{
                   position: 'absolute',
                   top: 42,
@@ -22175,7 +22238,6 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   alignItems: 'center',
                   justifyContent: 'flex-start',
                   overflow: 'visible',
-                  pointerEvents: 'none',
                 }}
               >
                 <TutorialProgressMeter

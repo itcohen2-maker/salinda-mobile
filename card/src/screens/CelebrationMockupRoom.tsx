@@ -110,7 +110,7 @@ export function CelebrationMockupRoom({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const safeTop = getScreenSafeTop(insets.top);
   const [fillStep, setFillStep] = useState(0);
-  const [rewardCoins, setRewardCoins] = useState(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full);
+  const [rewardCoins, setRewardCoins] = useState<number>(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full);
   const [totalCoins, setTotalCoins] = useState(128);
   const [showCelebration, setShowCelebration] = useState(false);
 

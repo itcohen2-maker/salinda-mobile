@@ -31,7 +31,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // is backed by synchronous localStorage (no cross-tab races to guard), we
     // skip the lock entirely on web.
     ...(Platform.OS === 'web' && {
-      lock: (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => fn(),
+      lock: <R,>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
     }),
   },
 });

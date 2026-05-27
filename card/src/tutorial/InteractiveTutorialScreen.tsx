@@ -101,6 +101,7 @@ const CELEBRATE_MS = 900;
 const LESSON_DONE_MS = 1400;
 const HIDDEN_TUTORIAL_LAYERS = new Set([15, 16, 17, 18]);
 const TUTORIAL_WILD_STAR = '★';
+const TUTORIAL_HAPPY_BUBBLE_TEST_ID = 'tutorial-happy-bubble';
 
 const L6_DICE_POOL = [
   { d1: 2, d2: 3, d3: 5 },
@@ -929,6 +930,16 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // Ref so event callbacks can read current gameState without stale closures.
   const gameStateRef = useRef(gameState);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const style = document.createElement('style');
+    style.setAttribute('data-tutorial-bubble-touch-through', 'true');
+    style.textContent =
+      `[data-testid="${TUTORIAL_HAPPY_BUBBLE_TEST_ID}"],` +
+      `[data-testid="${TUTORIAL_HAPPY_BUBBLE_TEST_ID}"] * { pointer-events: none !important; }`;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
   // L4 step 0: "תראה לי" gate — bot demo pauses here until the learner taps.
   const l4ShowMeResolveRef = useRef<(() => void) | null>(null);
   const [l4ShowMePending, setL4ShowMePending] = useState(false);
@@ -4147,7 +4158,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const bubbleText: string | null =
     isFracIntroActive ? null
     : isFracDefenseActive ? null
-    : (isFracAttackActive && engine.phase === 'bot-demo') ? null
+    : (isFracAttackActive && (engine.phase === 'bot-demo' || engine.phase === 'await-mimic')) ? null
     : (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && (engine.stepIndex === 0 || engine.stepIndex === 1) && engine.phase === 'await-mimic') ? null
     : isL4Step3BotDemo ? null
     : showL4Step3IntroModal || showL4Step3FinishModal ? null
@@ -4248,11 +4259,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
 
-  // Fan strip lives at the bottom of the screen. getWebGameLayout now returns
-  // the same mobile constants (handBottom=195, fanViewportHeight=116).
+  // Fan strip lives at the bottom of the screen. Use handStripHeight (140 on iOS)
+  // which includes the 24px strip-above-fan area, not just the card viewport (116).
   const FAN_BOTTOM = webTutorialLayout?.handBottom ?? 195;
-  const FAN_STRIP_H = webTutorialLayout?.fanViewportHeight ?? 116;
-  const FAN_VISUAL_TOP_FROM_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + 30; // 365 ג€” leaves a clear margin above bleeding cards
+  const FAN_STRIP_H = webTutorialLayout?.handStripHeight ?? 140;
+  const FAN_VISUAL_TOP_FROM_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + 30; // 365 — leaves a clear margin above bleeding cards
   // Uniform bottom offset for every "׳”׳'׳ ׳×׳™" intro-overlay button across all lessons.
   const GOT_IT_BOTTOM = 28;
   // Advanced lessons (fractions, parens) need a bit more breathing room above the hand.
@@ -4389,6 +4400,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const BUBBLE_BOTTOM = isDiceLesson && !diceHintShouldStayLow
     ? DICE_WINDOW_TOP_FROM_BOTTOM + 12
     : FAN_VISUAL_TOP_FROM_BOTTOM + 18;
+  const L7_FAN_CLEAR_BUBBLE_BOTTOM =
+    FAN_VISUAL_TOP_FROM_BOTTOM + (locale === 'en' ? 34 : 18);
   // L5.1 bubble sits just above the fan cards (below equation mockup).
   // FAN_BOTTOM + FAN_STRIP_H is the fan strip container top without the 30px
   // safety margin, keeping the bubble below the equation on all screen sizes.
@@ -6310,6 +6323,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         const isCompact = compactMid || bubbleAtTop || isL5Step0Bubble || isL9Stage0Bubble || isL9Stage1Bubble;
         return (
           <View
+            testID={TUTORIAL_HAPPY_BUBBLE_TEST_ID}
             pointerEvents={isParensLesson && engine.phase === 'celebrate' ? 'box-none' : 'none'}
             style={
               isL9Stage0Bubble
@@ -6419,7 +6433,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           pointerEvents="none"
           style={{
             position: 'absolute',
-            bottom: FAN_BOTTOM + 14,
+            bottom: L7_FAN_CLEAR_BUBBLE_BOTTOM,
             left: 22,
             right: 22,
             alignItems: 'center',
@@ -6465,7 +6479,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           pointerEvents="none"
           style={{
             position: 'absolute',
-            bottom: FAN_BOTTOM + 14,
+            bottom: L7_FAN_CLEAR_BUBBLE_BOTTOM,
             left: 0,
             right: 0,
             alignItems: 'center',
@@ -6537,9 +6551,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         const pileText = locale === 'he'
           ? `בערימה יש ${pileVal ?? '…'} והוא מתחלק ב${engine.stepIndex === 1 ? '½' : '⅓'}`
           : `Pile is ${pileVal ?? '…'} — divides by ${engine.stepIndex === 1 ? '½' : '⅓'}`;
+        const hintText =
+          engine.phase === 'await-mimic' && currentStep?.hintKey
+            ? t(currentStep.hintKey)
+            : null;
+        const fractionAttackText = hintText ? `${pileText}\n${hintText}` : pileText;
         return (
           <View pointerEvents="none" style={{ position: 'absolute', top: tutorialSideHintBubbleTop, alignItems: 'center', zIndex: 9310, ...tutorialTopBubbleInsets }}>
-            <HappyBubble text={pileText} tone="turn" withTail={false} size="compact" maxWidth={tutorialSideBubbleMaxWidth} />
+            <HappyBubble text={fractionAttackText} tone="turn" withTail={false} size="compact" maxWidth={tutorialSideBubbleMaxWidth} />
           </View>
         );
       })() : null}

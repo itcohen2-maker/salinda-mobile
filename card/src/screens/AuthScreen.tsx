@@ -148,6 +148,12 @@ export function AuthScreen({ onSuccess, onBack, intent = 'account' }: Props) {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
+        {/* TEST BANNER - REMOVE LATER */}
+        <View style={styles.testBanner}>
+          <Text style={styles.testBannerName}>✦ איציק ✦</Text>
+          <Text style={styles.testBannerVersion}>v1.0.0</Text>
+        </View>
+
         {showAccountMenu ? (
           <>
             <Text style={styles.title}>{t('auth.accountMenuTitle')}</Text>
@@ -495,5 +501,21 @@ const styles = StyleSheet.create({
   backText: {
     color: 'rgba(255,255,255,0.5)',
     fontSize: 13,
+  },
+  testBanner: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  testBannerName: {
+    color: '#FF6B00',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  testBannerVersion: {
+    color: '#FCD34D',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

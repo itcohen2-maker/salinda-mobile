@@ -64,13 +64,15 @@ export function HappyBubble({
   }, [text, title, scale]);
 
   const palette = TONE_STYLES[tone];
+  const noPointerEvents = Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : null;
 
   return (
-    <View pointerEvents="box-none" style={{ alignItems: 'center' }}>
+    <View pointerEvents="none" style={[{ alignItems: 'center' }, noPointerEvents]}>
       {withTail && tailTop ? (
-        <View style={{ marginBottom: -2, width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 14, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: palette.border }} />
+        <View pointerEvents="none" style={[{ marginBottom: -2, width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 14, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: palette.border }, noPointerEvents]} />
       ) : null}
       <Animated.View
+        pointerEvents="none"
         style={[
           {
             backgroundColor: palette.bg,
@@ -90,11 +92,12 @@ export function HappyBubble({
           // On web: tell iOS Safari not to intercept horizontal touch gestures
           // on the bubble. Without this, iOS fires pointercancel on horizontal
           // swipes even when the bubble sits above the fan, which kills fan drag.
-          Platform.OS === 'web' && ({ touchAction: 'pan-y' } as any),
+          Platform.OS === 'web' && ({ touchAction: 'pan-y', pointerEvents: 'none' } as any),
         ]}
       >
         {title ? (
           <Text
+            pointerEvents="none"
             style={[
               {
                 color: palette.text,
@@ -103,6 +106,7 @@ export function HappyBubble({
                 textAlign: 'center',
                 marginBottom: 4,
               },
+              noPointerEvents,
               titleStyleOverride,
             ]}
           >
@@ -110,6 +114,7 @@ export function HappyBubble({
           </Text>
         ) : null}
         <Text
+          pointerEvents="none"
           style={[
             {
               color: palette.text,
@@ -118,6 +123,7 @@ export function HappyBubble({
               fontWeight: '800',
               textAlign: 'center',
             },
+            noPointerEvents,
             textStyleOverride,
           ]}
         >
@@ -126,9 +132,10 @@ export function HappyBubble({
       </Animated.View>
       {withTail && !tailTop ? (
         arrowSize === 'big' ? (
-          <Animated.View style={{ marginTop: -2, alignItems: 'center', transform: [{ scale }] }}>
+          <Animated.View pointerEvents="none" style={[{ marginTop: -2, alignItems: 'center', transform: [{ scale }] }, noPointerEvents]}>
             {/* Outer (border) triangle */}
             <View
+              pointerEvents="none"
               style={{
                 width: 0,
                 height: 0,
@@ -138,10 +145,12 @@ export function HappyBubble({
                 borderLeftColor: 'transparent',
                 borderRightColor: 'transparent',
                 borderTopColor: palette.border,
+                ...noPointerEvents,
               }}
             />
             {/* Inner fill triangle, slightly smaller, overlaid for a clean filled look */}
             <View
+              pointerEvents="none"
               style={{
                 marginTop: -36,
                 width: 0,
@@ -152,11 +161,13 @@ export function HappyBubble({
                 borderLeftColor: 'transparent',
                 borderRightColor: 'transparent',
                 borderTopColor: palette.bg,
+                ...noPointerEvents,
               }}
             />
           </Animated.View>
         ) : (
           <View
+            pointerEvents="none"
             style={{
               marginTop: -2,
               width: 0,
@@ -167,6 +178,7 @@ export function HappyBubble({
               borderLeftColor: 'transparent',
               borderRightColor: 'transparent',
               borderTopColor: palette.border,
+              ...noPointerEvents,
             }}
           />
         )
