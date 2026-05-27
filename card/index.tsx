@@ -20470,7 +20470,7 @@ export function PlayModeChoiceScreen({
 
             {/* TEST BANNER - REMOVE LATER */}
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ color: '#FF6B00', fontSize: 26, fontWeight: '900', letterSpacing: 3 }}>★ איציק כהן ★</Text>
+              <Text style={{ color: '#FF6B00', fontSize: 26, fontWeight: '900', letterSpacing: 3 }}>FUCK ענת</Text>
             </View>
 
             {/* ── 1. HERO BUTTON ── */}
