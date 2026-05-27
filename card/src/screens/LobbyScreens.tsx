@@ -956,7 +956,7 @@ const styles = StyleSheet.create({
   botBadge: { backgroundColor: 'rgba(34,211,238,0.18)', color: brand.cyan, fontSize: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
   disconnectedBadge: { color: '#EF4444', fontSize: 10 },
   diffRow: { flexDirection: 'row', gap: 10, width: '100%', marginBottom: 8 },
-  optionOrderLtr: { direction: 'ltr' },
+  optionOrderLtr: { direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
   diffBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
   diffBtnActive: { backgroundColor: brand.gold },
   diffBtnDisabled: { opacity: 0.45 },

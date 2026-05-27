@@ -1464,6 +1464,7 @@ type GameAction =
   | { type: 'CLOSE_JOKER_MODAL' }
   | { type: 'ADD_SLINDA_TO_HAND' }
   | { type: 'MARK_SLINDA_ATTEMPT' }
+  | { type: 'UNMARK_SLINDA_ATTEMPT' }
   | { type: 'REPLACE_CARD_WITH_SLINDA'; cardId: string }
   | { type: 'MARK_WILD_ATTEMPT' }
   | { type: 'REPLACE_CARD_WITH_WILD'; cardId: string }
@@ -3292,6 +3293,10 @@ function gameReducer(
     case 'MARK_SLINDA_ATTEMPT': {
       if (st.phase !== 'turn-transition' || st.slindaAttemptedThisTurn) return st;
       return { ...st, slindaAttemptedThisTurn: true };
+    }
+    case 'UNMARK_SLINDA_ATTEMPT': {
+      if (!st.slindaAttemptedThisTurn) return st;
+      return { ...st, slindaAttemptedThisTurn: false };
     }
     case 'MARK_WILD_ATTEMPT': {
       if (st.phase !== 'turn-transition' || st.wildAttemptedThisTurn) return st;
@@ -12972,7 +12977,7 @@ const hsS = StyleSheet.create({
     flexWrap: 'wrap',
     alignSelf: 'stretch',
     justifyContent: 'flex-start',
-    direction: 'ltr',
+    direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
     gap: 5,
   },
   // מעטפת חיצונית לגרדיאנט של שורות נבחרות
@@ -13005,7 +13010,7 @@ const hsS = StyleSheet.create({
   },
   guidanceToggleWrapper: {
     flexDirection: 'row',
-    direction: 'ltr',
+    direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
     backgroundColor: '#1e293b',
     borderRadius: 8,
     padding: 2,
@@ -13156,7 +13161,7 @@ const hsS = StyleSheet.create({
   rowHint: { color: 'rgba(255,255,255,0.72)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   rowSubHint: { color: 'rgba(255,255,255,0.88)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   // LTR physical order: the last option in each array sits on the right.
-  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr', gap: 5 },
+  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: Platform.OS === 'android' ? 'ltr' as const : undefined, gap: 5 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
   toggleOn: {
     backgroundColor: '#FBBF24', borderColor: '#92400E', borderWidth: 2,
@@ -14974,6 +14979,9 @@ function TurnTransition() {
             autoDismissMs: 6500,
           },
         });
+        if (activeSpecialKind === 'slinda') {
+          dispatch({ type: 'UNMARK_SLINDA_ATTEMPT' });
+        }
         resetSpecialModalState();
         resumePausedStartTurnTimer();
         return;
@@ -20459,6 +20467,11 @@ export function PlayModeChoiceScreen({
       >
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
+
+            {/* TEST BANNER - REMOVE LATER */}
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#FF6B00', fontSize: 26, fontWeight: '900', letterSpacing: 3 }}>★ איציק כהן ★</Text>
+            </View>
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>

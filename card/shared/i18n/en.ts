@@ -1314,7 +1314,7 @@ export const en: Record<string, string> = {
   'tutorial.l5.jokerLabel': 'Slinda',
 
   // Welcome bubble — shown before the first lesson
-  'tutorial.welcome.title': 'Welcome to Salinda',
+  'tutorial.welcome.title': 'Welcome to Selinda',
   'tutorial.welcome.headline': 'Start with 7 cards',
   'tutorial.welcome.headlineSub': 'and win with 2 left!',
   'tutorial.welcome.tagline': 'Each turn, build an equation using 2 or 3 dice.',
