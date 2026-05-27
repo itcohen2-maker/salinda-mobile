@@ -22,14 +22,14 @@ const ogTags = `
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://salinda-mobile.vercel.app/" />
+  <meta property="og:url" content="https://lolos-mobile.vercel.app/" />
   <meta property="og:title" content="Salinda / סלינדה" />
   <meta property="og:description" content="משחק קלפים חברתי – סלינדה 🃏" />
-  <meta property="og:image" content="https://salinda-mobile.vercel.app/joker-preview.jpg" />
+  <meta property="og:image" content="https://lolos-mobile.vercel.app/joker-preview.jpg" />
   <meta property="og:image:width" content="800" />
   <meta property="og:image:height" content="1024" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="https://salinda-mobile.vercel.app/joker-preview.jpg" />`;
+  <meta name="twitter:image" content="https://lolos-mobile.vercel.app/joker-preview.jpg" />`;
 
 html = html.replace('</head>', `${ogTags}\n</head>`);
 fs.writeFileSync(distIndex, html);
