@@ -8541,7 +8541,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 const eqS = StyleSheet.create({
   wrap: { backgroundColor: 'transparent', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center', alignSelf: 'center' as any, width: '100%', maxWidth: '100%', gap: 10, borderWidth: 0, borderColor: 'transparent', overflow: 'visible' as const },
   title: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '700', textAlign: 'center' },
-  diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center', direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
+  diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center', direction: 'ltr' as const },
   diceBtn: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', borderWidth: 0, borderColor: 'transparent', overflow: 'hidden' },
   diceBtnFace: { backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0, padding: 0 },
   diceBtnUsed: { opacity: 0 },
@@ -8588,7 +8588,7 @@ const eqS = StyleSheet.create({
     backgroundColor: EQUATION_VISUAL_TOKENS.rowFill,
     borderWidth: 1,
     borderColor: EQUATION_VISUAL_TOKENS.rowBorder,
-    direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
+    direction: 'ltr' as const,
     writingDirection: 'ltr',
   },
   /** קבוצה שלמה של סלוטים+סימנים — לא נשברת באמצע */
@@ -8663,7 +8663,7 @@ const eqS = StyleSheet.create({
   resultVal: { fontSize: 26, fontWeight: '900', color: EQUATION_VISUAL_TOKENS.resultText },
   resultPlaceholder: { fontSize: 26, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.resultTextMuted },
   resultError: { fontSize: 20, fontWeight: '900', color: '#EA4335' },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: 'ltr' as const },
   hint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
 });
 
@@ -12977,7 +12977,7 @@ const hsS = StyleSheet.create({
     flexWrap: 'wrap',
     alignSelf: 'stretch',
     justifyContent: 'flex-start',
-    direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
+    direction: 'ltr' as const,
     gap: 5,
   },
   // מעטפת חיצונית לגרדיאנט של שורות נבחרות
@@ -13010,7 +13010,7 @@ const hsS = StyleSheet.create({
   },
   guidanceToggleWrapper: {
     flexDirection: 'row',
-    direction: Platform.OS === 'android' ? 'ltr' as const : undefined,
+    direction: 'ltr' as const,
     backgroundColor: '#1e293b',
     borderRadius: 8,
     padding: 2,
@@ -13161,7 +13161,7 @@ const hsS = StyleSheet.create({
   rowHint: { color: 'rgba(255,255,255,0.72)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   rowSubHint: { color: 'rgba(255,255,255,0.88)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   // LTR physical order: the last option in each array sits on the right.
-  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: Platform.OS === 'android' ? 'ltr' as const : undefined, gap: 5 },
+  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr' as const, gap: 5 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
   toggleOn: {
     backgroundColor: '#FBBF24', borderColor: '#92400E', borderWidth: 2,

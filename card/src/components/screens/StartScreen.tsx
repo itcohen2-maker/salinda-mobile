@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   input: { width: '100%', backgroundColor: '#374151', borderWidth: 1, borderColor: '#4B5563', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, marginBottom: 6 },
 
   /* ── Player count chips — 44×44 hit targets ── */
-  countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignSelf: 'flex-end', direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
+  countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignSelf: 'flex-end', direction: 'ltr' as const },
   countRowCompact: { alignSelf: 'stretch', justifyContent: 'flex-end' },
   countBtn: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
   countBtnActive: { backgroundColor: '#F59E0B' },
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   countTextActive: { color: '#FFF' },
 
   /* ── Difficulty row ── */
-  diffRow: { flexDirection: 'row', gap: 10, width: '100%', direction: Platform.OS === 'android' ? 'ltr' as const : undefined },
+  diffRow: { flexDirection: 'row', gap: 10, width: '100%', direction: 'ltr' as const },
   diffRowStacked: { flexDirection: 'column' },
   diffBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#374151', alignItems: 'center' },
   diffEasy: { backgroundColor: '#16A34A' },
