@@ -70,6 +70,7 @@ import { WalkingDice } from './components/WalkingDice';
 import FuseTimer from './components/FuseTimer';
 import ExcellenceMeter from './components/ExcellenceMeter';
 import TutorialProgressMeter from './components/TutorialProgressMeter';
+import { useAdminAccess } from './src/admin/useAdminAccess';
 import { SlindaCoin } from './components/SlindaCoin';
 import type { HorizontalWheelOption } from './components/HorizontalOptionWheel';
 import { AdSlot } from './src/components/AdSlot';
@@ -2397,7 +2398,7 @@ const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
 };
 const EXCELLENCE_METER_FULL_REWARD_COINS = SALINDA_GAMEPLAY_REWARDS.excellence_meter_full;
 const PRE_VICTORY_COIN_AWARD_HOLD_MS = 1500;
-const BOT_TURN_COIN_CELEBRATION_HOLD_MS = 1800;
+const BOT_TURN_COIN_CELEBRATION_HOLD_MS = 5000;
 
 function clampCourageStep(step: number): number {
   return Math.max(0, Math.min(3, step));
@@ -2634,7 +2635,6 @@ function gameReducer(
       });
     }
     case 'NEXT_TURN': {
-      console.log('NEXT_TURN, pendingFractionTarget was:', st.pendingFractionTarget);
       AsyncStorage.removeItem('lulos_guidance_notifications');
       const next = (st.currentPlayerIndex + 1) % st.players.length;
       return withOverflowSwapTurnTransition({
@@ -2682,7 +2682,6 @@ function gameReducer(
     }
     case 'BEGIN_TURN': {
       if (st.overflowSwapPending) return st;
-      console.log('BEGIN_TURN: pendingFractionTarget=', st.pendingFractionTarget, 'fractionAttackResolved=', st.fractionAttackResolved, 'topCard=', st.discardPile[st.discardPile.length-1]?.type, st.discardPile[st.discardPile.length-1]?.fraction);
       // activeOperation is purely informational — challenge card stays on pile, player plays normally
       // Fraction attack: explicit pending attack (from PLAY_FRACTION)
       if (st.pendingFractionTarget !== null && !st.fractionAttackResolved) {
@@ -3062,7 +3061,6 @@ function gameReducer(
       return { ...st, suppressIdenticalOverlayOnline: false };
     // ?? Equation operator placement (building phase only) ??
     case 'SELECT_EQ_OP': {
-      console.log('[REDUCER] SELECT_EQ_OP', 'phase=', st.phase, 'card=', action.card.operation);
       // שלב המשוואה נשלט ע"י override במצב רשת — ב-localState הוא נשאר 'setup', לכן אין בדיקת phase כאן; הצרכנים מגנים ב-UI.
       if (action.card.type !== 'operation') return st;
       // Tutorial Lesson 5 teaches operator-card placement — all four signs
@@ -3112,7 +3110,6 @@ function gameReducer(
     }
     case 'PLACE_EQ_OP': {
       const pick = st.equationHandPick;
-      console.log('[REDUCER] PLACE_EQ_OP', 'pos=', action.position, 'hasPick=', !!pick);
       if (!pick || action.position < 0 || action.position > 1) return st;
       if (pick.card.type === 'joker' && pick.jokerAs == null) return st;
       const opToPlace = pick.card.type === 'joker' ? pick.jokerAs : pick.card.operation;
@@ -3133,7 +3130,6 @@ function gameReducer(
       return { ...st, equationHandSlots: slots, message: '' };
     }
     case 'CLEAR_EQ_HAND': {
-      console.log('[REDUCER] CLEAR_EQ_HAND');
       return { ...st, equationHandSlots: [null, null], equationHandPick: null, message: '' };
     }
     case 'CLEAR_EQ_HAND_PICK':
@@ -3183,10 +3179,8 @@ function gameReducer(
       }
 
       // ?? ATTACK MODE: fraction played offensively ??
-      console.log('PLAY_FRACTION dispatch:', action.card.fraction, 'phase:', st.phase, 'pendingFractionTarget:', st.pendingFractionTarget);
-      if (st.phase !== 'pre-roll' && st.phase !== 'building' && st.phase !== 'solved') { console.log('PLAY_FRACTION REJECTED - bad phase:', st.phase); return st; }
+      if (st.phase !== 'pre-roll' && st.phase !== 'building' && st.phase !== 'solved') { return st; }
       const newTarget = denom;
-      console.log('SET pendingFractionTarget:', newTarget);
       const cardToDiscard = { ...action.card, resolvedTarget: denom };
       const np = st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hand: cp.hand.filter(c => c.id !== action.card.id) } : p);
       let ns: GameState = {
@@ -3454,7 +3448,6 @@ function gameReducer(
       if (id.startsWith('guidance-') || id.startsWith('onb-')) {
         AsyncStorage.setItem('lulos_guidance_notifications', JSON.stringify(next.filter(n => n.id.startsWith('guidance-') || n.id.startsWith('onb-')).slice(-10)));
       }
-      console.log('[PUSH]', JSON.stringify({id:action.payload.id,title:action.payload.title,emoji:action.payload.emoji,msg:action.payload.message?.slice(0,40),style:action.payload.style}));
       return { ...st, notifications: next };
     }
     case 'DISMISS_NOTIFICATION': {
@@ -3464,7 +3457,6 @@ function gameReducer(
         if (toStore.length) AsyncStorage.setItem('lulos_guidance_notifications', JSON.stringify(toStore));
         else AsyncStorage.removeItem('lulos_guidance_notifications');
       }
-      console.log('[DISMISS]', action.id, 'remaining:', next.length);
       return { ...st, notifications: next };
     }
     case 'RESTORE_NOTIFICATIONS':
@@ -8542,7 +8534,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 const eqS = StyleSheet.create({
   wrap: { backgroundColor: 'transparent', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center', alignSelf: 'center' as any, width: '100%', maxWidth: '100%', gap: 10, borderWidth: 0, borderColor: 'transparent', overflow: 'visible' as const },
   title: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '700', textAlign: 'center' },
-  diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center', direction: 'ltr' as const },
+  diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center', ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }) },
   diceBtn: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', borderWidth: 0, borderColor: 'transparent', overflow: 'hidden' },
   diceBtnFace: { backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0, padding: 0 },
   diceBtnUsed: { opacity: 0 },
@@ -8589,7 +8581,7 @@ const eqS = StyleSheet.create({
     backgroundColor: EQUATION_VISUAL_TOKENS.rowFill,
     borderWidth: 1,
     borderColor: EQUATION_VISUAL_TOKENS.rowBorder,
-    direction: 'ltr' as const,
+    ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }),
     writingDirection: 'ltr',
   },
   /** קבוצה שלמה של סלוטים+סימנים — לא נשברת באמצע */
@@ -8664,7 +8656,7 @@ const eqS = StyleSheet.create({
   resultVal: { fontSize: 26, fontWeight: '900', color: EQUATION_VISUAL_TOKENS.resultText },
   resultPlaceholder: { fontSize: 26, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.resultTextMuted },
   resultError: { fontSize: 20, fontWeight: '900', color: '#EA4335' },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, direction: 'ltr' as const },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }) },
   hint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
 });
 
@@ -10236,9 +10228,8 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     // במשחק מול הבוט — חסימת לחיצות על קלפים כשהבוט במהלכו
     if (isLocalBotTurn) return;
     if (l6ResultsMiniCardsOnly) return;
-    console.log('CARD TAP', card.id, card.type, card.type==='operation'?card.operation:'', 'phase=', state.phase, 'hp=', state.hasPlayedCards);
     if (state.hasPlayedCards) {
-      console.log('BLOCKED: hasPlayedCards'); return;
+      return;
     }
     if (soundOn) {
       if (state.isTutorial) {
@@ -12395,7 +12386,7 @@ function StartScreen({
               <Text style={{ color: 'rgba(226,232,240,0.92)', fontSize: 12, fontWeight: '700', textAlign: 'center', writingDirection: isRTL ? 'rtl' : 'ltr' }}>
                 {t('start.advancedSetup.operatorsTitle')}
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr', gap: 8, justifyContent: 'center' }}>
+              <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }, Platform.select({ native: { direction: 'ltr' as const }, default: {} })]}>
                 {([
                   ['plusMinus', ['+', '-'] as Operation[], 'start.advancedSetup.operators.plusMinus.label'],
                   ['all', ['+', '-', 'x', '÷'] as Operation[], 'start.advancedSetup.operators.all.label'],
@@ -12978,7 +12969,7 @@ const hsS = StyleSheet.create({
     flexWrap: 'wrap',
     alignSelf: 'stretch',
     justifyContent: 'flex-start',
-    direction: 'ltr' as const,
+    ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }),
     gap: 5,
   },
   // מעטפת חיצונית לגרדיאנט של שורות נבחרות
@@ -13011,7 +13002,7 @@ const hsS = StyleSheet.create({
   },
   guidanceToggleWrapper: {
     flexDirection: 'row',
-    direction: 'ltr' as const,
+    ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }),
     backgroundColor: '#1e293b',
     borderRadius: 8,
     padding: 2,
@@ -13162,7 +13153,7 @@ const hsS = StyleSheet.create({
   rowHint: { color: 'rgba(255,255,255,0.72)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   rowSubHint: { color: 'rgba(255,255,255,0.88)', fontSize: 11, lineHeight: 16, flexShrink: 1 },
   // LTR physical order: the last option in each array sits on the right.
-  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', direction: 'ltr' as const, gap: 5 },
+  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }), gap: 5 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
   toggleOn: {
     backgroundColor: '#FBBF24', borderColor: '#92400E', borderWidth: 2,
@@ -14399,6 +14390,9 @@ function TurnTransition() {
   const [autoResolving, setAutoResolving] = useState(false);
   const [warnedAtThreeSeconds, setWarnedAtThreeSeconds] = useState(false);
   const [localStartTurnDeadlineAt, setLocalStartTurnDeadlineAt] = useState<number | null>(null);
+  const [coinCelebrationOverlayActive, setCoinCelebrationOverlayActive] = useState(
+    () => showTurnCoinCelebration,
+  );
   const startTurnTimeoutFiredRef = useRef(false);
   const overflowSwapTimeoutFiredRef = useRef(false);
   const overflowAutoResolveAnim = useRef(new Animated.Value(0)).current;
@@ -14520,6 +14514,11 @@ function TurnTransition() {
     turnPlayerIdxRef.current = state.currentPlayerIndex;
   }, [state.phase, state.currentPlayerIndex]);
   useEffect(() => {
+    if (!coinCelebrationOverlayActive) return;
+    const id = setTimeout(() => setCoinCelebrationOverlayActive(false), 2500);
+    return () => clearTimeout(id);
+  }, [coinCelebrationOverlayActive]);
+  useEffect(() => {
     const canRunLocalStartTurnTimer =
       state.phase === 'turn-transition' &&
       !isOnlineSpectator &&
@@ -14537,7 +14536,8 @@ function TurnTransition() {
     }
     if (localStartTurnDeadlineAt == null) {
       startTurnTimeoutFiredRef.current = false;
-      setLocalStartTurnDeadlineAt(Date.now() + START_TURN_TIMER_SECONDS * 1000);
+      const celebrationDelay = showTurnCoinCelebration ? BOT_TURN_COIN_CELEBRATION_HOLD_MS : 0;
+      setLocalStartTurnDeadlineAt(Date.now() + celebrationDelay + START_TURN_TIMER_SECONDS * 1000);
       return;
     }
     const deadline = localStartTurnDeadlineAt;
@@ -15369,14 +15369,14 @@ function TurnTransition() {
           </View>
         )}
         {showTurnCoinCelebration && (
-          <View style={{ alignSelf: 'center', marginBottom: 6, maxWidth: 248, width: '100%', alignItems: 'center' }}>
+          <View style={{ alignSelf: 'center', marginBottom: 6, maxWidth: 320, width: '100%', alignItems: 'center' }}>
             <CoinAwardCelebrationCard
               amount={turnCoinsEarned}
               title={turnCoinCelebrationTitle}
               body={t('game.turnCoinCelebration.body')}
               pulseKey={state.courageRewardPulseId ?? turnCoinsEarned}
               variant="inline"
-              size="mini"
+              size="regular"
               testID="turn-coin-celebration"
             />
           </View>
@@ -15927,6 +15927,53 @@ function TurnTransition() {
         </TouchableOpacity>
       )}
     </View>
+
+    {/* Coin celebration full-screen overlay — shown at turn start when coins were earned */}
+    {coinCelebrationOverlayActive && showTurnCoinCelebration && (
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={() => setCoinCelebrationOverlayActive(false)}
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            zIndex: 20000,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 28,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['#0a1f14', '#0d2541', '#0a1f14']}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <Text
+          style={{
+            color: '#FDE68A',
+            fontSize: 52,
+            fontWeight: '900',
+            letterSpacing: 1,
+            marginBottom: 28,
+            textShadowColor: 'rgba(250,204,21,0.55)',
+            textShadowOffset: { width: 0, height: 0 },
+            textShadowRadius: 24,
+          }}
+        >
+          {t('game.turnCoinCelebration.exclamation')}
+        </Text>
+        <CoinAwardCelebrationCard
+          amount={turnCoinsEarned}
+          title={turnCoinCelebrationTitle}
+          body={t('game.turnCoinCelebration.body')}
+          pulseKey={state.courageRewardPulseId ?? turnCoinsEarned}
+          variant="hero"
+          size="regular"
+          testID="turn-coin-celebration-overlay"
+        />
+      </TouchableOpacity>
+    )}
     </WebGameScreenFrame>
   );
 }
@@ -20406,8 +20453,9 @@ export function PlayModeChoiceScreen({
   onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
 }) {
   const { t, locale, setLocale } = useLocale();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { isFeedbackAdmin } = useFeedbackAdmin();
+  const isLoggedIn = !!user && !user.is_anonymous;
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const preferredNameSeededRef = useRef(false);
@@ -20469,10 +20517,11 @@ export function PlayModeChoiceScreen({
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
 
-            {/* TEST BANNER - REMOVE LATER */}
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
-            </View>
+            {isFeedbackAdmin && (
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
+              </View>
+            )}
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
@@ -20621,7 +20670,7 @@ export function PlayModeChoiceScreen({
               style={{ marginBottom: 12, alignSelf: 'center' }}
             />
             <LulosButton
-              text={t('auth.homeButton')}
+              text={isLoggedIn ? t('auth.switchUserButton') : t('auth.homeButton')}
               color="blue"
               width={220}
               height={42}
@@ -20926,6 +20975,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const mp = useMultiplayerOptional();
   const { state, dispatch } = useGame();
   const { profile, user } = useAuth();
+  const { isAdmin } = useAdminAccess();
   const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const viewport = useWebViewportSize();
@@ -21455,8 +21505,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     AsyncStorage.setItem('lulos_tutorial_done', 'true').catch(() => {});
     if (tutorialCompleted) {
       void recordCompletedSessionForFeedback('tutorial');
-      setSelectedLocalGameMode('vs-bot');
-      setPlayMode('local');
+      setPlayMode('game-entry');
       return;
     }
     setPlayMode('choose');
@@ -22290,7 +22339,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   pulseKey={tutorialMeter.pulseKey}
                   isCelebrating={tutorialMeter.isCelebrating}
                   testID="tutorial-header-meter"
-                  layerNumber={tutorialMeter.layerNumber}
+                  layerNumber={isAdmin ? tutorialMeter.layerNumber : undefined}
+                  showStepMarkers={isAdmin}
                 />
               </View>
             </View>

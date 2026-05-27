@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
   setupFieldHintRtl: { writingDirection: 'rtl' },
   setupFieldRow: { width: '100%', maxWidth: 420, alignSelf: 'center', justifyContent: 'center' },
   setupActionBtn: { width: '100%', maxWidth: 420, alignSelf: 'center' },
-  optionOrderLtr: { direction: 'ltr' as const },
+  optionOrderLtr: { ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }) },
   sectionHeaderRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   refreshBtn: { backgroundColor: SURFACE_SOFT, borderWidth: 1, borderColor: GOLD_LINE, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
   refreshBtnText: { color: ACTION_GOLD, fontSize: 16, fontWeight: '700' },
