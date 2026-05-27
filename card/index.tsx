@@ -19560,8 +19560,39 @@ function BotMissionStrip(
   );
 }
 
-function BotThinkingOverlay({ topOffset: _topOffset }: { topOffset: number }) {
-  return null;
+function BotThinkingOverlay({ topOffset }: { topOffset: number }) {
+  const { dispatch } = useGame();
+  return (
+    <View
+      testID="bot-thinking-overlay"
+      pointerEvents="auto"
+      style={{
+        position: 'absolute',
+        bottom: 120,
+        left: 0,
+        right: 0,
+        zIndex: 400,
+        alignItems: 'center',
+        paddingTop: topOffset,
+      }}
+    >
+      <TouchableOpacity
+        testID="bot-speed-up"
+        onPress={() => dispatch({ type: 'BOT_STEP' })}
+        style={{
+          backgroundColor: 'rgba(30,41,59,0.85)',
+          borderRadius: 20,
+          paddingHorizontal: 18,
+          paddingVertical: 8,
+          borderWidth: 1,
+          borderColor: 'rgba(148,163,184,0.3)',
+        }}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={{ color: '#CBD5E1', fontSize: 13, fontWeight: '600' }}>⚡</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 // ???????????????????????????????????????????????????????????????

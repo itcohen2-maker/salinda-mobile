@@ -282,12 +282,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void init();
 
     try {
-      const { data } = supabase.auth.onAuthStateChange((_event, s) => {
+      const { data } = supabase.auth.onAuthStateChange((event, s) => {
         setSession(s ?? null);
         if (s?.user) {
           void fetchProfile(s.user.id);
         } else {
           setProfile(null);
+          if (event === 'TOKEN_REFRESH_FAILED') {
+            void beginAnonymousSession();
+          }
         }
       });
       subscription = data?.subscription ?? null;
