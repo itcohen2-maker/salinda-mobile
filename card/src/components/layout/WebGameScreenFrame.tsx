@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import type { ReactNode } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, ViewProps, ViewStyle } from 'react-native';
 
 type WebGameScreenFrameProps = {
   children: ReactNode;
@@ -12,6 +12,7 @@ type WebGameScreenFrameProps = {
   testID?: string;
   outerStyle?: StyleProp<ViewStyle>;
   innerStyle?: StyleProp<ViewStyle>;
+  containerPointerEvents?: ViewProps['pointerEvents'];
 };
 
 export function WebGameScreenFrame({
@@ -23,10 +24,11 @@ export function WebGameScreenFrame({
   testID,
   outerStyle,
   innerStyle,
+  containerPointerEvents,
 }: WebGameScreenFrameProps) {
   if (Platform.OS !== 'web') {
     return (
-      <View testID={testID} style={[styles.inner, { width }, innerStyle]}>
+      <View pointerEvents={containerPointerEvents} testID={testID} style={[styles.inner, { width }, innerStyle]}>
         {children}
       </View>
     );
@@ -50,8 +52,9 @@ export function WebGameScreenFrame({
     // the page during pull-to-refresh, making them appear "detached".
     const needsScale = safeScale < 1;
     return (
-      <View style={[styles.outer, outerStyle]}>
+      <View pointerEvents={containerPointerEvents} style={[styles.outer, outerStyle]}>
         <View
+          pointerEvents={containerPointerEvents}
           testID={testID}
           style={[
             styles.scaledSlot,
@@ -67,6 +70,7 @@ export function WebGameScreenFrame({
           ]}
         >
           <View
+            pointerEvents={containerPointerEvents}
             style={[
               styles.scaledContent,
               innerStyle,
@@ -86,8 +90,8 @@ export function WebGameScreenFrame({
   }
 
   return (
-    <View style={[styles.outer, outerStyle]}>
-      <View testID={testID} style={[styles.gameColumn, { width, maxWidth: '100%' as any }, innerStyle]}>
+    <View pointerEvents={containerPointerEvents} style={[styles.outer, outerStyle]}>
+      <View pointerEvents={containerPointerEvents} testID={testID} style={[styles.gameColumn, { width, maxWidth: '100%' as any }, innerStyle]}>
         {children}
       </View>
     </View>

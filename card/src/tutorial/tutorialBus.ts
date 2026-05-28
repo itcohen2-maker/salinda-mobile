@@ -38,6 +38,7 @@ export type FanDemoCmd =
    *  skip/back-navigates into L6 step 0 (chip should start closed and
    *  pulsing). */
   | { kind: 'closeResultsChip' }
+  | { kind: 'hideResultsChip' }
   /** Clear the selected equation for display — hides the red
    *  SolveExerciseChip. Used when transitioning out of L6 so the red
    *  chip doesn't linger into the fractions lesson. */

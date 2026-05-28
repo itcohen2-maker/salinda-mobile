@@ -10,7 +10,7 @@ function makePlayer(id: string, hand: Card[], isHost = false): Player {
     id,
     name: id,
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isConnected: true,
     isHost,
     isBot: false,
@@ -139,11 +139,11 @@ describe('eliminatePlayer', () => {
     expect(eliminatePlayer(after, 'p3')).toBeNull();
   });
 
-  it('clears calledLolos flag on elimination', () => {
+  it('clears hasOneCardLeft flag on elimination', () => {
     const st = makeState3P();
-    st.players[2].calledLolos = true;
+    st.players[2].hasOneCardLeft = true;
     const result = eliminatePlayer(st, 'p3');
-    expect(result!.players[2].calledLolos).toBe(false);
+    expect(result!.players[2].hasOneCardLeft).toBe(false);
   });
 
   it('clears mid-turn state when eliminated player was current', () => {

@@ -506,9 +506,9 @@ function PlayModeChoiceScreen({
 
 - [ ] **Step 2: Add Shop button + coin display inside `PlayModeChoiceScreen`**
 
-After the "How to Play" `LulosButton`, add:
+After the "How to Play" `SalindaButton`, add:
 ```typescript
-      <LulosButton
+      <SalindaButton
         text={t('shop.openShop')}
         color="yellow"
         width={280}

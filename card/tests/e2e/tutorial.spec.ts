@@ -19,7 +19,7 @@ test.describe('Tutorial entry flow', () => {
     page,
     lobby,
   }) => {
-    void lobby; // ensures lulos_tutorial_done is seeded so FTU routing doesn't race with click
+    void lobby; // ensures salinda_tutorial_done is seeded so FTU routing doesn't race with click
     const expectCenteredShell = async (expectedWidth: number) => {
       const shell = page.getByTestId('app-web-shell');
       await expect(shell).toBeVisible({ timeout: 30_000 });

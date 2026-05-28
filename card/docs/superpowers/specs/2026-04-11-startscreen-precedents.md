@@ -373,7 +373,7 @@ Not a toggle — it is a grid of `TouchableOpacity` chips inside the `advancedSe
 
 ### Player count selector (lines 5693–5730)
 
-Not a toggle — it is a stepper (− / number / +) using `LulosButton`-styled `TouchableOpacity`s with `LinearGradient`.
+Not a toggle — it is a stepper (− / number / +) using `SalindaButton`-styled `TouchableOpacity`s with `LinearGradient`.
 
 ### Summary of two-option toggle pattern
 
@@ -625,16 +625,16 @@ import { CasinoButton } from './components/CasinoButton';
 <CasinoButton text={t('start.letsPlay')} width={220} height={48} fontSize={19} onPress={startGame} />
 ```
 
-### Secondary/utility buttons: `LulosButton`
+### Secondary/utility buttons: `SalindaButton`
 
 **Import (line 25):**
 ```tsx
-import { LulosButton } from './components/LulosButton';
+import { SalindaButton } from './components/SalindaButton';
 ```
 
 **Example usage (line 5302):**
 ```tsx
-<LulosButton text={t('start.rulesButton')} color="blue" width={90} height={38} fontSize={13} onPress={() => setRulesOpen(true)} />
+<SalindaButton text={t('start.rulesButton')} color="blue" width={90} height={38} fontSize={13} onPress={() => setRulesOpen(true)} />
 ```
 
 ### In-row toggle buttons: plain `TouchableOpacity` with `hsS.toggleBtn` / `hsS.toggleOn` / `hsS.toggleOff` styles

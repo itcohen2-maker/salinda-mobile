@@ -56,7 +56,7 @@ function renderLobbyScreen(
     clearError: jest.fn(),
     toast: null,
     clearToast: jest.fn(),
-    serverUrl: 'https://lolos-mobile.onrender.com',
+    serverUrl: 'https://salinda-mobile.onrender.com',
     ...overrides,
   });
 
@@ -192,7 +192,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      serverUrl: 'https://lolos-mobile.onrender.com',
+      serverUrl: 'https://salinda-mobile.onrender.com',
     });
 
     const view = render(tree);
@@ -216,7 +216,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      serverUrl: 'https://lolos-mobile.onrender.com',
+      serverUrl: 'https://salinda-mobile.onrender.com',
     });
     view.rerender(tree);
     expect(startTableCountdown).not.toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
       clearError: jest.fn(),
       toast: null,
       clearToast: jest.fn(),
-      serverUrl: 'https://lolos-mobile.onrender.com',
+      serverUrl: 'https://salinda-mobile.onrender.com',
     });
     view.rerender(tree);
     expect(startTableCountdown).not.toHaveBeenCalled();

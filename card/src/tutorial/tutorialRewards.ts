@@ -2,8 +2,7 @@ export type TutorialRewardOutcome = 'awarded' | 'skipped' | 'limit';
 
 type GetTutorialRewardOutcomeOptions = {
   skipCount: number;
-  earnedCount: number;
-  maxEarnedCount?: number;
+  alreadyEarned?: boolean;
 };
 
 /**
@@ -12,10 +11,9 @@ type GetTutorialRewardOutcomeOptions = {
  */
 export function getTutorialRewardOutcome({
   skipCount,
-  earnedCount,
-  maxEarnedCount = 2,
+  alreadyEarned = false,
 }: GetTutorialRewardOutcomeOptions): TutorialRewardOutcome {
-  if (earnedCount >= maxEarnedCount) return 'limit';
+  if (alreadyEarned) return 'limit';
   if (skipCount > 2) return 'skipped';
   return 'awarded';
 }

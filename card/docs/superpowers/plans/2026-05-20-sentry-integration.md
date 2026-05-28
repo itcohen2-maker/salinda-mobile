@@ -132,7 +132,7 @@ After the edit, lines 1–8 of `index.tsx` should look like:
 
 ```tsx
 // ============================================================
-// index.tsx — Lolos Card Game — FULL SINGLE FILE
+// index.tsx — Salinda Card Game — FULL SINGLE FILE
 // LinearGradient cards, 3D shadows, rotated deck, thick edges
 // ============================================================
 

@@ -119,7 +119,7 @@ On receiving `room_closed` with `reason: 'eliminated'`:
 |----------|----------|
 | Two players disconnect simultaneously (3P) | Third player receives `opponent_disconnect_choice` (same as 2P flow) |
 | Survivor also disconnects before choosing (2P) | `destroyRoom` — no one to notify |
-| Eliminated player had called Lolos | `calledLolos` flag ignored, hand returned to deck as normal |
+| Eliminated player had one-card-left flag | `hasOneCardLeft` flag ignored, hand returned to deck as normal |
 | Eliminated player's turn is active | `eliminatePlayer` advances turn to next non-eliminated player; toast shown |
 
 ---

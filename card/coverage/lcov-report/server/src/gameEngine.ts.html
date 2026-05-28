@@ -2726,7 +2726,7 @@ export function eliminatePlayer(
   const newDrawPile = shuffle([...st.drawPile, ...player.hand]);
   const newPlayers = st.players.map((p, i) =&gt;
     i === playerIdx
-      ? { ...p, isEliminated: true, isSpectator: true, hand: [], calledLolos: false }
+      ? { ...p, isEliminated: true, isSpectator: true, hand: [], hasOneCardLeft: false }
       : p,
   );
 &nbsp;
@@ -2799,7 +2799,7 @@ function <span class="fstat-no" title="function not covered" >endTurnLogic(</spa
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return withOverflowSwapTurnTransition({</span>
     ...s,
-    players: s.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, calledLolos: false })</span>),
+    players: s.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, hasOneCardLeft: false })</span>),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     stagedCards: [], equationResult: null, validTargets: [],
     hasPlayedCards: false, hasDrawnCard: false, lastCardValue: null,
@@ -2869,7 +2869,7 @@ export function <span class="fstat-no" title="function not covered" >startGame(<
   const players: Player[] = <span class="cstat-no" title="statement not covered" >room.players.map(<span class="fstat-no" title="function not covered" >(p</span>, i) =&gt; (<span class="cstat-no" title="statement not covered" >{</span></span>
     ...p,
     hand: hands[i],
-    calledLolos: false,
+    hasOneCardLeft: false,
     afkWarnings: 0,
     isEliminated: false,
     isSpectator: false,
@@ -3172,7 +3172,7 @@ export function <span class="fstat-no" title="function not covered" >forceTurnTi
     const nextNameAfterKick = <span class="cstat-no" title="statement not covered" >playersAfterElimination[nextAfterKick]?.name ?? '…';</span>
 <span class="cstat-no" title="statement not covered" >    return withOverflowSwapTurnTransition({</span>
       ...st,
-      players: playersAfterElimination.map(<span class="fstat-no" title="function not covered" >(p</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, calledLolos: false })</span>),
+      players: playersAfterElimination.map(<span class="fstat-no" title="function not covered" >(p</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, hasOneCardLeft: false })</span>),
       currentPlayerIndex: nextAfterKick,
       phase: 'turn-transition',
       dice: null,
@@ -3405,7 +3405,7 @@ export function <span class="fstat-no" title="function not covered" >playFractio
 <span class="cstat-no" title="statement not covered" >    if (ns.phase === 'game-over') <span class="cstat-no" title="statement not covered" >return ns;</span></span>
     const next = <span class="cstat-no" title="statement not covered" >getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);</span>
 <span class="cstat-no" title="statement not covered" >    return withOverflowSwapTurnTransition({</span>
-      ...ns, players: ns.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, calledLolos: false })</span>),
+      ...ns, players: ns.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, hasOneCardLeft: false })</span>),
       currentPlayerIndex: next, phase: 'turn-transition', dice: null,
       stagedCards: [], equationResult: null, validTargets: [],
       consecutiveIdenticalPlays: 0,
@@ -3434,7 +3434,7 @@ export function <span class="fstat-no" title="function not covered" >playFractio
 <span class="cstat-no" title="statement not covered" >  if (ns.phase === 'game-over') <span class="cstat-no" title="statement not covered" >return ns;</span></span>
   const next = <span class="cstat-no" title="statement not covered" >getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);</span>
 <span class="cstat-no" title="statement not covered" >  return withOverflowSwapTurnTransition({</span>
-    ...ns, players: ns.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, calledLolos: false })</span>),
+    ...ns, players: ns.players.map(<span class="fstat-no" title="function not covered" >p </span>=&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, hasOneCardLeft: false })</span>),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     stagedCards: [], equationResult: null, validTargets: [],
     consecutiveIdenticalPlays: 0,
@@ -3533,7 +3533,7 @@ export function <span class="fstat-no" title="function not covered" >drawCard(</
 <span class="cstat-no" title="statement not covered" >  return endTurnLogic(s);</span>
 }
 &nbsp;
-export function <span class="fstat-no" title="function not covered" >callLulos(</span>st: ServerGameState, playerId: string): ServerGameState | { error: LocalizedMessage } {
+export function <span class="fstat-no" title="function not covered" >callSalinda(</span>st: ServerGameState, playerId: string): ServerGameState | { error: LocalizedMessage } {
 <span class="cstat-no" title="statement not covered" >  void st;</span>
 <span class="cstat-no" title="statement not covered" >  void playerId;</span>
 <span class="cstat-no" title="statement not covered" >  return locErr('call.notAvailable');</span>
@@ -3575,7 +3575,7 @@ export function <span class="fstat-no" title="function not covered" >getPlayerVi
         isConnected: p.isConnected,
         isHost: p.isHost,
         isBot: p.isBot,
-        calledLolos: p.calledLolos,
+        hasOneCardLeft: p.hasOneCardLeft,
         afkWarnings: p.afkWarnings,
         isEliminated: p.isEliminated,
         isSpectator: p.isSpectator,
@@ -3587,7 +3587,7 @@ export function <span class="fstat-no" title="function not covered" >getPlayerVi
       isConnected: p.isConnected,
       isHost: p.isHost,
       isBot: p.isBot,
-      calledLolos: p.calledLolos,
+      hasOneCardLeft: p.hasOneCardLeft,
       afkWarnings: p.afkWarnings,
       isEliminated: p.isEliminated,
       isSpectator: p.isSpectator,

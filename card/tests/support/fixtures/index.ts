@@ -15,10 +15,10 @@ type GameFixtures = {
 const gameTest = base.extend<GameFixtures>({
   lobby: async ({ page }, use) => {
     // Seed returning-user state so tests don't hit the mandatory tutorial flow.
-    // lobby-single-player testID only renders when lulos_tutorial_done is set.
+    // lobby-single-player testID only renders when salinda_tutorial_done is set.
     await page.addInitScript(() => {
-      window.localStorage.setItem('lulos_tutorial_done', 'true');
-      window.localStorage.setItem('lulos_welcome_player_screen_seen', 'true');
+      window.localStorage.setItem('salinda_tutorial_done', 'true');
+      window.localStorage.setItem('salinda_welcome_player_screen_seen', 'true');
     });
     const lobby = new LobbyPage(page);
     await use(lobby);

@@ -1,5 +1,5 @@
-﻿// ============================================================
-// index.tsx — Lolos Card Game — FULL SINGLE FILE
+// ============================================================
+// index.tsx — Salinda Card Game — FULL SINGLE FILE
 // LinearGradient cards, 3D shadows, rotated deck, thick edges
 // ============================================================
 
@@ -63,7 +63,7 @@ import { HappyBubble } from './src/components/HappyBubble';
 import { CoinAwardCelebrationCard } from './src/components/CoinAwardCelebrationCard';
 // RoamingDice inlined below (was ./components/RoamingDice)
 import { GoldDiceButton } from './components/GoldDiceButton';
-import { LulosButton } from './components/LulosButton';
+import { SalindaButton } from './components/SalindaButton';
 import { CasinoButton } from './components/CasinoButton';
 import { SpinningCard } from './src/components/SpinningCard';
 import { WalkingDice } from './components/WalkingDice';
@@ -534,6 +534,47 @@ function SalindaAudioIcon({
   );
 }
 
+function SalindaExitIcon({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <SvgRect
+        x="7.1"
+        y="5.5"
+        width="12"
+        height="16"
+        rx="2.6"
+        transform="rotate(-13 7.1 5.5)"
+        fill="#F8FAFC"
+        stroke="#FCD34D"
+        strokeWidth="1.35"
+      />
+      <SvgRect
+        x="10.1"
+        y="5.1"
+        width="12"
+        height="16"
+        rx="2.6"
+        transform="rotate(12 10.1 5.1)"
+        fill="#FFF7ED"
+        stroke="#FCD34D"
+        strokeWidth="1.35"
+      />
+      <SvgPath
+        d="M11.1 9.6L17.9 18.4M18.1 9.6L11.3 18.4"
+        stroke="#B91C1C"
+        strokeWidth="2.9"
+        strokeLinecap="round"
+      />
+      <SvgPath
+        d="M6.3 7.1L7.4 8.1L8.6 7.1L7.4 6L6.3 7.1Z"
+        fill="#FFFFFF"
+        opacity="0.85"
+      />
+      <SvgCircle cx="21.4" cy="19.5" r="1.25" fill="#FBBF24" />
+    </Svg>
+  );
+}
+
 function devCheckHandLayout() {
   if (!__DEV__) return;
   if (HAND_INNER_HEIGHT >= HAND_STRIP_HEIGHT) {
@@ -747,7 +788,7 @@ interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   isBot: boolean;
   courageMeterStep: number;
   courageMeterPercent: number;
@@ -1288,7 +1329,7 @@ function TournamentInfoModal({
           <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '800' }}>{t('ui.tournamentTitle')}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {onOpenRules ? (
-              <LulosButton
+              <SalindaButton
                 text="חוקים"
                 color="blue"
                 width={68}
@@ -1459,7 +1500,7 @@ type GameAction =
   | { type: 'DEFEND_FRACTION_PENALTY' }
   | { type: 'PLAY_JOKER'; card: Card; chosenOperation: Operation }
   | { type: 'DRAW_CARD'; reason?: 'manual' | 'turn-timeout' }
-  | { type: 'CALL_LOLOS' }
+  | { type: 'TRIGGER_LAST_CARD_ALERT' }
   | { type: 'END_TURN' }
   | { type: 'SET_MESSAGE'; message: string }
   | { type: 'OPEN_JOKER_MODAL'; card: Card }
@@ -2276,8 +2317,8 @@ function resolveOverflowSwapAndBeginTurn(
 function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => string): GameState {
   let s = { ...st };
   const up = s.players[s.currentPlayerIndex];
-  if (up.hand.length === 2 && !up.calledLolos) {
-    s.message = tf('local.callLolosForgiven', { name: up.name });
+  if (up.hand.length === 1 && !up.hasOneCardLeft) {
+    s.message = tf('local.oneCardLeft', { name: up.name });
   }
   const next = (s.currentPlayerIndex + 1) % s.players.length;
   const nextNotifications = [...s.notifications];
@@ -2308,7 +2349,7 @@ function endTurnLogic(st: GameState, tf: (key: string, params?: MsgParams) => st
     meterAnimationPending: false,
     pendingTurnState: null,
     notifications: nextNotifications,
-    players: s.players.map(p => ({ ...p, calledLolos: false, lastCourageCoinsAwarded: false })),
+    players: s.players.map(p => ({ ...p, hasOneCardLeft: false, lastCourageCoinsAwarded: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     selectedCards: [], stagedCards: [], equationResult: null, validTargets: [],
     activeOperation: null,
@@ -2484,7 +2525,7 @@ function gameReducer(
   switch (action.type) {
     case 'START_GAME':
     case 'PLAY_AGAIN': {
-      AsyncStorage.removeItem('lulos_guidance_notifications');
+      AsyncStorage.removeItem('salinda_guidance_notifications');
       const playersSeed: { name: string; isBot?: boolean; progress?: StoredPlayerProgressSnapshot | null }[] =
         action.type === 'PLAY_AGAIN'
           ? st.players.map((p) => ({
@@ -2595,7 +2636,7 @@ function gameReducer(
             id: i,
             name: p.name,
             hand: hands[i],
-            calledLolos: false,
+            hasOneCardLeft: false,
             isBot: (p as { isBot?: boolean }).isBot ?? false,
             courageMeterStep: progress.courageMeterStep,
             courageMeterPercent: progress.courageMeterPercent,
@@ -2635,12 +2676,12 @@ function gameReducer(
       });
     }
     case 'NEXT_TURN': {
-      AsyncStorage.removeItem('lulos_guidance_notifications');
+      AsyncStorage.removeItem('salinda_guidance_notifications');
       const next = (st.currentPlayerIndex + 1) % st.players.length;
       return withOverflowSwapTurnTransition({
         ...st,
         notifications: [],
-        players: st.players.map(p => ({ ...p, calledLolos: false })),
+        players: st.players.map(p => ({ ...p, hasOneCardLeft: false })),
         currentPlayerIndex: next,
         phase: 'turn-transition',
         dice: null,
@@ -2912,7 +2953,7 @@ function gameReducer(
         if (!isL6WildTutorialSelectionReady(st.stagedCards, st.equationResult, st.mathRangeMax ?? 25)) {
           return { ...st, message: tf('tutorial.l6c.mismatch') };
         }
-        // Wild alone is valid — no op card or extra numbers required.
+        // The lesson teaches a multi-card play: two number cards plus a wild.
         // Auto-set wild resolvedValue so validateStagedCards can pass.
         const fixedSum = stNumbers.filter(c => c.type === 'number').reduce((a, c) => a + (c.value ?? 0), 0);
         const wildNeededVal = (st.equationResult ?? 0) - fixedSum;
@@ -3160,7 +3201,7 @@ function gameReducer(
         const blockFracUni = getFractionDisplay(action.card.fraction);
         const blockMsg = tf('local.fractionBlockToast', { name: cp.name, fraction: String(blockFracUni ?? action.card.fraction ?? '?') });
         return withOverflowSwapTurnTransition({
-          ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
+          ...ns, players: ns.players.map(p => ({ ...p, hasOneCardLeft: false })),
           currentPlayerIndex: next, phase: 'turn-transition', dice: null,
           selectedCards: [], stagedCards: [], equationResult: null, validTargets: [],
           activeOperation: null, challengeSource: cp.name, equationOpsUsed: [],
@@ -3196,7 +3237,7 @@ function gameReducer(
       const fracUni = getFractionDisplay(action.card.fraction);
       const atkMsg = tf('local.fractionAttackToast', { name: cp.name, fraction: String(fracUni ?? action.card.fraction ?? '?') });
       return withOverflowSwapTurnTransition({
-        ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
+        ...ns, players: ns.players.map(p => ({ ...p, hasOneCardLeft: false })),
         currentPlayerIndex: next, phase: 'turn-transition', dice: null,
         selectedCards: [], stagedCards: [], equationResult: null, validTargets: [],
         activeOperation: null, challengeSource: cp.name, equationOpsUsed: [],
@@ -3409,15 +3450,15 @@ function gameReducer(
       };
       return endTurnWithMeterCheck(s, tf);
     }
-    case 'CALL_LOLOS': {
+    case 'TRIGGER_LAST_CARD_ALERT': {
       const cp = st.players[st.currentPlayerIndex];
-      if (cp.hand.length > 2) return st;
-      const lolosMsg = tf('local.callLolosDeclared', { name: cp.name });
+      if (cp.hand.length !== 1) return st;
+      const lastCardMsg = tf('local.oneCardLeft', { name: cp.name });
       return {
         ...st,
-        players: st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, calledLolos: true } : p),
-        message: lolosMsg,
-        moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: lolosMsg }],
+        players: st.players.map((p, i) => i === st.currentPlayerIndex ? { ...p, hasOneCardLeft: true } : p),
+        message: lastCardMsg,
+        moveHistory: [...st.moveHistory, { playerIndex: st.currentPlayerIndex, cardsDiscarded: 0, description: lastCardMsg }],
       };
     }
     case 'END_TURN': return endTurnWithMeterCheck(st, tf);
@@ -3446,7 +3487,7 @@ function gameReducer(
         void AsyncStorage.setItem(onbStorageKey, 'true');
       }
       if (id.startsWith('guidance-') || id.startsWith('onb-')) {
-        AsyncStorage.setItem('lulos_guidance_notifications', JSON.stringify(next.filter(n => n.id.startsWith('guidance-') || n.id.startsWith('onb-')).slice(-10)));
+        AsyncStorage.setItem('salinda_guidance_notifications', JSON.stringify(next.filter(n => n.id.startsWith('guidance-') || n.id.startsWith('onb-')).slice(-10)));
       }
       return { ...st, notifications: next };
     }
@@ -3454,8 +3495,8 @@ function gameReducer(
       const next = st.notifications.filter(n => n.id !== action.id);
       if (action.id.startsWith('guidance-') || action.id.startsWith('onb-')) {
         const toStore = next.filter(n => n.id.startsWith('guidance-') || n.id.startsWith('onb-'));
-        if (toStore.length) AsyncStorage.setItem('lulos_guidance_notifications', JSON.stringify(toStore));
-        else AsyncStorage.removeItem('lulos_guidance_notifications');
+        if (toStore.length) AsyncStorage.setItem('salinda_guidance_notifications', JSON.stringify(toStore));
+        else AsyncStorage.removeItem('salinda_guidance_notifications');
       }
       return { ...st, notifications: next };
     }
@@ -3913,7 +3954,7 @@ function gameReducer(
       return { ...stWithTick, botPresentation: buildBotPresentation(stWithTick, action_) };
     }
     case 'RESET_GAME':
-      AsyncStorage.removeItem('lulos_guidance_notifications');
+      AsyncStorage.removeItem('salinda_guidance_notifications');
       return { ...initialState, hasSeenIntroHint: st.hasSeenIntroHint, hasSeenSolvedHint: st.hasSeenSolvedHint, soundsEnabled: st.soundsEnabled, guidanceEnabled: st.guidanceEnabled };
     case 'TUTORIAL_SET_HANDS': {
       const newPlayers = st.players.map((p, i) =>
@@ -4066,7 +4107,7 @@ function GameProvider({ children }: { children: ReactNode }) {
   }, [mp?.serverState]);
   useEffect(() => {
     if (override) return;
-    AsyncStorage.getItem('lulos_guidance_notifications').then((raw) => {
+    AsyncStorage.getItem('salinda_guidance_notifications').then((raw) => {
       if (!raw) return;
       try {
         const arr = JSON.parse(raw);
@@ -4408,7 +4449,7 @@ function GameProvider({ children }: { children: ReactNode }) {
 function useGame() { return useContext(GameContext); }
 
 // ???????????????????????????????????????????????????????????????
-//  BUTTON — (old Btn removed, using LulosButton from components)
+//  BUTTON — (old Btn removed, using SalindaButton from components)
 // ???????????????????????????????????????????????????????????????
 
 // ???????????????????????????????????????????????????????????????
@@ -4973,7 +5014,7 @@ function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopP
     : numberColors;
   const label = fractionLabel ? getFractionDisplay(fractionLabel) : String(value);
   const labelColor = fractionLabel ? cl.face : numberColors.dark;
-  const labelFontSize = fractionLabel ? 16 : value >= 10 ? 16 : 18;
+  const labelFontSize = fractionLabel ? 17 : value >= 10 ? 18 : 22;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   // Stronger "pop" animation (no translateY to avoid clipping)
   const scaleAnim = useRef(new Animated.Value(0.35)).current;
@@ -5060,7 +5101,7 @@ function MiniResultCard({ value, fractionLabel, index = 0, pulseToken = 0, loopP
           style={{
             width: MINI_W - 7,
             fontSize: labelFontSize,
-            lineHeight: 20,
+            lineHeight: fractionLabel ? 19 : value >= 10 ? 20 : 24,
             fontWeight: '900',
             color: labelColor,
             textAlign: 'center',
@@ -5751,7 +5792,7 @@ function PickCardsActionButton({
 
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <LulosButton
+      <SalindaButton
         text={t('game.back')}
         color={color}
         textColor="#FFFFFF"
@@ -5770,7 +5811,7 @@ function ChooseCardsPromptButton() {
 
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <LulosButton
+      <SalindaButton
         text={t('game.pickCards')}
         color="green"
         textColor="#FFFFFF"
@@ -5940,7 +5981,9 @@ const dpS = StyleSheet.create({ empty: { width:80, height:115, borderRadius:12, 
 const CHIP_W = 88;
 const CHIP_H = 68;
 const CHIP_R = 14;
-const SOLVE_CHIP_W = 106;
+const SOLVE_CHIP_W = 142;
+const SOLVE_CHIP_H = 84;
+const SOLVE_CHIP_R = 18;
 
 function ResultsSlot({
   onToggle,
@@ -6021,6 +6064,7 @@ function ResultsStripNearPile({
   highlightResult?: number;
   highlightAll?: boolean;
 }) {
+  const stripRef = useRef<View>(null);
   const normalizedResults = useMemo(() => {
     const byResult = new Map<number, EquationOption>();
     for (const option of filteredResults) {
@@ -6063,7 +6107,15 @@ function ResultsStripNearPile({
   }, [resultsOpen, normalizedResults.length, uniqueFractions.length]);
   if (!resultsOpen || (normalizedResults.length === 0 && uniqueFractions.length === 0)) return null;
   return (
-    <Animated.View style={{flexShrink:0,flex:1,minWidth:0,opacity:stripOpacity,transform:[{translateY:stripSlide}]}}>
+    <Animated.View
+      ref={stripRef as any}
+      onLayout={() => {
+        stripRef.current?.measureInWindow?.((x, y, w, h) => {
+          tutorialBus.setLayout('miniStrip', { top: y, left: x, width: w, height: h });
+        });
+      }}
+      style={{flexShrink:0,flex:1,minWidth:0,opacity:stripOpacity,transform:[{translateY:stripSlide}]}}
+    >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10,paddingHorizontal:6,alignItems:'center',justifyContent:'flex-start'}}>
         {normalizedResults.map((t, i) => (
           <View key={`${t.equation}-${t.result}-${i}`} style={{width:MINI_W + 14}}>
@@ -6081,6 +6133,7 @@ function ResultsStripNearPile({
 }
 
 function ResultsStripBelowTable({ resultsOpen, filteredResults, fractionCards = [], onSelectEquation, miniPulseToken = 0, loopPulse = false, highlightResult, highlightAll = false }: { resultsOpen: boolean; filteredResults: EquationOption[]; fractionCards?: Card[]; onSelectEquation?: (eq: EquationOption) => void; miniPulseToken?: number; loopPulse?: boolean; highlightResult?: number; highlightAll?: boolean }) {
+  const stripRef = useRef<View>(null);
   const normalizedResults = useMemo(() => {
     const byResult = new Map<number, EquationOption>();
     for (const option of filteredResults) {
@@ -6122,7 +6175,15 @@ function ResultsStripBelowTable({ resultsOpen, filteredResults, fractionCards = 
   }, [resultsOpen, normalizedResults.length]);
   if (!resultsOpen || (normalizedResults.length === 0 && uniqueFractions.length === 0)) return null;
   return (
-    <Animated.View style={{flexShrink:0,width:'100%',alignItems:'center',justifyContent:'center',opacity:stripOpacity,transform:[{translateY:stripSlide}]}}>
+    <Animated.View
+      ref={stripRef as any}
+      onLayout={() => {
+        stripRef.current?.measureInWindow?.((x, y, w, h) => {
+          tutorialBus.setLayout('miniStrip', { top: y, left: x, width: w, height: h });
+        });
+      }}
+      style={{flexShrink:0,width:'100%',alignItems:'center',justifyContent:'center',opacity:stripOpacity,transform:[{translateY:stripSlide}]}}
+    >
       <View style={{minHeight:MINI_H + 16,backgroundColor:'transparent',paddingVertical:10,paddingHorizontal:12,width:'100%',maxWidth:360,alignItems:'center'}}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10,paddingHorizontal:6,alignItems:'center',justifyContent:'center'}}>
           {normalizedResults.map((t, i) => (
@@ -6352,7 +6413,23 @@ function formatEquationForDisplay(equation: string): string {
   return norm;
 }
 
-function SolveExerciseChip({ equation, onPress, pulseKey = 0, loopPulse = false }: { equation: string; onPress: () => void; pulseKey?: number; loopPulse?: boolean }) {
+function SolveExerciseChip({
+  equation,
+  displayText,
+  writingDirection = 'ltr',
+  onPress,
+  pulseKey = 0,
+  loopPulse = false,
+  disabled = false,
+}: {
+  equation: string;
+  displayText?: string;
+  writingDirection?: 'ltr' | 'rtl';
+  onPress: () => void;
+  pulseKey?: number;
+  loopPulse?: boolean;
+  disabled?: boolean;
+}) {
   const pressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const handlePressIn = useCallback(() => {
@@ -6389,44 +6466,50 @@ function SolveExerciseChip({ equation, onPress, pulseKey = 0, loopPulse = false 
   }, [loopPulse, pulseAnim]);
   const rim = 4;
   const inset = 2;
-  const innerR = CHIP_R - 3;
+  const innerR = SOLVE_CHIP_R - 3;
   const feltPad = rim + inset;
   return (
-    <View style={{ width: SOLVE_CHIP_W, height: CHIP_H + 6 }}>
-      <TouchableOpacity activeOpacity={0.8} onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <Animated.View style={{ width: SOLVE_CHIP_W, height: CHIP_H + 4, transform: [{ scale: Animated.multiply(scale, pulseScale) }, { translateY }] }}>
+    <View style={{ width: SOLVE_CHIP_W, height: SOLVE_CHIP_H + 6 }}>
+      <TouchableOpacity
+        activeOpacity={disabled ? 1 : 0.8}
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={disabled ? undefined : handlePressIn}
+        onPressOut={disabled ? undefined : handlePressOut}
+      >
+        <Animated.View style={{ width: SOLVE_CHIP_W, height: SOLVE_CHIP_H + 4, transform: [{ scale: Animated.multiply(scale, pulseScale) }, { translateY }] }}>
           <Animated.View pointerEvents="none" style={{
             position: 'absolute', top: -6, left: -6, right: -6, bottom: -6,
-            borderRadius: CHIP_R + 8, borderWidth: 2, borderColor: 'rgba(252,165,165,0.9)',
+            borderRadius: SOLVE_CHIP_R + 8, borderWidth: 2, borderColor: 'rgba(252,165,165,0.9)',
             opacity: pulseGlow,
             transform: [{ scale: pulseScale }],
           }} />
           <View style={{
-            position: 'absolute', bottom: 0, left: 2, right: 2, height: CHIP_H,
-            borderRadius: CHIP_R + 2, backgroundColor: '#1A0D00',
+            position: 'absolute', bottom: 0, left: 2, right: 2, height: SOLVE_CHIP_H,
+            borderRadius: SOLVE_CHIP_R + 2, backgroundColor: '#1A0D00',
             ...Platform.select({
               ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 10 },
               android: { elevation: 10 },
             }),
           }} />
           <View style={{
-            position: 'absolute', bottom: 2, left: 1, right: 1, height: CHIP_H,
-            borderRadius: CHIP_R + 2, backgroundColor: '#3A1515',
+            position: 'absolute', bottom: 2, left: 1, right: 1, height: SOLVE_CHIP_H,
+            borderRadius: SOLVE_CHIP_R + 2, backgroundColor: '#3A1515',
           }} />
           <LinearGradient
             colors={['#FCA5A5', '#F87171', '#EF4444', '#DC2626', '#B91C1C', '#E85C5C', '#F87272']}
             locations={[0, 0.15, 0.35, 0.55, 0.75, 0.9, 1]}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: CHIP_H, borderRadius: CHIP_R + 2 }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: SOLVE_CHIP_H, borderRadius: SOLVE_CHIP_R + 2 }}
           />
           <View style={{
-            position: 'absolute', top: 1, left: CHIP_R, right: CHIP_R,
-            height: CHIP_H * 0.3, borderBottomLeftRadius: CHIP_H, borderBottomRightRadius: CHIP_H,
+            position: 'absolute', top: 1, left: SOLVE_CHIP_R, right: SOLVE_CHIP_R,
+            height: SOLVE_CHIP_H * 0.3, borderBottomLeftRadius: SOLVE_CHIP_H, borderBottomRightRadius: SOLVE_CHIP_H,
             backgroundColor: 'rgba(255,230,230,0.2)',
           }} />
           <View style={{
             position: 'absolute', top: rim - 1, left: rim - 1, right: rim - 1, bottom: rim + 2,
-            borderRadius: CHIP_R - 1, backgroundColor: '#1C0A0A',
+            borderRadius: SOLVE_CHIP_R - 1, backgroundColor: '#1C0A0A',
           }} />
           <LinearGradient
             colors={['#7F1D1D', '#991B1B', '#B91C1C', '#991B1B']}
@@ -6446,20 +6529,22 @@ function SolveExerciseChip({ equation, onPress, pulseKey = 0, loopPulse = false 
             borderRadius: innerR, borderWidth: 0.7, borderColor: 'rgba(248,113,113,0.25)',
           }} />
           <View style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: CHIP_H,
-            borderRadius: CHIP_R + 2, borderWidth: 0.8, borderColor: 'rgba(254,202,202,0.3)',
+            position: 'absolute', top: 0, left: 0, right: 0, height: SOLVE_CHIP_H,
+            borderRadius: SOLVE_CHIP_R + 2, borderWidth: 0.8, borderColor: 'rgba(254,202,202,0.3)',
           }} />
           <View style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: CHIP_H,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+            position: 'absolute', top: 0, left: 0, right: 0, height: SOLVE_CHIP_H,
+            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7,
           }}>
-            <Text numberOfLines={3} allowFontScaling={false} style={{
-              color: '#FECACA', fontSize: 11, fontWeight: '900', textAlign: 'center', lineHeight: 13,
-              writingDirection: 'ltr',
+            <Text numberOfLines={3} allowFontScaling={false} adjustsFontSizeToFit minimumFontScale={0.74} style={{
+              width: SOLVE_CHIP_W - 18,
+              color: '#FECACA', fontSize: 15, fontWeight: '900', textAlign: 'center', lineHeight: 18,
+              includeFontPadding: false,
+              writingDirection,
               ...(Platform.OS !== 'android' ? {
                 textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
               } : {}),
-            }}>{'\u2066'}{formatEquationForDisplay(equation)}{'\u2069'}</Text>
+            }}>{displayText ? displayText : <>{'\u2066'}{formatEquationForDisplay(equation)}{'\u2069'}</>}</Text>
           </View>
         </Animated.View>
       </TouchableOpacity>
@@ -7046,7 +7131,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     setOp2((prev) => (prev != null && eqOpChoices.indexOf(prev) === -1 ? null : prev));
   }, [eqOpChoices]);
 
-  const showBuilder = (state.phase === 'building' || state.phase === 'solved') && state.dice && state.pendingFractionTarget === null;
+  const showBuilder =
+    (state.phase === 'building' || state.phase === 'solved') &&
+    state.dice &&
+    state.pendingFractionTarget === null &&
+    !(state.isTutorial && tutorialBus.getFracGuidedMode());
   const isSolved = state.phase === 'solved';
   const diceValues = React.useMemo(
     () => state.dice ? [state.dice.die1, state.dice.die2, state.dice.die3] : [0, 0, 0],
@@ -7607,13 +7696,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       // placed a card yet).
     } else if (tutorialBus.getL4GuidedEqValidationMode()) {
       // Lesson-4 step-3 guided full build: the exercise itself is still
-      // step-driven, but the learner should move straight from "valid
-      // equation" to "pick the matching card" without a separate confirm tap.
+      // step-driven, but this is the learner's first full build, so the
+      // orange confirm button stays a real step instead of auto-firing.
       if (!tutorialAutoConfirmedRef.current && !isSolved) {
         tutorialAutoConfirmedRef.current = true;
         tutorialBus.setLastEquationResult(finalResult);
         tutorialBus.emitUserEvent({ kind: 'eqReadyToConfirm' });
-        setTimeout(() => confirmRef.current?.(), 420);
       }
     } else if (tutorialBus.getL5GuidedMode()) {
       // Lesson 5: sandbox for dice + operation signs (+ joker placement) —
@@ -7740,6 +7828,13 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     tutorialBus.getL4Step3Mode() &&
     !isSolved &&
     l4GuidedMissing === 'secondOperator';
+  const l4NeedsFirstOperatorPulse =
+    state.isTutorial &&
+    tutorialBus.getL4Step3Mode() &&
+    !isSolved &&
+    dice1 !== null &&
+    dice2 !== null &&
+    effectiveOp1 === null;
   const l4NeedsThirdDiePulse =
     state.isTutorial &&
     tutorialBus.getL4Step3Mode() &&
@@ -7748,7 +7843,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   useEffect(() => {
     const needsOp1 = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
     const needsOp2 = !isSolved && !state.isTutorial && dice3 !== null && !effectiveOp2;
-    const needs = needsOp1 || needsOp2 || l4NeedsSecondOperatorPulse || l4NeedsThirdDiePulse;
+    const needs = needsOp1 || needsOp2 || l4NeedsFirstOperatorPulse || l4NeedsSecondOperatorPulse || l4NeedsThirdDiePulse;
     if (!needs) { needsSignPulse.setValue(0); return; }
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(needsSignPulse, { toValue: 1, duration: 480, useNativeDriver: true }),
@@ -7756,7 +7851,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     ]));
     loop.start();
     return () => loop.stop();
-  }, [isSolved, state.isTutorial, dice1, dice2, dice3, effectiveOp1, effectiveOp2, l4NeedsSecondOperatorPulse, l4NeedsThirdDiePulse, needsSignPulse]);
+  }, [isSolved, state.isTutorial, dice1, dice2, dice3, effectiveOp1, effectiveOp2, l4NeedsFirstOperatorPulse, l4NeedsSecondOperatorPulse, l4NeedsThirdDiePulse, needsSignPulse]);
 
   if (!showBuilder) return null;
 
@@ -7765,6 +7860,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // L7 (parens) and L9 (identical copy) always show the full 3-dice layout so
   // the learner can tap operators and dice in any order without getting stuck.
   const isParensTutorial = state.isTutorial && (tutorialBus.getL7GuidedMode() || tutorialBus.getL9ParensFilter());
+  const isFractionTutorialLocked = state.isTutorial && tutorialBus.getFracGuidedMode();
   const show3rd = isParensTutorial ? true : (!parensRight
     ? subResult !== null
     : d1v !== null && effectiveOp1 !== null && d2v !== null);
@@ -7805,7 +7901,9 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     : resultVisualState === 'error'
       ? '#FFFFFF'
       : neutralResultTextColor;
-  const needsOp1Pulse = !isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1;
+  const needsOp1Pulse =
+    (!isSolved && !state.isTutorial && dice1 !== null && dice2 !== null && !effectiveOp1) ||
+    l4NeedsFirstOperatorPulse;
   const needsOp2Pulse =
     (!isSolved && !state.isTutorial && show3rd && dice3 !== null && !effectiveOp2) ||
     l4NeedsSecondOperatorPulse;
@@ -7823,9 +7921,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
           backgroundColor: 'rgba(252,211,77,0.18)',
         },
       ]}
-      onPress={() => slotValue !== null && removeDice(slotNum)}
+      onPress={() => {
+        if (isFractionTutorialLocked) return;
+        if (slotValue !== null) removeDice(slotNum);
+      }}
       activeOpacity={0.7}
-      disabled={isSolved}
+      disabled={isSolved || isFractionTutorialLocked}
       touchSoundDisabled>
       {slotValue !== null
         ? <Text style={eqS.slotVal}>{diceValues[slotValue]}</Text>
@@ -7840,7 +7941,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     const isWaitingPlacement = state.equationHandPick !== null;
     const isReferenceEquationLocked =
       state.isTutorial &&
-      state.showPossibleResults &&
+      (state.showPossibleResults || isFractionTutorialLocked) &&
       !tutorialBus.getL7GuidedMode() &&
       !tutorialBus.getL9ParensFilter();
     const isL5SecondaryPlacementAllowed =
@@ -8282,6 +8383,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 ],
               }}>
                 <TouchableOpacity onPress={() => {
+                  if (isFractionTutorialLocked) return;
                   // Lesson 5a: in step 5.2 block unplaced-die taps (dice are
                   // pre-filled). In step 5.1 the equation starts empty so the
                   // learner places dice manually — allow taps there.
@@ -8318,7 +8420,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                       borderWidth: 3,
                     },
                   ]}
-                  disabled={isFace && !tutorialMobileTouch}>
+                  disabled={isFractionTutorialLocked || (isFace && !tutorialMobileTouch && !state.isTutorial)}>
                   {isFace ? (
                     <GoldDieFace value={dv} size={52} />
                   ) : (() => {
@@ -8752,7 +8854,7 @@ export function EquationResultCube({
 //  STAGING ZONE
 // ???????????????????????????????????????????????????????????????
 
-const STAGING_HINT_KEY = 'lulos_staging_hint_seen';
+const STAGING_HINT_KEY = 'salinda_staging_hint_seen';
 
 function StagingZone() {
   const { state, dispatch } = useGame();
@@ -8842,7 +8944,7 @@ function ActionBar() {
     <View style={{width:'100%',gap:10}}>
       {canUseActiveTurnUi && (pr||bl||so)&&hp && !state.isTutorial && (
         <View style={{alignItems:'center',gap:6}}>
-          <LulosButton text={t('game.endTurn')} color="green" width={160} height={52} testID="end-turn" onPress={()=>dispatch({type:'END_TURN'})} />
+          <SalindaButton text={t('game.endTurn')} color="green" width={160} height={52} testID="end-turn" onPress={()=>dispatch({type:'END_TURN'})} />
         </View>
       )}
       <AppModal
@@ -8853,7 +8955,7 @@ function ActionBar() {
         boxStyle={jokerModalBoxStyle}
       >
         <View style={{flexDirection:'row',flexWrap:'wrap',gap:jokerButtonGap,justifyContent:'center'}}>
-          {(['+','-','x','÷'] as Operation[]).map(op => <LulosButton key={op} text={op} color="blue" width={jokerButtonWidth} height={jokerButtonHeight} fontSize={jokerButtonFontSize} onPress={()=>{const j=state.selectedCards[0];if(!j)return;if(state.phase==='building'){if(state.isTutorial&&tutorialBus.getL5GuidedMode()){tutorialBus.emitUserEvent({kind:'l5JokerPickedInModal',op});tutorialBus.emitUserEvent({kind:'opSelected',op,via:'joker'});}dispatch({type:'SELECT_EQ_JOKER',card:j,chosenOperation:op});}else{dispatch({type:'PLAY_JOKER',card:j,chosenOperation:op});}}} />)}
+          {(['+','-','x','÷'] as Operation[]).map(op => <SalindaButton key={op} text={op} color="blue" width={jokerButtonWidth} height={jokerButtonHeight} fontSize={jokerButtonFontSize} onPress={()=>{const j=state.selectedCards[0];if(!j)return;if(state.phase==='building'){if(state.isTutorial&&tutorialBus.getL5GuidedMode()){tutorialBus.emitUserEvent({kind:'l5JokerPickedInModal',op});tutorialBus.emitUserEvent({kind:'opSelected',op,via:'joker'});}dispatch({type:'SELECT_EQ_JOKER',card:j,chosenOperation:op});}else{dispatch({type:'PLAY_JOKER',card:j,chosenOperation:op});}}} />)}
         </View>
       </AppModal>
     </View>
@@ -10351,6 +10453,14 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         if (card.type !== 'number') {
           return;
         }
+        if (card.value !== state.equationResult) {
+          tutorialBus.emitUserEvent({
+            kind: 'l4Step3WrongCard',
+            cardId: card.id,
+          });
+          state.stagedCards.forEach((stagedCard) => dispatch({ type: 'UNSTAGE_CARD', card: stagedCard }));
+          return;
+        }
         const isCurrentCardStaged = state.stagedCards.some(
           (stagedCard) => stagedCard.id === card.id,
         );
@@ -10468,14 +10578,21 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       : tutorialMultiPlayHighlightIds && tutorialMultiPlayHighlightIds.size > 0
         ? tutorialMultiPlayHighlightIds
         : tutorialPairHighlightIds;
+  const tutorialFractionFocusCardId = useMemo(() => {
+    if (!state.isTutorial || !tutorialBus.getFracGuidedMode() || hasFracDefense) return null;
+    const topCard = state.discardPile[state.discardPile.length - 1];
+    if (!topCard || topCard.type !== 'number') return null;
+    return sorted.find((card) => card.type === 'fraction' && validateFractionPlay(card, topCard))?.id ?? null;
+  }, [state.isTutorial, state.discardPile, hasFracDefense, sorted]);
   const tutorialCenteredCardId =
-    state.isTutorial &&
+    tutorialFractionFocusCardId ??
+    (state.isTutorial &&
     (
       (tutorialBus.getL5GuidedMode() && tutorialBus.getTutorialPreserveHandOrder()) ||
       isTutorialL5bRiggedHand
     )
       ? (sorted.find((card) => card.type === 'joker')?.id ?? null)
-      : null;
+      : null);
   const tutorialFocusedCardId = tutorialCenteredCardId;
 
   const forwardCardId = null;
@@ -10501,7 +10618,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
           {wildDefensePickValues.map((v) => (
-            <LulosButton
+            <SalindaButton
               key={v}
               text={String(v)}
               color="green"
@@ -10730,7 +10847,7 @@ function BottomControlsBar() {
                   }),
                 ]}
               >
-                <LulosButton
+                <SalindaButton
                   text={t('game.placeCards')}
                   color="orange"
                   width={BOTTOM_PLACE_BTN_W}
@@ -11348,7 +11465,7 @@ function StartScreen({
 
   const setGuidance = useCallback((on: boolean) => {
     setGuidanceOn(on);
-    void AsyncStorage.setItem('lulos_guidance_enabled', on ? 'true' : 'false');
+    void AsyncStorage.setItem('salinda_guidance_enabled', on ? 'true' : 'false');
     dispatch({ type: 'SET_GUIDANCE_ENABLED', enabled: on });
   }, [dispatch]);
 
@@ -11356,7 +11473,7 @@ function StartScreen({
     let cancelled = false;
     void (async () => {
       try {
-        const saved = await AsyncStorage.getItem('lulos_guidance_enabled');
+        const saved = await AsyncStorage.getItem('salinda_guidance_enabled');
         if (cancelled) return;
         if (saved != null) {
           const enabled = saved !== 'false';
@@ -11373,7 +11490,7 @@ function StartScreen({
   }, [dispatch]);
   const chooseGuidanceMode = useCallback((on: boolean) => {
     if (on) {
-      void clearAllLulosOnboardingKeys().catch(() => {});
+      void clearAllSalindaOnboardingKeys().catch(() => {});
     }
     setGuidance(on);
     setGuidancePromptOpen(false);
@@ -11764,7 +11881,7 @@ function StartScreen({
       return (
         <View style={{ flex: 1, backgroundColor: '#071426', paddingTop: safe.insets.top || 12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
-            <LulosButton text={t('teacher.backDashboard')} color="blue" width={110} height={38} fontSize={12} onPress={() => setTeacherScreenOpen(false)} />
+            <SalindaButton text={t('teacher.backDashboard')} color="blue" width={110} height={38} fontSize={12} onPress={() => setTeacherScreenOpen(false)} />
             <Text style={{ color: '#E2E8F0', fontSize: 18, fontWeight: '800' }}>{t('teacher.title')}</Text>
             <View style={{ width: 110 }} />
           </View>
@@ -11803,7 +11920,7 @@ function StartScreen({
               <Text style={{ color: '#DCFCE7', fontSize: 15, fontWeight: '800', textAlign: 'right', marginBottom: 8 }}>{t('teacher.intervention')}</Text>
               <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
                 {TEACHER_DEMO_ACTIONS.map((action) => (
-                  <LulosButton
+                  <SalindaButton
                     key={action}
                     text={teacherDemoActionTitle(action as Exclude<TeacherDemoAction, 'toggleAlerts'>)}
                     color="green"
@@ -11813,7 +11930,7 @@ function StartScreen({
                     onPress={() => applyTeacherIntervention(action)}
                   />
                 ))}
-                <LulosButton
+                <SalindaButton
                   text={teacherAlertsOn ? t('teacher.alertsOn') : t('teacher.alertsOff')}
                   color="blue"
                   width={120}
@@ -11845,7 +11962,7 @@ function StartScreen({
     return (
       <View style={{ flex: 1, backgroundColor: '#071426', paddingTop: safe.insets.top || 12 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
-          <LulosButton text={t('demo.benefitsBack')} color="red" width={100} height={38} fontSize={13} onPress={() => { stopDemoSimulation(); setTeacherScreenOpen(false); setBenefitsDemoOpen(false); }} />
+          <SalindaButton text={t('demo.benefitsBack')} color="red" width={100} height={38} fontSize={13} onPress={() => { stopDemoSimulation(); setTeacherScreenOpen(false); setBenefitsDemoOpen(false); }} />
           <Text style={{ color: '#E2E8F0', fontSize: 18, fontWeight: '800' }}>{t('demo.benefitsTitle')}</Text>
           <View style={{ width: 100 }} />
         </View>
@@ -11859,7 +11976,7 @@ function StartScreen({
             <Text style={{ color: '#BFDBFE', fontSize: 12, textAlign: 'right', marginBottom: 8 }}>{t('demo.ageBandLabel')}</Text>
             <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8 }}>
               {DEMO_GRADE_BANDS.map((band) => (
-                <LulosButton key={band} text={t(`demo.band.${band}`)} color={demoGradeBand === band ? 'green' : 'blue'} width={110} height={34} fontSize={11} onPress={() => setDemoGradeBand(band)} />
+                <SalindaButton key={band} text={t(`demo.band.${band}`)} color={demoGradeBand === band ? 'green' : 'blue'} width={110} height={34} fontSize={11} onPress={() => setDemoGradeBand(band)} />
               ))}
             </View>
             <Text style={{ color: '#E2E8F0', fontSize: 12, textAlign: 'right', lineHeight: 18 }}>
@@ -11876,12 +11993,12 @@ function StartScreen({
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ color: '#7DD3FC', fontSize: 12 }}>{t('demo.sampleGamesLabel', { n: String(demoClassGames) })}</Text>
               <View style={{ flexDirection: 'row-reverse', gap: 6 }}>
-                <LulosButton text="+20" color="blue" width={62} height={30} fontSize={11} onPress={() => setDemoClassGames(v => Math.min(500, v + 20))} />
-                <LulosButton text="-20" color="blue" width={62} height={30} fontSize={11} onPress={() => setDemoClassGames(v => Math.max(20, v - 20))} />
+                <SalindaButton text="+20" color="blue" width={62} height={30} fontSize={11} onPress={() => setDemoClassGames(v => Math.min(500, v + 20))} />
+                <SalindaButton text="-20" color="blue" width={62} height={30} fontSize={11} onPress={() => setDemoClassGames(v => Math.max(20, v - 20))} />
               </View>
             </View>
             <View style={{ marginTop: 10, alignItems: 'flex-end' }}>
-              <LulosButton text={t('demo.openTeacherScreen')} color="green" width={200} height={36} fontSize={11} onPress={() => setTeacherScreenOpen(true)} />
+              <SalindaButton text={t('demo.openTeacherScreen')} color="green" width={200} height={36} fontSize={11} onPress={() => setTeacherScreenOpen(true)} />
             </View>
           </View>
 
@@ -11889,7 +12006,7 @@ function StartScreen({
             <Text style={{ color: '#DCFCE7', fontSize: 15, fontWeight: '800', textAlign: 'right', marginBottom: 8 }}>{t('demo.diffTitle')}</Text>
             <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               {DEMO_LEVELS.map((level) => (
-                <LulosButton key={level} text={t(`demo.level.${level}`)} color={demoLevel === level ? 'green' : 'blue'} width={96} height={34} fontSize={11} onPress={() => setDemoLevel(level)} />
+                <SalindaButton key={level} text={t(`demo.level.${level}`)} color={demoLevel === level ? 'green' : 'blue'} width={96} height={34} fontSize={11} onPress={() => setDemoLevel(level)} />
               ))}
             </View>
             <Text style={{ color: '#BBF7D0', fontSize: 12, textAlign: 'right' }}>
@@ -11911,7 +12028,7 @@ function StartScreen({
             </View>
             <Text style={{ color: '#E5E7EB', fontSize: 12, textAlign: 'right', lineHeight: 18, marginBottom: 10 }}>{demoSimMessage}</Text>
             <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-              <LulosButton
+              <SalindaButton
                 text={demoSimRunning ? t('demoSim.btnRunning') : t('demoSim.btnStart')}
                 color={demoSimRunning ? 'blue' : 'green'}
                 width={146}
@@ -11919,7 +12036,7 @@ function StartScreen({
                 fontSize={12}
                 onPress={startDemoSimulation}
               />
-              <LulosButton text={t('demoSim.reset')} color="red" width={88} height={36} fontSize={12} onPress={resetDemoSimulation} />
+              <SalindaButton text={t('demoSim.reset')} color="red" width={88} height={36} fontSize={12} onPress={resetDemoSimulation} />
             </View>
             {demoSimResult && (
               <Text style={{ color: demoSimResult === 'success' ? '#86EFAC' : '#FCD34D', fontSize: 12, textAlign: 'right', marginTop: 8 }}>
@@ -11945,7 +12062,7 @@ function StartScreen({
     return (
       <View style={{ flex: 1, backgroundColor: '#1E293B', paddingTop: safe.insets.top || 12 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
-          <LulosButton text={t('lab.back')} color="red" width={100} height={38} fontSize={13} onPress={() => { setFutureLabOpen(false); }} />
+          <SalindaButton text={t('lab.back')} color="red" width={100} height={38} fontSize={13} onPress={() => { setFutureLabOpen(false); }} />
           <Text style={{ color: '#E2E8F0', fontSize: 18, fontWeight: '800' }}>{t('lab.title')}</Text>
           <View style={{ width: 100 }} />
         </View>
@@ -11963,7 +12080,7 @@ function StartScreen({
                 </View>
               )}
               <View style={{ marginTop: 6, alignItems: 'center' }}>
-                <LulosButton
+                <SalindaButton
                   text={t('lab.openDemo')}
                   color="blue"
                   width={200}
@@ -12017,7 +12134,7 @@ function StartScreen({
               writingDirection: 'ltr',
             } as any}
           >
-            <LulosButton
+            <SalindaButton
               text={backButtonLabel}
               color="blue"
               width={topActionsBackWidth}
@@ -12058,7 +12175,7 @@ function StartScreen({
         </Animated.View>
         <View style={{ alignItems: 'center', gap: topActionsRowGap, zIndex: 4, elevation: 4 }}>
           {onHowToPlay ? (
-            <LulosButton
+            <SalindaButton
               text={t('mode.howToPlay')}
               color="purple"
               width={topActionsPrimaryWidth}
@@ -12070,7 +12187,7 @@ function StartScreen({
             />
           ) : null}
           <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: topActionsColumnGap }}>
-            <LulosButton
+            <SalindaButton
               text={t('start.rulesButton')}
               color="blue"
               width={topActionsSecondaryWidth}
@@ -12080,7 +12197,7 @@ function StartScreen({
               style={rulesButtonGlowStyle}
             />
             {onShop ? (
-              <LulosButton
+              <SalindaButton
                 text={t('shop.openShop')}
                 color="yellow"
                 width={topActionsSecondaryWidth}
@@ -12266,7 +12383,6 @@ function StartScreen({
                   subtitle={t('meter.excellenceSubtitle')}
                   value={EXCELLENCE_METER_DEMO_VALUE}
                   height={128}
-                  courageCoins={5}
                 />
               </View>
               <Text
@@ -12788,7 +12904,7 @@ function StartScreen({
         ) : null}
         <TouchableOpacity
           onLongPress={() => {
-            void clearAllLulosOnboardingKeys().then(() => {
+            void clearAllSalindaOnboardingKeys().then(() => {
               if (__DEV__) console.log('[DEV] Long-press: cleared all onboarding keys');
               Alert.alert(t('dev.onboardingClearedTitle'), t('dev.onboardingClearedBody'));
             });
@@ -13554,8 +13670,8 @@ function BotDifficultySettingsBlock({
 // ???????????????????????????????????????????????????????????????
 
 /** שם השחקן האנושי — נשמר אחרי הזנה ראשונה, משמש ב-startGame כדי לא לחזור ל-"שחקן 1". */
-const PLAYER_SAVED_NAME_KEY = 'lulos_player_saved_name';
-const PLAYER_PROFILES_STORAGE_KEY = 'lulos_player_profiles_v1';
+const PLAYER_SAVED_NAME_KEY = 'salinda_player_saved_name';
+const PLAYER_PROFILES_STORAGE_KEY = 'salinda_player_profiles_v1';
 
 /** האם השם הוא ברירת מחדל (שחקן N). */
 function isDefaultPlayerName(name: string): boolean {
@@ -13620,113 +13736,120 @@ function PlayerNameModal({
   return (
     <RNModal transparent animationType="fade" onRequestClose={handleRequestClose} statusBarTranslucent visible={true}>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}>
-        <LinearGradient
-          colors={['rgba(0,0,0,0.97)', 'rgba(6,8,18,0.94)', 'rgba(0,0,0,0.96)']}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}
-        >
-          <ScrollView contentContainerStyle={{flexGrow:1,justifyContent:'center',alignItems:'center'}} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View
-              style={{
-                backgroundColor: 'rgba(30,41,59,0.98)',
-                borderRadius: 16,
-                paddingHorizontal: 20,
-                paddingVertical: 16,
-                borderWidth: 2,
-                borderColor: '#FACC15',
-                maxWidth: 340,
-                width: '100%',
-                ...Platform.select({
-                  ios: {
-                    shadowColor: '#FACC15',
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.5,
-                    shadowRadius: 28,
-                  },
-                  android: { elevation: 18 },
-                }),
-              }}
-            >
-              <Text style={{color:'#FDE68A',fontSize:18,fontWeight:'800',textAlign:'center',marginBottom:10}}>{t('player.namePrompt')}</Text>
-              <LinearGradient
-                colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <LinearGradient
+            colors={['rgba(0,0,0,0.97)', 'rgba(6,8,18,0.94)', 'rgba(0,0,0,0.96)']}
+            start={{ x: 0.2, y: 0 }}
+            end={{ x: 0.8, y: 1 }}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}
+          >
+            <View style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+              <View
                 style={{
-                  borderRadius: 26,
-                  padding: 3,
-                  marginBottom: 14,
-                  shadowColor: '#4A3200',
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowOpacity: 0.28,
-                  shadowRadius: 10,
-                  elevation: 7,
+                  backgroundColor: 'rgba(30,41,59,0.98)',
+                  borderRadius: 16,
+                  paddingHorizontal: 20,
+                  paddingVertical: 16,
+                  borderWidth: 2,
+                  borderColor: '#FACC15',
+                  maxWidth: 340,
+                  width: '100%',
+                  ...Platform.select({
+                    ios: {
+                      shadowColor: '#FACC15',
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.5,
+                      shadowRadius: 28,
+                    },
+                    android: { elevation: 18 },
+                  }),
                 }}
               >
+                <Text style={{color:'#FDE68A',fontSize:18,fontWeight:'800',textAlign:'center',marginBottom:8}}>
+                  {t('player.namePrompt')}
+                </Text>
+                <Text style={{color:'rgba(255,248,200,0.86)',fontSize:13,fontWeight:'700',textAlign:'center',marginBottom:12}}>
+                  מלא את שמך פעם אחת בלבד
+                </Text>
                 <LinearGradient
-                  colors={['#0B153C', '#142763', '#1B3F8C']}
+                  colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
-                    borderRadius: 23,
-                    overflow: 'hidden',
-                    position: 'relative',
+                    borderRadius: 26,
+                    padding: 3,
+                    marginBottom: 14,
+                    shadowColor: '#4A3200',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.28,
+                    shadowRadius: 10,
+                    elevation: 7,
                   }}
                 >
-                  <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
-                  <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
-                  <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
-                  <Text style={{ position: 'absolute', bottom: 8, left: 54, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
-                  <Text style={{ position: 'absolute', bottom: 10, right: 60, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
-                  </View>
-                  <TextInput
-                    value={name}
-                  onChangeText={(txt) => {
-                      const sliced = txt.slice(0, 7);
-                      sendDebugLog('H5', 'index.tsx:PlayerNameModal.onChangeText', 'Name input changed', {
-                        rawLength: txt.length,
-                        slicedLength: sliced.length,
-                        value: sliced,
-                      });
-                      setName(sliced);
-                    }}
-                    onFocus={() => {
-                      if (isDefaultPlayerName(name)) setName('');
-                    }}
-                    placeholder=""
-                    placeholderTextColor="rgba(226,235,255,0.8)"
-                    maxLength={7}
-                    editable
-                    blurOnSubmit={false}
+                  <LinearGradient
+                    colors={['#0B153C', '#142763', '#1B3F8C']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                     style={{
-                      backgroundColor: 'transparent',
-                      borderRadius: 21,
-                      borderWidth: 1,
-                      borderColor: 'rgba(226,232,255,0.14)',
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      color: '#EAF1FF',
-                      fontSize: 18,
-                      fontWeight: '800',
-                      textAlign: 'center',
+                      borderRadius: 23,
+                      overflow: 'hidden',
+                      position: 'relative',
                     }}
-                  />
+                  >
+                    <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
+                    <Text style={{ position: 'absolute', top: 5, left: 20, color: 'rgba(230,240,255,0.55)', fontSize: 10 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', top: 12, right: 28, color: 'rgba(255,248,200,0.42)', fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', bottom: 8, left: 54, color: 'rgba(200,225,255,0.3)', fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+                    <Text style={{ position: 'absolute', bottom: 10, right: 60, color: 'rgba(255,248,200,0.32)', fontSize: 7 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+                    </View>
+                    <TextInput
+                      value={name}
+                      onChangeText={(txt) => {
+                        const sliced = txt.slice(0, 7);
+                        sendDebugLog('H5', 'index.tsx:PlayerNameModal.onChangeText', 'Name input changed', {
+                          rawLength: txt.length,
+                          slicedLength: sliced.length,
+                          value: sliced,
+                        });
+                        setName(sliced);
+                      }}
+                      onFocus={() => {
+                        if (isDefaultPlayerName(name)) setName('');
+                      }}
+                      placeholder={t('player.namePrompt')}
+                      placeholderTextColor="rgba(226,235,255,0.56)"
+                      maxLength={7}
+                      editable
+                      blurOnSubmit={false}
+                      style={{
+                        backgroundColor: 'transparent',
+                        borderRadius: 21,
+                        borderWidth: 1,
+                        borderColor: 'rgba(226,232,255,0.14)',
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        color: '#EAF1FF',
+                        fontSize: 18,
+                        fontWeight: '800',
+                        textAlign: 'center',
+                      }}
+                    />
+                  </LinearGradient>
                 </LinearGradient>
-              </LinearGradient>
-              <View style={{ alignItems: 'center', marginTop: 4 }}>
-                <CasinoButton text={t('ui.confirm')} width={220} height={48} fontSize={19} onPress={handleConfirm} />
+                <View style={{ alignItems: 'center', marginTop: 4 }}>
+                  <CasinoButton text={t('ui.confirm')} width={220} height={48} fontSize={19} onPress={handleConfirm} />
+                </View>
               </View>
             </View>
-          </ScrollView>
-        </LinearGradient>
+          </LinearGradient>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </RNModal>
   );
 }
 
 /** דגל התמדה: מסתיר את בועת ה"ברוכים הבאים" במסך השחקן אחרי שנכנסו לתפריט המשחק. */
-const WELCOME_PLAYER_SCREEN_KEY = 'lulos_welcome_player_screen_seen';
+const WELCOME_PLAYER_SCREEN_KEY = 'salinda_welcome_player_screen_seen';
 
 /** מצב מקוצר: עד 3 כפתורים (המשחק תומך עד 6 משתתפים). תמיד כולל את השחקן בתור, ואז משלימים עד maxCollapsed */
 const COLLAPSED_PLAYER_CHIP_COUNT = 3;
@@ -15115,7 +15238,7 @@ function TurnTransition() {
                     ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים`
                     : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
                 const btn = (
-                  <LulosButton
+                  <SalindaButton
                     text={btnText}
                     color={chipColor}
                     width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
@@ -15164,9 +15287,20 @@ function TurnTransition() {
         ) : null}
         {!state.isTutorial ? (
         <View style={{flexShrink:0,flexDirection:'column',alignItems:'center',gap:0,marginTop:turnHeaderLift}}>
-          <LulosButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} style={{ marginBottom: -8 }} />
+          <SalindaButton
+            text="X"
+            color="red"
+            width={hudExitButtonWidth}
+            height={hudButtonHeight}
+            fontSize={hudExitButtonFontSize}
+            hideText
+            overlayContent={<SalindaExitIcon size={Math.max(24, hudExitButtonFontSize + 11)} />}
+            accessibilityLabel={t('tutorial.exit')}
+            onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }}
+            style={{ marginBottom: -8 }}
+          />
           {!state.isTutorial && (
-            <LulosButton text={t('ui.tournament')} color="orange" width={hudButtonWidth} height={hudButtonHeight} fontSize={hudButtonFontSize} onPress={() => setTournamentInfoOpen((prev) => !prev)} style={{ marginBottom: -8 }} />
+            <SalindaButton text={t('ui.tournament')} color="orange" width={hudButtonWidth} height={hudButtonHeight} fontSize={hudButtonFontSize} onPress={() => setTournamentInfoOpen((prev) => !prev)} style={{ marginBottom: -8 }} />
           )}
           {!state.isTutorial ? (
             <CoinInfoBadge
@@ -15179,7 +15313,7 @@ function TurnTransition() {
               style={{ marginBottom: -4 }}
             />
           ) : null}
-          <LulosButton
+          <SalindaButton
             text={soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}
             color="blue"
             width={hudSoundButtonWidth}
@@ -15231,7 +15365,7 @@ function TurnTransition() {
                   ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים`
                   : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
               const btn = (
-                <LulosButton
+                <SalindaButton
                   text={btnText}
                   color={chipColor}
                   width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
@@ -15826,7 +15960,7 @@ function TurnTransition() {
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 14 }}>
-            <LulosButton
+            <SalindaButton
               text={t('ui.cancel')}
               color="blue"
               width={112}
@@ -15836,7 +15970,7 @@ function TurnTransition() {
               testID={activeSpecialKind === 'wild' ? 'wild-cancel' : 'slinda-cancel'}
               onPress={closeSpecialModal}
             />
-            <LulosButton
+            <SalindaButton
               text={specialBusy ? '...' : t(`${activeSpecialBankKey}.confirm`)}
               color="yellow"
               width={162}
@@ -15993,37 +16127,37 @@ let _identArrowShownForGame: string | null = null;
 const ONB_KEYS = ['onb_game_start', 'onb_results', 'onb_first_discard', 'onb_welcome_screen', 'onb_choose_cards', 'onb_choose_cards_after_confirm', 'onb_build_equation'] as const;
 type OnbKey = typeof ONB_KEYS[number];
 /** חץ קטן חד־פעמי מעל מיני תוצאות — אחרי לחיצה ראשונה על «תוצאות אפשריות» */
-const RESULTS_MINI_ARROW_SEEN_KEY = 'lulos_results_mini_arrow_seen';
-const RESULTS_MINI_PULSE_SEEN_KEY = 'lulos_results_mini_pulse_seen';
+const RESULTS_MINI_ARROW_SEEN_KEY = 'salinda_results_mini_arrow_seen';
+const RESULTS_MINI_PULSE_SEEN_KEY = 'salinda_results_mini_pulse_seen';
 /** חד־פעמי: האם המשתמש לחץ לפחות פעם אחת על מיני-קלף תוצאה? כל עוד לא — מיני-הקלפים פועמים בלולאה. */
-const MINI_RESULT_TAPPED_KEY = 'lulos_mini_result_tapped';
+const MINI_RESULT_TAPPED_KEY = 'salinda_mini_result_tapped';
 /** הדרכה חד־פעמית — אחרי מעבר ל־building מהטלת קוביות */
-const BUILDING_EQUATION_HINT_KEY = 'lulos_building_equation_hint_shown';
+const BUILDING_EQUATION_HINT_KEY = 'salinda_building_equation_hint_shown';
 /** הודעת "אין לך קלף זהה" — מוצגת פעם אחת בלבד לאורך השימוש (עם איפוס onboarding) */
-const NO_IDENTICAL_HINT_SEEN_KEY = 'lulos_no_identical_hint_seen';
+const NO_IDENTICAL_HINT_SEEN_KEY = 'salinda_no_identical_hint_seen';
 
 const GUIDANCE_KEYS = ['guidance_op_challenge', 'guidance_identical', 'guidance_joker', 'guidance_triple', 'guidance_wild_results'] as const;
 type GuidanceKey = typeof GUIDANCE_KEYS[number];
 
-const CARD_HINT_JOKER_SEEN_KEY = 'lulos_card_hint_joker_seen';
-const CARD_HINT_OP_SEEN_KEY = 'lulos_card_hint_op_seen';
+const CARD_HINT_JOKER_SEEN_KEY = 'salinda_card_hint_joker_seen';
+const CARD_HINT_OP_SEEN_KEY = 'salinda_card_hint_op_seen';
 
 /** מחיקת כל מפתחות ההדרכה והטיפים החד־פעמיים (מסך פתיחה / איפוס ידני) */
-async function clearAllLulosOnboardingKeys(): Promise<void> {
+async function clearAllSalindaOnboardingKeys(): Promise<void> {
   const keys: string[] = [
     ...ONB_KEYS,
     ...GUIDANCE_KEYS,
-    'lulos_tutorial_done',
-    'lulos_tip1_done',
-    'lulos_tip2_done',
-    'lulos_ident_arrow_seen',
-    'lulos_find_cards_sum_alert_seen',
+    'salinda_tutorial_done',
+    'salinda_tip1_done',
+    'salinda_tip2_done',
+    'salinda_ident_arrow_seen',
+    'salinda_find_cards_sum_alert_seen',
     NO_IDENTICAL_HINT_SEEN_KEY,
     RESULTS_MINI_ARROW_SEEN_KEY,
     RESULTS_MINI_PULSE_SEEN_KEY,
     BUILDING_EQUATION_HINT_KEY,
     WELCOME_PLAYER_SCREEN_KEY,
-    'lulos_guidance_notifications',
+    'salinda_guidance_notifications',
     CARD_HINT_JOKER_SEEN_KEY,
     CARD_HINT_OP_SEEN_KEY,
     // NOTE: PLAYER_SAVED_NAME_KEY is deliberately excluded — player's name
@@ -16889,11 +17023,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      AsyncStorage.getItem('lulos_guidance_enabled'),
-      AsyncStorage.getItem('lulos_tutorial_done'),
-      AsyncStorage.getItem('lulos_tip1_done'),
-      AsyncStorage.getItem('lulos_tip2_done'),
-      AsyncStorage.getItem('lulos_ident_arrow_seen'),
+      AsyncStorage.getItem('salinda_guidance_enabled'),
+      AsyncStorage.getItem('salinda_tutorial_done'),
+      AsyncStorage.getItem('salinda_tip1_done'),
+      AsyncStorage.getItem('salinda_tip2_done'),
+      AsyncStorage.getItem('salinda_ident_arrow_seen'),
       AsyncStorage.getItem(NO_IDENTICAL_HINT_SEEN_KEY),
       AsyncStorage.getItem(RESULTS_MINI_ARROW_SEEN_KEY),
       AsyncStorage.getItem(RESULTS_MINI_PULSE_SEEN_KEY),
@@ -16987,6 +17121,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   // Fraction tap intercept: show hint if playable, toast if not, TIP 3 if tutorial active
   useEffect(() => {
     fracTapIntercept.fn = (card: Card) => {
+      if (state.isTutorial && tutorialBus.getFracGuidedMode()) {
+        return false;
+      }
       const topCard = state.discardPile[state.discardPile.length - 1];
       const playable = validateFractionPlay(card, topCard);
 
@@ -17024,7 +17161,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       return false;
     };
     return () => { fracTapIntercept.fn = null; };
-  }, [state.discardPile, tutLoaded, dispatch, t]);
+  }, [state.discardPile, state.isTutorial, tutLoaded, dispatch, t]);
 
   // ?? Guidance notification system ??
   // First time ever = full explanation, after that = short one-liner
@@ -17112,6 +17249,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         // the pulsing chip, even on back-nav after the learner already
         // opened it once (which would have turned boostedPulse off).
         setResultsChipBoostedPulse(true);
+      } else if (cmd.kind === 'hideResultsChip') {
+        setResultsChipHiddenThisTurn(true);
+        setResultsOpenState(false);
+        setResultsChipBoostedPulse(false);
       } else if (cmd.kind === 'disarmResultsChipPulse') {
         setResultsChipBoostedPulse(false);
       } else if (cmd.kind === 'clearSolveExerciseChip') {
@@ -17123,6 +17264,9 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         setParensToggleNeedsAttention(false);
         setSolveExerciseHidden(false);
         setSolveChipPulseKey((prev) => prev + 1);
+      } else if (cmd.kind === 'setParensRight') {
+        setParensRight(cmd.value);
+        setParensToggleTouched(false);
       } else if (cmd.kind === 'tapMiniResult') {
         // Bot demo visual-only tap: select the mini-card at idx (sorted by
         // result ascending) and show the solve chip WITHOUT emitting the
@@ -17452,7 +17596,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     // predicate — without the emit the lesson never advances.
     if (state.isTutorial) {
       setResultsChipHiddenThisTurn(true);
-      setResultsOpenState(true);
+      setResultsOpenState(false);
       setResultsChipBoostedPulse(false);
       tutorialBus.emitUserEvent({ kind: 'miniCardTapped', result: eq.result, equation: eq.equation });
       // Find the simplest 2-number dice combination that produces eq.result
@@ -17749,7 +17893,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [state.validTargets, handNumberValuesForResults, playableFractionCardsForResults]);
   // During the bot's turn, the badge count must match the narrowed strip.
   const matchCountForHand = isBotTurnAny ? botVisibleResults.length : matchCountForHandRaw;
-  // Keep the original layout: results chip near the pile, mini cards below the table.
+  // Keep both the results chip and its mini cards near the pile so the whole feature
+  // lives in one stable area instead of jumping between two zones.
   const swapPossibleResultsPositionsOnAndroid = false;
   const showPossibleResultsPhaseUi =
     (state.phase === 'building' || state.phase === 'solved') &&
@@ -17764,7 +17909,14 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     swapPossibleResultsPositionsOnAndroid &&
     resultsOpen &&
     (resultsStripFeed.length > 0 || (!isBotTurnAny && playableFractionCardsForResults.length > 0));
-  const showSolveChipNearPile = selectedEquationForDisplay !== null && !solveExerciseHidden;
+  const showSolveChipInstruction =
+    resultsOpen &&
+    selectedEquationForDisplay === null &&
+    canUseActiveTurnUi &&
+    !isBotTurnAny &&
+    !state.isTutorial &&
+    !!state.showSolveExercise;
+  const showSolveChipNearPile = (selectedEquationForDisplay !== null || showSolveChipInstruction) && !solveExerciseHidden;
   useEffect(() => {
     if (showSolveChipNearPile && state.isTutorial && tutorialBus.getL6GuidedMode()) return;
     tutorialBus.setLayout('solveChip', null);
@@ -18042,7 +18194,18 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               ...(androidStableDirection ? { writingDirection: androidStableDirection } : null),
             }}
           >
-            <LulosButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} style={{ marginBottom: -8 }} />
+            <SalindaButton
+              text="X"
+              color="red"
+              width={hudExitButtonWidth}
+              height={hudButtonHeight}
+              fontSize={hudExitButtonFontSize}
+              hideText
+              overlayContent={<SalindaExitIcon size={Math.max(24, hudExitButtonFontSize + 11)} />}
+              accessibilityLabel={t('tutorial.exit')}
+              onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }}
+              style={{ marginBottom: -8 }}
+            />
             {!state.isTutorial && (() => {
               const meterPlayer =
                 (cp && !cp.isBot ? cp : null) ??
@@ -18066,7 +18229,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               ) : null;
             })()}
             {!state.isTutorial && state.timerSetting !== 'off' && (
-              <LulosButton
+              <SalindaButton
                 text={`? ${secsLeft ?? 0}`}
                 color={secsLeft <= 5 && timerRunning ? 'red' : 'blue'}
                 width={hudButtonWidth}
@@ -18076,7 +18239,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 style={{ marginBottom: -8 }}
               />
             )}
-            <LulosButton
+            <SalindaButton
               text={soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}
               color="blue"
               width={hudSoundButtonWidth}
@@ -18145,12 +18308,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           style={{
             position: 'absolute',
             top: resultsTop,
-            ...(swapPossibleResultsPositionsOnAndroid ? { left: 12 } : null),
-            right: resultsRight,
+            ...(showSolveChipInstruction
+              ? { left: 0, right: 0 }
+              : {
+                  ...(swapPossibleResultsPositionsOnAndroid ? { left: 12 } : null),
+                  right: resultsRight,
+                }),
             zIndex: 8,
             flexDirection: 'row-reverse',
             alignItems: 'center',
-            justifyContent: 'flex-end',
+            justifyContent: showSolveChipInstruction ? 'center' : 'flex-end',
             gap: 6,
           }}
           pointerEvents="box-none"
@@ -18196,7 +18363,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               noPulse={state.isTutorial && tutorialBus.getL7GuidedMode()}
             />
           ) : null}
-          {swapPossibleResultsPositionsOnAndroid && showPossibleResultsStripNearPile ? (
+          {showPossibleResultsStripNearPile ? (
             <ResultsStripNearPile
               resultsOpen={resultsOpen}
               filteredResults={resultsStripFeed}
@@ -18220,7 +18387,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               }}
             >
               <SolveExerciseChip
-                equation={selectedEquationForDisplay!.equation}
+                equation={selectedEquationForDisplay?.equation ?? ''}
+                displayText={showSolveChipInstruction ? 'לחץ על מיני קלף כדי לראות את התרגיל' : undefined}
+                writingDirection={showSolveChipInstruction ? 'rtl' : 'ltr'}
+                disabled={showSolveChipInstruction}
                 pulseKey={solveChipPulseKey}
                 loopPulse={state.isTutorial && tutorialBus.getL7SolveChipLoopPulse()}
                 onPress={state.isTutorial || !canUseActiveTurnUi ? () => {} : () => setSolveExerciseHidden(true)}
@@ -18574,7 +18744,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                     <Text style={{ fontSize: 32, color: '#FDE047', fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>{GUIDE_ARROW_GLYPH}</Text>
                   </Animated.View>
                 )}
-                <LulosButton
+                <SalindaButton
                   text={confirmLabel}
                   color="orange"
                   width={220}
@@ -18672,7 +18842,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                 {/* Tutorial arrow for "בחרתי" is drawn from the side in
                     InteractiveTutorialScreen via the reported layout rect —
                     no inline → here so the button stays at its normal spot. */}
-                <LulosButton
+                <SalindaButton
                   text={t('game.placeCards')}
                   color="orange"
                   width={PLACE_NOW_BTN_W}
@@ -18702,7 +18872,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         const abEndTurn = (pr||bl||so)&&state.hasPlayedCards;
         const totalBtns = btnCount + (abEndTurn?1:0);
         const showFallback = totalBtns === 0 && canUseActiveTurnUi && (pr||bl||so) && !state.isTutorial && !actionButtonsLocked;
-        const barPaddingBottom = Math.max(24, safe.insets.bottom + 20);
+        const isDesktopWebActionLayout = Platform.OS === 'web' && !mobileWebViewport;
+        const barPaddingBottom = isDesktopWebActionLayout ? Math.max(24, safe.insets.bottom + 20) : 0;
+        const mobileActionBottomInset = Math.max(10, safe.insets.bottom + 8);
+        const resetEquationButtonDrop = isDesktopWebActionLayout ? 18 : 14;
         const BOTTOM_BAR_HEIGHT = 180;
         const drawVisible = canUseActiveTurnUi && shouldShowDrawForfeitButton(state, canRoll);
         const showSolvedRow = so && !state.hasPlayedCards;
@@ -18727,24 +18900,28 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               overflow: 'visible',
               backgroundColor: 'transparent',
               paddingHorizontal: 20,
-              paddingTop: 12,
+              paddingTop: isDesktopWebActionLayout ? 12 : 0,
               paddingBottom: barPaddingBottom,
-              ...(Platform.OS === 'web' && !mobileWebViewport
+              ...(isDesktopWebActionLayout
                 ? { top: webBottomActionTop ?? floatingActionMinTop, height: webBottomActionZoneHeight }
-                : isAndroid
-                ? { top: bottomActionTop ?? 0, bottom: bottomActionInset }
-                : { bottom: bottomActionInset, height: bottomActionZoneHeight }),
+                : { bottom: mobileActionBottomInset }),
             }}
           >
-            <View pointerEvents="box-none" style={{flex:1,justifyContent:'flex-end'}}>
-              <ScrollView style={{flexGrow:0, overflow:'visible'}} contentContainerStyle={{alignItems:'center',gap:8}} showsVerticalScrollIndicator={true} bounces={false}>
-                <ActionBar />
-              </ScrollView>
+            <View pointerEvents="box-none" style={isDesktopWebActionLayout ? {flex:1,justifyContent:'flex-end'} : {alignItems:'center',justifyContent:'flex-end',gap:8}}>
+              {isDesktopWebActionLayout ? (
+                <ScrollView style={{flexGrow:0, overflow:'visible'}} contentContainerStyle={{alignItems:'center',gap:8}} showsVerticalScrollIndicator={true} bounces={false}>
+                  <ActionBar />
+                </ScrollView>
+              ) : (
+                <View style={{width:'100%',alignItems:'center'}}>
+                  <ActionBar />
+                </View>
+              )}
               {/* איפוס התרגיל — שורה קבועה מתחת ל-ScrollView */}
-              <View style={{flexShrink:0,minHeight:52,alignItems:'center',justifyContent:'center',gap:8,paddingTop:6,marginTop:0,transform:[{ translateY: bottomActionLift }],flexDirection:'row',flexWrap:'wrap'}}>
+              <View style={{flexShrink:0,minHeight:isDesktopWebActionLayout ? 52 : 38,alignItems:'center',justifyContent:'center',gap:8,paddingTop:isDesktopWebActionLayout ? 6 : 0,marginTop:0,transform:[{ translateY: (isDesktopWebActionLayout ? bottomActionLift : 0) + resetEquationButtonDrop }],flexDirection:'row',flexWrap:'wrap'}}>
                 {/* איפוס התרגיל — רק ב-building */}
                 {canUseActiveTurnUi && bl && !state.hasPlayedCards && state.dice && state.pendingFractionTarget === null && !state.isTutorial && !overflowSwapActive && (
-                  <LulosButton
+                  <SalindaButton
                     text={t('game.resetEquation')}
                     color="blue"
                     width={160}
@@ -18755,7 +18932,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
                   />
                 )}
                 {showBackToEquation && (
-                  <LulosButton
+                  <SalindaButton
                     text={t('game.backToEquation')}
                     color="blue"
                     width={168}
@@ -18768,8 +18945,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               </View>
               {/* שורה שנייה — שלוף קלף, מופרדת כדי למנוע חפיפה */}
               {drawVisible && (
-                <Animated.View style={{flexShrink:0,marginTop:10,alignItems:'center',opacity: shouldBlinkGameTimerHint ? gameTimerHintOpacity : 1,transform:[{translateY:bottomActionLift}]}}>
-                  <LulosButton
+                <Animated.View style={{flexShrink:0,marginTop:isDesktopWebActionLayout ? 10 : 0,alignItems:'center',opacity: shouldBlinkGameTimerHint ? gameTimerHintOpacity : 1,...(isDesktopWebActionLayout ? {transform:[{translateY:bottomActionLift}]} : {})}}>
+                  <SalindaButton
                     text={t('game.drawForfeit')}
                     color="forfeit"
                     height={38}
@@ -18924,7 +19101,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
       )}
 
       {/* בחר קלפים — בעיגון התחתון המקורי כדי לא להסתיר את תוצאת התרגיל */}
-      {canUseActiveTurnUi && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !showSolvedPromptInlineBackButton && !l5GuidedTutorial && (!state.isTutorial || tutorialBus.getL4Step3Mode() || tutorialBus.getL9ParensFilter()) && (
+      {canUseActiveTurnUi && !state.isTutorial && state.phase === 'solved' && !state.hasPlayedCards && state.stagedCards.length === 0 && !showSolvedPromptInlineBackButton && !l5GuidedTutorial && (
         <View
           style={[
             StyleSheet.absoluteFillObject,
@@ -19264,13 +19441,13 @@ function GameOver({ onPlayVsBot, onBackToLobby }: { onPlayVsBot?: () => void; on
       ) : null}
       {isTechnicalVictory ? (
         <>
-          <LulosButton text={t('game.playVsBot')} color="green" width={280} height={64} onPress={() => onPlayVsBot?.()} style={{marginTop:16}} />
-          <LulosButton text={t('game.backToLobby')} color="blue" width={280} height={56} onPress={() => onBackToLobby?.()} style={{marginTop:12}} />
+          <SalindaButton text={t('game.playVsBot')} color="green" width={280} height={64} onPress={() => onPlayVsBot?.()} style={{marginTop:16}} />
+          <SalindaButton text={t('game.backToLobby')} color="blue" width={280} height={56} onPress={() => onBackToLobby?.()} style={{marginTop:12}} />
         </>
       ) : (
         <>
-          <LulosButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
-          <LulosButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
+          <SalindaButton text={t('game.playAgain')} color="green" width={280} height={64} onPress={()=>dispatch({type:'PLAY_AGAIN'})} style={{marginTop:20}} />
+          <SalindaButton text={t('tutorial.exit')} color="red" width={280} height={56} onPress={()=>dispatch({type:'RESET_GAME'})} style={{marginTop:12}} />
         </>
       )}
     </View>
@@ -20016,7 +20193,7 @@ function PlayerWaitingScreen({
             </View>
           </View>
           <View style={{ alignItems: 'flex-start', gap: 6 }}>
-            <LulosButton text="חזרה לצפייה" color="blue" width={120} height={32} fontSize={11} onPress={onBack} />
+            <SalindaButton text="חזרה לצפייה" color="blue" width={120} height={32} fontSize={11} onPress={onBack} />
             <CoinInfoBadge coins={totalCoins} testID="waiting-coin-info" width={88} height={66} coinSize={30} valueFontSize={16} />
           </View>
         </View>
@@ -20287,7 +20464,7 @@ function MenuCapsuleButton({
   style?: any;
 }) {
   return (
-    <LulosButton
+    <SalindaButton
       text={text}
       color={color}
       width={MENU_CAPSULE_WIDTH}
@@ -20462,10 +20639,24 @@ export function PlayModeChoiceScreen({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
-  const sectionGap = compactMainMenu ? 18 : 24;
-  const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 22 : 30);
+  const sectionGap = compactMainMenu ? 14 : 24;
+  const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 16 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
   const primaryStackGap = 28;
+  const menuHorizontalPadding = compactMainMenu ? 20 : 24;
+  const heroButtonWidth = compactMainMenu ? 256 : 280;
+  const heroButtonHeight = compactMainMenu ? 64 : 72;
+  const heroButtonFontSize = compactMainMenu ? 22 : 24;
+  const secondaryRowGap = compactMainMenu ? 8 : 10;
+  const preferredNameInputWidth = compactMainMenu ? 132 : 140;
+  const preferredNameInputFontSize = compactMainMenu ? 13 : 14;
+  const languageButtonWidth = compactMainMenu ? 104 : 112;
+  const languageButtonHeight = compactMainMenu ? 34 : 36;
+  const languageButtonFontSize = compactMainMenu ? 11 : 12;
+  const guideButtonWidth = compactMainMenu ? 236 : MENU_CAPSULE_WIDTH;
+  const guideButtonHeight = compactMainMenu ? 48 : MENU_CAPSULE_HEIGHT;
+  const guideButtonFontSize = compactMainMenu ? 14 : MENU_CAPSULE_FONT_SIZE;
+  const shopAuthGap = compactMainMenu ? 18 : 14;
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
   const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
@@ -20489,7 +20680,7 @@ export function PlayModeChoiceScreen({
 
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem('lulos_tutorial_done').then((v) => {
+    AsyncStorage.getItem('salinda_tutorial_done').then((v) => {
       if (!cancelled) setTutorialDone(v === 'true');
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -20499,6 +20690,7 @@ export function PlayModeChoiceScreen({
   const heroLabel = tutorialDone ? t('lobby.playNow') : t('lobby.startTutorial');
   const heroAction = tutorialDone ? onPlay : onHowToPlay;
   const heroTestID = tutorialDone ? 'lobby-single-player' : 'lobby-start-tutorial';
+  const nextLocale = locale === 'he' ? 'en' : 'he';
 
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
@@ -20508,7 +20700,7 @@ export function PlayModeChoiceScreen({
           flex: 1,
           width: '100%',
           alignItems: 'center',
-          paddingHorizontal: 24,
+          paddingHorizontal: menuHorizontalPadding,
           paddingTop: menuTopPadding,
           paddingBottom: menuBottomPadding,
           overflow: 'hidden',
@@ -20525,12 +20717,12 @@ export function PlayModeChoiceScreen({
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
-              <LulosButton
+              <SalindaButton
                 text={heroLabel}
                 color="green"
-                width={280}
-                height={72}
-                fontSize={24}
+                width={heroButtonWidth}
+                height={heroButtonHeight}
+                fontSize={heroButtonFontSize}
                 accessibilityLabel={heroLabel}
                 testID={heroTestID}
                 onPress={heroAction}
@@ -20567,7 +20759,7 @@ export function PlayModeChoiceScreen({
                 alignItems: 'center',
                 justifyContent: 'center',
                 width: '100%',
-                gap: 10,
+                gap: secondaryRowGap,
                 marginBottom: sectionGap,
                 flexWrap: 'wrap',
               }}
@@ -20603,15 +20795,15 @@ export function PlayModeChoiceScreen({
                   </View>
                   <TextInput
                     style={{
-                      width: 140,
+                      width: preferredNameInputWidth,
                       backgroundColor: 'transparent',
                       borderWidth: 1,
                       borderColor: 'rgba(226,232,255,0.14)',
                       borderRadius: 14,
                       paddingHorizontal: 10,
-                      paddingVertical: 8,
+                      paddingVertical: compactMainMenu ? 7 : 8,
                       color: '#EAF1FF',
-                      fontSize: 14,
+                      fontSize: preferredNameInputFontSize,
                       fontWeight: '800',
                       textAlign: 'center',
                     }}
@@ -20625,33 +20817,24 @@ export function PlayModeChoiceScreen({
               </LinearGradient>
 
               {/* Language toggle — compact */}
-              <View testID="lobby-language-toggle" style={{ flexDirection: 'row', writingDirection: 'ltr', gap: 6 } as any}>
-                <LulosButton
-                  text={t('lang.he')}
-                  color={locale === 'he' ? 'orange' : 'blue'}
-                  width={56}
-                  height={36}
-                  fontSize={13}
-                  testID="lobby-language-he"
-                  onPress={() => void setLocale('he')}
-                />
-                <LulosButton
-                  text={t('lang.en')}
-                  color={locale === 'en' ? 'orange' : 'blue'}
-                  width={56}
-                  height={36}
-                  fontSize={13}
-                  testID="lobby-language-en"
-                  onPress={() => void setLocale('en')}
+              <View testID="lobby-language-toggle" style={{ writingDirection: 'ltr' } as any}>
+                <SalindaButton
+                  text={t('lang.switch')}
+                  color="orange"
+                  width={languageButtonWidth}
+                  height={languageButtonHeight}
+                  fontSize={languageButtonFontSize}
+                  testID="lobby-language-switch"
+                  onPress={() => void setLocale(nextLocale)}
                 />
               </View>
 
-              <LulosButton
+              <SalindaButton
                 text={t('lobby.guideButton')}
                 color="orange"
-                width={MENU_CAPSULE_WIDTH}
-                height={MENU_CAPSULE_HEIGHT}
-                fontSize={MENU_CAPSULE_FONT_SIZE}
+                width={guideButtonWidth}
+                height={guideButtonHeight}
+                fontSize={guideButtonFontSize}
                 testID="lobby-tutorial"
                 onPress={onHowToPlay}
               />
@@ -20667,18 +20850,19 @@ export function PlayModeChoiceScreen({
               iconWrapSize={30}
               testID="lobby-shop"
               onPress={onShop}
-              style={{ marginBottom: 12, alignSelf: 'center' }}
+              style={{ marginBottom: shopAuthGap, alignSelf: 'center' }}
             />
-            <LulosButton
-              text={isLoggedIn ? t('auth.switchUserButton') : t('auth.homeButton')}
-              color="blue"
-              width={220}
-              height={42}
-              fontSize={15}
-              testID="home-auth-button"
-              onPress={onOpenAuth}
-              style={{ marginBottom: sectionGap, alignSelf: 'center' }}
-            />
+            <View testID="home-auth-spacer" style={{ marginBottom: sectionGap, alignItems: 'center' }}>
+              <SalindaButton
+                text={isLoggedIn ? t('auth.switchUserButton') : t('auth.homeButton')}
+                color="blue"
+                width={220}
+                height={42}
+                fontSize={15}
+                testID="home-auth-button"
+                onPress={onOpenAuth}
+              />
+            </View>
 
             {/* Feedback card — inline expansion */}
             {showAdminControls && feedbackOpen ? (
@@ -20707,7 +20891,7 @@ export function PlayModeChoiceScreen({
             {/* ── 4. ADMIN BLOCK ── */}
             {showAdminControls ? (
               <>
-                <LulosButton
+                <SalindaButton
                   text={t('lobby.sendFeedback')}
                   color="blue"
                   width={220}
@@ -20717,7 +20901,7 @@ export function PlayModeChoiceScreen({
                   onPress={() => setFeedbackOpen((prev) => !prev)}
                   style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
                 />
-                <LulosButton
+                <SalindaButton
                   text={t('feedbackInbox.open')}
                   color="orange"
                   width={220}
@@ -20727,7 +20911,7 @@ export function PlayModeChoiceScreen({
                   onPress={onOpenFeedbackInbox}
                   style={{ marginTop: 12, alignSelf: 'center' }}
                 />
-                <LulosButton
+                <SalindaButton
                   text={locale === 'he' ? 'אנליטיקס' : 'Analytics'}
                   color="orange"
                   width={220}
@@ -20737,7 +20921,7 @@ export function PlayModeChoiceScreen({
                   onPress={onOpenAnalytics}
                   style={{ marginTop: 12, alignSelf: 'center' }}
                 />
-                <LulosButton
+                <SalindaButton
                   text={adminCoinsLabel}
                   color="blue"
                   width={220}
@@ -20806,7 +20990,7 @@ function GameEntryChoiceScreen({
             zIndex: 5,
           }}
         >
-          <LulosButton
+          <SalindaButton
             text={backButtonLabel}
             color="blue"
             width={128}
@@ -20916,7 +21100,7 @@ function FriendsChoiceScreen({
             zIndex: 5,
           }}
         >
-          <LulosButton
+          <SalindaButton
             text={backButtonLabel}
             color="blue"
             width={128}
@@ -20986,7 +21170,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   // Web starts at the home/choose screen like mobile; URL-based room joins still work via the effect below.
   const [playMode, setPlayMode] = useState<ShellPlayMode>('choose');
   const [authReturnMode, setAuthReturnMode] = useState<'online' | null>(null);
-  // FTU routing: new users (lulos_tutorial_done not set) are sent to tutorial automatically
+  // FTU routing: new users (salinda_tutorial_done not set) are sent to tutorial automatically
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
@@ -21018,9 +21202,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const SALINDA_TRACK_W = isAndroidPlatform ? 8 : 6;
   const SALINDA_THUMB_SIZE = isAndroidPlatform ? 22 : 18;
   const SALINDA_THUMB_RADIUS = SALINDA_THUMB_SIZE / 2;
-  const SALINDA_VOLUME_KEY = 'lulos_salinda_volume';
-  const SALINDA_VOLUME_TOUCHED_KEY = 'lulos_salinda_volume_touched';
-  const PREFERRED_NAME_KEY = 'lolos_preferred_name';
+  const SALINDA_VOLUME_KEY = 'salinda_salinda_volume';
+  const SALINDA_VOLUME_TOUCHED_KEY = 'salinda_salinda_volume_touched';
+  const PREFERRED_NAME_KEY = 'salinda_preferred_name';
   const feedbackStateRef = useRef<FeedbackPromptState>(DEFAULT_FEEDBACK_PROMPT_STATE);
   const [feedbackPrompt, setFeedbackPrompt] = useState<PendingFeedbackPrompt | null>(null);
   const feedbackStateLoadedRef = useRef(false);
@@ -21303,7 +21487,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   // FTU routing: auto-navigate new users to tutorial if they have never completed it
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem('lulos_tutorial_done').then((v) => {
+    AsyncStorage.getItem('salinda_tutorial_done').then((v) => {
       if (cancelled) return;
       if (Platform.OS === 'web' && parseJoinParamsFromUrl().roomCode) return;
       if (v === null) {
@@ -21502,7 +21686,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     const tutorialCompleted = tutorialMeter.percent >= 100;
     dispatch({ type: 'RESET_GAME' });
     setTutorialMeter(INITIAL_TUTORIAL_METER_STATE);
-    AsyncStorage.setItem('lulos_tutorial_done', 'true').catch(() => {});
+    AsyncStorage.setItem('salinda_tutorial_done', 'true').catch(() => {});
     if (tutorialCompleted) {
       void recordCompletedSessionForFeedback('tutorial');
       setPlayMode('game-entry');
@@ -21974,7 +22158,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       {showShop && <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />}
       {playMode === 'classroom-game' && state.phase === 'game-over' && (
         <View style={{ position: 'absolute', top: 18, left: 18, zIndex: 20001 }}>
-          <LulosButton
+          <SalindaButton
             text={locale === 'he' ? 'חזרה לכיתה' : 'Back to class'}
             color="blue"
             width={124}
@@ -22237,7 +22421,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                       shadowRadius: 6,
                     }}
                   >
-                    <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
+                    <SalindaExitIcon size={24} />
                   </TouchableOpacity>
                 )}
                 {Platform.OS === 'android' ? (
@@ -22263,7 +22447,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                       shadowRadius: 6,
                     }}
                   >
-                    <Text style={{ color: '#FFF5F5', fontSize: 16, lineHeight: 16, fontWeight: '900' }}>X</Text>
+                    <SalindaExitIcon size={24} />
                   </TouchableOpacity>
                 ) : (
                   <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 } as any}>
@@ -22339,8 +22523,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   pulseKey={tutorialMeter.pulseKey}
                   isCelebrating={tutorialMeter.isCelebrating}
                   testID="tutorial-header-meter"
-                  layerNumber={isAdmin ? tutorialMeter.layerNumber : undefined}
-                  showStepMarkers={isAdmin}
+                  layerNumber={tutorialMeter.layerNumber}
                 />
               </View>
             </View>
@@ -22489,7 +22672,7 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   });
 
   return (
-    <Animated.View style={{
+    <Animated.View pointerEvents="none" style={{
       ...StyleSheet.absoluteFillObject,
       opacity: splashOpacity,
       transform: [{ scale: splashScale }],

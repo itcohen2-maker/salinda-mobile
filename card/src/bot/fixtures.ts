@@ -37,7 +37,7 @@ export interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   isBot?: boolean; // added in M5; optional here so fixtures compile pre-M5
 }
 
@@ -223,7 +223,7 @@ export function makeFixtureState(overrides: Partial<GameState>): GameState {
  * Build a Player fixture. Hand defaults to [].
  */
 export function makePlayer(id: number, name: string, hand: Card[] = []): Player {
-  return { id, name, hand, calledLolos: false };
+  return { id, name, hand, hasOneCardLeft: false };
 }
 
 let _cardSeq = 0;

@@ -3,7 +3,7 @@ import { View, TouchableOpacity, Animated, Platform, StyleSheet } from 'react-na
 import { WebView } from 'react-native-webview';
 import { HtmlCanvasEmbed } from './HtmlCanvasEmbed';
 
-export interface LulosButtonProps {
+export interface SalindaButtonProps {
   text: string;
   color: 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'orange' | 'forfeit';
   onPress: () => void;
@@ -263,7 +263,7 @@ loop();
 <\/script></body></html>`;
 }
 
-export function LulosButton({
+export function SalindaButton({
   text,
   color,
   onPress,
@@ -277,7 +277,7 @@ export function LulosButton({
   hideText = false,
   style,
   accessibilityLabel,
-}: LulosButtonProps) {
+}: SalindaButtonProps) {
   const fs = fontSize ?? Math.round(height * 0.38);
   const w = width ?? Math.max(140, Math.min(300, text.length * fs * 0.6 + 80));
   const palette = PALETTES[color];

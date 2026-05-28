@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // InteractiveTutorialScreen.tsx ג€” Watch-and-mimic tutorial host.
 // Boots a vs-bot game underneath (using the existing tutorial
 // hand rigging), then floats cheerful speech bubbles narrating
@@ -28,6 +28,7 @@ import { WebGameScreenFrame } from '../components/layout/WebGameScreenFrame';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
 import { useLocale } from '../i18n/LocaleContext';
+import { t as translate, type AppLocale } from '../../shared/i18n';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { HappyBubble, type HappyBubbleTone } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
@@ -99,7 +100,7 @@ const LESSON_SHAPES = LESSONS.map((l) => ({ id: l.id, stepCount: l.steps.length 
 
 const CELEBRATE_MS = 900;
 const LESSON_DONE_MS = 1400;
-const HIDDEN_TUTORIAL_LAYERS = new Set([15, 16, 17, 18]);
+const HIDDEN_TUTORIAL_LAYERS = new Set([15, 16, 17, 18, 63, 67]);
 const TUTORIAL_WILD_STAR = '★';
 const TUTORIAL_HAPPY_BUBBLE_TEST_ID = 'tutorial-happy-bubble';
 
@@ -239,6 +240,34 @@ function buildL7ChipEquation(ex: { d1: number; d2: number; d3: number; target: n
 }
 
 const FRAC_KINDS: Fraction[] = ['1/2', '1/3'];
+
+function buildParensRightTargets(ex: { d1: number; d2: number; d3: number }) {
+  const applyOp = (a: number, op: string, b: number): number | null => {
+    if (op === '+') return a + b;
+    if (op === '-') return a - b;
+    if (op === 'x') return a * b;
+    if (op === '÷') return b !== 0 && Number.isInteger(a / b) ? a / b : null;
+    return null;
+  };
+  const ops = ['+', '-', 'x', '÷'] as const;
+  const vals = [ex.d1, ex.d2, ex.d3];
+  const targets = new Map<number, { equation: string; result: number }>();
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (j !== i) for (let k = 0; k < 3; k++) if (k !== i && k !== j) {
+    const [a, b, c] = [vals[i], vals[j], vals[k]];
+    for (const op1 of ops) for (const op2 of ops) {
+      const inner = applyOp(b, op2, c);
+      if (inner === null) continue;
+      const result = applyOp(a, op1, inner);
+      if (result !== null && result > 0 && result <= 25 && Number.isInteger(result) && !targets.has(result)) {
+        targets.set(result, {
+          equation: `${a} ${op1} (${b} ${op2} ${c}) = ${result}`,
+          result,
+        });
+      }
+    }
+  }
+  return [...targets.values()].sort((a, b) => a.result - b.result);
+}
 
 /** Scripted board for each optional-fractions tutorial step (see lesson-06). */
 function buildFractionTutorialSetup(stepIndex: number, ts: number) {
@@ -471,7 +500,7 @@ interface Props {
 }
 
 
-type CardMatchReminderTarget = 'advanced' | 'real-game';
+type CardMatchReminderTarget = 'advanced' | 'real-game' | 'continue';
 
 type TutorialWelcomeModalProps = {
   topInset: number;
@@ -487,6 +516,8 @@ type TutorialWelcomeModalProps = {
   onStart: () => void;
   onAdvanced: () => void;
   t: (key: string) => string;
+  locale: AppLocale;
+  onSetLocale: (locale: AppLocale) => void;
 };
 
 function TutorialWelcomeModal({
@@ -503,7 +534,142 @@ function TutorialWelcomeModal({
   onStart,
   onAdvanced,
   t,
+  locale,
+  onSetLocale,
 }: TutorialWelcomeModalProps) {
+  const webPressLockRef = useRef<string | null>(null);
+  const isHebrew = locale === 'he';
+  const textDirection = isHebrew ? 'rtl' : 'ltr';
+  const textWritingDirection = isHebrew ? 'rtl' : 'ltr';
+  const handleWebPress = (key: string, onPress: () => void) => {
+    if (webPressLockRef.current === key) return;
+    webPressLockRef.current = key;
+    onPress();
+    setTimeout(() => {
+      if (webPressLockRef.current === key) webPressLockRef.current = null;
+    }, 250);
+  };
+  const handleWebLocalePress = () => {
+    const nextLocale: AppLocale = locale === 'he' ? 'en' : 'he';
+    handleWebPress(`locale-${nextLocale}`, () => onSetLocale(nextLocale));
+  };
+
+  const renderWelcomeButton = (
+    label: string,
+    onPress: () => void,
+    variant: 'start' | 'advanced',
+  ) => {
+    if (Platform.OS === 'web') {
+      const isStart = variant === 'start';
+      return React.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: () => handleWebPress(variant, onPress),
+          onPointerUp: () => handleWebPress(variant, onPress),
+          'aria-label': label,
+          style: {
+            width: '100%',
+            minHeight: 48,
+            padding: '0 28px',
+            borderRadius: 18,
+            border: `2px solid ${isStart ? '#4ADE80' : '#C4B5FD'}`,
+            backgroundColor: isStart ? '#16A34A' : '#6D28D9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            touchAction: 'manipulation',
+            font: 'inherit',
+          } as any,
+        },
+        React.createElement(
+          'span',
+          {
+            style: {
+              color: '#FFFFFF',
+              fontWeight: 900,
+              fontSize: 16,
+              lineHeight: '20px',
+              textAlign: 'center',
+              direction: textDirection,
+              fontFamily: 'inherit',
+            } as any,
+          },
+          label,
+        ),
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={[
+          styles.tutorialWelcomeButton,
+          variant === 'start' ? styles.tutorialWelcomeStartButton : styles.tutorialWelcomeAdvancedButton,
+        ]}
+      >
+        <Text style={styles.tutorialWelcomeButtonText}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderLanguageButton = (label: string) => {
+    if (Platform.OS === 'web') {
+      return React.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: handleWebLocalePress,
+          onPointerUp: handleWebLocalePress,
+          onMouseUp: handleWebLocalePress,
+          onTouchEnd: handleWebLocalePress,
+          'aria-label': label,
+          style: {
+            minWidth: 112,
+            minHeight: 36,
+            padding: '0 14px',
+            borderRadius: 14,
+            border: '2px solid #FACC15',
+            backgroundColor: '#F59E0B',
+            color: '#431407',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            touchAction: 'manipulation',
+            font: 'inherit',
+            fontWeight: 900,
+            fontSize: 13,
+            lineHeight: '16px',
+          } as any,
+        },
+        label,
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        onPress={() => {
+          onSetLocale(locale === 'he' ? 'en' : 'he');
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={[styles.tutorialWelcomeLanguageButton, styles.tutorialWelcomeLanguageButtonSelected]}
+      >
+        <Text
+          style={[styles.tutorialWelcomeLanguageButtonText, styles.tutorialWelcomeLanguageButtonTextSelected]}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View
       pointerEvents="auto"
@@ -516,6 +682,9 @@ function TutorialWelcomeModal({
         },
       ]}
     >
+      <View style={styles.tutorialWelcomeFloatingLanguage}>
+        {renderLanguageButton(t('lang.switch'))}
+      </View>
       <View
         style={[
           styles.tutorialWelcomeCard,
@@ -531,60 +700,30 @@ function TutorialWelcomeModal({
         ]}
       >
         <View style={[styles.tutorialWelcomeTextBlock, { gap: cardGap }]}>
-          <Text style={styles.tutorialWelcomeTitle}>{t('tutorial.welcome.title')}</Text>
+          <Text style={[styles.tutorialWelcomeTitle, { writingDirection: textWritingDirection }]}>
+            {t('tutorial.welcome.title')}
+          </Text>
 
-          <Text style={styles.tutorialWelcomeBodyText}>
+          <Text style={[styles.tutorialWelcomeBodyText, { writingDirection: textWritingDirection }]}>
             {t('tutorial.welcome.headline')}
             {' '}
-            <Text style={styles.tutorialWelcomeGoldStrong}>
+            <Text style={[styles.tutorialWelcomeGoldStrong, { writingDirection: textWritingDirection }]}>
               {t('tutorial.welcome.headlineSub')}
             </Text>
           </Text>
 
-          <Text style={styles.tutorialWelcomeBodyText}>{t('tutorial.welcome.tagline')}</Text>
-
-          <Text style={styles.tutorialWelcomeBodyText}>{t('tutorial.welcome.body')}</Text>
-        </View>
-
-        <View style={styles.tutorialWelcomeRewardBlock}>
-          <Text style={styles.tutorialWelcomeRewardText}>
-            {t('tutorial.welcome.coreRewardPrefix')}
-            <Text style={styles.tutorialWelcomeRewardGold}>
-              {t('tutorial.welcome.coreRewardValue')}
-            </Text>
-            {t('tutorial.welcome.coreRewardSuffix')}
+          <Text style={[styles.tutorialWelcomeBodyText, { writingDirection: textWritingDirection }]}>
+            {t('tutorial.welcome.tagline')}
           </Text>
-          <Text style={styles.tutorialWelcomeRewardText}>
-            {t('tutorial.welcome.advancedRewardPrefix')}
-            <Text style={styles.tutorialWelcomeRewardGold}>
-              {t('tutorial.welcome.advancedRewardValue')}
-            </Text>
-            {t('tutorial.welcome.advancedRewardSuffix')}
+
+          <Text style={[styles.tutorialWelcomeBodyText, { writingDirection: textWritingDirection }]}>
+            {t('tutorial.welcome.body')}
           </Text>
         </View>
 
         <View style={[styles.tutorialWelcomeButtonStack, { gap: Math.max(8, cardGap) }]}>
-          <TouchableOpacity
-            onPress={onStart}
-            accessibilityRole="button"
-            accessibilityLabel={t('tutorial.welcome.start')}
-            style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeStartButton]}
-          >
-            <Text style={styles.tutorialWelcomeButtonText}>
-              {t('tutorial.welcome.start')}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onAdvanced}
-            accessibilityRole="button"
-            accessibilityLabel={t('tutorial.welcome.advancedBtn')}
-            style={[styles.tutorialWelcomeButton, styles.tutorialWelcomeAdvancedButton]}
-          >
-            <Text style={styles.tutorialWelcomeButtonText}>
-              {t('tutorial.welcome.advancedBtn')}
-            </Text>
-          </TouchableOpacity>
+          {renderWelcomeButton(t('tutorial.welcome.start'), onStart, 'start')}
+          {renderWelcomeButton(t('tutorial.welcome.advancedBtn'), onAdvanced, 'advanced')}
         </View>
       </View>
     </View>
@@ -607,7 +746,9 @@ function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchR
   const cardWidth = isCompact ? 124 : 144;
   const cardHeight = isCompact ? 182 : 212;
   const titleFontSize = isCompact ? 40 : 48;
-  const ackText = t('tutorial.cardMatchReminder.ack');
+  const ackText = target === 'continue'
+    ? t('tutorial.cardMatchReminder.continue')
+    : t('tutorial.cardMatchReminder.ack');
   const ackHandledRef = useRef(false);
   const handleAck = useCallback(() => {
     if (ackHandledRef.current) return;
@@ -881,7 +1022,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.60)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 9400,
+    zIndex: 9700,
   },
   tutorialWelcomeCard: {
     backgroundColor: '#78350F',
@@ -902,20 +1043,26 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  tutorialWelcomeFloatingLanguage: {
+    position: 'absolute',
+    top: 12,
+    right: 14,
+    zIndex: 2,
+  },
   tutorialWelcomeTitle: {
     color: '#FACC15',
-    fontSize: 25,
+    fontSize: 24,
     fontWeight: '900',
-    lineHeight: 30,
+    lineHeight: 29,
     textAlign: 'center',
     writingDirection: 'rtl',
     includeFontPadding: false,
   },
   tutorialWelcomeBodyText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '400',
-    lineHeight: 23,
+    lineHeight: 22,
     textAlign: 'center',
     writingDirection: 'rtl',
     includeFontPadding: false,
@@ -954,6 +1101,54 @@ const styles = StyleSheet.create({
   },
   tutorialWelcomeButtonStack: {
     width: '100%',
+  },
+  tutorialWelcomeLanguageBlock: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  tutorialWelcomeLanguageLabel: {
+    color: '#FEF3C7',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: false,
+  },
+  tutorialWelcomeLanguageRow: {
+    flexDirection: 'row',
+    writingDirection: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tutorialWelcomeLanguageButton: {
+    minWidth: 82,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(254, 243, 199, 0.42)',
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tutorialWelcomeLanguageButtonSelected: {
+    borderColor: '#FACC15',
+    backgroundColor: '#F59E0B',
+  },
+  tutorialWelcomeLanguageButtonText: {
+    color: '#FEF3C7',
+    fontWeight: '900',
+    fontSize: 13,
+    lineHeight: 16,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  tutorialWelcomeLanguageButtonTextSelected: {
+    color: '#431407',
   },
   tutorialWelcomeButton: {
     minHeight: 48,
@@ -1170,7 +1365,9 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
 }
 
 export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispatch, gameState }: Props): React.ReactElement | null {
-  const { t, locale } = useLocale();
+  const { t, locale, setLocale } = useLocale();
+  const [welcomeLocale, setWelcomeLocale] = useState<AppLocale>(() => locale);
+  const welcomeLocaleTouchedRef = useRef(false);
   const { awardCoins: awardTutorialCoins } = useAuth();
   const trackEvent = useTrackEvent();
   const insets = useSafeAreaInsets();
@@ -1184,14 +1381,14 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   const tutorialWelcomeScale = isAndroidTutorialWelcome ? 0.5 : 2 / 3;
   const scaleTutorialWelcome = (value: number, min = 0) =>
     Math.max(min, Math.round(value * tutorialWelcomeScale));
-  const tutorialMockupTopInset = Math.max(tutorialSafeTop + 22, 44);
-  const tutorialMockupBottomInset = Math.max((insets.bottom || 0) + 24, 44);
+  const tutorialMockupTopInset = Math.max(tutorialSafeTop + 18, 34);
+  const tutorialMockupBottomInset = Math.max((insets.bottom || 0) + 18, 34);
   const tutorialMockupHorizontalPadding = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
   const tutorialMockupCardMaxWidth = isAndroidTutorialWelcome
-    ? Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 340)
-    : Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 360);
+    ? Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 320)
+    : Math.min(Math.max(tutorialWindowWidth - tutorialMockupHorizontalPadding * 2, 0), 340);
   const tutorialMockupCardWidth = '100%';
-  const tutorialMockupCardPaddingVertical = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
+  const tutorialMockupCardPaddingVertical = isAndroidTutorialWelcome ? 16 : scaleTutorialWelcome(22, 14);
   const tutorialMockupCardPaddingHorizontal = isAndroidTutorialWelcome ? 18 : scaleTutorialWelcome(24, 16);
   const tutorialMockupCardGap = isAndroidTutorialWelcome ? 11 : scaleTutorialWelcome(12, 9);
   const [engine, dispatchEngine] = useReducer(
@@ -1203,6 +1400,11 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // Tutorial-owned dice state ג€” used only for lesson 3 so the lesson is
   // self-contained and doesn't depend on the underlying game phase.
   const [tutorialDice, setTutorialDice] = useState<{ d1: number; d2: number; d3: number } | null>(null);
+
+  useEffect(() => {
+    if (welcomeLocaleTouchedRef.current) return;
+    setWelcomeLocale(locale);
+  }, [locale]);
   // Pulse halo around the tutorial-owned dice button during the bot demo.
   const dicePulse = useRef(new Animated.Value(0)).current;
   // Lesson 4: random dice generated once when lesson 4 starts. The values
@@ -1225,7 +1427,7 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   // L4 step 0: "תראה לי" gate — bot demo pauses here until the learner taps.
   const l4ShowMeResolveRef = useRef<(() => void) | null>(null);
   const [l4ShowMePending, setL4ShowMePending] = useState(false);
-  const [l2CelebratePending, setL2CelebratePending] = useState(false);
+  const [earlyCelebratePending, setEarlyCelebratePending] = useState(false);
   // Brief green-V overlay when the bot taps the equation confirm button.
   const [showConfirmCheck, setShowConfirmCheck] = useState(false);
   const confirmCheckScale = useRef(new Animated.Value(0)).current;
@@ -1260,6 +1462,7 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   const [confirmBtnRect, setConfirmBtnRect] = useState<LayoutRect | null>(null);
   const [playCardsBtnRect, setPlayCardsBtnRect] = useState<LayoutRect | null>(null);
   const [solveChipRect, setSolveChipRect] = useState<LayoutRect | null>(null);
+  const [miniStripRect, setMiniStripRect] = useState<LayoutRect | null>(null);
 
   // Lesson 5 (op-cycle) state ג€” scratch canvas. The equation is
   //   `[a] [op] [b] = [result]`  where result updates live as op changes.
@@ -1298,6 +1501,22 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   const [fracBonusStage, setFracBonusStage] = useState<0 | 1>(0);
   // Tracks whether user chose a fraction card in each defense step.
   const fracDefenseUsedFractionRef = useRef<{ step3: boolean; step4: boolean }>({ step3: false, step4: false });
+  const fracAttackExampleRef = useRef<{
+    stepIndex: number;
+    pile: number;
+    denom: number;
+    fraction: '1/2' | '1/3';
+  } | null>(null);
+  const fracAttackOutcomeMatchedRef = useRef('');
+  const fracSetupCacheRef = useRef<Record<string, ReturnType<typeof buildFractionTutorialSetup>>>({});
+  const getFractionTutorialSetup = useCallback((stepIndex: number) => {
+    const key = `${MIMIC_FIRST_FRACTION_LESSON_INDEX}-${stepIndex}`;
+    const cached = fracSetupCacheRef.current[key];
+    if (cached) return cached;
+    const setup = buildFractionTutorialSetup(stepIndex, Date.now());
+    fracSetupCacheRef.current[key] = setup;
+    return setup;
+  }, []);
 const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' | 'placeSign'>('tapJoker');
   // L6.2 (tap-mini) await-mimic: "׳”׳'׳ ׳×׳™" button appears ~1.5s after the hint
   // bubble so the learner has time to read "׳׳—׳¦׳• ׳¢׳ ׳׳™׳ ׳™ ׳§׳׳£" before the button shows.
@@ -1312,9 +1531,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // doesn't match the target (wrong parens position or wrong result).
   const [l7Mismatch, setL7Mismatch] = useState(false);
   const l7MismatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Frac-lesson bot-demo rig: tracks which stepIndex was last rigged so we
-  // don't double-rig on re-renders. -1 means nothing rigged yet.
-  const fracBotDemoRiggedRef = useRef(-1);
   // L7 rigged flag: prevents double-rigging on re-render during bot-demo.
   const l7RiggedRef = useRef(false);
   const l7AwaitSolveChipRef = useRef(false);
@@ -1343,15 +1559,23 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const l11PreparedRef = useRef<ReturnType<typeof buildPreparedPairExercise> | null>(null);
   const [l7FanHintHidden, setL7FanHintHidden] = useState(false);
   const [l7Step1MiniPicked, setL7Step1MiniPicked] = useState(false);
+  const [l7Step1DicePickCount, setL7Step1DicePickCount] = useState(0);
+  const [l7Step1OpPickCount, setL7Step1OpPickCount] = useState(0);
+  const [l7Step1ParensMoved, setL7Step1ParensMoved] = useState(false);
   // L7 two-stage intro: 0=info bubble, 1=happy bubble+arrow, 2=gameplay.
   const [parensIntroStage, setParensIntroStage] = useState<0 | 1 | 2>(0);
   const [parensMockupApproved, setParensMockupApproved] = useState(false);
   const [parensMockupPendingAdvance, setParensMockupPendingAdvance] = useState(false);
+  const parensConceptAdvancedRef = useRef(false);
   const [l3TipApproved, setL3TipApproved] = useState(false);
   const [l5aSignTipApproved, setL5aSignTipApproved] = useState(false);
   const [l6WildMockupApproved, setL6WildMockupApproved] = useState(false);
   const [identicalMockupApproved, setIdenticalMockupApproved] = useState(false);
   const [identicalMockupPendingAdvance, setIdenticalMockupPendingAdvance] = useState(false);
+  const [identicalMockupStage, setIdenticalMockupStage] = useState<0 | 1>(0);
+  const identicalMockupStageRef = useRef<0 | 1>(0);
+  const identicalMockupPressGuardRef = useRef(0);
+  const identicalMockupStageKeyRef = useRef('');
   const [l11MockupApproved, setL11MockupApproved] = useState(false);
   const [l11MockupPendingAdvance, setL11MockupPendingAdvance] = useState(false);
 
@@ -1423,24 +1647,37 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const [l9IntroPendingAdvance, setL9IntroPendingAdvance] = useState(false);
   // Skip counter: counts presses of "׳“׳׳'" during bot-demo or await-mimic phases
   // (the two phases where the learner is expected to watch or act). If > 2,
-  // the core-complete popup shows "no coins" instead of the 10-coin reward.
+  // the core-complete popup shows "no coins" instead of the 150-coin reward.
   const [skipCount, setSkipCount] = useState(0);
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(true);
   const [pendingCardMatchReminder, setPendingCardMatchReminder] = useState<CardMatchReminderTarget | null>(null);
+  const [showCoreBonusNudge, setShowCoreBonusNudge] = useState(false);
+  const coreBonusNudgeShownRef = useRef(false);
   // Persistent count of tutorial runs where coins were actually earned.
   // Caps at 2 ג€” registered-user infrastructure: once a user has earned
   // tutorial coins twice, subsequent completions show "no coins".
-  const TUTORIAL_COINS_KEY = 'lulos_tutorial_coins_earned_count';
+  const TUTORIAL_COINS_KEY = 'salinda_tutorial_coins_earned_count';
+  const TUTORIAL_CORE_REWARD_EARNED_KEY = 'salinda_tutorial_core_reward_earned';
+  const TUTORIAL_ADVANCED_REWARD_EARNED_KEY = 'salinda_tutorial_advanced_reward_earned';
   const [tutorialCoinsEarnedCount, setTutorialCoinsEarnedCount] = useState(0);
+  const [coreRewardAlreadyEarned, setCoreRewardAlreadyEarned] = useState(false);
+  const [advancedRewardAlreadyEarned, setAdvancedRewardAlreadyEarned] = useState(false);
   const [tutorialCoinsLoaded, setTutorialCoinsLoaded] = useState(false);
   const [coreRewardOutcome, setCoreRewardOutcome] = useState<TutorialRewardOutcome | null>(null);
   const [advancedRewardOutcome, setAdvancedRewardOutcome] = useState<TutorialRewardOutcome | null>(null);
   const coreCompleteProcessedRef = useRef(false);
   useEffect(() => {
-    void AsyncStorage.getItem(TUTORIAL_COINS_KEY)
-      .then((val) => {
+    void Promise.all([
+      AsyncStorage.getItem(TUTORIAL_COINS_KEY),
+      AsyncStorage.getItem(TUTORIAL_CORE_REWARD_EARNED_KEY),
+      AsyncStorage.getItem(TUTORIAL_ADVANCED_REWARD_EARNED_KEY),
+    ])
+      .then(([val, coreEarned, advancedEarned]) => {
         const n = parseInt(val ?? '0', 10);
-        setTutorialCoinsEarnedCount(isNaN(n) ? 0 : n);
+        const earnedCount = isNaN(n) ? 0 : n;
+        setTutorialCoinsEarnedCount(earnedCount);
+        setCoreRewardAlreadyEarned(coreEarned === 'true' || earnedCount >= 1);
+        setAdvancedRewardAlreadyEarned(advancedEarned === 'true' || earnedCount >= 2);
       })
       .finally(() => {
         setTutorialCoinsLoaded(true);
@@ -1450,6 +1687,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.phase !== 'idle') return;
     coreCompleteProcessedRef.current = false;
     advancedCompleteProcessedRef.current = false;
+    coreBonusNudgeShownRef.current = false;
+    setShowCoreBonusNudge(false);
     setCoreRewardOutcome(null);
     setAdvancedRewardOutcome(null);
   }, [engine.phase]);
@@ -1460,20 +1699,22 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     coreCompleteProcessedRef.current = true;
     const outcome = getTutorialRewardOutcome({
       skipCount,
-      earnedCount: tutorialCoinsEarnedCount,
+      alreadyEarned: coreRewardAlreadyEarned,
     });
     setCoreRewardOutcome(outcome);
     if (outcome !== 'awarded') return;
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
+      void AsyncStorage.setItem(TUTORIAL_CORE_REWARD_EARNED_KEY, 'true');
       void awardTutorialCoins(SALINDA_TUTORIAL_REWARDS.basic, SALINDA_COIN_SOURCES.tutorial_core);
+      setCoreRewardAlreadyEarned(true);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awardTutorialCoins, engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
+  }, [awardTutorialCoins, coreRewardAlreadyEarned, engine.phase, skipCount, tutorialCoinsLoaded]);
 
-  // ג”€ג”€ Advanced-tutorial completion: award 20 coins when all advanced lessons done ג”€ג”€
+  // ג”€ג”€ Advanced-tutorial completion: award 250 coins when all advanced lessons done ג”€ג”€
   const advancedCompleteProcessedRef = useRef(false);
   useEffect(() => {
     if (engine.phase !== 'advanced-complete') return;
@@ -1482,31 +1723,39 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     advancedCompleteProcessedRef.current = true;
     const outcome = getTutorialRewardOutcome({
       skipCount,
-      earnedCount: tutorialCoinsEarnedCount,
+      alreadyEarned: advancedRewardAlreadyEarned,
     });
     setAdvancedRewardOutcome(outcome);
     if (outcome !== 'awarded') return;
     setTutorialCoinsEarnedCount((prev) => {
       const next = prev + 1;
       void AsyncStorage.setItem(TUTORIAL_COINS_KEY, String(next));
+      void AsyncStorage.setItem(TUTORIAL_ADVANCED_REWARD_EARNED_KEY, 'true');
       void awardTutorialCoins(SALINDA_TUTORIAL_REWARDS.advanced, SALINDA_COIN_SOURCES.tutorial_advanced);
+      setAdvancedRewardAlreadyEarned(true);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awardTutorialCoins, engine.phase, skipCount, tutorialCoinsEarnedCount, tutorialCoinsLoaded]);
-
-  const openCardMatchReminder = useCallback((target: CardMatchReminderTarget) => {
-    setPendingCardMatchReminder(target);
-  }, []);
+  }, [advancedRewardAlreadyEarned, awardTutorialCoins, engine.phase, skipCount, tutorialCoinsLoaded]);
 
   const handleCardMatchReminderAck = useCallback((target: CardMatchReminderTarget) => {
     setPendingCardMatchReminder(null);
+    if (target === 'continue') {
+      if (engine.phase === 'lesson-done') {
+        dispatchEngine({ type: 'DISMISS_LESSON_DONE' });
+        return;
+      }
+      if (engine.phase === 'celebrate') {
+        dispatchEngine({ type: 'CELEBRATE_DONE' });
+      }
+      return;
+    }
     if (target === 'advanced') {
       dispatchEngine({ type: 'CHOOSE_ADVANCED_FRACTIONS' });
       return;
     }
     onExit();
-  }, [onExit]);
+  }, [engine.phase, onExit]);
 
 
   // ג”€ג”€ Lesson 5c (solve-for-op) state ג”€ג”€
@@ -1768,8 +2017,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       // Clear stale copy-config on back navigation.
       // Full game state setup is handled by the bot-demo rigging effect.
       tutorialBus.setL6CopyConfig(null);
-    } else if (isFracLesson) {
-      gameDispatch(buildFractionTutorialSetup(engine.stepIndex, Date.now()));
     }
   }, [engine.phase, engine.lessonIndex, engine.stepIndex, gameState?.phase, gameDispatch]);
 
@@ -1793,25 +2040,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       gameDispatch({ type: 'REVERT_TO_BUILDING' });
     }
   }, [engine.phase, engine.lessonIndex, engine.stepIndex, gameState?.phase, gameDispatch]);
-
-  // ג”€ג”€ Frac-lesson steps 1+: rig game state at bot-demo entry.
-  //    The MimicEngine goes celebrate ג†' bot-demo (stepIndex+1) directly,
-  //    skipping intro, so the intro effect above never fires for steps 1+.
-  //    Step 0 is already handled by the intro effect above ג€” skip it here. ג”€ג”€
-  useEffect(() => {
-    if (engine.lessonIndex !== MIMIC_FIRST_FRACTION_LESSON_INDEX) {
-      fracBotDemoRiggedRef.current = -1;
-      return;
-    }
-    if (engine.phase !== 'bot-demo') {
-      fracBotDemoRiggedRef.current = -1;
-      return;
-    }
-    if (engine.stepIndex === 0) return;
-    if (fracBotDemoRiggedRef.current === engine.stepIndex) return;
-    fracBotDemoRiggedRef.current = engine.stepIndex;
-    gameDispatch(buildFractionTutorialSetup(engine.stepIndex, Date.now()));
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
 
   // ג”€ג”€ Boot underlying game once on mount ג”€ג”€
   const bootedRef = useRef(false);
@@ -2009,6 +2237,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         engine.stepIndex === 0 &&
         !parensMockupApproved
       ) {
+        if (parensConceptAdvancedRef.current) return;
         setParensMockupPendingAdvance(true);
         return;
       }
@@ -2094,7 +2323,38 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     // prevents a "try again" flash on what turned out to be a legal play.
     const isL7 = engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX;
     return tutorialBus.subscribeUserEvent((evt) => {
+      const isFractionAttackAwait =
+        engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
+        engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
+        engine.phase === 'await-mimic' &&
+        (engine.stepIndex === 1 || engine.stepIndex === 2);
+      if (isFractionAttackAwait && evt.kind === 'cardTapped') {
+        const gs = gameStateRef.current;
+        const expectedFraction = engine.stepIndex === 1 ? '1/2' : '1/3';
+        const expectedDenom = engine.stepIndex === 1 ? 2 : 3;
+        const tappedCard = gs?.players?.[1]?.hand?.find((card: Card) => card.id === evt.cardId);
+        const pileTop = gs?.discardPile?.[gs.discardPile.length - 1];
+        const isCorrectFraction =
+          tappedCard?.type === 'fraction' &&
+          tappedCard.fraction === expectedFraction &&
+          pileTop?.type === 'number' &&
+          typeof pileTop.value === 'number' &&
+          pileTop.value > 0 &&
+          pileTop.value % expectedDenom === 0;
+        if (isCorrectFraction) {
+          fracAttackOutcomeMatchedRef.current = `${engine.lessonIndex}-${engine.stepIndex}`;
+          dispatchEngine({ type: 'OUTCOME_MATCHED' });
+          return;
+        }
+      }
       if (step.outcome(evt)) {
+        if (
+          engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
+          engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
+          evt.kind === 'fracAttackPlayed'
+        ) {
+          fracAttackOutcomeMatchedRef.current = `${engine.lessonIndex}-${engine.stepIndex}`;
+        }
         // L4 steps 0 & 1: filter the played card from the bus config AND
         // from gameState.hands so the fan visually shrinks immediately and
         // the card is absent in the next step.
@@ -2147,7 +2407,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setL4bHintPhase('pickDie');
     return tutorialBus.subscribeUserEvent((evt) => {
       if (evt.kind === 'eqUserPickedDice') {
-        setL4bHintPhase('pickCard');
+        const cfg = tutorialBus.getL4Config();
+        if (cfg?.pickB === evt.idx) {
+          setL4bHintPhase('pickCard');
+        }
       }
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
@@ -2351,6 +2614,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX;
     if (!inFractionsLesson) return;
     tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
+    gameDispatch({ type: 'CLEAR_EQ_HAND' });
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: false });
   }, [engine.lessonIndex, engine.phase, engine.stepIndex, gameDispatch]);
 
@@ -2386,14 +2651,65 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.lessonIndex < MIMIC_FIRST_FRACTION_LESSON_INDEX ||
         engine.lessonIndex >= MIMIC_PARENS_LESSON_INDEX) {
       lastFracRigRef.current = '';
+      fracSetupCacheRef.current = {};
       return;
     }
     if (engine.phase !== 'bot-demo') return;
     const key = `${engine.lessonIndex}-${engine.stepIndex}`;
     if (lastFracRigRef.current === key) return;
     lastFracRigRef.current = key;
-    gameDispatch(buildFractionTutorialSetup(engine.stepIndex, Date.now()));
-  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
+    gameDispatch(getFractionTutorialSetup(engine.stepIndex));
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch, getFractionTutorialSetup]);
+
+  useEffect(() => {
+    const isFractionAttackAwait =
+      engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
+      engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
+      engine.phase === 'await-mimic' &&
+      (engine.stepIndex === 1 || engine.stepIndex === 2);
+    if (!isFractionAttackAwait) return;
+    const stepKey = `${engine.lessonIndex}-${engine.stepIndex}`;
+    if (fracAttackOutcomeMatchedRef.current === stepKey) return;
+    if (!gameState?.players || gameState.players.length < 2) return;
+
+    const expectedSetup = getFractionTutorialSetup(engine.stepIndex);
+    const expectedTop = expectedSetup.slice.discardPile[expectedSetup.slice.discardPile.length - 1];
+    const expectedFraction = engine.stepIndex === 1 ? '1/2' : '1/3';
+    const pileTop = gameState.discardPile[gameState.discardPile.length - 1];
+    const humanHand = gameState.players[1]?.hand ?? [];
+    const hasExpectedFraction = humanHand.some(
+      (card: Card) => card.type === 'fraction' && card.fraction === expectedFraction,
+    );
+    const pileMatches =
+      pileTop?.type === 'number' &&
+      expectedTop?.type === 'number' &&
+      pileTop.value === expectedTop.value;
+    const setupMatches =
+      gameState.phase === expectedSetup.slice.phase &&
+      gameState.currentPlayerIndex === expectedSetup.slice.currentPlayerIndex &&
+      gameState.showFractions === expectedSetup.slice.showFractions &&
+      gameState.pendingFractionTarget === expectedSetup.slice.pendingFractionTarget &&
+      gameState.fractionPenalty === expectedSetup.slice.fractionPenalty &&
+      pileMatches &&
+      hasExpectedFraction;
+
+    if (setupMatches) return;
+    lastFracRigRef.current = stepKey;
+    gameDispatch(expectedSetup);
+  }, [
+    engine.lessonIndex,
+    engine.stepIndex,
+    engine.phase,
+    gameState?.players,
+    gameState?.phase,
+    gameState?.currentPlayerIndex,
+    gameState?.discardPile,
+    gameState?.showFractions,
+    gameState?.pendingFractionTarget,
+    gameState?.fractionPenalty,
+    gameDispatch,
+    getFractionTutorialSetup,
+  ]);
 
   useEffect(() => {
     // Joker-place is now stepIndex 1 (the new place-op step took over
@@ -2433,10 +2749,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     setConfirmBtnRect(tutorialBus.getLayout('confirmEqBtn'));
     setPlayCardsBtnRect(tutorialBus.getLayout('playCardsBtn'));
     setSolveChipRect(tutorialBus.getLayout('solveChip'));
+    setMiniStripRect(tutorialBus.getLayout('miniStrip'));
     return tutorialBus.subscribeLayout((key, rect) => {
       if (key === 'confirmEqBtn') setConfirmBtnRect(rect);
       else if (key === 'playCardsBtn') setPlayCardsBtnRect(rect);
       else if (key === 'solveChip') setSolveChipRect(rect);
+      else if (key === 'miniStrip') setMiniStripRect(rect);
     });
   }, []);
 
@@ -2529,11 +2847,25 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'await-mimic';
     if (!isL4Step3 || !l4Step3IntroApproved) return;
     return tutorialBus.subscribeUserEvent((evt) => {
+      if (evt.kind === 'eqUserPickedDice') {
+        setL4Step3Phase((phase) =>
+          phase === 'pickFirstDie'
+            ? 'pickSecondDie'
+            : phase === 'pickSecondDie'
+              ? 'pickOperator'
+              : phase,
+        );
+        return;
+      }
       if (evt.kind === 'l4EquationProgress') {
         setL4Step3Phase(resolveL4Step3PhaseFromProgress(evt));
         return;
       }
       if (evt.kind === 'eqReadyToConfirm') {
+        setL4Step3Phase('pressConfirm');
+        return;
+      }
+      if (evt.kind === 'eqConfirmedByUser') {
         setL4Step3Phase('pickCard');
         return;
       }
@@ -2605,6 +2937,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const eqLessonAdvancedRef = useRef(false);
   const eqLessonHandRiggedRef = useRef(false);
   const l4Step3RiggedRef = useRef(false);
+  const l4Step0AwaitFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const l5LessonAdvancedRef = useRef(false);
   const l5LessonHandRiggedRef = useRef(false);
   const rigL4 = () => {
@@ -2671,6 +3004,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   //    dispatch (new array reference), which would re-trigger the effect. ג”€ג”€
   const l4Step0ForcedRef = useRef(false);
   useEffect(() => {
+    if (l4Step0AwaitFallbackTimerRef.current) {
+      clearTimeout(l4Step0AwaitFallbackTimerRef.current);
+      l4Step0AwaitFallbackTimerRef.current = null;
+    }
+
     if (engine.lessonIndex !== 3 || engine.stepIndex !== 0) {
       l4Step0ForcedRef.current = false;
       return;
@@ -2689,21 +3027,44 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       l4Step0ForcedRef.current = true;
       return;
     }
-    const l4 = l4DiceRef.current;
-    if (!l4 || !gameState?.players || gameState.players.length < 2) return;
-    l4Step0ForcedRef.current = true;
-    const { d1, d2, d3, pickA, pickB, target } = l4;
-    const dv = [d1, d2, d3];
-    const equationDisplay = `${dv[pickA] ?? d1} + ${dv[pickB] ?? d2} = ${target}`;
-    tutorialBus.setLastEquationResult(target);
-    gameDispatch({
-      type: 'TUTORIAL_FORCE_SOLVED',
-      equationResult: target,
-      dice: { die1: d1, die2: d2, die3: d3 },
-      equationDisplay,
-      playerHand: gameState.players[1]?.hand ?? [],
-      botHand: gameState.players[0]?.hand ?? [],
-    });
+    l4Step0AwaitFallbackTimerRef.current = setTimeout(() => {
+      l4Step0AwaitFallbackTimerRef.current = null;
+      if (l4Step0ForcedRef.current) return;
+
+      const gs = gameStateRef.current;
+      if (gs?.phase === 'solved') {
+        const settledL4 = l4DiceRef.current;
+        if (settledL4 && tutorialBus.getLastEquationResult() === null) {
+          tutorialBus.setLastEquationResult(settledL4.target);
+        }
+        l4Step0ForcedRef.current = true;
+        return;
+      }
+
+      const l4 = l4DiceRef.current;
+      if (!l4 || !gs?.players || gs.players.length < 2) return;
+
+      l4Step0ForcedRef.current = true;
+      const { d1, d2, d3, pickA, pickB, target } = l4;
+      const dv = [d1, d2, d3];
+      const equationDisplay = `${dv[pickA] ?? d1} + ${dv[pickB] ?? d2} = ${target}`;
+      tutorialBus.setLastEquationResult(target);
+      gameDispatch({
+        type: 'TUTORIAL_FORCE_SOLVED',
+        equationResult: target,
+        dice: { die1: d1, die2: d2, die3: d3 },
+        equationDisplay,
+        playerHand: gs.players[1]?.hand ?? [],
+        botHand: gs.players[0]?.hand ?? [],
+      });
+    }, 450);
+
+    return () => {
+      if (l4Step0AwaitFallbackTimerRef.current) {
+        clearTimeout(l4Step0AwaitFallbackTimerRef.current);
+        l4Step0AwaitFallbackTimerRef.current = null;
+      }
+    };
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
 
   useEffect(() => {
@@ -3135,8 +3496,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
 
-  // ג”€ג”€ Lesson 7 (parens-move) rigging: dice 6,2,1; both ops minus; chip shows
-  //    target 6 גˆ' (2 גˆ' 1) = 5. Runs once per L7 entry (bot-demo step 0). ג”€ג”€
+  // ג”€ג”€ Lesson 7 (parens-move) rigging: roll three dice and show the red
+  //    reference mini-card. The equation builder stays empty so the learner
+  //    copies the full exercise from the mini-card. ג”€ג”€
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_PARENS_LESSON_INDEX) { l7RiggedRef.current = false; return; }
     // Reset the flag on any non-bot-demo phase so back-navigation re-rigs correctly.
@@ -3159,7 +3521,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
     tutorialBus.emitFanDemo({ kind: 'disarmResultsChipPulse' });
     tutorialBus.emitFanDemo({ kind: 'openResultsChip' });
-    gameDispatch({ type: 'ROLL_DICE', values: { die1: ex.d1, die2: ex.d2, die3: ex.d3 } });
+    gameDispatch({ type: 'TUTORIAL_SET_DICE', values: { die1: ex.d1, die2: ex.d2, die3: ex.d3 } });
     // Keep at least one guaranteed matching card in hand (target), so the
     // learner can complete the exercise without being blocked by hand RNG.
     const extraNums = [3, 5, 7, 8, 9]
@@ -3172,15 +3534,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     }));
     const botHand = playerHand.map((c) => ({ ...c, id: `bot-${c.id}` }));
     gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [botHand, playerHand] });
-    // Dice pre-filled; operators left empty for the learner to set.
+    // Keep the builder empty: the learner must copy the exercise manually.
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
-    setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 0 }), 140);
-    setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 1 }), 280);
-    setTimeout(() => tutorialBus.emitFanDemo({ kind: 'eqPickDice', idx: 2 }), 420);
     const chipEq = buildL7ChipEquation(ex);
     setTimeout(() => {
       tutorialBus.emitFanDemo({ kind: 'setSolveChip', equation: chipEq, result: ex.target });
-    }, 560);
+    }, 140);
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
 
   // Ensure layer 72 / step 2.1 (L7 step 0 await-mimic) always re-shows the
@@ -3202,6 +3561,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_SOLVE_EXERCISE', value: true });
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
     tutorialBus.emitFanDemo({ kind: 'openResultsChip' });
+    tutorialBus.emitFanDemo({ kind: 'eqReset' });
     tutorialBus.emitFanDemo({
       kind: 'setSolveChip',
       equation: buildL7ChipEquation(ex),
@@ -3546,15 +3906,18 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const target = TARGET_POOL[Math.floor(Math.random() * TARGET_POOL.length)];
     const baseCard = Math.min(target - 1, 4 + Math.floor(Math.random() * 3)); // 4-6
     const wildNeeded = target - baseCard; // always ≥ 1
-    // 7-card hand: wild (★ only, no resolvedValue) + baseCard + 5 distractors
+    // 7-card hand: wild (★ only, no resolvedValue) + baseCard + zero gift + 4 distractors.
+    // The zero card lets the lesson require a true multi-card play without
+    // changing the target sum.
     const distractors = new Set<number>();
-    while (distractors.size < 5) {
+    while (distractors.size < 4) {
       const v = 1 + Math.floor(Math.random() * 10);
       if (v !== baseCard && v !== target) distractors.add(v);
     }
     const playerHand = [
       { id: `tut-l6w-wild-${ts}`, type: 'wild' as const },
       { id: `tut-l6w-base-${ts}`, type: 'number' as const, value: baseCard },
+      { id: `tut-l6w-zero-${ts}`, type: 'number' as const, value: 0 },
       ...[...distractors].map((v, i) => ({ id: `tut-l6w-d${i}-${ts}`, type: 'number' as const, value: v })),
     ].slice(0, 7);
     const botHand = playerHand.map((c) => ({ ...c, id: `bot-${c.id}` }));
@@ -3765,18 +4128,41 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       engine.phase === 'await-mimic';
     if (!isL7Step1Active) {
       setL7Step1MiniPicked(false);
+      setL7Step1DicePickCount(0);
+      setL7Step1OpPickCount(0);
+      setL7Step1ParensMoved(false);
       l7Step1SelectionRef.current = null;
       l7Step1OutcomeKeyRef.current = '';
       return;
     }
     setL7Step1MiniPicked(false);
+    setL7Step1DicePickCount(0);
+    setL7Step1OpPickCount(0);
+    setL7Step1ParensMoved(false);
     l7Step1SelectionRef.current = null;
     l7Step1OutcomeKeyRef.current = '';
     return tutorialBus.subscribeUserEvent((evt) => {
       if (evt.kind === 'miniCardTapped') {
         setL7Step1MiniPicked(true);
         l7Step1SelectionRef.current = { result: evt.result, equation: evt.equation };
-        tutorialBus.emitFanDemo({ kind: 'closeResultsChip' });
+        tutorialBus.emitFanDemo({ kind: 'hideResultsChip' });
+      }
+    });
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
+  useEffect(() => {
+    const isL7Step1Active =
+      engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
+      engine.stepIndex === 1 &&
+      engine.phase === 'await-mimic';
+    if (!isL7Step1Active) return;
+    return tutorialBus.subscribeUserEvent((evt) => {
+      if (evt.kind === 'eqUserPickedDice') {
+        setL7Step1DicePickCount((count) => Math.min(3, count + 1));
+      } else if (evt.kind === 'opSelected') {
+        setL7Step1OpPickCount((count) => Math.min(2, count + 1));
+      } else if (evt.kind === 'parensToggled') {
+        setL7Step1ParensMoved(true);
       }
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
@@ -3802,10 +4188,23 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
   }, [engine.lessonIndex, engine.phase, parensIntroStage]);
 
+  // L4 step 3 is the first learner-built equation. Keep auto-confirm off so
+  // the orange confirmation button is a real, explicit step in the guidance.
+  useEffect(() => {
+    const isL4Step3Await =
+      engine.lessonIndex === 3 &&
+      engine.stepIndex === 3 &&
+      engine.phase === 'await-mimic';
+    if (!isL4Step3Await) return;
+    tutorialBus.setManualEqConfirm(true);
+    return () => tutorialBus.setManualEqConfirm(false);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
+
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_PARENS_LESSON_INDEX) {
       setParensMockupApproved(false);
       setParensMockupPendingAdvance(false);
+      parensConceptAdvancedRef.current = false;
     }
   }, [engine.lessonIndex]);
 
@@ -3829,15 +4228,56 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
   useEffect(() => {
     if (!parensMockupPendingAdvance || !parensMockupApproved) return;
+    if (parensConceptAdvancedRef.current) {
+      setParensMockupPendingAdvance(false);
+      return;
+    }
+    parensConceptAdvancedRef.current = true;
     setParensMockupPendingAdvance(false);
     dispatchEngine({ type: 'BOT_DEMO_DONE' });
+    dispatchEngine({ type: 'OUTCOME_MATCHED' });
+    dispatchEngine({ type: 'CELEBRATE_DONE' });
   }, [parensMockupPendingAdvance, parensMockupApproved]);
+
+  useEffect(() => {
+    identicalMockupStageRef.current = identicalMockupStage;
+  }, [identicalMockupStage]);
+
+  const handleIdenticalMockupCta = useCallback(() => {
+    const now = Date.now();
+    if (now - identicalMockupPressGuardRef.current < 220) return;
+    identicalMockupPressGuardRef.current = now;
+
+    if (identicalMockupStageRef.current === 0) {
+      identicalMockupStageRef.current = 1;
+      setIdenticalMockupStage(1);
+      return;
+    }
+
+    setIdenticalMockupApproved(true);
+    setIdenticalMockupPendingAdvance(true);
+  }, []);
+
+  const attachIdenticalMockupCtaHandlers = useCallback((node: unknown) => {
+    if (Platform.OS !== 'web') return;
+    const button = node as any;
+    if (!button) return;
+    button.onclick = handleIdenticalMockupCta;
+    button.onpointerup = handleIdenticalMockupCta;
+  }, [handleIdenticalMockupCta]);
 
   useEffect(() => {
     if (!identicalMockupPendingAdvance || !identicalMockupApproved) return;
     setIdenticalMockupPendingAdvance(false);
+    const isIdenticalIntro =
+      engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX &&
+      engine.stepIndex === 0;
+    if (isIdenticalIntro && engine.phase === 'await-mimic') {
+      dispatchEngine({ type: 'OUTCOME_MATCHED' });
+      return;
+    }
     dispatchEngine({ type: 'BOT_DEMO_DONE' });
-  }, [identicalMockupPendingAdvance, identicalMockupApproved]);
+  }, [identicalMockupPendingAdvance, identicalMockupApproved, engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   useEffect(() => {
     if (!l11MockupPendingAdvance || !l11MockupApproved) return;
@@ -3849,8 +4289,23 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.lessonIndex !== MIMIC_SINGLE_IDENTICAL_LESSON_INDEX) {
       setIdenticalMockupApproved(false);
       setIdenticalMockupPendingAdvance(false);
+      setIdenticalMockupStage(0);
     }
   }, [engine.lessonIndex]);
+
+  useEffect(() => {
+    const stepKey = `${engine.lessonIndex}:${engine.stepIndex}`;
+    if (identicalMockupStageKeyRef.current === stepKey) return;
+    identicalMockupStageKeyRef.current = stepKey;
+    if (
+      engine.lessonIndex === MIMIC_SINGLE_IDENTICAL_LESSON_INDEX &&
+      engine.stepIndex === 0 &&
+      !identicalMockupApproved
+    ) {
+      setIdenticalMockupStage(1);
+      identicalMockupStageRef.current = 1;
+    }
+  }, [engine.lessonIndex, engine.stepIndex, identicalMockupApproved]);
 
   // ג”€ג”€ L8 step 0 await-mimic: auto-advance via identicalSingleAck so the
   //    intro step (our "׳§׳׳£ ׳–׳”׳”" mockup) skips to step 1 immediately.
@@ -3858,8 +4313,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_SINGLE_IDENTICAL_LESSON_INDEX) return;
     if (engine.phase !== 'await-mimic' || engine.stepIndex !== 0) return;
+    if (!identicalMockupApproved) return;
     tutorialBus.emitUserEvent({ kind: 'identicalSingleAck' });
-  }, [engine.lessonIndex, engine.phase, engine.stepIndex]);
+  }, [engine.lessonIndex, engine.phase, engine.stepIndex, identicalMockupApproved]);
 
   useEffect(() => {
     if (engine.lessonIndex !== MIMIC_IDENTICAL_LESSON_INDEX || engine.stepIndex !== 0) return;
@@ -3885,24 +4341,52 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     });
   }, [engine.lessonIndex, parensIntroStage]);
 
-  // ג”€ג”€ L7 await-mimic: enable manual eq confirm so the confirm button is visible. ג”€ג”€
+  useEffect(() => {
+    const shouldPulse =
+      engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
+      engine.phase === 'await-mimic' &&
+      engine.stepIndex === 1 &&
+      l7Step1MiniPicked &&
+      l7Step1DicePickCount >= 3 &&
+      l7Step1OpPickCount >= 2 &&
+      !l7Step1ParensMoved;
+    tutorialBus.setParensButtonPulse(shouldPulse);
+    return () => {
+      if (shouldPulse) tutorialBus.setParensButtonPulse(false);
+    };
+  }, [
+    engine.lessonIndex,
+    engine.phase,
+    engine.stepIndex,
+    l7Step1MiniPicked,
+    l7Step1DicePickCount,
+    l7Step1OpPickCount,
+    l7Step1ParensMoved,
+  ]);
+
+  // L7 await-mimic: always suppress equation auto-confirm. In step 1 the
+  // learner can start touching the equation before selecting a mini-card; if
+  // auto-confirm runs there, the game reaches solved with no selected target.
   useEffect(() => {
     const isL7Step0Await =
       engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
       engine.phase === 'await-mimic' &&
       engine.stepIndex === 0;
-    const isL7Step1AwaitWithMini =
+    const isL7Step1Await =
       engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
       engine.phase === 'await-mimic' &&
-      engine.stepIndex === 1 &&
-      l7Step1MiniPicked;
-    if (!isL7Step0Await && !isL7Step1AwaitWithMini) {
+      engine.stepIndex === 1;
+    const isL4Step3Await =
+      engine.lessonIndex === 3 &&
+      engine.stepIndex === 3 &&
+      engine.phase === 'await-mimic';
+    if (!isL7Step0Await && !isL7Step1Await && !isL4Step3Await) {
       tutorialBus.setManualEqConfirm(false);
       return;
     }
     tutorialBus.setManualEqConfirm(true);
     return () => tutorialBus.setManualEqConfirm(false);
-  }, [engine.lessonIndex, engine.phase, engine.stepIndex, l7Step1MiniPicked]);
+  }, [engine.lessonIndex, engine.phase, engine.stepIndex]);
 
   // ג”€ג”€ L7 step 1 setup: runs ONCE (ref guard). Rolls dice for validTargets,
   //    opens chip. No eqPickDice ג€” equation slots stay empty so the learner
@@ -3923,47 +4407,95 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (l7Step1RiggedRef.current) return;
     l7Step1RiggedRef.current = true;
     const ex = l7ExerciseRef.current;
-    gameDispatch({ type: 'REVERT_TO_BUILDING' });
     gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+', '-', 'x', '÷'] });
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
     gameDispatch({ type: 'TUTORIAL_SET_SHOW_SOLVE_EXERCISE', value: false });
     tutorialBus.emitFanDemo({ kind: 'disarmResultsChipPulse' });
     tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
+    tutorialBus.emitFanDemo({ kind: 'setParensRight', value: false });
     tutorialBus.setL7Step1Mode(true);
     const ts = Date.now();
-    const applyOp = (a: number, op: string, b: number): number | null => {
-      if (op === '+') return a + b;
-      if (op === '-') return a - b;
-      if (op === 'x') return a * b;
-      if (op === '÷') return b !== 0 && Number.isInteger(a / b) ? a / b : null;
-      return null;
-    };
-    const ops = ['+', '-', 'x', '÷'] as const;
-    const vals = [ex.d1, ex.d2, ex.d3];
-    const resultSet = new Set<number>();
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (j !== i) for (let k = 0; k < 3; k++) if (k !== i && k !== j) {
-      const [a, b, c] = [vals[i], vals[j], vals[k]];
-      for (const op1 of ops) for (const op2 of ops) {
-        const inner = applyOp(b, op2, c);
-        if (inner === null) continue;
-        const result = applyOp(a, op1, inner);
-        if (result !== null && result > 0 && result <= 25 && Number.isInteger(result)) resultSet.add(result);
-      }
-    }
-    const playerHand = [...resultSet].sort((a, b) => a - b).map((value, i) => ({
+    const parensRightTargets = buildParensRightTargets(ex);
+    const playerHand = parensRightTargets.map(({ result: value }, i) => ({
       id: `tut-l7s1-${value}-${ts}-${i}`,
       type: 'number' as const,
       value,
     }));
     const botHand = playerHand.map((c) => ({ ...c, id: `bot-${c.id}` }));
-    gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [botHand, playerHand] });
+    const discardCard = {
+      id: `tut-l7s1-pile-${ts}`,
+      type: 'number' as const,
+      value: ex.target,
+    };
+    const dice = { die1: ex.d1, die2: ex.d2, die3: ex.d3 };
     const id = setTimeout(() => {
-      gameDispatch({ type: 'ROLL_DICE', values: { die1: ex.d1, die2: ex.d2, die3: ex.d3 } });
+      gameDispatch({
+        type: 'TUTORIAL_FRACTION_SETUP',
+        slice: {
+          currentPlayerIndex: 1,
+          phase: 'building' as const,
+          hands: [botHand, playerHand],
+          discardPile: [discardCard],
+          dice,
+          pendingFractionTarget: null,
+          fractionPenalty: 0,
+          fractionAttackResolved: false,
+          showFractions: false,
+          fractionKinds: [],
+        },
+      });
+      gameDispatch({
+        type: 'TUTORIAL_SET_VALID_TARGETS',
+        targets: parensRightTargets,
+      });
       tutorialBus.emitFanDemo({ kind: 'openResultsChip' });
+      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'openResultsChip' }), 80);
+      setTimeout(() => tutorialBus.emitFanDemo({ kind: 'openResultsChip' }), 180);
     }, 0);
     return () => clearTimeout(id);
   }, [engine.lessonIndex, engine.phase, engine.stepIndex, gameDispatch]);
+
+  useEffect(() => {
+    const isL7Step1Await =
+      engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
+      engine.stepIndex === 1 &&
+      engine.phase === 'await-mimic';
+    if (!isL7Step1Await || l7Step1MiniPicked) return;
+    const ex = l7ExerciseRef.current;
+    const targets = buildParensRightTargets(ex);
+    const hasParensMiniTargets =
+      (gameState?.validTargets ?? []).some((target: { equation: string }) => {
+        const eq = target.equation.trimStart();
+        return eq.includes('(') && !eq.startsWith('(');
+      });
+    tutorialBus.setL7Step1Mode(true);
+    gameDispatch({ type: 'TUTORIAL_SET_ENABLED_OPERATORS', operators: ['+', '-', 'x', '÷'] });
+    gameDispatch({ type: 'TUTORIAL_SET_SHOW_POSSIBLE_RESULTS', value: true });
+    gameDispatch({ type: 'TUTORIAL_SET_SHOW_SOLVE_EXERCISE', value: false });
+    if (!hasParensMiniTargets) {
+      gameDispatch({ type: 'TUTORIAL_SET_VALID_TARGETS', targets });
+    }
+    tutorialBus.emitFanDemo({ kind: 'clearSolveExerciseChip' });
+    tutorialBus.emitFanDemo({ kind: 'openResultsChip' });
+    const reopen = setTimeout(() => tutorialBus.emitFanDemo({ kind: 'openResultsChip' }), 80);
+    return () => clearTimeout(reopen);
+  }, [
+    engine.lessonIndex,
+    engine.stepIndex,
+    engine.phase,
+    l7Step1MiniPicked,
+    gameDispatch,
+  ]);
+
+  useEffect(() => {
+    const on =
+      engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
+      engine.stepIndex === 1 &&
+      (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
+    tutorialBus.setL7Step1Mode(on);
+    return () => tutorialBus.setL7Step1Mode(false);
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   useEffect(() => {
     const on =
@@ -3986,7 +4518,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const got = gameState.equationResult as number | null;
     const liveRight = tutorialBus.getL7ParensResults()?.right ?? null;
     const expected = liveRight ?? l7ExerciseRef.current.target;
-    if (parensRight && got === expected) {
+    const builtEquation = normalizeTutorialEquationDisplay(gameState?.lastEquationDisplay);
+    const expectedEquation = normalizeTutorialEquationDisplay(buildL7ChipEquation(l7ExerciseRef.current));
+    if (parensRight && got === expected && builtEquation !== null && builtEquation === expectedEquation) {
       tutorialBus.emitUserEvent({ kind: 'l7ParensCopyConfirmed' });
     } else if (got != null) {
       tutorialBus.emitUserEvent({ kind: 'l7ParensCopyMismatch', expected, got });
@@ -4007,7 +4541,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (gameState?.phase !== 'solved') return;
     const selected = l7Step1SelectionRef.current;
     const got = gameState?.equationResult as number | null;
-    if (!selected || got == null) return;
+    if (got == null) return;
+    if (!selected) {
+      tutorialBus.emitUserEvent({ kind: 'l7ParensCopyMismatch', expected: got, got });
+      return;
+    }
     const key = `${gameState?.roundsPlayed ?? 0}:${gameState?.lastEquationDisplay ?? ''}:${selected.result}:${selected.equation}`;
     if (l7Step1OutcomeKeyRef.current === key) return;
     l7Step1OutcomeKeyRef.current = key;
@@ -4130,11 +4668,20 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   useEffect(() => {
     if (engine.phase !== 'celebrate') return;
     // Dice step 0 (roll-dice): wait for user to tap "׳”׳'׳ ׳×׳™" ג€” no auto-advance.
+    if (engine.lessonIndex === 3 && engine.stepIndex === 0) {
+      setPendingCardMatchReminder((current) => current ?? 'continue');
+      return;
+    }
+    if (engine.lessonIndex === 3 && engine.stepIndex === 1 && !coreBonusNudgeShownRef.current) {
+      coreBonusNudgeShownRef.current = true;
+      setShowCoreBonusNudge(true);
+      return;
+    }
     if (engine.lessonIndex === 2 && engine.stepIndex === 0) return;
     // L2 (tap-card): show explicit "בוא נמשיך" button instead of auto-advancing.
-    if (engine.lessonIndex === 1) {
-      setL2CelebratePending(true);
-      return () => setL2CelebratePending(false);
+    if (engine.lessonIndex === 0 || engine.lessonIndex === 1) {
+      setEarlyCelebratePending(true);
+      return () => setEarlyCelebratePending(false);
     }
     // Lesson 4 step 3 ends with a blocking success modal; the learner moves
     // on only after explicitly acknowledging it.
@@ -4145,8 +4692,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       dispatchEngine({ type: 'CELEBRATE_DONE' });
       return;
     }
-    // L6.1 (open possible results): this is a key concept, so do not
-    // auto-advance. The learner continues with the explicit "Got it" button.
+    // L6.1 (open possible results): wait for the learner to tap at least two
+    // mini-cards, then let the explicit green button advance the lesson.
     if (engine.lessonIndex === 5 && engine.stepIndex === 0) {
       return;
     }
@@ -4155,6 +4702,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
         engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
         engine.stepIndex === 0) {
+      const nextStepIndex = engine.stepIndex + 1;
+      if (nextStepIndex < (LESSONS[engine.lessonIndex]?.steps.length ?? 0)) {
+        gameDispatch(getFractionTutorialSetup(nextStepIndex));
+        lastFracRigRef.current = `${engine.lessonIndex}-${nextStepIndex}`;
+      }
       dispatchEngine({ type: 'CELEBRATE_DONE' });
       return;
     }
@@ -4184,9 +4736,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const step = lesson?.steps[engine.stepIndex];
     // Dice lesson ג†' equation: instant transition, no celebration pause.
     const ms = step?.celebrateKey ? 2600 : CELEBRATE_MS;
-    const id = setTimeout(() => dispatchEngine({ type: 'CELEBRATE_DONE' }), ms);
+    const isFracCelebrate =
+      engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
+      engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX;
+    const id = setTimeout(() => {
+      if (isFracCelebrate) {
+        const nextStepIndex = engine.stepIndex + 1;
+        if (nextStepIndex < (LESSONS[engine.lessonIndex]?.steps.length ?? 0)) {
+          gameDispatch(getFractionTutorialSetup(nextStepIndex));
+          lastFracRigRef.current = `${engine.lessonIndex}-${nextStepIndex}`;
+        }
+      }
+      dispatchEngine({ type: 'CELEBRATE_DONE' });
+    }, ms);
     return () => clearTimeout(id);
-  }, [engine.phase, engine.lessonIndex, engine.stepIndex]);
+  }, [engine.phase, engine.lessonIndex, engine.stepIndex, gameDispatch, getFractionTutorialSetup]);
 
   // ג”€ג”€ L6.2 (tap-mini): clear bot demo's solve-chip selection on entry so
   //    the learner taps their own mini-card fresh. ג”€ג”€
@@ -4271,6 +4835,28 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (!isFrac || engine.stepIndex !== 0) setFracIntroStage(0);
   }, [engine.lessonIndex, engine.stepIndex]);
 
+  useEffect(() => {
+    const isAttackStep =
+      engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
+      engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX &&
+      (engine.stepIndex === 1 || engine.stepIndex === 2);
+    if (!isAttackStep) {
+      fracAttackExampleRef.current = null;
+      fracAttackOutcomeMatchedRef.current = '';
+      return;
+    }
+    if (engine.phase !== 'await-mimic') fracAttackOutcomeMatchedRef.current = '';
+    const pileTop = gameState?.discardPile?.[gameState.discardPile.length - 1];
+    if (!pileTop || pileTop.type !== 'number') return;
+    const denom = engine.stepIndex === 1 ? 2 : 3;
+    fracAttackExampleRef.current = {
+      stepIndex: engine.stepIndex,
+      pile: pileTop.value,
+      denom,
+      fraction: engine.stepIndex === 1 ? '1/2' : '1/3',
+    };
+  }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.discardPile]);
+
   // ג”€ג”€ Frac-defense intro: reset whenever leaving step 3 ג”€ג”€
   useEffect(() => {
     const isFrac = engine.lessonIndex >= MIMIC_FIRST_FRACTION_LESSON_INDEX &&
@@ -4349,11 +4935,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const isL4Step3Celebrate = engine.lessonIndex === 3 && engine.stepIndex === 3 && engine.phase === 'celebrate';
   const showL4Step3IntroModal = isL4Step3Await && !l4Step3IntroApproved;
   const showL4Step3FinishModal = isL4Step3Celebrate && !l4Step3FinishApproved;
-  // Lesson 4 step 3 uses a dynamic bubble: die 1 -> die 2 -> operator -> card -> play.
+  // Lesson 4 step 3 uses one steady bubble: die 1 -> die 2 -> operator -> confirm -> card -> play.
   const l4Step3HintKey: string | null = isL4Step3Await
     ? (l4Step3Phase === 'pickFirstDie' ? 'tutorial.l4c.hintFull'
        : l4Step3Phase === 'pickSecondDie' ? 'tutorial.l4c.hintPickSecondDie'
        : l4Step3Phase === 'pickOperator' ? 'tutorial.l4c.hintPickOperator'
+       : l4Step3Phase === 'pressConfirm' ? 'tutorial.l4c.hintPressConfirm'
        : l4Step3Phase === 'missingSecondOperator' ? 'tutorial.l4c.hintMissingSecondOperator'
        : l4Step3Phase === 'missingThirdDieOrCancelOperator' ? 'tutorial.l4c.hintAddNumberOrCancelSign'
        : l4Step3Phase === 'pickCard' ? 'tutorial.l4c.hintBuildProgress'
@@ -4435,7 +5022,34 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const isL7Step1Phase = engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
     engine.stepIndex === 1 &&
     (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
+  const l7Step1BuildReady = l7Step1DicePickCount >= 3 && l7Step1OpPickCount >= 2;
+  const l7Step1GuideStage: 'mini' | 'build' | 'parens' | 'confirm' | null =
+    isL7Step1Await
+      ? (!l7Step1MiniPicked
+          ? 'mini'
+          : !l7Step1BuildReady
+            ? 'build'
+            : !l7Step1ParensMoved
+              ? 'parens'
+              : 'confirm')
+      : null;
   const l7MismatchHintKey: string | null = isL7ParensAwait && l7Mismatch ? 'tutorial.l8.mismatch' : null;
+  const l7ParensGuideKey: string | null =
+    isL7ParensAwait && engine.stepIndex === 0 && !l7Mismatch
+      ? (parensIntroStage === 0
+          ? 'tutorial.l8.copyDiceAndSigns'
+          : parensIntroStage === 1
+            ? 'tutorial.l8.tapParensButton'
+            : 'tutorial.l8.confirmCopiedExercise')
+      : null;
+  const l7ParensGuideParams =
+    l7ParensGuideKey
+      ? {
+          d1: String(l7ExerciseRef.current.d1),
+          d2: String(l7ExerciseRef.current.d2),
+          d3: String(l7ExerciseRef.current.d3),
+        }
+      : undefined;
   // Fractions intro step uses custom dedicated bubbles ג€” suppress default bubble.
   // Parens lesson does NOT suppress (it uses its own hintKey via currentStep).
   const isFracIntroActive =
@@ -4457,11 +5071,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   const bubbleText: string | null =
     isFracIntroActive ? null
     : isFracDefenseActive ? null
-    : (isFracAttackActive && (engine.phase === 'bot-demo' || engine.phase === 'await-mimic')) ? null
+    : isFracAttackActive ? null
     : (engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX && (engine.stepIndex === 0 || engine.stepIndex === 1) && engine.phase === 'await-mimic') ? null
     : isL4Step3BotDemo ? null
     : showL4Step3IntroModal || showL4Step3FinishModal ? null
     : engine.phase === 'post-signs-choice' || engine.phase === 'core-complete' ? null
+    : isL7ParensAwait && engine.stepIndex === 0 ? null
     : isL7Step1Phase ? null
     : isL6WildIntro ? (isL6WildMockupOpen ? null : (currentStep?.botHintKey ? t(currentStep.botHintKey) : null))
     : isL6WildBotDemo ? null
@@ -4665,13 +5280,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     coreRewardOutcome ??
     getTutorialRewardOutcome({
       skipCount,
-      earnedCount: tutorialCoinsEarnedCount,
+      alreadyEarned: coreRewardAlreadyEarned,
     });
   const resolvedAdvancedRewardOutcome =
     advancedRewardOutcome ??
     getTutorialRewardOutcome({
       skipCount,
-      earnedCount: tutorialCoinsEarnedCount,
+      alreadyEarned: advancedRewardAlreadyEarned,
     });
 
   useEffect(() => {
@@ -4708,6 +5323,65 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // displayed just below the golden dice pill.
   const L5_STEP0_BUBBLE_BOTTOM = FAN_BOTTOM + FAN_STRIP_H + (Platform.OS !== 'web' ? 50 : 0);
   const isAndroidTutorialUi = Platform.OS === 'android';
+  const isTutorialMobileLayout =
+    Platform.OS !== 'web' ||
+    !!(webTutorialLayout && webTutorialLayout.playfieldWidth === webTutorialLayout.viewportWidth);
+  const tutorialGoldActionButtonTop =
+    webTutorialLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, tutorialViewport.height - 140));
+  const TUTORIAL_ACTION_BUTTON_ESTIMATED_HEIGHT = 62;
+  const TUTORIAL_ACTION_BUTTON_BOTTOM = isTutorialMobileLayout
+    ? Math.max(
+        10,
+        Math.min(
+          82,
+          Math.round(tutorialViewport.height - tutorialGoldActionButtonTop - TUTORIAL_ACTION_BUTTON_ESTIMATED_HEIGHT),
+        ),
+      )
+    : 60;
+  const l7GuideBubbleBottom = isTutorialMobileLayout
+    ? Math.max(FAN_BOTTOM + FAN_STRIP_H - 90, 220)
+    : L7_FAN_CLEAR_BUBBLE_BOTTOM;
+  const l7ConfirmGuideRect =
+    l7ParensGuideKey === 'tutorial.l8.confirmCopiedExercise' ? confirmBtnRect : null;
+  const l7ConfirmGuideBubbleTop = l7ConfirmGuideRect
+    ? Math.max(tutorialSafeTop + 70, l7ConfirmGuideRect.top - (isTutorialMobileLayout ? 96 : 88))
+    : null;
+  const l7Step1TableTop = webTutorialLayout?.tableTop ?? nativeTutorialLayout?.tableTop ?? 205;
+  const l7Step1TableHeight = webTutorialLayout?.tableHeight ?? nativeTutorialLayout?.tableHeight ?? 240;
+  const l7Step1TableWidth = webTutorialLayout?.tableWidth ?? Math.min(388, tutorialWindowWidth - 24);
+  const l7Step1EquationRect: LayoutRect = {
+    top: l7Step1TableTop + Math.round(l7Step1TableHeight * 0.3),
+    left: Math.max(16, (tutorialWindowWidth - Math.min(360, l7Step1TableWidth)) / 2),
+    width: Math.min(360, l7Step1TableWidth),
+    height: 92,
+  };
+  const l7Step1ParensRect: LayoutRect = {
+    top: (webTutorialLayout?.parensTop ?? nativeTutorialLayout?.parensTop ?? 170) - 8,
+    left: Math.max(20, (tutorialWindowWidth - 220) / 2),
+    width: Math.min(220, tutorialWindowWidth - 40),
+    height: 72,
+  };
+  const l7Step1GuideRect: LayoutRect | null =
+    l7Step1GuideStage === 'mini'
+      ? miniStripRect
+      : l7Step1GuideStage === 'build'
+        ? l7Step1EquationRect
+        : l7Step1GuideStage === 'parens'
+          ? l7Step1ParensRect
+          : l7Step1GuideStage === 'confirm'
+            ? confirmBtnRect
+            : null;
+  const l7Step1GuideBubbleTop =
+    l7Step1GuideRect && l7Step1GuideStage === 'mini'
+      ? Math.max(tutorialSafeTop + 70, l7Step1TableTop - 86)
+      : l7Step1GuideStage === 'build'
+        ? l7Step1TableTop + l7Step1TableHeight + 10
+      : l7Step1GuideRect && l7Step1GuideStage === 'confirm'
+        ? Math.max(tutorialSafeTop + 70, l7Step1GuideRect.top - 78)
+      : l7Step1GuideRect
+        ? Math.max(tutorialSafeTop + 70, l7Step1GuideRect.top - 94)
+        : null;
+  const l4ShowMeButtonBottom = TUTORIAL_ACTION_BUTTON_BOTTOM;
   const tutorialTopControlRight = isAndroidTutorialUi ? 106 : 12;
   const tutorialTopBubbleInsets = isAndroidTutorialUi
     ? { left: 12, right: 104 }
@@ -4879,10 +5553,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         dispatchEngine({ type: 'BOT_DEMO_DONE' });
         break;
       case 'await-mimic': dispatchEngine({ type: 'OUTCOME_MATCHED' }); break;
-      case 'celebrate': setL2CelebratePending(false); dispatchEngine({ type: 'CELEBRATE_DONE' }); break;
+      case 'celebrate': setEarlyCelebratePending(false); dispatchEngine({ type: 'CELEBRATE_DONE' }); break;
       case 'lesson-done': dispatchEngine({ type: 'DISMISS_LESSON_DONE' }); break;
-      case 'core-complete': openCardMatchReminder('real-game'); break;
-      case 'post-signs-choice': openCardMatchReminder('real-game'); break;
+      case 'core-complete': onExit(); break;
+      case 'post-signs-choice': onExit(); break;
       case 'advanced-complete': dispatchEngine({ type: 'DISMISS_ADVANCED_COMPLETE' }); onExit(); break;
       case 'all-done': onExit(); break;
       default: break;
@@ -4894,7 +5568,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     identicalMockupApproved,
     l11MockupApproved,
     onExit,
-    openCardMatchReminder,
     parensMockupApproved,
     showWelcomeBubble,
   ]);
@@ -5021,7 +5694,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               pointerEvents={engine.phase === 'await-mimic' ? 'auto' : 'none'}
               style={{
                 position: 'absolute',
-                top: webTutorialLayout?.goldActionButtonTop ?? Math.max(96, Math.min(680, tutorialViewport.height - 140)),
+                top: tutorialGoldActionButtonTop,
                 left: 0,
                 right: 0,
                 alignItems: 'center',
@@ -5077,7 +5750,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => dispatchEngine({ type: 'CELEBRATE_DONE' })}
-              style={{ position: 'absolute', bottom: Platform.OS === 'android' ? GOT_IT_BOTTOM + 150 : GOT_IT_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
+              style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
             >
               <View style={{
                 backgroundColor: '#2563EB', borderRadius: 20,
@@ -5350,7 +6023,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         <TouchableOpacity
           onPress={() => {
             if (showWelcomeBubble) return;
-            // Advanced module started from welcome ג†' restart.
+            // Advanced module started from welcome -> restart.
             if (
               advancedStartedFromWelcomeRef.current &&
               engine.lessonIndex === MIMIC_FIRST_FRACTION_LESSON_INDEX &&
@@ -5476,7 +6149,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       </View>
       ) : null}
 
-      {/* L6 step 0 celebrate: progressive "הבנתי" button gated on mini-card taps. */}
+      {/* L6 step 0 celebrate: gated button. It stays instructional until two mini-card taps. */}
       {engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' ? (
         <TouchableOpacity
           activeOpacity={l6CelebrateMiniTapCount >= 2 ? 0.8 : 1}
@@ -5484,7 +6157,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             if (l6CelebrateMiniTapCount < 2) return;
             skipForward();
           }}
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+          style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
         >
           <View style={{
             backgroundColor: l6CelebrateMiniTapCount >= 2 ? '#15803D' : '#1E3A5F',
@@ -5500,11 +6173,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             }),
           }}>
             <Text style={{ color: '#F0FDF4', fontSize: 17, fontWeight: '900' }}>
-              {l6CelebrateMiniTapCount === 0
+              {l6CelebrateMiniTapCount < 2
                 ? t('tutorial.l6b.continueTap0')
-                : l6CelebrateMiniTapCount === 1
-                ? t('tutorial.l6b.continueTap1')
-                : t('tutorial.l6b.continue')}
+                : t('tutorial.l6a.continue')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -5568,7 +6239,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setL3TipApproved(true)}
-              style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+              style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
             >
               <View style={{
                 backgroundColor: '#F59E0B',
@@ -5661,7 +6332,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setL5aSignTipApproved(true)}
-              style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+              style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
             >
               <View style={{
                 backgroundColor: '#6D28D9',
@@ -5738,7 +6409,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               setL4Step3IntroApproved(true);
               setL4Step3Phase('pickFirstDie');
             }}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#F59E0B',
@@ -5819,7 +6490,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               setL4Step3FinishApproved(true);
               dispatchEngine({ type: 'CELEBRATE_DONE' });
             }}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#F59E0B',
@@ -5842,33 +6513,6 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       ) : null}
 
       {engine.lessonIndex === 5 &&
-       engine.stepIndex === 0 &&
-       engine.phase === 'celebrate' ? (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => dispatchEngine({ type: 'CELEBRATE_DONE' })}
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
-        >
-          <View style={{
-            backgroundColor: '#15803D',
-            borderRadius: 20,
-            paddingVertical: 15,
-            paddingHorizontal: 42,
-            borderWidth: 2,
-            borderColor: '#86EFAC',
-            ...Platform.select({
-              ios: { shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 14 },
-              android: { elevation: 12 },
-            }),
-          }}>
-            <Text style={{ color: '#F0FDF4', fontSize: 17, lineHeight: 22, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr', includeFontPadding: false }}>
-              {t('tutorial.l6a.continue')}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      ) : null}
-
-      {engine.lessonIndex === 5 &&
        engine.stepIndex === 1 &&
        engine.phase === 'bot-demo' &&
        l6MiniDemoPendingAdvance ? (
@@ -5878,7 +6522,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             setL6MiniDemoPendingAdvance(false);
             dispatchEngine({ type: 'BOT_DEMO_DONE' });
           }}
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+          style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
         >
           <View style={{
             backgroundColor: '#15803D',
@@ -5970,7 +6614,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               setL6WildMockupApproved(true);
               dispatchEngine({ type: 'DISMISS_INTRO' });
             }}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#6D28D9',
@@ -6056,12 +6700,43 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               <Text style={{ color: '#86EFAC', fontSize: 16, fontWeight: '800', textAlign: 'center', lineHeight: 24 }}>
                 {t('tutorial.l8.mockupBody')}
               </Text>
+              <View style={{ width: '100%', gap: 8, marginTop: 2 }}>
+                <View style={{
+                  borderRadius: 16,
+                  borderWidth: 2,
+                  borderColor: 'rgba(248,113,113,0.75)',
+                  backgroundColor: 'rgba(127,29,29,0.72)',
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  alignItems: 'center',
+                }}>
+                  <Text style={{ color: '#FEE2E2', fontSize: 18, lineHeight: 24, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' }}>
+                    (6 - 3) - 2 = 1
+                  </Text>
+                </View>
+                <View style={{
+                  borderRadius: 16,
+                  borderWidth: 2,
+                  borderColor: 'rgba(134,239,172,0.85)',
+                  backgroundColor: 'rgba(20,83,45,0.78)',
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  alignItems: 'center',
+                }}>
+                  <Text style={{ color: '#DCFCE7', fontSize: 18, lineHeight: 24, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' }}>
+                    6 - (3 - 2) = 5
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => setParensMockupApproved(true)}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            onPress={() => {
+              setParensMockupApproved(true);
+              setParensMockupPendingAdvance(true);
+            }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#2563EB',
@@ -6148,7 +6823,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setL11MockupApproved(true)}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#F59E0B',
@@ -6343,8 +7018,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* ׳§׳׳£ ׳–׳”׳” ג€” did-you-know mockup */}
       {isL10Intro && !identicalMockupApproved && (
+        <>
         <View
           pointerEvents="auto"
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 9249,
+          }}
+        />
+        <View
+          pointerEvents="box-none"
           style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, bottom: 0,
@@ -6377,13 +7061,33 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               {t('tutorial.identicalCard.title')}
             </Text>
             <Text style={{ color: '#F8FAFC', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22, writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
-              {t('tutorial.identicalCard.desc')}
+              {t(identicalMockupStage === 0 ? 'tutorial.identicalCard.opportunityDesc' : 'tutorial.identicalCard.matchDesc')}
             </Text>
+            {identicalMockupStage === 0 ? (
+              <View style={{
+                width: '100%',
+                borderRadius: 18,
+                borderWidth: 2,
+                borderColor: 'rgba(252,211,77,0.82)',
+                backgroundColor: 'rgba(120,53,15,0.42)',
+                paddingVertical: 18,
+                paddingHorizontal: 16,
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <Text style={{ color: '#FEF3C7', fontSize: 18, lineHeight: 25, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                  {t('tutorial.identicalCard.opportunityCallout')}
+                </Text>
+                <Text style={{ color: '#DBEAFE', fontSize: 14, lineHeight: 21, fontWeight: '800', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                  {t('tutorial.identicalCard.opportunityHint')}
+                </Text>
+              </View>
+            ) : (
             <View
               style={{
                 position: 'relative',
                 width: '100%',
-                minHeight: 224,
+                minHeight: 252,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -6452,7 +7156,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 =
               </Text>
 
-              <View style={{ position: 'absolute', top: 150, left: 0, right: 0, alignItems: 'center' }}>
+              <View style={{ position: 'absolute', top: 146, left: 0, right: 0, alignItems: 'center' }}>
                 <Text style={{ color: '#DBEAFE', fontSize: 12, fontWeight: '900', textAlign: 'center', marginBottom: 4, writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
                   {locale === 'he' ? 'קלף תואם ביד' : 'Matching card in hand'}
                 </Text>
@@ -6480,8 +7184,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 </View>
               </View>
             </View>
+            )}
             <TouchableOpacity
+              ref={Platform.OS === 'web' ? attachIdenticalMockupCtaHandlers : undefined}
               activeOpacity={0.8}
+              accessibilityRole="button"
               style={{
                 backgroundColor: '#F59E0B',
                 borderRadius: 20,
@@ -6491,19 +7198,23 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 borderColor: '#FCD34D',
                 minWidth: 234,
                 alignItems: 'center',
+                position: 'relative',
+                zIndex: 9300,
                 ...Platform.select({
                   ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
                   android: { elevation: 12 },
                 }),
               }}
-              onPress={() => setIdenticalMockupApproved(true)}
+              onPressIn={handleIdenticalMockupCta}
+              onPress={handleIdenticalMockupCta}
             >
               <Text style={{ color: '#431407', fontSize: 17, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
-                {t('tutorial.identicalCard.cta')}
+                {t(identicalMockupStage === 0 ? 'tutorial.identicalCard.next' : 'tutorial.identicalCard.cta')}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
+        </>
       )}
 
       {/* L8 step 1: rolled-before-identical retry hint ג€” positioned on the table */}
@@ -6682,7 +7393,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           activeOpacity={0.8}
           onPress={() => { l4ShowMeResolveRef.current?.(); }}
           accessibilityRole="button"
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
+          style={{ position: 'absolute', bottom: l4ShowMeButtonBottom, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
         >
           <View style={{
             backgroundColor: '#F59E0B',
@@ -6707,15 +7418,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       )}
 
       {/* "בוא נמשיך" button — L2 celebrate only */}
-      {l2CelebratePending && engine.phase === 'celebrate' && (
+      {earlyCelebratePending && engine.phase === 'celebrate' && (
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => {
-            setL2CelebratePending(false);
+            setEarlyCelebratePending(false);
             dispatchEngine({ type: 'CELEBRATE_DONE' });
           }}
           accessibilityRole="button"
-          style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
+          style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
         >
           <View style={{
             backgroundColor: '#F59E0B',
@@ -6739,70 +7450,103 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         </TouchableOpacity>
       )}
 
-      {isL7Step1Await && !l7Step1MiniPicked ? (
+      {l7Step1GuideRect && l7Step1GuideStage !== 'mini' && l7Step1GuideStage !== 'build' ? (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            bottom: L7_FAN_CLEAR_BUBBLE_BOTTOM,
-            left: 22,
-            right: 22,
-            alignItems: 'center',
-            zIndex: 9200,
+            top: l7Step1GuideRect.top - 8,
+            left: l7Step1GuideRect.left - 8,
+            width: l7Step1GuideRect.width + 16,
+            height: l7Step1GuideRect.height + 16,
+            borderRadius: 22,
+            borderWidth: 3,
+            borderColor: '#FCD34D',
+            backgroundColor: 'rgba(252, 211, 77, 0.10)',
+            zIndex: 9206,
           }}
-        >
-          <View
-            style={{
-              maxWidth: 350,
-              borderRadius: 22,
-              backgroundColor: 'rgba(234,242,255,0.98)',
-              borderWidth: 2.5,
-              borderColor: '#3B82F6',
-              paddingVertical: 14,
-              paddingHorizontal: 18,
-              ...Platform.select({
-                ios: { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10 },
-                android: { elevation: 8 },
-              }),
-            }}
-          >
-            <Text
-              style={{
-                color: '#1E3A8A',
-                fontSize: 15,
-                lineHeight: 22,
-                fontWeight: '800',
-                textAlign: 'center',
-              }}
-            >
-              {t('tutorial.l8.step2.selectMini')}
-            </Text>
-          </View>
-        </View>
+        />
       ) : null}
 
-      {engine.lessonIndex === MIMIC_PARENS_LESSON_INDEX &&
-       engine.phase === 'await-mimic' &&
-       engine.stepIndex === 0 &&
-       !l7FanHintHidden &&
-       !l7Mismatch ? (
+      {l7Step1GuideStage ? (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            bottom: L7_FAN_CLEAR_BUBBLE_BOTTOM,
-            left: 0,
-            right: 0,
+            top: l7Step1GuideBubbleTop ?? undefined,
+            bottom: l7Step1GuideBubbleTop == null ? l7GuideBubbleBottom : undefined,
+            left: 14,
+            right: 14,
             alignItems: 'center',
             zIndex: 9210,
           }}
         >
           <HappyBubble
-            text={t('tutorial.l8.continueParens')}
-            tone="celebrate"
+            text={t(
+              l7Mismatch
+                ? 'tutorial.l8.mismatch'
+                : l7Step1GuideStage === 'mini'
+                ? 'tutorial.l8.step2.selectMini'
+                : l7Step1GuideStage === 'build'
+                  ? 'tutorial.l8.step2.copyNumbers'
+                  : l7Step1GuideStage === 'parens'
+                    ? 'tutorial.l8.step2.moveParens'
+                    : 'tutorial.l8.step2.confirm',
+            )}
+            tone={l7Step1GuideStage === 'confirm' ? 'celebrate' : 'turn'}
             size="compact"
             arrowSize="small"
-            maxWidth={300}
+            maxWidth={isTutorialMobileLayout ? 340 : 300}
+            tailTop={false}
+          />
+        </View>
+      ) : null}
+
+      {l7ConfirmGuideRect ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: l7ConfirmGuideRect.top - 8,
+            left: l7ConfirmGuideRect.left - 8,
+            width: l7ConfirmGuideRect.width + 16,
+            height: l7ConfirmGuideRect.height + 16,
+            borderRadius: Math.max(18, Math.min(28, (l7ConfirmGuideRect.height + 16) / 2)),
+            borderWidth: 3,
+            borderColor: '#FCD34D',
+            backgroundColor: 'rgba(252, 211, 77, 0.12)',
+            zIndex: 9208,
+          }}
+        />
+      ) : null}
+
+      {l7ParensGuideKey ? (
+        <View
+          pointerEvents="none"
+          style={l7ConfirmGuideRect
+            ? {
+                position: 'absolute',
+                top: l7ConfirmGuideBubbleTop ?? 0,
+                left: 12,
+                right: 12,
+                alignItems: 'center',
+                zIndex: 9210,
+              }
+            : {
+                position: 'absolute',
+                bottom: l7GuideBubbleBottom,
+                left: 0,
+                right: 0,
+                alignItems: 'center',
+                zIndex: 9210,
+              }}
+        >
+          <HappyBubble
+            text={t(l7ParensGuideKey, l7ParensGuideParams)}
+            tone={parensIntroStage === 1 ? 'celebrate' : 'turn'}
+            size="compact"
+            arrowSize="small"
+            maxWidth={isTutorialMobileLayout ? 340 : 300}
             tailTop={false}
           />
         </View>
@@ -6859,9 +7603,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
        (engine.phase === 'bot-demo' || engine.phase === 'await-mimic') ? (() => {
         const pileTop = gameState?.discardPile?.[gameState.discardPile.length - 1];
         const pileVal: number | null = pileTop?.type === 'number' ? (pileTop as { type: 'number'; value: number }).value : null;
+        const denom = engine.stepIndex === 1 ? 2 : 3;
+        const fraction = engine.stepIndex === 1 ? '1/2' : '1/3';
         const pileText = locale === 'he'
-          ? `בערימה יש ${pileVal ?? '…'} והוא מתחלק ב${engine.stepIndex === 1 ? '½' : '⅓'}`
-          : `Pile is ${pileVal ?? '…'} — divides by ${engine.stepIndex === 1 ? '½' : '⅓'}`;
+          ? `בערימה יש ${pileVal ?? '...'}.\n${pileVal ?? 'המספר'} מתחלק ב-${denom}, לכן קלף ${fraction} מתאים.`
+          : `Pile card: ${pileVal ?? '...'}.\nIt divides by ${denom}, so ${fraction} matches.`;
         const hintText =
           engine.phase === 'await-mimic' && currentStep?.hintKey
             ? t(currentStep.hintKey)
@@ -6870,6 +7616,41 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         return (
           <View pointerEvents="none" style={{ position: 'absolute', top: tutorialSideHintBubbleTop, alignItems: 'center', zIndex: 9310, ...tutorialTopBubbleInsets }}>
             <HappyBubble text={fractionAttackText} tone="turn" withTail={false} size="compact" maxWidth={tutorialSideBubbleMaxWidth} />
+          </View>
+        );
+      })() : null}
+
+      {isFracLesson && (engine.stepIndex === 1 || engine.stepIndex === 2) && engine.phase === 'celebrate' ? (() => {
+        const example = fracAttackExampleRef.current;
+        if (!example || example.stepIndex !== engine.stepIndex) return null;
+        const result = example.pile / example.denom;
+        const fractionText = locale === 'he'
+          ? `קלף ${example.fraction} מתאים ל-${example.pile}`
+          : `${example.fraction} matches ${example.pile}`;
+        return (
+          <View pointerEvents="none" style={{ position: 'absolute', top: tutorialSideHintBubbleTop, left: 18, right: 18, alignItems: 'center', zIndex: 9320 }}>
+            <View style={{
+              minWidth: 220,
+              borderRadius: 20,
+              borderWidth: 3,
+              borderColor: '#FCD34D',
+              backgroundColor: '#FEF3C7',
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+              alignItems: 'center',
+              gap: 6,
+              ...Platform.select({
+                ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 16 },
+                android: { elevation: 14 },
+              }),
+            }}>
+              <Text style={{ color: '#78350F', fontSize: 28, lineHeight: 34, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' }}>
+                {`${example.pile} ÷ ${example.denom} = ${result}`}
+              </Text>
+              <Text style={{ color: '#92400E', fontSize: 15, lineHeight: 20, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+                {fractionText}
+              </Text>
+            </View>
           </View>
         );
       })() : null}
@@ -6934,7 +7715,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => setFracIntroStage(1)}
-                  style={{ position: 'absolute', bottom: GOT_IT_BOTTOM_ADV, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
+                  style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
                 >
                   <View style={{ backgroundColor: '#2563EB', borderRadius: 20, paddingVertical: 15, paddingHorizontal: 48, borderWidth: 2, borderColor: '#93C5FD', ...Platform.select({ ios: { shadowColor: '#2563EB', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 }, android: { elevation: 12 } }) }}>
                     <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>
@@ -6979,7 +7760,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => tutorialBus.emitUserEvent({ kind: 'fracLessonAck' })}
-                style={{ position: 'absolute', bottom: GOT_IT_BOTTOM_ADV, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}
+                style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}
               >
                 <View style={{ backgroundColor: '#2563EB', borderRadius: 20, paddingVertical: 15, paddingHorizontal: 42, borderWidth: 2, borderColor: '#93C5FD', ...Platform.select({ ios: { shadowColor: '#2563EB', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 }, android: { elevation: 12 } }) }}>
                   <Text style={{ color: '#fff', fontSize: 17, fontWeight: '900' }}>
@@ -7032,7 +7813,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setFracDefenseIntroStage(1)}
-            style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
           >
             <View style={{
               backgroundColor: '#4F46E5',
@@ -7112,7 +7893,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => setFracBonusStage(1)}
-                style={{ position: 'absolute', bottom: 60, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
+                style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
               >
                 <View style={{
                   backgroundColor: '#16A34A',
@@ -7212,6 +7993,73 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
 
       {/* Welcome bubble ג€” shown at the very start before any lesson begins */}
+      {showCoreBonusNudge ? (
+        <View
+          pointerEvents="auto"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.62)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 15000,
+            paddingHorizontal: 22,
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 340,
+              borderRadius: 22,
+              borderWidth: 3,
+              borderColor: '#FACC15',
+              backgroundColor: '#78350F',
+              paddingVertical: 24,
+              paddingHorizontal: 22,
+              alignItems: 'center',
+              gap: 14,
+              ...Platform.select({
+                ios: { shadowColor: '#FACC15', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.66, shadowRadius: 18 },
+                android: { elevation: 14 },
+              }),
+            }}
+          >
+            <Text style={{ color: '#FEF3C7', fontSize: 24, lineHeight: 29, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+              {t('tutorial.bonusNudge.title')}
+            </Text>
+            <Text style={{ color: '#FDE68A', fontSize: 17, lineHeight: 24, fontWeight: '800', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+              {t('tutorial.bonusNudge.body')}
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              accessibilityRole="button"
+              onPress={() => {
+                setShowCoreBonusNudge(false);
+                dispatchEngine({ type: 'CELEBRATE_DONE' });
+              }}
+              style={{
+                width: '100%',
+                minHeight: 54,
+                borderRadius: 18,
+                borderWidth: 2,
+                borderColor: '#34D399',
+                backgroundColor: '#10B981',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 24,
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 18, lineHeight: 22, fontWeight: '900', textAlign: 'center' }}>
+                {t('tutorial.bonusNudge.cta')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
       {showWelcomeBubble && engine.phase !== 'idle' && (
         <TutorialWelcomeModal
           topInset={tutorialMockupTopInset}
@@ -7224,13 +8072,21 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           cardGap={tutorialMockupCardGap}
           borderRadius={scaleTutorialWelcome(22, 11)}
           borderWidth={scaleTutorialWelcome(3, 1)}
-          t={t}
+          t={(key) => translate(welcomeLocale, key)}
+          locale={welcomeLocale}
+          onSetLocale={(nextLocale) => {
+            welcomeLocaleTouchedRef.current = true;
+            setWelcomeLocale(nextLocale);
+            void setLocale(nextLocale);
+          }}
           onStart={() => {
             advancedStartedFromWelcomeRef.current = false;
+            void setLocale(welcomeLocale);
             setShowWelcomeBubble(false);
           }}
           onAdvanced={() => {
             advancedStartedFromWelcomeRef.current = true;
+            void setLocale(welcomeLocale);
             setShowWelcomeBubble(false);
             dispatchEngine({ type: 'JUMP_TO_ADVANCED' });
           }}
@@ -7294,7 +8150,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             {/* Advanced fractions option */}
             <TouchableOpacity
               onPress={() => {
-                openCardMatchReminder('advanced');
+                dispatchEngine({ type: 'CHOOSE_ADVANCED_FRACTIONS' });
               }}
               accessibilityLabel={locale === 'he'
                 ? 'המשיכו למתקדמים ותרוויחו 20 מטבעות סלינדה'
@@ -7327,7 +8183,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             </TouchableOpacity>
             {/* Real game ג€” exits tutorial */}
             <TouchableOpacity
-              onPress={() => openCardMatchReminder('real-game')}
+              onPress={onExit}
               style={{
                 paddingVertical: 15,
                 paddingHorizontal: 28,
@@ -7485,7 +8341,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
       {/* All-done: "׳™׳׳׳׳” ׳ ׳©׳—׳§!" CTA ג€” returns to the mode picker */}
       {engine.phase === 'all-done' ? (
-        <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}>
+        <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}>
           <TouchableOpacity
             onPress={onExit}
             activeOpacity={0.8}

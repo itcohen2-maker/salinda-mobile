@@ -42,12 +42,12 @@ BEGIN
     RETURN 'already_owned';
   END IF;
 
-  IF v_coins < 40 THEN
+  IF v_coins < 20 THEN
     RETURN 'insufficient_coins';
   END IF;
 
   UPDATE public.profiles
-     SET total_coins = total_coins - 40,
+     SET total_coins = total_coins - 20,
          table_skins_owned = array_append(table_skins_owned, skin_id)
    WHERE id = auth.uid();
 

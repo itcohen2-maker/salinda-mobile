@@ -93,7 +93,7 @@ function gameReducer(
         id: i,
         name: p.name,
         hand: hands[i],
-        calledLolos: false,
+        hasOneCardLeft: false,
       }))
 
       return {
@@ -109,7 +109,7 @@ function gameReducer(
 
     case 'NEXT_TURN': {
       const nextIndex = (state.currentPlayerIndex + 1) % state.players.length
-      const players = state.players.map((p) => ({ ...p, calledLolos: false }))
+      const players = state.players.map((p) => ({ ...p, hasOneCardLeft: false }))
       return {
         ...state,
         players,
@@ -443,7 +443,7 @@ function gameReducer(
       }
     }
 
-    case 'CALL_LOLOS': {
+    case 'TRIGGER_LAST_CARD_ALERT': {
       return state
     }
 
@@ -464,7 +464,7 @@ function gameReducer(
       }
 
       const nextIndex = (s.currentPlayerIndex + 1) % s.players.length
-      const players = s.players.map((p) => ({ ...p, calledLolos: false }))
+      const players = s.players.map((p) => ({ ...p, hasOneCardLeft: false }))
       return {
         ...s,
         players,

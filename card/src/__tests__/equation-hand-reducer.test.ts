@@ -18,7 +18,7 @@ function buildingState(overrides: Partial<GameState> = {}): GameState {
         id: 'p0',
         name: 'T',
         hand: [],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isConnected: true,
         isHost: true,
         isBot: false,

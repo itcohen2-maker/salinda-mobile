@@ -13,7 +13,7 @@ function turnTransitionState(hand: Card[], overrides: Partial<GameState> = {}): 
         id: 'p0',
         name: 'T',
         hand,
-        calledLolos: false,
+        hasOneCardLeft: false,
         isConnected: true,
         isHost: true,
         isBot: false,

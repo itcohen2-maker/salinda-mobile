@@ -14,7 +14,7 @@ export interface Player {
   id: number
   name: string
   hand: Card[]
-  calledLolos: boolean
+  hasOneCardLeft: boolean
   courageCoins?: number
 }
 
@@ -77,7 +77,7 @@ export type GameAction =
   | { type: 'PLAY_FRACTION'; card: Card }
   | { type: 'PLAY_JOKER'; card: Card; chosenOperation: Operation }
   | { type: 'DRAW_CARD' }
-  | { type: 'CALL_LOLOS' }
+  | { type: 'TRIGGER_LAST_CARD_ALERT' }
   | { type: 'END_TURN' }
   | { type: 'CONFIRM_EQUATION'; equationResult: number }
   | { type: 'SET_MESSAGE'; message: string }

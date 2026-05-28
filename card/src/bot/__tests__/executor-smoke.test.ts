@@ -17,8 +17,8 @@ function makeFixtureState(): GameState {
   return {
     currentPlayerIndex: 1,                 // bot is player index 1
     players: [
-      { id: 0, name: 'Human', hand: [], calledLolos: false, isBot: false },
-      { id: 1, name: 'Bot',   hand: [card], calledLolos: false, isBot: true },
+      { id: 0, name: 'Human', hand: [], hasOneCardLeft: false, isBot: false },
+      { id: 1, name: 'Bot',   hand: [card], hasOneCardLeft: false, isBot: true },
     ],
     // All other fields: use any-cast stubs. The translator only reads
     // state.players and state.currentPlayerIndex.

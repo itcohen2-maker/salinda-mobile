@@ -79,16 +79,16 @@ describe('lesson registry smoke', () => {
     expect(api.l4Config).toHaveBeenCalledTimes(1);
     expect(api.scrollFanTo).toHaveBeenCalledWith(1, { durationMs: 1400, easing: 'settle' });
     expect(api.eqPickDice.mock.calls.map(([idx]) => idx)).toEqual([2, 0]);
-    expect(api.stageCardByValue).toHaveBeenCalledWith(9);
+    expect(api.pulseCard).toHaveBeenCalledWith(1, 1800);
+    expect(api.stageCardByValue).not.toHaveBeenCalled();
   });
-  it('lesson 4 step 2 (fill-missing-die) outcome: card matching lastEquationResult', () => {
-    tutorialBus.setLastEquationResult(9);
+  it('lesson 4 step 2 (fill-missing-die) outcome: correct missing die', () => {
+    tutorialBus.setL4Config({ pickA: 0, pickB: 2, target: 9, hand: [4, 9, 1] });
     const step = LESSONS[3].steps[1];
     expect(step.botHintKey).toBeUndefined();
-    expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-9-123' })).toBe(true);
-    expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-bot-card-9-123' })).toBe(true);
-    expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-5-123' })).toBe(false);
+    expect(step.outcome({ kind: 'eqUserPickedDice', idx: 2 })).toBe(true);
     expect(step.outcome({ kind: 'eqUserPickedDice', idx: 1 })).toBe(false);
+    expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-9-123' })).toBe(false);
     tutorialBus._reset();
   });
   it('lesson 4 step 3 (did-you-know) outcome: l4DidYouKnowAck', () => {
@@ -175,9 +175,9 @@ describe('lesson registry smoke', () => {
     expect(rollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(false);
     expect(previewStep.outcome({ kind: 'l3SolvedAck' })).toBe(true);
   });
-  it('scroll-fan outcome accepts fanScrolled or cardTapped', () => {
+  it('scroll-fan outcome only accepts horizontal fan movement', () => {
     const [scrollStep] = LESSONS[0].steps;
     expect(scrollStep.outcome({ kind: 'fanScrolled', toIdx: 1 })).toBe(true);
-    expect(scrollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(true);
+    expect(scrollStep.outcome({ kind: 'cardTapped', cardId: 'x' })).toBe(false);
   });
 });

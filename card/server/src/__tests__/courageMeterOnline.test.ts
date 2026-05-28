@@ -10,7 +10,7 @@ function makePlayer(id: string, hand: Card[], overrides: Partial<Player> = {}): 
     id,
     name: id,
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isConnected: true,
     isHost: id === 'p1',
     isBot: false,

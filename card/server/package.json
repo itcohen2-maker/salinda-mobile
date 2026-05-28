@@ -1,7 +1,7 @@
 {
-  "name": "lolos-server",
+  "name": "salinda-server",
   "version": "1.0.0",
-  "description": "Lolos card game multiplayer server",
+  "description": "Salinda card game multiplayer server",
   "main": "dist/server/src/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

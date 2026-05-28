@@ -331,7 +331,7 @@ export function eliminatePlayer(
   const newDrawPile = shuffle([...st.drawPile, ...player.hand]);
   const newPlayers = st.players.map((p, i) =>
     i === playerIdx
-      ? { ...p, isEliminated: true, isSpectator: true, hand: [], calledLolos: false }
+      ? { ...p, isEliminated: true, isSpectator: true, hand: [], hasOneCardLeft: false }
       : p,
   );
 
@@ -435,7 +435,7 @@ function endTurnLogic(st: ServerGameState): ServerGameState {
 
   return withOverflowSwapTurnTransition({
     ...s,
-    players: s.players.map(p => ({ ...p, calledLolos: false })),
+    players: s.players.map(p => ({ ...p, hasOneCardLeft: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     stagedCards: [], equationResult: null, validTargets: [],
     hasPlayedCards: false, hasDrawnCard: false, lastCardValue: null,
@@ -507,7 +507,7 @@ export function startGame(
   const players: Player[] = room.players.map((p, i) => ({
     ...p,
     hand: hands[i],
-    calledLolos: false,
+    hasOneCardLeft: false,
     afkWarnings: 0,
     isEliminated: false,
     isSpectator: false,
@@ -823,7 +823,7 @@ export function forceTurnTimeout(st: ServerGameState): ServerGameState | { error
     const nextNameAfterKick = playersAfterElimination[nextAfterKick]?.name ?? '…';
     return withOverflowSwapTurnTransition({
       ...eliminated,
-      players: playersAfterElimination.map((p) => ({ ...p, calledLolos: false })),
+      players: playersAfterElimination.map((p) => ({ ...p, hasOneCardLeft: false })),
       currentPlayerIndex: nextAfterKick,
       phase: 'turn-transition',
       dice: null,
@@ -1059,7 +1059,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
     if (ns.phase === 'game-over') return ns;
     const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
     return withOverflowSwapTurnTransition({
-      ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
+      ...ns, players: ns.players.map(p => ({ ...p, hasOneCardLeft: false })),
       currentPlayerIndex: next, phase: 'turn-transition', dice: null,
       stagedCards: [], equationResult: null, validTargets: [],
       consecutiveIdenticalPlays: 0,
@@ -1089,7 +1089,7 @@ export function playFraction(st: ServerGameState, cardId: string): ServerGameSta
   if (ns.phase === 'game-over') return ns;
   const next = getNextActivePlayerIndex(ns.players, ns.currentPlayerIndex);
   return withOverflowSwapTurnTransition({
-    ...ns, players: ns.players.map(p => ({ ...p, calledLolos: false })),
+    ...ns, players: ns.players.map(p => ({ ...p, hasOneCardLeft: false })),
     currentPlayerIndex: next, phase: 'turn-transition', dice: null,
     stagedCards: [], equationResult: null, validTargets: [],
     consecutiveIdenticalPlays: 0,
@@ -1188,7 +1188,7 @@ export function drawCard(st: ServerGameState): ServerGameState | { error: Locali
   return endTurnLogic(s);
 }
 
-export function callLulos(st: ServerGameState, playerId: string): ServerGameState | { error: LocalizedMessage } {
+export function callSalinda(st: ServerGameState, playerId: string): ServerGameState | { error: LocalizedMessage } {
   void st;
   void playerId;
   return locErr('call.notAvailable');
@@ -1245,7 +1245,7 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
         isConnected: p.isConnected,
         isHost: p.isHost,
         isBot: p.isBot,
-        calledLolos: p.calledLolos,
+        hasOneCardLeft: p.hasOneCardLeft,
         afkWarnings: p.afkWarnings,
         isEliminated: p.isEliminated,
         isSpectator: p.isSpectator,
@@ -1257,7 +1257,7 @@ export function getPlayerView(state: ServerGameState, playerId: string, locale: 
       isConnected: p.isConnected,
       isHost: p.isHost,
       isBot: p.isBot,
-      calledLolos: p.calledLolos,
+      hasOneCardLeft: p.hasOneCardLeft,
       afkWarnings: p.afkWarnings,
       isEliminated: p.isEliminated,
       isSpectator: p.isSpectator,

@@ -2,7 +2,7 @@
 /**
  * לולוס — סימולציית מונטה קרלו (3 שחקנים, חפיסה מלאה עם שברים)
  * מחשב: P(סיום), ממוצע/חציון תורות, התפלגות.
- * הרצה: node card/scripts/simulate-lolos.js
+ * הרצה: node card/scripts/simulate-salinda.js
  * פלט: קונסול + קובץ דיווח ב-card/docs/simulation-report-3players.md
  */
 
@@ -181,7 +181,7 @@ function runOneGame(opts = {}) {
     drawPile = drawPile.slice(1);
   }
 
-  const players = hands.map((hand, i) => ({ hand: [...hand], calledLolos: false }));
+  const players = hands.map((hand, i) => ({ hand: [...hand], hasOneCardLeft: false }));
   let currentPlayer = 0;
   let turns = 0;
 
@@ -189,12 +189,8 @@ function runOneGame(opts = {}) {
     const p = players[currentPlayer];
     const topDiscard = discardPile[discardPile.length - 1];
 
-    // Call Lolos when 1–2 cards left
-    if (p.hand.length <= 2 && !p.calledLolos)
-      p.calledLolos = true;
-
     // Win check
-    if (p.hand.length === 0 && p.calledLolos)
+    if (p.hand.length === 0)
       return { finished: true, turns, winnerIndex: currentPlayer };
 
     const d1 = Math.floor(Math.random() * 6) + 1;
@@ -325,7 +321,7 @@ if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
 
 const md = `# דיווח סימולציה — לולוס (3 שחקנים, 7 קלפים)
 
-נוצר על ידי \`node card/scripts/simulate-lolos.js\`. חצי משחקים עם 15 קלפי שבר (בלי פרא), חצי עם 15 שברים + 4 קלפי פרא.
+נוצר על ידי \`node card/scripts/simulate-salinda.js\`. חצי משחקים עם 15 קלפי שבר (בלי פרא), חצי עם 15 שברים + 4 קלפי פרא.
 
 ## פרמטרים
 

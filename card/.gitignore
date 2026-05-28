@@ -58,3 +58,8 @@ yarn-error.*
 .mcp.json
 
 .vercel
+
+# Local session artifacts (screenshots, logs, scratch)
+.codex-*
+tmp-*.png
+server-dev.log

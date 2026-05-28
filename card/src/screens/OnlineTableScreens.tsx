@@ -281,14 +281,12 @@ function LobbySummarySection({
 
 export function LanguageToggle() {
   const { locale, setLocale, t } = useLocale();
+  const nextLocale = locale === 'he' ? 'en' : 'he';
   return (
     <View style={styles.langRow} testID="lobby-language-toggle">
       <Text style={styles.langLabel}>{t('lang.label')}:</Text>
-      <TouchableOpacity onPress={() => void setLocale('he')} style={[styles.langBtn, locale === 'he' && styles.langBtnActive]}>
-        <Text style={[styles.langBtnText, locale === 'he' && styles.langBtnTextActive]}>{t('lang.he')}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => void setLocale('en')} style={[styles.langBtn, locale === 'en' && styles.langBtnActive]}>
-        <Text style={[styles.langBtnText, locale === 'en' && styles.langBtnTextActive]}>{t('lang.en')}</Text>
+      <TouchableOpacity onPress={() => void setLocale(nextLocale)} style={[styles.langBtn, styles.langBtnActive]}>
+        <Text style={[styles.langBtnText, styles.langBtnTextActive]}>{t('lang.switch')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -315,7 +313,7 @@ function guestInviteSearchParams(roomCode: string, serverUrl: string, inviteCode
   const fallbackPublicServer =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
-      : 'https://lolos-mobile.onrender.com';
+      : 'https://salinda-mobile.onrender.com';
   const safeServerUrl = isLocalServerUrl(serverUrl) ? fallbackPublicServer : serverUrl.trim();
   const params = new URLSearchParams({ room: roomCode });
   if (inviteCode?.trim()) params.set('invite', inviteCode.trim());

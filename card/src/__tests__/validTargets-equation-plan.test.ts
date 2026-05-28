@@ -75,7 +75,7 @@ function minimalPlayer(overrides: Partial<Player> = {}): Player {
     id: 'p0',
     name: 'Test',
     hand: [],
-    calledLolos: false,
+    hasOneCardLeft: false,
     isConnected: true,
     isHost: true,
     isBot: false,

@@ -2,8 +2,8 @@
 // lesson-01-fan.ts — First watch-and-mimic lesson: the fan.
 // Bot sweeps the fan right to the end, then left to the end,
 // then settles on the middle card so cards are visible on both
-// sides. User must then do something equivalent (any scroll,
-// any tap) to pass the step.
+// sides. User must then scroll the fan; a random card tap should
+// not pass this step because the goal is learning how to browse.
 // ============================================================
 
 import type { Lesson } from './types';
@@ -30,10 +30,11 @@ export const lesson01Fan: Lesson = {
         await api.wait(PAUSE_MS);
         await api.scrollFanTo(mid, { durationMs: SETTLE_MS, easing: 'settle' });
       },
-      outcome: (event) => event.kind === 'fanScrolled' || event.kind === 'cardTapped',
+      outcome: (event) => event.kind === 'fanScrolled',
       highlight: { target: 'fan', shape: 'arrow' },
       hintKey: 'tutorial.l1.hintScroll',
       botHintKey: 'tutorial.l1.botScroll',
+      celebrateKey: 'tutorial.l1.celebrate',
     },
   ],
 };

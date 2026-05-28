@@ -1212,7 +1212,7 @@ Find where `FeedbackInboxScreen` is rendered (search for `activePlayMode === 'fe
 Find the admin buttons section (around line 20541 where `feedbackInbox.open` button is). Add after the feedback inbox button:
 
 ```tsx
-<LulosButton
+<SalindaButton
   text={locale === 'he' ? 'אנליטיקס' : 'Analytics'}
   color="blue"
   width={220}

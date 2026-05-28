@@ -23,7 +23,7 @@ Then redeploy the mobile/web client if needed so the UI and server use the same 
 ## Important Check
 If `.env` points to:
 
-`EXPO_PUBLIC_SERVER_URL=https://lolos-mobile.onrender.com`
+`EXPO_PUBLIC_SERVER_URL=https://salinda-mobile.onrender.com`
 
 then your app is talking to Render, not to your local server.
 

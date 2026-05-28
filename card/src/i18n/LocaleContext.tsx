@@ -10,7 +10,7 @@ const STORAGE_KEY = 'salinda_locale_v1';
 
 export function deviceDefaultLocale(): AppLocale {
   const code = Localization.getLocales()[0]?.languageCode?.toLowerCase() ?? 'he';
-  return code === 'en' ? 'en' : 'he';
+  return code === 'he' ? 'he' : 'en';
 }
 
 type LocaleContextValue = {

@@ -38,7 +38,7 @@ describe('shouldShowDrawForfeitButton', () => {
           id: 'p0',
           name: 'T',
           hand: Array.from({ length: 9 }, (_, i) => ({ id: `n-${i}`, type: 'number' as const, value: i })),
-          calledLolos: false,
+          hasOneCardLeft: false,
           isConnected: true,
           isHost: true,
           isBot: false,

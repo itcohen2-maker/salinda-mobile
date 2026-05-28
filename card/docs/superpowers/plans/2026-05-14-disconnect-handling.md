@@ -111,7 +111,7 @@ function makePlayer(id: string, hand: Card[], isHost = false): Player {
     id,
     name: id,
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isConnected: true,
     isHost,
     isBot: false,
@@ -225,11 +225,11 @@ describe('eliminatePlayer', () => {
     expect(eliminatePlayer(after, 'p3')).toBeNull();
   });
 
-  it('clears calledLolos flag on elimination', () => {
+  it('clears hasOneCardLeft flag on elimination', () => {
     const st = makeState3P();
-    st.players[2].calledLolos = true;
+    st.players[2].hasOneCardLeft = true;
     const result = eliminatePlayer(st, 'p3');
-    expect(result!.players[2].calledLolos).toBe(false);
+    expect(result!.players[2].hasOneCardLeft).toBe(false);
   });
 });
 ```
@@ -263,7 +263,7 @@ export function eliminatePlayer(
   const newDrawPile = shuffle([...st.drawPile, ...player.hand]);
   const newPlayers = st.players.map((p, i) =>
     i === playerIdx
-      ? { ...p, isEliminated: true, isSpectator: true, hand: [], calledLolos: false }
+      ? { ...p, isEliminated: true, isSpectator: true, hand: [], hasOneCardLeft: false }
       : p,
   );
 
@@ -608,8 +608,8 @@ const disconnectChoiceModal = disconnectChoice ? (
           : `${disconnectChoice.playerName} לא חזר בזמן. רוצים להמשיך מול בוט?`}
       </Text>
       <View style={{ flexDirection: 'row', ... }}>
-        <LulosButton text={t('lobby.startBotGame')} onPress={() => void mp?.continueVsBot?.()} />
-        <LulosButton text={t('lobby.leaveRoom')} onPress={() => ...} />
+        <SalindaButton text={t('lobby.startBotGame')} onPress={() => void mp?.continueVsBot?.()} />
+        <SalindaButton text={t('lobby.leaveRoom')} onPress={() => ...} />
       </View>
     </View>
   </AppModal>
@@ -634,7 +634,7 @@ const disconnectChoiceModal =
           {`${disconnectChoice.playerName} ${locale === 'he' ? 'התנתק/ה מהמשחק' : 'disconnected'}`}
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <LulosButton
+          <SalindaButton
             text={locale === 'he' ? 'קבל ניצחון טכני' : 'Accept technical victory'}
             color="green"
             width={160}
@@ -643,7 +643,7 @@ const disconnectChoiceModal =
               mp?.acceptTechnicalVictory?.();
             }}
           />
-          <LulosButton
+          <SalindaButton
             text={t('lobby.startBotGame')}
             color="blue"
             width={160}

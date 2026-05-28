@@ -20,8 +20,8 @@ function buildFinishedState(): GameState {
     allowNegativeTargets: true,
     abVariant: 'variant_0_15_plus',
     players: [
-      { id: 0, name: 'Dana', hand: [{ id: 'n1', type: 'number', value: 1 }], calledLolos: false, isBot: false },
-      { id: 1, name: 'Roi', hand: [{ id: 'n2', type: 'number', value: 2 }], calledLolos: false, isBot: false },
+      { id: 0, name: 'Dana', hand: [{ id: 'n1', type: 'number', value: 1 }], hasOneCardLeft: false, isBot: false },
+      { id: 1, name: 'Roi', hand: [{ id: 'n2', type: 'number', value: 2 }], hasOneCardLeft: false, isBot: false },
     ],
     tournamentTable: [
       { playerId: 0, playerName: 'Dana', wins: 2, losses: 1 },

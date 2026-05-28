@@ -170,7 +170,7 @@ type GameAction =
   | { type: 'DEFEND_FRACTION_PENALTY' }
   | { type: 'PLAY_JOKER'; card: Card; chosenOperation: Operation }
   | { type: 'DRAW_CARD' }
-  | { type: 'CALL_LOLOS' }
+  | { type: 'TRIGGER_LAST_CARD_ALERT' }
   | { type: 'END_TURN' }
   | { type: 'SET_MESSAGE'; message: string }
   | { type: 'OPEN_JOKER_MODAL'; card: Card }
@@ -227,7 +227,7 @@ type GameAction =
 
 - **`ROLL_DICE`** — line 361: `{ type: 'ROLL_DICE'; values?: DiceResult }` — `values` is optional; when absent the reducer generates random dice values.
 
-- **`NEXT_TURN`** — line 359: `{ type: 'NEXT_TURN' }` — EXISTS and is used separately from `END_TURN`. `END_TURN` calls `endTurnLogic` (a helper that advances turn and sets phase to `'turn-transition'`). `NEXT_TURN` is a separate action that also advances the player index and resets turn state. Both result in `phase: 'turn-transition'` but `END_TURN` also triggers the `endTurnLogic` side-effects (e.g., lolos forgiven message, 3-card notification). `NEXT_TURN` is used in online multiplayer.
+- **`NEXT_TURN`** — line 359: `{ type: 'NEXT_TURN' }` — EXISTS and is used separately from `END_TURN`. `END_TURN` calls `endTurnLogic` (a helper that advances turn and sets phase to `'turn-transition'`). `NEXT_TURN` is a separate action that also advances the player index and resets turn state. Both result in `phase: 'turn-transition'` but `END_TURN` also triggers the `endTurnLogic` side-effects (e.g., salinda forgiven message, 3-card notification). `NEXT_TURN` is used in online multiplayer.
 
 ---
 
@@ -240,7 +240,7 @@ interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
 }
 ```
 
@@ -307,7 +307,7 @@ type GamePhase = 'setup' | 'turn-transition' | 'pre-roll' | 'building' | 'solved
 ```typescript
     case 'START_GAME':
     case 'PLAY_AGAIN': {
-      AsyncStorage.removeItem('lulos_guidance_notifications');
+      AsyncStorage.removeItem('salinda_guidance_notifications');
       const playersSeed =
         action.type === 'PLAY_AGAIN'
           ? st.players.map((p) => ({ name: p.name }))
@@ -370,7 +370,7 @@ type GamePhase = 'setup' | 'turn-transition' | 'pre-roll' | 'building' | 'solved
         totalEquationResponseMs: 0,
         showFractions: fractions, showPossibleResults, showSolveExercise,
         timerSetting, timerCustomSeconds,
-        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], calledLolos: false })),
+        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false })),
         drawPile, discardPile: firstDiscard ? [firstDiscard] : [],
         tournamentTable:
           action.type === 'PLAY_AGAIN'
@@ -394,10 +394,10 @@ type GamePhase = 'setup' | 'turn-transition' | 'pre-roll' | 'building' | 'solved
 **Player construction (exact line 1005):**
 
 ```typescript
-        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], calledLolos: false })),
+        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false })),
 ```
 
-There is **no `isBot` field** in the player construction. The shape is exactly `{ id: i, name: p.name, hand: hands[i], calledLolos: false }`.
+There is **no `isBot` field** in the player construction. The shape is exactly `{ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false }`.
 
 ---
 
@@ -407,7 +407,7 @@ There is **no `isBot` field** in the player construction. The shape is exactly `
 
 ```typescript
     case 'RESET_GAME':
-      AsyncStorage.removeItem('lulos_guidance_notifications');
+      AsyncStorage.removeItem('salinda_guidance_notifications');
       return { ...initialState, hasSeenIntroHint: st.hasSeenIntroHint, hasSeenSolvedHint: st.hasSeenSolvedHint, soundsEnabled: st.soundsEnabled, guidanceEnabled: st.guidanceEnabled };
 ```
 
@@ -872,7 +872,7 @@ The spec anticipated 6 phases; the live code has 7. The `'roll-dice'` phase is r
 
 ### 2. `Player.isBot` does not exist
 
-The `Player` interface has no `isBot` field. Adding bot support will require either (a) extending `Player` with `isBot?: boolean`, or (b) tracking bot player indices separately in `GameState`. Because `START_GAME` constructs players as `{ id: i, name: p.name, hand: hands[i], calledLolos: false }`, any bot flag must be added at that construction point.
+The `Player` interface has no `isBot` field. Adding bot support will require either (a) extending `Player` with `isBot?: boolean`, or (b) tracking bot player indices separately in `GameState`. Because `START_GAME` constructs players as `{ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false }`, any bot flag must be added at that construction point.
 
 ### 3. `START_GAME` action carries no bot information
 

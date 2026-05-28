@@ -59,9 +59,8 @@ export const lesson04Equation: Lesson = {
         await api.wait(1500);
         // Pulse the target card to draw attention before staging.
         if (targetIdx >= 0) {
-          await api.pulseCard(targetIdx, 1500);
+          await api.pulseCard(targetIdx, 1800);
         }
-        await api.stageCardByValue(target);
       },
       outcome: (event) => {
         // Check against the ACTUAL equation result the learner confirmed
@@ -98,12 +97,9 @@ export const lesson04Equation: Lesson = {
         }
       },
       outcome: (event) => {
-        // Check against the ACTUAL equation result the learner confirmed.
-        if (event.kind !== 'cardTapped') return false;
-        const eqResult = tutorialBus.getLastEquationResult();
-        if (eqResult === null) return false;
-        const v = cardIdValue(event.cardId);
-        return v === eqResult;
+        if (event.kind !== 'eqUserPickedDice') return false;
+        const cfg = tutorialBus.getL4Config();
+        return cfg?.pickB === event.idx;
       },
       // Keep only the learner-turn hint on layer 24. The preceding
       // bot-demo bubble ("the framed card hints...") was removed by request.

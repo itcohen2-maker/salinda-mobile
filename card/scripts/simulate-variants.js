@@ -168,14 +168,13 @@ function runOneGame(v, cardsPerPlayer) {
     discardPile = [drawPile[0]];
     drawPile = drawPile.slice(1);
   }
-  const players = hands.map(h => ({ hand: [...h], calledLolos: false }));
+  const players = hands.map(h => ({ hand: [...h], hasOneCardLeft: false }));
   let current = 0, turns = 0;
 
   while (turns < MAX_TURNS) {
     const p = players[current];
     const top = discardPile[discardPile.length - 1];
-    if (p.hand.length <= 2 && !p.calledLolos) p.calledLolos = true;
-    if (p.hand.length === 0 && p.calledLolos)
+    if (p.hand.length === 0)
       return { finished: true, turns, winnerIndex: current };
 
     const d1 = Math.floor(Math.random() * 6) + 1, d2 = Math.floor(Math.random() * 6) + 1, d3 = Math.floor(Math.random() * 6) + 1;

@@ -6,7 +6,7 @@
 
 **Architecture:** Single component `TurnTransition` rewritten in-place inside `index.tsx` (lines 3162-3219). Uses existing `GameCard` component at 0.7x scale for the card fan. Card tooltips are local state with a positioned popup. Onboarding uses the existing `onbSeen` + AsyncStorage pattern with a new `onb_welcome_screen` key.
 
-**Tech Stack:** React Native, Animated, AsyncStorage, existing GameCard/CasinoButton/LulosButton components.
+**Tech Stack:** React Native, Animated, AsyncStorage, existing GameCard/CasinoButton/SalindaButton components.
 
 ---
 
@@ -122,7 +122,7 @@ function TurnTransition() {
     <View style={{flex:1}}>
       {/* Exit button */}
       <View style={{position:'absolute',top:54,right:20,zIndex:10}}>
-        <LulosButton text="יציאה" color="red" width={100} height={44} onPress={()=>dispatch({type:'RESET_GAME'})} />
+        <SalindaButton text="יציאה" color="red" width={100} height={44} onPress={()=>dispatch({type:'RESET_GAME'})} />
       </View>
 
       {/* Main content */}

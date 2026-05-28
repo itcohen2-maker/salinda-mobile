@@ -48,17 +48,15 @@ function lobbyTimerLabel(t: TFn, ts: HostGameSettings['timerSetting'], customSec
 
 export function LanguageToggle() {
   const { locale, setLocale, t } = useLocale();
+  const nextLocale = locale === 'he' ? 'en' : 'he';
   return (
     <View
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' }}
       testID="lobby-language-toggle"
     >
       <Text style={{ color: '#9CA3AF', fontSize: 12 }}>{t('lang.label')}:</Text>
-      <TouchableOpacity onPress={() => void setLocale('he')} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: locale === 'he' ? brand.gold : brand.surface2 }}>
-        <Text style={{ color: locale === 'he' ? '#111827' : '#fff', fontWeight: '700', fontSize: 12 }}>{t('lang.he')}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => void setLocale('en')} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: locale === 'en' ? brand.gold : brand.surface2 }}>
-        <Text style={{ color: locale === 'en' ? '#111827' : '#fff', fontWeight: '700', fontSize: 12 }}>{t('lang.en')}</Text>
+      <TouchableOpacity onPress={() => void setLocale(nextLocale)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: brand.gold }}>
+        <Text style={{ color: '#111827', fontWeight: '700', fontSize: 12 }}>{t('lang.switch')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -91,7 +89,7 @@ function guestInviteSearchParams(roomCode: string, serverUrl: string, inviteCode
   const fallbackPublicServer =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
-      : 'https://lolos-mobile.onrender.com';
+      : 'https://salinda-mobile.onrender.com';
   const safeServerUrl = isLocalServerUrl(serverUrl) ? fallbackPublicServer : serverUrl.trim();
   const params = new URLSearchParams({ room: roomCode });
   if (inviteCode?.trim()) params.set('invite', inviteCode.trim());

@@ -11,7 +11,7 @@ function makeState(hand = [NUMBER_CARD, FRACTION_CARD, WILD_CARD]): GameState {
   return {
     currentPlayerIndex: 0,
     players: [
-      { id: 0, name: 'Bot', hand, calledLolos: false, isBot: true },
+      { id: 0, name: 'Bot', hand, hasOneCardLeft: false, isBot: true },
     ],
   } as unknown as GameState;
 }

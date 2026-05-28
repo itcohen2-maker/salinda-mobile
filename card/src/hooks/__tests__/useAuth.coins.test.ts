@@ -63,44 +63,44 @@ describe('syncTutorialCoins', () => {
   });
 
   it('does nothing when already synced', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
-    await AsyncStorage.setItem('lulos_tutorial_coins_synced', 'true');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
+    await AsyncStorage.setItem('salinda_tutorial_coins_synced', 'true');
     await syncTutorialCoins();
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('awards tutorial_core (10 coins) when count = 1', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
+  it('awards tutorial_core (150 coins) when count = 1', async () => {
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
     await syncTutorialCoins();
-    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 10, p_source: 'tutorial_core' });
+    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 150, p_source: 'tutorial_core' });
     expect(mockRpc).toHaveBeenCalledTimes(1);
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('awards tutorial_core + tutorial_advanced when count = 2', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '2');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '2');
     await syncTutorialCoins();
-    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 10, p_source: 'tutorial_core' });
-    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 20, p_source: 'tutorial_advanced' });
+    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 150, p_source: 'tutorial_core' });
+    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 250, p_source: 'tutorial_advanced' });
     expect(mockRpc).toHaveBeenCalledTimes(2);
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('uses tutorial_legacy fallback for unexpected count', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '5');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '5');
     await syncTutorialCoins();
-    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 50, p_source: 'tutorial_legacy' });
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 750, p_source: 'tutorial_legacy' });
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('leaves synced flag unset if RPC fails so it retries on next login', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
     mockRpc.mockRejectedValueOnce(new Error('network error'));
     await syncTutorialCoins();
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBeNull();
   });
 });

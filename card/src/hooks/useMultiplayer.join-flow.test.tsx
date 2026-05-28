@@ -281,8 +281,8 @@ describe('useMultiplayer join flow', () => {
         makePlayerView({
           myPlayerId: 'guest-1',
           players: [
-            { id: 'host-1', name: 'Dana', cardCount: 4, isConnected: true, isHost: true, isBot: false, calledLolos: false, afkWarnings: 0, isEliminated: false, isSpectator: false },
-            { id: 'guest-1', name: 'Noa', cardCount: 4, isConnected: true, isHost: false, isBot: false, calledLolos: false, afkWarnings: 0, isEliminated: false, isSpectator: false },
+            { id: 'host-1', name: 'Dana', cardCount: 4, isConnected: true, isHost: true, isBot: false, hasOneCardLeft: false, afkWarnings: 0, isEliminated: false, isSpectator: false },
+            { id: 'guest-1', name: 'Noa', cardCount: 4, isConnected: true, isHost: false, isBot: false, hasOneCardLeft: false, afkWarnings: 0, isEliminated: false, isSpectator: false },
           ],
         }),
       );

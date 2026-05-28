@@ -11,9 +11,10 @@ export function isL6WildTutorialSelectionReady(
     (card): card is Card => card.type === 'number' || card.type === 'wild',
   );
   const hasWild = stagedNumbers.some((card) => card.type === 'wild');
+  const numberCards = stagedNumbers.filter((card) => card.type === 'number');
 
   if (!hasWild) return false;
-  if (stagedNumbers.length < 1) return false;
+  if (numberCards.length < 2) return false;
 
   const fixedSum = stagedNumbers
     .filter((c) => c.type === 'number')

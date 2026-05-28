@@ -8,7 +8,7 @@ function basePlayer(hand: GameState['players'][number]['hand']): GameState['play
     id: 0,
     name: 'P1',
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isBot: false,
     courageMeterStep: 0,
     courageMeterPercent: 0,

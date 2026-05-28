@@ -1,6 +1,6 @@
 // ============================================================
 // useMultiplayer — Socket.io connection, room, and game state
-// Connects to Lolos server; provides lobby + game override for client
+// Connects to Salinda server; provides lobby + game override for client
 // ============================================================
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
@@ -181,7 +181,7 @@ function getServerUrl(): string {
     const inferred = inferDevMachineSocketUrl();
     if (inferred) return inferred;
   }
-  return 'https://lolos-mobile.onrender.com';
+  return 'https://salinda-mobile.onrender.com';
 }
 
 export type PlayMode = 'choose' | 'local' | 'online';
@@ -305,7 +305,7 @@ function playerViewToGameState(view: PlayerView): any {
       name: p.name,
       hand,
       isBot: p.isBot ?? false,
-      calledLolos: p.calledLolos,
+      hasOneCardLeft: p.hasOneCardLeft,
       afkWarnings: p.afkWarnings ?? 0,
       isEliminated: p.isEliminated ?? false,
       isSpectator: p.isSpectator ?? false,
@@ -426,7 +426,7 @@ function playerViewToGameState(view: PlayerView): any {
     abVariant: gs.abVariant ?? (view.difficulty === 'full' ? 'variant_0_15_plus' : 'control_0_12_plus'),
     timerSetting: normalizedTimerSetting,
     timerCustomSeconds: gs.timerCustomSeconds,
-    winner: view.winner ? { id: 0, name: view.winner.name, hand: [], calledLolos: false } : null,
+    winner: view.winner ? { id: 0, name: view.winner.name, hand: [], hasOneCardLeft: false } : null,
     message: view.message,
     openingDrawId: view.openingDrawId,
     turnDeadlineAt: normalizedTurnDeadlineAt,
@@ -501,7 +501,7 @@ function actionToSocketEvent(action: any): { event: string; data?: any } | null 
     case 'PLAY_JOKER':
       return { event: 'play_joker', data: { cardId: action.card?.id, chosenOperation: action.chosenOperation } };
     case 'DRAW_CARD': return { event: 'draw_card' };
-    case 'CALL_LOLOS': return null;
+    case 'TRIGGER_LAST_CARD_ALERT': return null;
     case 'END_TURN': return { event: 'end_turn' };
     case 'RESOLVE_OVERFLOW_SWAP':
       return {

@@ -1,5 +1,5 @@
 // ============================================================
-// server/src/index.ts — Lolos Game Server Entry Point
+// server/src/index.ts — Salinda Game Server Entry Point
 // Express + Socket.io
 // ============================================================
 
@@ -57,7 +57,7 @@ app.use(express.json());
 app.get('/', (_req, res) => {
   res.json({
     status: 'ok',
-    game: 'lolos',
+    game: 'salinda',
     timestamp: Date.now(),
     bootId: serverBootId,
     startedAt: serverStartedAt.toISOString(),
@@ -132,5 +132,5 @@ server.listen(PORT, '0.0.0.0', () => {
     environment: process.env.NODE_ENV ?? null,
     corsOrigins: ALLOWED_ORIGINS ?? 'dev-permissive',
   });
-  console.log(`🎴 Lolos server listening on 0.0.0.0:${PORT} (LAN: use this PC's IP)`);
+  console.log(`🎴 Salinda server listening on 0.0.0.0:${PORT} (LAN: use this PC's IP)`);
 });

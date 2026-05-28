@@ -4,7 +4,7 @@ export const SALINDA_TUTORIAL_REWARDS = {
 } as const;
 
 export const SALINDA_GAMEPLAY_REWARDS = {
-  excellence_meter_full: 50,
+  excellence_meter_full: 1,
   standard_win: 100,
   first_win_of_day: 300,
 } as const;
@@ -13,26 +13,14 @@ export const SALINDA_CATALOG = {
   table_design: {
     itemId: 'table_design',
     assetId: 'poker_red',
-    price: 400,
+    price: 20,
     inventoryKind: 'table_skin',
   },
   background_design: {
     itemId: 'background_design',
     assetId: 'royal',
-    price: 500,
+    price: 25,
     inventoryKind: 'theme',
-  },
-  salinda_card: {
-    itemId: 'salinda_card',
-    assetId: 'salinda_card',
-    price: 1500,
-    inventoryKind: 'special_card',
-  },
-  wild_card: {
-    itemId: 'wild_card',
-    assetId: 'wild_card',
-    price: 2000,
-    inventoryKind: 'special_card',
   },
 } as const;
 

@@ -211,15 +211,14 @@ function runOneGame(opts) {
     drawPile = drawPile.slice(1);
   }
 
-  const players = hands.map(h => ({ hand: [...h], calledLolos: false }));
+  const players = hands.map(h => ({ hand: [...h], hasOneCardLeft: false }));
   let current = 0;
   let turns = 0;
 
   while (turns < MAX_TURNS) {
     const p = players[current];
     const top = discardPile[discardPile.length - 1];
-    if (p.hand.length <= 2 && !p.calledLolos) p.calledLolos = true;
-    if (p.hand.length === 0 && p.calledLolos) return { finished: true, turns, winnerIndex: current };
+    if (p.hand.length === 0) return { finished: true, turns, winnerIndex: current };
 
     const dice = rollDice010();
     const targets = generateValidTargets(dice.die1, dice.die2, dice.die3, allowNegativeTargets, maxNum);

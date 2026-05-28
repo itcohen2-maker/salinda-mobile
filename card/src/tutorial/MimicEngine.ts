@@ -193,7 +193,7 @@ export function mimicReducer(
     return { phase: 'intro', lessonIndex: MIMIC_LAST_CORE_LESSON_INDEX + 1, stepIndex: 0 };
   }
 
-  // Jump to the fractions-advanced lesson from any phase (tutorial skip button).
+  // Jump to the fractions-advanced lesson from the welcome screen.
   if (action.type === 'JUMP_TO_ADVANCED') {
     return { phase: 'intro', lessonIndex: MIMIC_LAST_CORE_LESSON_INDEX + 1, stepIndex: 0 };
   }

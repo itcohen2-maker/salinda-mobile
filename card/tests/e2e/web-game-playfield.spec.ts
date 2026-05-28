@@ -112,7 +112,7 @@ async function openSinglePlayerSetup(
   },
 ) {
   await page.addInitScript(() => {
-    window.localStorage.setItem('lulos_tutorial_done', 'true');
+    window.localStorage.setItem('salinda_tutorial_done', 'true');
   });
   await lobby.goto();
   await page.waitForTimeout(6_000);
@@ -314,7 +314,7 @@ test.describe('Mobile Gameplay Playfield', () => {
     test.skip(!testInfo.project.name.includes('mobile'), 'Mobile-only full-width regression.');
 
     await page.addInitScript(() => {
-      window.localStorage.setItem('lulos_tutorial_done', 'true');
+      window.localStorage.setItem('salinda_tutorial_done', 'true');
       Object.defineProperty(Element.prototype, 'requestFullscreen', { value: undefined, configurable: true });
       Object.defineProperty(Element.prototype, 'webkitRequestFullscreen', { value: undefined, configurable: true });
     });

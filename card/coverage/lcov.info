@@ -613,7 +613,7 @@ FN:1040,defendFractionPenalty
 FN:1054,playOperation
 FN:1059,playJoker
 FN:1065,drawCard
-FN:1087,callLulos
+FN:1087,callSalinda
 FN:1093,doEndTurn
 FN:1111,getPlayerView
 FN:1112,(anonymous_85)
@@ -704,7 +704,7 @@ FNDA:0,defendFractionPenalty
 FNDA:0,playOperation
 FNDA:0,playJoker
 FNDA:0,drawCard
-FNDA:0,callLulos
+FNDA:0,callSalinda
 FNDA:0,doEndTurn
 FNDA:0,getPlayerView
 FNDA:0,(anonymous_85)

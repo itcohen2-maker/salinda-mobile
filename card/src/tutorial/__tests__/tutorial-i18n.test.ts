@@ -21,6 +21,8 @@ const NEW_TUTORIAL_KEYS = [
   'tutorial.welcome.advancedRewardValue',
   'tutorial.welcome.advancedRewardSuffix',
   'tutorial.welcome.advancedBtn',
+  // Lesson 1 — move the fan
+  'tutorial.l1.celebrate',
   // Lesson 2 — tap a card
   'tutorial.l2.title',
   'tutorial.l2.botTap',
@@ -53,6 +55,7 @@ const NEW_TUTORIAL_KEYS = [
   'tutorial.l4c.hintMissingSecondOperator',
   'tutorial.l4c.hintAddNumberOrCancelSign',
   'tutorial.l4c.hintBuildProgress',
+  'tutorial.l4c.hintPressConfirm',
   'tutorial.l4c.hintPressPlay',
   'tutorial.l4c.tryAgain',
   'tutorial.l4c.finishTitle',
@@ -64,6 +67,10 @@ const NEW_TUTORIAL_KEYS = [
   'tutorial.fracBranch.prompt',
   'tutorial.fracBranch.advancedBtn',
   'tutorial.fracBranch.finishBtn',
+  'tutorial.cardMatchReminder.continue',
+  'tutorial.bonusNudge.title',
+  'tutorial.bonusNudge.body',
+  'tutorial.bonusNudge.cta',
   'tutorial.l6.title',
   'tutorial.l6.desc',
   'tutorial.l6a.hintTapChip',

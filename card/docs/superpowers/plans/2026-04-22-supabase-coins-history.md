@@ -532,15 +532,15 @@ describe('syncTutorialCoins', () => {
   });
 
   it('does nothing when already synced', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
-    await AsyncStorage.setItem('lulos_tutorial_coins_synced', 'true');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
+    await AsyncStorage.setItem('salinda_tutorial_coins_synced', 'true');
 
     await syncTutorialCoins();
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('awards tutorial_core (10 coins) when count = 1', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
 
     await syncTutorialCoins();
 
@@ -550,12 +550,12 @@ describe('syncTutorialCoins', () => {
     });
     expect(mockRpc).toHaveBeenCalledTimes(1);
 
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('awards tutorial_core + tutorial_advanced when count = 2', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '2');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '2');
 
     await syncTutorialCoins();
 
@@ -563,28 +563,28 @@ describe('syncTutorialCoins', () => {
     expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 20, p_source: 'tutorial_advanced' });
     expect(mockRpc).toHaveBeenCalledTimes(2);
 
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('uses tutorial_legacy fallback for unexpected count', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '5');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '5');
 
     await syncTutorialCoins();
 
     expect(mockRpc).toHaveBeenCalledWith('award_coins', { p_amount: 50, p_source: 'tutorial_legacy' });
 
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBe('true');
   });
 
   it('leaves synced flag unset if RPC fails so it retries on next login', async () => {
-    await AsyncStorage.setItem('lulos_tutorial_coins_earned_count', '1');
+    await AsyncStorage.setItem('salinda_tutorial_coins_earned_count', '1');
     mockRpc.mockRejectedValueOnce(new Error('network error'));
 
     await syncTutorialCoins(); // should not throw
 
-    const synced = await AsyncStorage.getItem('lulos_tutorial_coins_synced');
+    const synced = await AsyncStorage.getItem('salinda_tutorial_coins_synced');
     expect(synced).toBeNull();
   });
 });
@@ -626,8 +626,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 Add this function (exported so it can be tested) before the `AuthProvider` component:
 
 ```typescript
-const TUTORIAL_COINS_KEY = 'lulos_tutorial_coins_earned_count';
-const TUTORIAL_COINS_SYNCED_KEY = 'lulos_tutorial_coins_synced';
+const TUTORIAL_COINS_KEY = 'salinda_tutorial_coins_earned_count';
+const TUTORIAL_COINS_SYNCED_KEY = 'salinda_tutorial_coins_synced';
 
 /** Migrate tutorial coins from AsyncStorage to Supabase. One-time, idempotent. */
 export async function syncTutorialCoins(): Promise<void> {

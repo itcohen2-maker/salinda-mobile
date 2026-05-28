@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://lolos-mobile.vercel.app,https://salinda-web.onrender.com
+        value: https://salinda-mobile.vercel.app,https://salinda-web.onrender.com
 
   # ── Web frontend (Expo static export) ──
   - type: web
@@ -19,9 +19,9 @@ services:
     staticPublishPath: dist
     envVars:
       - key: EXPO_PUBLIC_SERVER_URL
-        value: https://lolos-mobile.onrender.com
+        value: https://salinda-mobile.onrender.com
       - key: EXPO_PUBLIC_WEB_APP_URL
-        value: https://lolos-mobile.vercel.app
+        value: https://salinda-mobile.vercel.app
       - key: EXPO_PUBLIC_SUPABASE_URL
         value: https://isqxuchcmmabjosxjawt.supabase.co
       - key: EXPO_PUBLIC_SUPABASE_ANON_KEY

@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-09  
 **Status:** Design only — not yet implemented.  
-**Context:** Part of future ideas for Lolos (TakiMaster); see plan "רעיונות עתידיים למשחק לולוס".
+**Context:** Part of future ideas for Salinda (TakiMaster); see plan "רעיונות עתידיים למשחק לולוס".
 
 ---
 

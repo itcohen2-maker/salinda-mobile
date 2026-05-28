@@ -13,7 +13,6 @@ import {
 import { supabase } from '../lib/supabase';
 import type { TableSkinId } from '../theme/tableSkins';
 import {
-  SALINDA_CATALOG,
   SALINDA_TUTORIAL_REWARDS,
   type SalindaCoinSource,
 } from '../../shared/salindaEconomy';
@@ -57,11 +56,11 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   signOutToGuest: () => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
-  /** Purchase the Slinda card for 150 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
+  /** Legacy Slinda-card purchase hook. Consumable cards are no longer sold in the shop catalog. */
   purchaseSlinda: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
   /** Consume owned Slinda after activating it in-game. */
   consumeSlinda: () => Promise<'ok' | 'not_owned' | 'error'>;
-  /** Purchase the Wild card for 2,000 coins. Returns 'ok', 'already_owned', or 'insufficient_coins'. */
+  /** Legacy Wild-card purchase hook. Consumable cards are no longer sold in the shop catalog. */
   purchaseWild: () => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'>;
   /** Consume owned Wild after activating it in-game. */
   consumeWild: () => Promise<'ok' | 'not_owned' | 'error'>;
@@ -77,9 +76,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TUTORIAL_COINS_KEY = 'lulos_tutorial_coins_earned_count';
-const TUTORIAL_COINS_SYNCED_KEY = 'lulos_tutorial_coins_synced';
-const LOCAL_WILD_OWNED_KEY_PREFIX = 'lulos_local_wild_owned:';
+const TUTORIAL_COINS_KEY = 'salinda_tutorial_coins_earned_count';
+const TUTORIAL_COINS_SYNCED_KEY = 'salinda_tutorial_coins_synced';
+const LOCAL_WILD_OWNED_KEY_PREFIX = 'salinda_local_wild_owned:';
 
 function localWildOwnedKey(userId: string): string {
   return `${LOCAL_WILD_OWNED_KEY_PREFIX}${userId}`;
@@ -288,7 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           void fetchProfile(s.user.id);
         } else {
           setProfile(null);
-          if (event === 'TOKEN_REFRESH_FAILED') {
+          if ((event as string) === 'TOKEN_REFRESH_FAILED') {
             void beginAnonymousSession();
           }
         }
@@ -401,48 +400,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshProfile, user]);
 
   const purchaseWild = useCallback(async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
-    const purchaseViaProfileUpdate = async (): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'error'> => {
-      if (!user) return 'error';
-      const currentCoins = profile?.total_coins ?? 0;
-      if ((profile?.wild_owned ?? false) === true) return 'already_owned';
-      if (currentCoins < SALINDA_CATALOG.wild_card.price) return 'insufficient_coins';
-      try {
-        const nextCoins = currentCoins - SALINDA_CATALOG.wild_card.price;
-        const { data, error } = await supabase
-          .from('profiles')
-          .update({ total_coins: nextCoins })
-          .eq('id', user.id)
-          .eq('total_coins', currentCoins)
-          .select('id, total_coins');
-        if (error) return 'error';
-        if (!data || data.length === 0) {
-          await refreshProfile();
-          return 'error';
-        }
-        await AsyncStorage.setItem(localWildOwnedKey(user.id), 'true');
-        setProfile((prev) => (prev ? { ...prev, total_coins: nextCoins, wild_owned: true } : prev));
-        await refreshProfile();
-        return 'ok';
-      } catch {
-        return 'error';
-      }
-    };
-
-    try {
-      const { data, error } = await supabase.rpc('purchase_wild');
-      if (error) {
-        return await purchaseViaProfileUpdate();
-      }
-      const result = data as string;
-      if (result === 'ok') {
-        if (user) await AsyncStorage.removeItem(localWildOwnedKey(user.id));
-        await refreshProfile();
-      }
-      return result as 'ok' | 'already_owned' | 'insufficient_coins';
-    } catch {
-      return await purchaseViaProfileUpdate();
-    }
-  }, [profile, refreshProfile, user]);
+    return 'error';
+  }, []);
 
   const consumeWild = useCallback(async (): Promise<'ok' | 'not_owned' | 'error'> => {
     // Local-storage fallback: purchase_wild fallback path stores ownership only in

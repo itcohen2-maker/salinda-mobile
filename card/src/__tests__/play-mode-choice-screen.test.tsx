@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
 import { PlayModeChoiceScreen } from '../../index';
@@ -73,6 +74,7 @@ describe('PlayModeChoiceScreen auth button', () => {
     onFeedbackSubmit: jest.fn().mockResolvedValue('submitted'),
     onHowToPlay: jest.fn(),
     onOpenAdminCoinGifts: jest.fn(),
+    onOpenAnalytics: jest.fn(),
     onOpenAuth: jest.fn(),
     onOpenFeedbackInbox: jest.fn(),
     onPlay: jest.fn(),
@@ -142,5 +144,28 @@ describe('PlayModeChoiceScreen auth button', () => {
 
     expect(screen.getByTestId('lobby-tutorial')).toBeTruthy();
     expect(screen.getByTestId('lobby-shop')).toBeTruthy();
+  });
+
+  it('keeps shop and sign-in separated on tight mobile layouts', () => {
+    mockUseResponsiveLayout.mockReturnValue({
+      width: 375,
+      height: 633,
+      fontScale: 1,
+      isTight: true,
+      isCompact: true,
+      isSingleColumn: true,
+      isTablet: false,
+    });
+    mockUseAuth.mockReturnValue({ isAnonymous: true, profile: { total_coins: 15 } });
+
+    render(<PlayModeChoiceScreen {...baseProps} />);
+
+    const shopStyle = StyleSheet.flatten(screen.getByTestId('lobby-shop').props.style);
+    const authSpacerStyle = StyleSheet.flatten(screen.getByTestId('home-auth-spacer').props.style);
+
+    expect(screen.getByTestId('lobby-shop')).toBeTruthy();
+    expect(screen.getByTestId('home-auth-button')).toBeTruthy();
+    expect(shopStyle.marginBottom).toBeGreaterThanOrEqual(18);
+    expect(authSpacerStyle.marginBottom).toBeGreaterThanOrEqual(14);
   });
 });

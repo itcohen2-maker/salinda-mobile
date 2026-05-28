@@ -17,6 +17,7 @@ export type L4Step3Phase =
   | 'pickFirstDie'
   | 'pickSecondDie'
   | 'pickOperator'
+  | 'pressConfirm'
   | 'missingSecondOperator'
   | 'missingThirdDieOrCancelOperator'
   | 'pickCard'
@@ -24,7 +25,7 @@ export type L4Step3Phase =
   | 'pressPlay';
 
 export function resolveL4Step3PhaseFromProgress(progress: L4EquationProgress): L4Step3Phase {
-  if (progress.ok) return 'pickCard';
+  if (progress.ok) return 'pressConfirm';
   if (progress.missing === 'secondOperator') return 'missingSecondOperator';
   if (progress.missing === 'thirdDieOrCancelSecondOperator') return 'missingThirdDieOrCancelOperator';
   if (progress.diceCount <= 0) return 'pickFirstDie';

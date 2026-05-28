@@ -90,6 +90,23 @@ describe('mimicReducer fractions branch', () => {
     expect(s.phase).toBe('all-done');
   });
 
+  it('after fractions complete in the full advanced flow, continues to parens lesson', () => {
+    const fullShapes = LESSONS.map((lesson) => ({
+      id: lesson.id,
+      stepCount: lesson.steps.length,
+    }));
+    let s: typeof INITIAL_MIMIC_STATE = {
+      ...INITIAL_MIMIC_STATE,
+      lessonIndex: MIMIC_FIRST_FRACTION_LESSON_INDEX,
+      stepIndex: LESSONS[MIMIC_FIRST_FRACTION_LESSON_INDEX].steps.length - 1,
+      phase: 'lesson-done',
+    };
+    s = mimicReducer(s, { type: 'DISMISS_LESSON_DONE' }, fullShapes);
+    expect(s.phase).toBe('intro');
+    expect(LESSONS[s.lessonIndex].id).toBe('parens-move');
+    expect(s.stepIndex).toBe(0);
+  });
+
   it('attack-half step rejects wrong fraction event (stay on step until correct)', () => {
     const step = LESSONS[MIMIC_FIRST_FRACTION_LESSON_INDEX].steps[1]; // index 1 = frac-attack-half
     expect(step.outcome({ kind: 'fracAttackPlayed', fraction: '1/3' })).toBe(false);

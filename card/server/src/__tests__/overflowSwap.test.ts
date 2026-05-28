@@ -14,7 +14,7 @@ function makePlayer(id: string, hand: Card[]): Player {
     id,
     name: id,
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isConnected: true,
     isHost: true,
     isBot: false,

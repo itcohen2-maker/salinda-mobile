@@ -21,7 +21,7 @@ function basePlayer(hand: Card[]): GameState['players'][number] {
     id: 0,
     name: 'Tutor',
     hand,
-    calledLolos: false,
+    hasOneCardLeft: false,
     isBot: false,
     courageMeterStep: 0,
     courageMeterPercent: 0,

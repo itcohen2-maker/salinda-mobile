@@ -1,5 +1,5 @@
 // ============================================================
-// shared/types.ts — Lolos Card Game — Shared Types
+// shared/types.ts — Salinda Card Game — Shared Types
 // Used by both server and client
 // ============================================================
 
@@ -65,7 +65,7 @@ export interface Player {
   id: string;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   isConnected: boolean;
   isHost: boolean;
   isBot: boolean;
@@ -94,7 +94,7 @@ export interface OpponentView {
   isConnected: boolean;
   isHost: boolean;
   isBot: boolean;
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   afkWarnings: number;
   isEliminated: boolean;
   isSpectator: boolean;
@@ -291,7 +291,7 @@ export interface PlayerView {
     isConnected: boolean;
     isHost: boolean;
     isBot: boolean;
-    calledLolos: boolean;
+    hasOneCardLeft: boolean;
     afkWarnings: number;
     isEliminated: boolean;
     isSpectator: boolean;
@@ -409,7 +409,7 @@ export interface ClientToServerEvents {
   play_operation: (data: { cardId: string }) => void;
   play_joker: (data: { cardId: string; chosenOperation: Operation }) => void;
   draw_card: () => void;
-  call_lulos: () => void;
+  trigger_last_card_alert: () => void;
   end_turn: () => void;
   begin_turn: () => void;
   resolve_overflow_swap: (data: { handCardId?: string; pileChoice?: OverflowSwapPileChoice }) => void;

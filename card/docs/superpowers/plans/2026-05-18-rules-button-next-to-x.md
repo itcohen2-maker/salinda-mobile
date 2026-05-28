@@ -6,7 +6,7 @@
 
 **Architecture:** `TurnTransition` already contains the HUD column. Wrap the X button and new Rules button in a horizontal `flexDirection:'row'` View inside that column. Reuse the existing `AppModal` + `RulesContent` components, passing the live `state` (same pattern as `StartScreen`). Add one i18n key `ui.rules`.
 
-**Tech Stack:** React Native, TypeScript, existing `LulosButton`, `AppModal`, `RulesContent` — all in `index.tsx`.
+**Tech Stack:** React Native, TypeScript, existing `SalindaButton`, `AppModal`, `RulesContent` — all in `index.tsx`.
 
 ---
 
@@ -103,15 +103,15 @@ Add immediately after it:
 Find the current X-only button line (line ~14050):
 
 ```tsx
-          <LulosButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} style={{ marginBottom: -8 }} />
+          <SalindaButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} style={{ marginBottom: -8 }} />
 ```
 
 Replace it with a horizontal row that holds both the X button and the new Rules button:
 
 ```tsx
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: -8 }}>
-            <LulosButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} />
-            <LulosButton text={t('ui.rules')} color="blue" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudButtonFontSize} onPress={() => setRulesOpen(true)} />
+            <SalindaButton text="X" color="red" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudExitButtonFontSize} onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }} />
+            <SalindaButton text={t('ui.rules')} color="blue" width={hudExitButtonWidth} height={hudButtonHeight} fontSize={hudButtonFontSize} onPress={() => setRulesOpen(true)} />
           </View>
 ```
 

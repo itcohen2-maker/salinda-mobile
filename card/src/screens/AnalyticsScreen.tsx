@@ -49,6 +49,14 @@ interface AnalyticsScreenProps {
   onBack: () => void;
 }
 
+type SessionsQuery = {
+  eq: (column: string, value: string | boolean) => SessionsQuery;
+  order: (
+    column: string,
+    options: { ascending: boolean },
+  ) => { limit: (count: number) => Promise<{ data: AppSession[] | null; error: unknown }> };
+};
+
 function formatDuration(startIso: string, endIso: string | null): string {
   if (!endIso) return '—';
   const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();
@@ -123,19 +131,19 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
         .from('app_sessions')
         .select(
           'id, user_id, is_anonymous, platform, locale, app_version, session_start, session_end, last_seen_at, event_count',
-        );
+        ) as unknown as SessionsQuery;
 
       if (platformFilter !== 'all') {
-        query = (query as ReturnType<typeof query.eq>).eq('platform', platformFilter);
+        query = query.eq('platform', platformFilter);
       }
 
       if (userTypeFilter === 'anonymous') {
-        query = (query as ReturnType<typeof query.eq>).eq('is_anonymous', true);
+        query = query.eq('is_anonymous', true);
       } else if (userTypeFilter === 'registered') {
-        query = (query as ReturnType<typeof query.eq>).eq('is_anonymous', false);
+        query = query.eq('is_anonymous', false);
       }
 
-      const { data, error: queryError } = await (query as unknown as { order: (col: string, opts: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: AppSession[] | null; error: unknown }> } })
+      const { data, error: queryError } = await query
         .order('session_start', { ascending: false })
         .limit(200);
 

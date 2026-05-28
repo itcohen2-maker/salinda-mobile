@@ -898,7 +898,7 @@ export interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   isBot?: boolean; // added in M5; optional here so fixtures compile pre-M5
 }
 
@@ -1053,7 +1053,7 @@ export function makeFixtureState(overrides: Partial<GameState>): GameState {
  * Build a Player fixture. Hand defaults to [].
  */
 export function makePlayer(id: number, name: string, hand: Card[] = []): Player {
-  return { id, name, hand, calledLolos: false };
+  return { id, name, hand, hasOneCardLeft: false };
 }
 
 let _cardSeq = 0;
@@ -2273,8 +2273,8 @@ function makeFixtureState(): GameState {
   return {
     currentPlayerIndex: 1,                 // bot is player index 1
     players: [
-      { id: 0, name: 'Human', hand: [], calledLolos: false, isBot: false },
-      { id: 1, name: 'Bot',   hand: [card], calledLolos: false, isBot: true },
+      { id: 0, name: 'Human', hand: [], hasOneCardLeft: false, isBot: false },
+      { id: 1, name: 'Bot',   hand: [card], hasOneCardLeft: false, isBot: true },
     ],
     // All other fields: use any-cast stubs. The translator only reads
     // state.players and state.currentPlayerIndex.
@@ -2605,7 +2605,7 @@ function makeState(hand = [NUMBER_CARD, FRACTION_CARD, WILD_CARD]): GameState {
   return {
     currentPlayerIndex: 0,
     players: [
-      { id: 0, name: 'Bot', hand, calledLolos: false, isBot: true },
+      { id: 0, name: 'Bot', hand, hasOneCardLeft: false, isBot: true },
     ],
   } as unknown as GameState;
 }
@@ -2633,7 +2633,7 @@ function makeState(hand = [NUMBER_CARD, FRACTION_CARD, WILD_CARD]): GameState {
   return {
     currentPlayerIndex: 0,
     players: [
-      { id: 0, name: 'Bot', hand, calledLolos: false, isBot: true },
+      { id: 0, name: 'Bot', hand, hasOneCardLeft: false, isBot: true },
     ],
   } as unknown as GameState;
 }
@@ -3079,14 +3079,14 @@ function makeTwoPlayerBotState(overrides: Partial<GameState> = {}): GameState {
         id: 0,
         name: 'Human',
         hand: [{ id: 'h1', type: 'number' as const, value: 3 }],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: false,
       },
       {
         id: 1,
         name: 'Bot',
         hand: [numberCard5, numberCard7, numberCard12],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: true,
       },
     ],
@@ -3219,14 +3219,14 @@ test.skip('M4.5.2 — pre-roll defense: bot defends fraction attack; turn eventu
         id: 0,
         name: 'Human',
         hand: [],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: false,
       },
       {
         id: 1,
         name: 'Bot',
         hand: [divisibleCard],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: true,
       },
     ],
@@ -3312,14 +3312,14 @@ test.skip('M4.5.3 — building phase: plan drains atomically in a single BOT_STE
         id: 0,
         name: 'Human',
         hand: [],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: false,
       },
       {
         id: 1,
         name: 'Bot',
         hand: [card5, card7],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: true,
       },
     ],
@@ -3405,14 +3405,14 @@ test.skip('M4.5.4 — frozen bot: no valid plan causes drawCard fallback; botTic
         id: 0,
         name: 'Human',
         hand: [],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: false,
       },
       {
         id: 1,
         name: 'Bot',
         hand: [joker1, joker2],  // jokers only — planner produces null
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: true,
       },
     ],
@@ -3535,7 +3535,7 @@ test.skip('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Har
         id: 0,
         name: 'Human',
         hand: [{ id: 'h1', type: 'number' as const, value: 1 }],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: false,
       },
       {
@@ -3547,7 +3547,7 @@ test.skip('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Har
           { id: 'b3', type: 'number' as const, value: 5 },
           { id: 'b4', type: 'number' as const, value: 7 },
         ],
-        calledLolos: false,
+        hasOneCardLeft: false,
         isBot: true,
       },
     ],
@@ -3959,7 +3959,7 @@ interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
 }
 
 // AFTER:
@@ -3967,7 +3967,7 @@ interface Player {
   id: number;
   name: string;
   hand: Card[];
-  calledLolos: boolean;
+  hasOneCardLeft: boolean;
   /** True when this player slot is controlled by the local bot engine. Defaults false for human players. */
   isBot: boolean;
 }
@@ -3975,14 +3975,14 @@ interface Player {
 
 **3b. Propagate `isBot` in player construction near line 1005 (inside START_GAME/PLAY_AGAIN case).**
 
-Grep anchor: `players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], calledLolos: false })),`
+Grep anchor: `players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false })),`
 
 ```typescript
 // BEFORE:
-        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], calledLolos: false })),
+        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false })),
 
 // AFTER:
-        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], calledLolos: false, isBot: (p as { isBot?: boolean }).isBot ?? false })),
+        players: playersSeed.map((p, i) => ({ id: i, name: p.name, hand: hands[i], hasOneCardLeft: false, isBot: (p as { isBot?: boolean }).isBot ?? false })),
 ```
 
 **3c. Preserve `isBot` in the PLAY_AGAIN `playersSeed` branch near line 313.**

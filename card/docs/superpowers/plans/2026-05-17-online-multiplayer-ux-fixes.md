@@ -215,7 +215,7 @@ Find the block starting with `{!state.isTutorial && displayPlayers.map((p) => {`
                     ? `${shortName}\nיש לך ${p.hand?.length ?? 0} קלפים`
                     : `${shortName}\n${p.hand?.length ?? 0} קלפים`;
                 const btn = (
-                  <LulosButton
+                  <SalindaButton
                     text={btnText}
                     color={chipColor}
                     width={turnPlayerChipWidth}

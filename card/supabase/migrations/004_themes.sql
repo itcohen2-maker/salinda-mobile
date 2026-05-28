@@ -5,7 +5,7 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS active_table text NOT NULL DEFAULT 'classic';
 
 -- Atomic purchase RPC:
--- Deducts 50 coins and adds theme_id to themes_owned.
+-- Deducts 25 coins and adds theme_id to themes_owned.
 -- Returns 'ok', 'already_owned', 'insufficient_coins', 'invalid_theme', or 'error'.
 CREATE OR REPLACE FUNCTION public.purchase_theme(theme_id text)
 RETURNS text
@@ -31,12 +31,12 @@ BEGIN
     RETURN 'already_owned';
   END IF;
 
-  IF v_coins < 50 THEN
+  IF v_coins < 25 THEN
     RETURN 'insufficient_coins';
   END IF;
 
   UPDATE public.profiles
-     SET total_coins   = total_coins - 50,
+     SET total_coins   = total_coins - 25,
          themes_owned  = array_append(themes_owned, theme_id)
    WHERE id = auth.uid();
 
