@@ -39,7 +39,7 @@ npx expo start --clear
 
 | Var | Purpose |
 |---|---|
-| `EXPO_PUBLIC_SERVER_URL` | Remote Socket.IO server URL (prod on Render: `https://salinda-mobile.onrender.com`) |
+| `EXPO_PUBLIC_SERVER_URL` | Remote Socket.IO server URL (prod on Render: `https://lolos-mobile.onrender.com`) |
 | `EXPO_PUBLIC_LOCAL_SOCKET_SERVER` | `1` = dev-only flag, forces client to use local LAN server (ignores `EXPO_PUBLIC_SERVER_URL` for online play). `0` = use cloud. |
 | `EXPO_PUBLIC_WEB_APP_URL` | Public web build URL (Vercel: `https://salinda-mobile.vercel.app`) |
 | `EXPO_PUBLIC_LOCK_ADVANCED_STAGES` | `1` = lock stages A–H (for future purchase/subscription gating) |
@@ -136,6 +136,6 @@ node scripts/research-simulate-0-10-15.js
 ## External services
 
 - **GitHub**: `itcohen2-maker/salinda-mobile` (main branch)
-- **Render**: multiplayer server (`salinda-mobile.onrender.com`)
+- **Render**: multiplayer server (`lolos-mobile.onrender.com`)
 - **Vercel**: web client (`salinda-mobile.vercel.app`)
 - **EAS / Expo**: mobile builds (production env via `eas.json`)

@@ -313,7 +313,7 @@ function guestInviteSearchParams(roomCode: string, serverUrl: string, inviteCode
   const fallbackPublicServer =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
-      : 'https://salinda-mobile.onrender.com';
+      : 'https://lolos-mobile.onrender.com';
   const safeServerUrl = isLocalServerUrl(serverUrl) ? fallbackPublicServer : serverUrl.trim();
   const params = new URLSearchParams({ room: roomCode });
   if (inviteCode?.trim()) params.set('invite', inviteCode.trim());

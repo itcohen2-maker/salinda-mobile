@@ -181,7 +181,7 @@ function getServerUrl(): string {
     const inferred = inferDevMachineSocketUrl();
     if (inferred) return inferred;
   }
-  return 'https://salinda-mobile.onrender.com';
+  return 'https://lolos-mobile.onrender.com';
 }
 
 export type PlayMode = 'choose' | 'local' | 'online';

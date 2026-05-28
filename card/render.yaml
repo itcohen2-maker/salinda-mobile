@@ -1,7 +1,10 @@
 services:
   # ── Backend game server (Socket.IO) ──
+  # NOTE: Web frontend is served from Vercel (project `salinda-mobile`,
+  # canonical URL https://lolos-mobile.vercel.app). Render hosts only the
+  # Socket.IO server below as service `lolos-mobile`.
   - type: web
-    name: salinda-server
+    name: lolos-mobile
     runtime: node
     buildCommand: cd server && npm install && npm run build
     startCommand: cd server && npm start
@@ -9,32 +12,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://salinda-mobile.vercel.app,https://salinda-web.onrender.com
-
-  # ── Web frontend (Expo static export) ──
-  - type: web
-    name: salinda-web
-    runtime: static
-    buildCommand: npm install && npx expo export --platform web && node scripts/inject-og-tags.js
-    staticPublishPath: dist
-    envVars:
-      - key: EXPO_PUBLIC_SERVER_URL
-        value: https://salinda-mobile.onrender.com
-      - key: EXPO_PUBLIC_WEB_APP_URL
-        value: https://salinda-mobile.vercel.app
-      - key: EXPO_PUBLIC_SUPABASE_URL
-        value: https://isqxuchcmmabjosxjawt.supabase.co
-      - key: EXPO_PUBLIC_SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzcXh1Y2hjbW1hYmpvc3hqYXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NjA2MTIsImV4cCI6MjA5MjQzNjYxMn0.qVVgJWxkXfD6AYUghJWOaAf66_DwsI8CxibDnv1MZXY
-      - key: EXPO_PUBLIC_LOCAL_SOCKET_SERVER
-        value: "0"
-      - key: EXPO_PUBLIC_LOCK_ADVANCED_STAGES
-        value: "0"
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-store
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+        value: https://lolos-mobile.vercel.app,https://salinda-mobile.vercel.app

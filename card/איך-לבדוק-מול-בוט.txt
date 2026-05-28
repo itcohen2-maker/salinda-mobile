@@ -26,5 +26,5 @@
 
 הערה:
 אם בקובץ .env יש:
-EXPO_PUBLIC_SERVER_URL=https://salinda-mobile.onrender.com
+EXPO_PUBLIC_SERVER_URL=https://lolos-mobile.onrender.com
 אז האפליקציה מתחברת ל-Render ולא לשרת המקומי.
