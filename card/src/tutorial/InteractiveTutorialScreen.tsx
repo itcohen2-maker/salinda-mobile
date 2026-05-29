@@ -33,6 +33,7 @@ import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { HappyBubble, type HappyBubbleTone } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
 import { GoldDiceButton } from '../../components/GoldDiceButton';
+import { GoldButton } from '../../components/GoldButton';
 import { initializeSfx, isSfxMuted, playSfx, setSfxMuted } from '../audio/sfx';
 import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatus';
 import { SlindaCoin } from '../../components/SlindaCoin';
@@ -953,13 +954,17 @@ function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchR
                   width: '100%',
                   minHeight: 58,
                   borderRadius: 22,
-                  backgroundColor: '#10B981',
-                  border: '2px solid #34D399',
+                  // Polished gold (D): smooth metallic sheen, light top → deep
+                  // bottom, with an inset bevel for volume. No wood grain.
+                  background:
+                    'linear-gradient(180deg, #F8E08E 0%, #F0C659 18%, #D9A23A 55%, #C08A2C 82%, #8A5A1C 100%)',
+                  border: '2px solid #8A5A1C',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '14px 26px',
-                  boxShadow: '0 0 16px rgba(16,185,129,0.78)',
+                  boxShadow:
+                    'inset 0 2px 0 rgba(255,248,220,0.7), inset 0 -3px 6px rgba(94,58,16,0.5), 0 6px 14px rgba(0,0,0,0.35)',
                   cursor: 'pointer',
                   touchAction: 'manipulation',
                 } as any,
@@ -968,44 +973,25 @@ function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchR
                 'span',
                 {
                   style: {
-                    color: '#FFFFFF',
+                    color: '#5E3A10',
                     fontSize: 20,
                     lineHeight: '24px',
                     fontWeight: 900,
                     textAlign: 'center',
                     fontFamily: 'inherit',
+                    textShadow: '0 1px 0 rgba(248,224,142,0.6)',
                   } as any,
                 },
                 ackText,
               ),
             )
           : (
-            <TouchableOpacity
+            <GoldButton
+              label={ackText}
               onPress={handleAck}
-              activeOpacity={0.84}
-              accessibilityRole="button"
+              fullWidth
               accessibilityLabel={ackText}
-              style={{
-                width: '100%',
-                minHeight: 58,
-                borderRadius: 22,
-                backgroundColor: '#10B981',
-                borderWidth: 2,
-                borderColor: '#34D399',
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 14,
-                paddingHorizontal: 26,
-                ...Platform.select({
-                  ios: { shadowColor: '#10B981', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.78, shadowRadius: 16 },
-                  android: { elevation: 14 },
-                }),
-              }}
-            >
-              <Text style={{ color: '#FFFFFF', fontSize: 20, lineHeight: 24, fontWeight: '900', textAlign: 'center' }}>
-                {ackText}
-              </Text>
-            </TouchableOpacity>
+            />
           )}
       </View>
     </View>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Salinda · Polished Color Bubbles — exactly what I meant</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"Heebo","Segoe UI",sans-serif;}
+  body{
+    background-image:
+      repeating-linear-gradient(90deg, rgba(0,0,0,.18) 0 2px, transparent 2px 9px),
+      linear-gradient(160deg,#241608,#160d04);
+    color:#f3e4c0;padding:30px 18px 60px;
+  }
+  h1{font-size:21px;text-align:center;color:#f4cd5a;margin-bottom:4px;}
+  .sub{text-align:center;color:#9a865f;font-size:13px;margin-bottom:8px;}
+  .explain{max-width:640px;margin:0 auto 28px;font-size:13px;line-height:1.7;color:#bfa878;
+    background:rgba(255,255,255,.03);border:1px solid rgba(244,205,90,.15);border-radius:12px;padding:14px 18px;}
+  .explain b{color:#f4cd5a;}
+  .section-title{font-size:15px;font-weight:800;margin:30px 0 16px;color:#f4cd5a;
+    border-bottom:1px solid rgba(244,205,90,.22);padding-bottom:6px;}
+  .row{display:flex;flex-wrap:wrap;gap:26px 18px;justify-content:center;align-items:flex-start;}
+  .cell{flex:1 1 240px;max-width:280px;text-align:center;}
+  .name{font-size:12px;color:#9a865f;margin-bottom:12px;letter-spacing:.5px;text-transform:uppercase;}
+
+  /* ===== THE "DIFFERENT BUBBLE" =====
+     Glossy gel: volumetric gradient (light top -> deep bottom),
+     a bright sheen on the upper half, soft outer shadow, crisp light
+     rim. No wood grain. This is the "polished D" treatment generalised
+     to every semantic color. */
+  .gel{
+    position:relative;display:inline-block;
+    border-radius:30px;padding:18px 26px 20px;
+    border:2px solid var(--rim);
+    background:linear-gradient(180deg, var(--c-top) 0%, var(--c-mid) 48%, var(--c-bot) 100%);
+    box-shadow:
+      0 10px 22px rgba(0,0,0,.45),
+      inset 0 2px 2px rgba(255,255,255,.55),
+      inset 0 -8px 14px rgba(0,0,0,.22);
+    color:var(--c-text);
+  }
+  /* the glossy sheen on the top half */
+  .gel::before{
+    content:"";position:absolute;left:8px;right:8px;top:5px;height:42%;
+    border-radius:24px 24px 40px 40px;
+    background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
+    pointer-events:none;
+  }
+  .gel .ttl{position:relative;display:block;font-size:19px;font-weight:900;margin-bottom:3px;
+    text-shadow:0 1px 1px rgba(255,255,255,.35);}
+  .gel .msg{position:relative;font-size:15px;font-weight:800;line-height:1.4;}
+  /* matching tail */
+  .tail{width:0;height:0;margin:-1px auto 0;
+    border-left:13px solid transparent;border-right:13px solid transparent;
+    border-top:15px solid var(--c-bot);}
+
+  /* ---- color tokens per tone (volumetric, premium) ---- */
+  .turn{ --c-top:#9AD2FF; --c-mid:#2E7FE0; --c-bot:#14458F; --rim:#0C3470; --c-text:#06224d; }
+  .welcome{ --c-top:#B6F2C6; --c-mid:#2EB85C; --c-bot:#15803D; --rim:#0E5C2C; --c-text:#08381b; }
+  .celebrate{ --c-top:#FBC4E4; --c-mid:#E248A0; --c-bot:#A2156A; --rim:#7A0E4F; --c-text:#4d0631; }
+  .warning{ --c-top:#FFC6B2; --c-mid:#F0503E; --c-bot:#B11E12; --rim:#831309; --c-text:#530a04; }
+  .orange{ --c-top:#FFD9A8; --c-mid:#F59331; --c-bot:#C25E0C; --rim:#8A4108; --c-text:#5a2c05; }
+  .gold{ --c-top:#FBE490; --c-mid:#E0B347; --c-bot:#9C6F1C; --rim:#7A4F12; --c-text:#2b1d08; }
+
+  .footer{max-width:640px;margin:34px auto 0;font-size:13px;line-height:1.7;color:#bfa878;
+    background:rgba(255,255,255,.03);border:1px solid rgba(244,205,90,.15);border-radius:12px;padding:16px 18px;}
+  .footer b{color:#f4cd5a;}
+</style>
+</head>
+<body>
+  <h1>✨ בדיוק למה התכוונתי</h1>
+  <div class="sub">סגנון "D מלוטש" — אבל בכל הצבעים הסמנטיים · בועה חדשה</div>
+
+  <div class="explain">
+    <b>הרעיון:</b> אותו טיפול "זהב מלוטש" שאהבת (נפח + ברק + צל רך, בלי פסים) —
+    מיושם על <b>כל צבע</b> במקום רק על זהב. כך כחול עדיין אומר "תורך", ירוק "ברוך הבא",
+    ורוד "ניצחון" — אבל כולם נראים יקרים ועקביים. הצורה החדשה: <b>ג'ל מבריק</b> עם היילייט
+    בחצי העליון ושפה בהירה.
+  </div>
+
+  <div class="section-title">הבועה החדשה — בכל הצבעים</div>
+  <div class="row">
+    <div class="cell">
+      <div class="name">turn · "תורך"</div>
+      <div class="gel turn"><span class="ttl">תורך!</span><span class="msg">בחר קלף כדי לשחק</span></div>
+      <div class="tail turn"></div>
+    </div>
+    <div class="cell">
+      <div class="name">welcome · "ברוך הבא"</div>
+      <div class="gel welcome"><span class="ttl">ברוך הבא!</span><span class="msg">בוא נלמד לשחק יחד</span></div>
+      <div class="tail welcome"></div>
+    </div>
+    <div class="cell">
+      <div class="name">celebrate · "ניצחון"</div>
+      <div class="gel celebrate"><span class="ttl">כל הכבוד! 🏆</span><span class="msg">ניצחת את היד</span></div>
+      <div class="tail celebrate"></div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:24px;">
+    <div class="cell">
+      <div class="name">warning · "אזהרה"</div>
+      <div class="gel warning"><span class="ttl">שים לב</span><span class="msg">נשארו לך 3 מהלכים</span></div>
+      <div class="tail warning"></div>
+    </div>
+    <div class="cell">
+      <div class="name">orange · "טיפ"</div>
+      <div class="gel orange"><span class="ttl">טיפ</span><span class="msg">נסה לחבר זוגות מספרים</span></div>
+      <div class="tail orange"></div>
+    </div>
+    <div class="cell">
+      <div class="name">gold · "מיוחד"</div>
+      <div class="gel gold"><span class="ttl">בונוס!</span><span class="msg">קיבלת 50 מטבעות</span></div>
+      <div class="tail gold"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <b>מה הופך אותן ל"עולמיות" (ולא זולות):</b><br>
+    • <b>נפח:</b> מעבר מבהיר למעלה לכהה למטה → תחושת כדור/ג'ל תלת-ממדי.<br>
+    • <b>ברק:</b> היילייט לבן בחצי העליון, כמו אור שנופל על משטח מבריק.<br>
+    • <b>שפה בהירה + צל רך:</b> הבועה "מרחפת" מעל המסך.<br>
+    • <b>צבעים עמוקים יותר:</b> במקום תכלת/ורוד שטוח — גוונים עשירים ורוויים.<br><br>
+    אם זה הכיוון — תגיד לי, ואני מיישם את זה ב-<b>HappyBubble.tsx</b> עם expo-linear-gradient.
+  </div>
+</body>
+</html>

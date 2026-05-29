@@ -58,8 +58,11 @@ import { GoldDieFace } from './AnimatedDice';
 import { InteractiveTutorialScreen, type TutorialProgressPayload } from './src/tutorial/InteractiveTutorialScreen';
 import { isL6WildTutorialSelectionReady } from './src/tutorial/l6WildSelection';
 import type { L4EquationProgressMissing } from './src/tutorial/l4EquationProgress';
+import { getEquationMissingState, equationGuidanceMessageKey } from './src/equation/equationBuildGuidance';
 import { tutorialBus } from './src/tutorial/tutorialBus';
 import { HappyBubble } from './src/components/HappyBubble';
+import { GoldRoomScreen } from './src/goldroom/GoldRoomScreen';
+import { GoldButton } from './components/GoldButton';
 import { CoinAwardCelebrationCard } from './src/components/CoinAwardCelebrationCard';
 // RoamingDice inlined below (was ./components/RoamingDice)
 import { GoldDiceButton } from './components/GoldDiceButton';
@@ -1162,6 +1165,10 @@ function isBlockingGameplayNotification(notification: Notification | null | unde
 
 const INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX = 'confirm-staged-invalid';
 
+// Real-game equation-builder guidance bubble (auto-dismiss). `card-hint-` prefix
+// scopes visibility to the build/solve toast phases (see getVisibleGameplayNotifications).
+const EQ_MISSING_NOTIFICATION_PREFIX = 'card-hint-eq-missing';
+
 function getRegularStagedSelectionErrorKey(st: GameState): 'confirm.needNumberOrWild' | 'confirm.sumMismatch' | null {
   if (st.isTutorial) return null;
   if (st.phase !== 'solved' || st.hasPlayedCards || st.equationResult === null) return null;
@@ -1910,6 +1917,17 @@ function getL11MultiPlayTutorialMissingKey(
   if (positiveNumberCount < 2) return 'tutorial.multiPlayExerciseMore.needSecondNumber';
   if (!hasWild) return 'tutorial.multiPlayExerciseMore.needWild';
   return null;
+}
+
+function emitTutorialPlayedCards(stagedCards: Card[]): void {
+  if (stagedCards.length === 0) return;
+  tutorialBus.emitUserEvent({
+    kind: 'userPlayedCards',
+    count: stagedCards.length,
+    hasZero: stagedCards.some((c) => c.type === 'number' && c.value === 0),
+    hasWild: stagedCards.some((c) => c.type === 'wild'),
+    positiveNumberCount: stagedCards.filter((c) => c.type === 'number' && (c.value ?? 0) > 0).length,
+  });
 }
 
 function computeStagedResult(staged: Card[]): number | null {
@@ -3488,6 +3506,8 @@ function gameReducer(
         ? notifs.filter((n) => !n.id.startsWith('frac-'))
         : id.startsWith(INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX)
           ? notifs.filter((n) => !n.id.startsWith(INVALID_STAGED_SELECTION_NOTIFICATION_PREFIX))
+        : id.startsWith(EQ_MISSING_NOTIFICATION_PREFIX)
+          ? notifs.filter((n) => !n.id.startsWith(EQ_MISSING_NOTIFICATION_PREFIX))
         : notifs;
       const next = [...baseList, payload];
       if (id.startsWith('onb-')) {
@@ -7644,12 +7664,24 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       state.validTargets.some(t => t.result === finalResult) ||
       l4GuidedValidSums.includes(finalResult)
     );
+  // Explicit "missing" state for the live game. A third die without a second
+  // sign, or a second sign cycled in without a third die, must never count as
+  // ready — even when a valid 2-dice result happens to exist. A second sign
+  // supplied by a played hand card is exempt (it validly closes 2 dice).
+  const realGameMissing = getEquationMissingState({
+    filledCount,
+    dice3Placed: dice3 !== null,
+    hasOp1: effectiveOp1 !== null,
+    hasOp2: effectiveOp2 !== null,
+    op2FromHandCard: state.equationHandSlots[1] != null && handOp1 != null,
+  });
   const ok =
     finalResult !== null &&
     Number.isFinite(finalResult) &&
     finalResult >= 0 &&
     Number.isInteger(finalResult) &&
     filledCount >= 2 &&
+    realGameMissing === null &&
     matchesValidTarget &&
     eqOpReady &&
     jokerCommitReady;
@@ -7861,6 +7893,34 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     loop.start();
     return () => loop.stop();
   }, [isSolved, state.isTutorial, dice1, dice2, dice3, effectiveOp1, effectiveOp2, l4NeedsFirstOperatorPulse, l4NeedsSecondOperatorPulse, l4NeedsThirdDiePulse, needsSignPulse]);
+
+  // Real-game guidance bubble (auto-dismiss after 3s): when the equation enters
+  // an explicit "missing" state, push a NotificationZone bubble explaining why
+  // it can't be confirmed. The tutorial owns its own guidance and suppresses the
+  // NotificationZone, so this is gated to the live game. The ref guard fires one
+  // push per entry into a missing state; a unique id keeps the zone's entry
+  // animation + auto-dismiss timer re-running each time, while the reducer's
+  // EQ_MISSING_NOTIFICATION_PREFIX dedup ensures only one bubble exists at once.
+  const eqMissingNotifiedRef = useRef<L4EquationProgressMissing>(null);
+  useEffect(() => {
+    if (state.isTutorial || !showBuilder || isSolved || !interactive) {
+      eqMissingNotifiedRef.current = null;
+      return;
+    }
+    if (realGameMissing === eqMissingNotifiedRef.current) return;
+    eqMissingNotifiedRef.current = realGameMissing;
+    const messageKey = equationGuidanceMessageKey(realGameMissing);
+    if (!messageKey) return;
+    dispatch({
+      type: 'PUSH_NOTIFICATION',
+      payload: {
+        id: `${EQ_MISSING_NOTIFICATION_PREFIX}-${Date.now()}`,
+        message: t(messageKey),
+        style: 'warning',
+        autoDismissMs: 3000,
+      },
+    });
+  }, [realGameMissing, state.isTutorial, showBuilder, isSolved, interactive, dispatch, t]);
 
   if (!showBuilder) return null;
 
@@ -10429,6 +10489,20 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
           dispatch({ type: 'CLEAR_EQ_HAND_PICK' });
         } else {
           dispatch({ type: 'SELECT_EQ_OP', card });
+          const shouldAutoPlaceL5Operator =
+            state.isTutorial &&
+            tutorialBus.getL5GuidedMode() &&
+            tutorialBus.getL5aBlockFanTaps() &&
+            !tutorialBus.getTutorialPreserveHandOrder();
+          const placedOperatorOp = normalizeOperationToken(card.operation);
+          if (shouldAutoPlaceL5Operator && placedOperatorOp) {
+            dispatch({ type: 'PLACE_EQ_OP', position: 0 });
+            tutorialBus.emitUserEvent({
+              kind: 'l5OperatorPlaced',
+              op: placedOperatorOp,
+              position: 0,
+            });
+          }
         }
       }
       else if (card.type === 'fraction') {
@@ -10463,11 +10537,6 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
           return;
         }
         if (card.value !== state.equationResult) {
-          tutorialBus.emitUserEvent({
-            kind: 'l4Step3WrongCard',
-            cardId: card.id,
-          });
-          state.stagedCards.forEach((stagedCard) => dispatch({ type: 'UNSTAGE_CARD', card: stagedCard }));
           return;
         }
         const isCurrentCardStaged = state.stagedCards.some(
@@ -10779,6 +10848,7 @@ function BottomControlsBar() {
       }
     }
     if (soundOn && state.stagedCards.length >= 2) playPlaceMultipleSound();
+    if (state.isTutorial) emitTutorialPlayedCards(state.stagedCards);
     dispatch({ type: 'CONFIRM_STAGED' });
   }, [dispatch, l6ResultsMiniCardsOnly, placeCardsDisabled, playPlaceMultipleSound, soundOn, state, t]);
 
@@ -14161,10 +14231,33 @@ function OverflowSwapOverlay({
   // Flip animation for the surprise card
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [isFlipping, setIsFlipping] = useState(false);
+  const randomResolveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const randomChoiceSentRef = useRef(false);
+
+  useEffect(() => () => {
+    if (randomResolveTimeoutRef.current != null) {
+      clearTimeout(randomResolveTimeoutRef.current);
+      randomResolveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const finalizeRandomChoice = useCallback(() => {
+    if (randomChoiceSentRef.current) return;
+    randomChoiceSentRef.current = true;
+    onSelectPileChoice('random');
+  }, [onSelectPileChoice]);
 
   const handleRandomTap = useCallback(() => {
     if (locked || isFlipping) return;
     setIsFlipping(true);
+    randomChoiceSentRef.current = false;
+    if (randomResolveTimeoutRef.current != null) {
+      clearTimeout(randomResolveTimeoutRef.current);
+    }
+    randomResolveTimeoutRef.current = setTimeout(() => {
+      randomResolveTimeoutRef.current = null;
+      finalizeRandomChoice();
+    }, 900);
     flipAnim.setValue(0);
     Animated.timing(flipAnim, {
       toValue: 1,
@@ -14173,9 +14266,9 @@ function OverflowSwapOverlay({
       easing: Easing.inOut(Easing.cubic),
     }).start(({ finished }) => {
       if (!finished) return;
-      setTimeout(() => onSelectPileChoice('random'), 1000);
+      if (randomResolveTimeoutRef.current == null) finalizeRandomChoice();
     });
-  }, [flipAnim, isFlipping, locked, onSelectPileChoice]);
+  }, [finalizeRandomChoice, flipAnim, isFlipping, locked]);
 
   const backRotateY = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['0deg', '90deg', '90deg'] });
   const frontRotateY = flipAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['-90deg', '-90deg', '0deg'] });
@@ -17996,6 +18089,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
         return;
       }
     }
+    if (state.isTutorial) emitTutorialPlayedCards(state.stagedCards);
     dispatch({ type: 'CONFIRM_STAGED' });
   }, [dispatch, l6ResultsMiniCardsOnly, placeCardsDisabled, state, t]);
   const showSoloBuildConfirmHint =
@@ -20635,6 +20729,14 @@ export function PlayModeChoiceScreen({
   const responsive = useResponsiveLayout();
   const preferredNameSeededRef = useRef(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [goldRoomOpen, setGoldRoomOpen] = useState(false);
+  // Dev-only preview deep link (?goldroom=1) opens the gold room without an
+  // admin login while iterating. Disabled in production builds (__DEV__ false).
+  const forceGoldRoom =
+    __DEV__ &&
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    /[?&]goldroom=1/.test(window.location.search);
   const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 14 : 24;
@@ -20708,10 +20810,17 @@ export function PlayModeChoiceScreen({
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
 
             {isFeedbackAdmin && (
-              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ alignItems: 'center', marginBottom: 12, gap: 10 }}>
                 <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
+                {/* Admin-only entry to the new, separate gold tutorial. */}
+                <View style={{ width: 220 }}>
+                  <GoldButton label="🪙 חדר הזהב" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="פתח את חדר הזהב" />
+                </View>
               </View>
             )}
+            {/* The room renders only when opened; only its trigger is admin-gated.
+                A dev deep-link (?goldroom=1) can also open it for preview. */}
+            <GoldRoomScreen visible={goldRoomOpen || forceGoldRoom} onClose={() => setGoldRoomOpen(false)} />
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
