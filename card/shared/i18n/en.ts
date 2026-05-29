@@ -52,6 +52,8 @@ export const en: Record<string, string> = {
   'equation.handSlotsFull': 'Remove a card from the equation first (max two operation cards)',
   'equation.operatorNotInStage': 'That operation is not allowed in this practice stage.',
   'equation.displayMismatch': 'This equation does not match the current dice or result.',
+  'equation.missingSecondOperator': 'Add a sign before the next number.',
+  'equation.missingThirdDie': 'Add a number or remove the extra sign.',
   'equation.commitOpMismatch': 'That operation card does not match the operator shown in the equation.',
   'equation.evalOrderHint': '× and ÷ are calculated before + and − (same as in class). The score follows this order.',
 

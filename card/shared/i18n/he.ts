@@ -63,6 +63,8 @@ export const he: Record<string, string> = {
   'equation.handSlotsFull': 'הסר קלף מהמשוואה קודם (עד שני קלפי פעולה)',
   'equation.operatorNotInStage': 'סימן הפעולה הזה לא מותר בשלב התרגול הנוכחי.',
   'equation.displayMismatch': 'התרגיל לא תואם לקוביות או לתוצאה שנבחרה.',
+  'equation.missingSecondOperator': 'הוסיפו סימן לפני המספר הבא.',
+  'equation.missingThirdDie': 'הוסיפו מספר או הסירו את הסימן המיותר.',
   'equation.commitOpMismatch': 'קלף הפעולה לא תואם לסימן שמופיע בתרגיל.',
   'equation.evalOrderHint': 'כפל וחילוק לפני חיבור וחיסור (כמו בכיתה). התוצאה מחושבת לפי הסדר הזה.',
 
