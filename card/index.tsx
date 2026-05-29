@@ -2075,6 +2075,14 @@ function shouldShowSolvedPromptInlineBackButton(options: {
   return options.showSolvedPickCardsPrompt && !options.isTutorial;
 }
 
+function shouldShowSolvedPickCardsPrompt(options: {
+  hideSolvedResultsUi: boolean;
+  stagedCardsCount: number;
+  hasSelectedMiniEquation: boolean;
+}): boolean {
+  return options.hideSolvedResultsUi && options.stagedCardsCount === 0 && !options.hasSelectedMiniEquation;
+}
+
 function incrementSoloSessionCounter(
   stats: SoloSessionStats | null,
   key: 'drawCount' | 'swapCount' | 'fullEquationCount' | 'slindaFromBankCount' | 'wildFromBankCount',
@@ -6943,6 +6951,7 @@ export {
   shouldShowDrawForfeitButton,
   shouldShowConfirmEquationButton,
   shouldShowSolvedPromptInlineBackButton,
+  shouldShowSolvedPickCardsPrompt,
 };
 export { GameProvider, useGame };
 export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType, GamePhase, DiceResult, EquationOption };
@@ -17494,9 +17503,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     !isBotTurnAny &&
     state.phase === 'solved' &&
     !state.hasPlayedCards;
-  const showSolvedPickCardsPrompt =
-    hideSolvedResultsUi &&
-    state.stagedCards.length === 0;
+  const showSolvedPickCardsPrompt = shouldShowSolvedPickCardsPrompt({
+    hideSolvedResultsUi,
+    stagedCardsCount: state.stagedCards.length,
+    hasSelectedMiniEquation: selectedEquationForDisplay !== null,
+  });
   const showSolvedPromptInlineBackButton = shouldShowSolvedPromptInlineBackButton({
     showSolvedPickCardsPrompt,
     isTutorial: state.isTutorial,
@@ -17589,6 +17600,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     setParensToggleTouched(false);
     setSolveExerciseHidden(false);
     setSolveChipPulseKey(prev => prev + 1);
+    if (!state.isTutorial) {
+      setResultsChipHiddenThisTurn(true);
+      setResultsChipBoostedPulse(false);
+    }
     if (state.isTutorial && tutorialBus.getL6GuidedMode()) {
       tutorialBus.emitFanDemo({ kind: 'eqFillFromEquation', equation: eq.equation });
     }
@@ -19793,38 +19808,21 @@ function BotMissionStrip(
   );
 }
 
-function BotThinkingOverlay({ topOffset }: { topOffset: number }) {
-  const { dispatch } = useGame();
+function BotThinkingOverlay({ topOffset: _topOffset }: { topOffset: number }) {
   return (
     <View
       testID="bot-thinking-overlay"
       pointerEvents="auto"
       style={{
         position: 'absolute',
-        bottom: 120,
+        top: 0,
+        bottom: 0,
         left: 0,
         right: 0,
         zIndex: 400,
-        alignItems: 'center',
-        paddingTop: topOffset,
+        backgroundColor: 'transparent',
       }}
-    >
-      <TouchableOpacity
-        testID="bot-speed-up"
-        onPress={() => dispatch({ type: 'BOT_STEP' })}
-        style={{
-          backgroundColor: 'rgba(30,41,59,0.85)',
-          borderRadius: 20,
-          paddingHorizontal: 18,
-          paddingVertical: 8,
-          borderWidth: 1,
-          borderColor: 'rgba(148,163,184,0.3)',
-        }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={{ color: '#CBD5E1', fontSize: 13, fontWeight: '600' }}>⚡</Text>
-      </TouchableOpacity>
-    </View>
+    />
   );
 }
 

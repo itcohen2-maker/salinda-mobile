@@ -2,6 +2,7 @@ import {
   initialState,
   shouldShowConfirmEquationButton,
   shouldShowDrawForfeitButton,
+  shouldShowSolvedPickCardsPrompt,
   shouldShowSolvedPromptInlineBackButton,
 } from '../../index';
 import type { GameState } from '../../index';
@@ -136,6 +137,38 @@ describe('shouldShowSolvedPromptInlineBackButton', () => {
       shouldShowSolvedPromptInlineBackButton({
         showSolvedPickCardsPrompt: false,
         isTutorial: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('shouldShowSolvedPickCardsPrompt', () => {
+  it('shows the prompt for an empty solved selection before a mini equation is picked', () => {
+    expect(
+      shouldShowSolvedPickCardsPrompt({
+        hideSolvedResultsUi: true,
+        stagedCardsCount: 0,
+        hasSelectedMiniEquation: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('hides the green prompt after selecting a mini equation', () => {
+    expect(
+      shouldShowSolvedPickCardsPrompt({
+        hideSolvedResultsUi: true,
+        stagedCardsCount: 0,
+        hasSelectedMiniEquation: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides the prompt after cards are selected', () => {
+    expect(
+      shouldShowSolvedPickCardsPrompt({
+        hideSolvedResultsUi: true,
+        stagedCardsCount: 1,
+        hasSelectedMiniEquation: false,
       }),
     ).toBe(false);
   });

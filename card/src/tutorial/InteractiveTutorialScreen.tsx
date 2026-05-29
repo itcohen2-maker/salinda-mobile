@@ -8154,7 +8154,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               }}
               accessibilityLabel={locale === 'he'
                 ? 'המשיכו למתקדמים ותרוויחו 20 מטבעות סלינדה'
-                : 'Continue to advanced and earn 20 Slinda coins'}
+                : t('tutorial.coreComplete.advancedBtn')}
               style={{
                 paddingVertical: 15,
                 paddingHorizontal: 28,
@@ -8166,20 +8166,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 alignItems: 'center',
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 }}>
-                <Text
-                  style={{ color: '#431407', fontWeight: '900', fontSize: Platform.OS === 'android' ? 14 : 17 }}
-                  adjustsFontSizeToFit
-                  numberOfLines={1}
-                  minimumFontScale={0.75}
-                >
-                  {t('tutorial.coreComplete.advancedBtn')}
-                </Text>
-                <SlindaCoin size={Platform.OS === 'android' ? 17 : 20} />
-                <Text style={{ color: '#431407', fontWeight: '900', fontSize: Platform.OS === 'android' ? 14 : 17 }}>
-                  20
-                </Text>
-              </View>
+              <Text
+                style={{ color: '#431407', fontWeight: '900', fontSize: Platform.OS === 'android' ? 14 : 17, textAlign: 'center' }}
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                minimumFontScale={0.75}
+              >
+                {t('tutorial.coreComplete.advancedBtn')}
+              </Text>
             </TouchableOpacity>
             {/* Real game ג€” exits tutorial */}
             <TouchableOpacity

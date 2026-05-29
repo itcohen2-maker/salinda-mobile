@@ -52,6 +52,7 @@ const ACTION_AMBER = '#a34705';
 const TEXT_MAIN = '#f5f1e6';
 const TEXT_DIM = '#b9b0a0';
 const TEXT_MUTE = '#8a8275';
+const LOBBY_HORIZONTAL_PADDING = 24;
 const DEFAULT_SUMMARY_MAX_PARTICIPANTS = 4;
 const DEFAULT_SUMMARY_VISIBILITY: LobbyTableVisibility = 'public';
 
@@ -738,7 +739,7 @@ export function LobbyScreen({
   const configured = (!isHost && !!roomCode) || configSaved || currentTable?.configuredDifficulty != null;
   const shouldRightAlignLeaveButton = Platform.OS === 'android' || (!configured && isRTL);
   const lobbyShellWidth = Platform.OS === 'web'
-    ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, responsive.width)
+    ? Math.min(WEB_GAME_PLAYFIELD_MAX_WIDTH, Math.max(0, responsive.width - LOBBY_HORIZONTAL_PADDING * 2))
     : responsive.width;
   // Keep Hebrew text direction in the panel without pushing the whole setup UI to the right.
   const rtlDirection = isRTL && Platform.OS === 'web' ? ({ direction: 'rtl' } as const) : null;
@@ -1195,7 +1196,7 @@ export function LobbyScreen({
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: ROOT_BG },
-  container: { padding: 24, paddingTop: 60, paddingBottom: 44, alignItems: 'center' },
+  container: { padding: LOBBY_HORIZONTAL_PADDING, paddingTop: 60, paddingBottom: 44, alignItems: 'center' },
   contentFrame: { width: '100%', alignSelf: 'center' },
   langRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center' },
   langLabel: { color: TEXT_MUTE, fontSize: 12 },
