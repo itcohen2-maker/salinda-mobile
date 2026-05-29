@@ -1,37 +1,45 @@
 // ============================================================
 // GoldRoomScreen — "חדר הזהב"
-// A brand-new, ADMIN-ONLY onboarding tutorial in its own separate
+// A brand-new, ADMIN-ONLY onboarding center in its own separate
 // entry. Full-screen overlay (RN Modal) that floats ABOVE the live
 // app and changes nothing in the existing screens.
 //
-// Architecture (per UX brief — low cognitive load, action-focused,
-// progressive disclosure):
-//  • Linear step counter (1..4).
-//  • Steps 1-3 advance with "המשך"; step 4 turns into "סיום" and
-//    closes the modal. Back + Skip are always available.
-//  • Numbers mirror the real rules: start with 7 cards, win
-//    ("Golden Rule") at exactly 2 cards.
-//  • Visual focus layer (Spotlight): instead of placeholder emojis
-//    the screen dims and highlights the relevant UX region per step.
-//    Targets are expressed as screen fractions so that — once this
-//    runs over a real game board — they can be swapped for measured
-//    element rects with no structural change.
+// Structure — Hub → Task (implemented with the app's own patterns,
+// no react-navigation; the app uses a custom router):
+//   • TrainingHub  — a list of gold "training task" cards.
+//   • TrainingTask — a task's step flow (spotlight tutorial).
+//
+// Task flow architecture (per UX brief — low cognitive load,
+// action-focused, progressive disclosure):
+//   • Linear step counter (1..N).
+//   • Steps 1..N-1 advance with "המשך"; the last turns into "סיום"
+//     and returns to the Hub. Back + Skip are always available.
+//   • Numbers mirror the real rules: start with 7 cards, win
+//     ("Golden Rule") at exactly 2 cards.
+//   • Visual focus layer (Spotlight): the screen dims and highlights
+//     the relevant UX region per step. Targets are screen fractions
+//     so they can be swapped for measured element rects once this
+//     runs over a real game board — no structural change.
 // ============================================================
 
 import React, { useState, useCallback } from 'react';
-import { Modal, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
+import { useTrainingProgress } from './useTrainingProgress';
 
 interface GoldRoomScreenProps {
   visible: boolean;
   onClose: () => void;
+  // Launches the REAL live-practice tutorial engine (the existing
+  // InteractiveTutorialScreen) over the actual game board. When provided,
+  // the "basics" task runs real practice instead of the placeholder spotlight.
+  onStartLiveTutorial?: () => void;
 }
 
 type CardAnchor = 'top' | 'bottom' | 'center';
 
-// Spotlight target, as fractions (0..1) of the screen. Replace with measured
-// element rects when the room runs over a live board.
+// Spotlight target, as fractions (0..1) of the screen.
 interface Spot {
   top: number;
   left: number;
@@ -47,7 +55,16 @@ interface Step {
   cardAnchor: CardAnchor;
 }
 
-const STEPS: Step[] = [
+interface Task {
+  id: string;
+  badge: string;
+  title: string;
+  desc: string;
+  steps?: Step[]; // undefined → "coming soon" (locked card)
+}
+
+// ---- Task: "יסודות המשחק" (the basics) ----
+const BASICS_STEPS: Step[] = [
   {
     tag: 'חדר הזהב',
     title: 'ברוך הבא! 🪙',
@@ -76,14 +93,33 @@ const STEPS: Step[] = [
   },
 ];
 
+// ---- The Hub's task catalog ----
+const TASKS: Task[] = [
+  { id: 'basics', badge: '🪙', title: 'יסודות המשחק', desc: 'הערימה, המניפה, וחוק הזהב — תוך דקה.', steps: BASICS_STEPS },
+  { id: 'operations', badge: '➗', title: 'פעולות חשבון', desc: 'חיבור, חיסור, כפל וחילוק על הקלפים.' },
+  { id: 'fractions', badge: '½', title: 'שברים', desc: 'איך משחקים עם קלפי שברים.' },
+  { id: 'jokers', badge: '🃏', title: 'ג׳וקרים', desc: 'הקלף שמשנה את כללי המשחק.' },
+];
+
 // Gold tones sampled from the physical gold plank — "polished D" language.
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
 const DIM = 'rgba(8,5,2,0.84)';
 
-// Dark mask with a clear, glowing cutout over the target (built from four dim
-// strips around the rect — no SVG masking needed, works on web + native).
-function Spotlight({ spot }: { spot?: Spot }) {
-  const { width: W, height: H } = useWindowDimensions();
+function CloseButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel="יציאה">
+      <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.closeBtn}>
+        <Text style={styles.closeText}>✕</Text>
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+// Dark mask with a clear, glowing cutout over the target (four dim strips +
+// a glow ring — no SVG masking, works on web + native). Sizes are fractions
+// of the rendered container (passed in), not the window, so it stays aligned
+// inside the capped phone frame on web.
+function Spotlight({ spot, W, H }: { spot?: Spot; W: number; H: number }) {
   if (!spot) {
     return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />;
   }
@@ -97,7 +133,6 @@ function Spotlight({ spot }: { spot?: Spot }) {
       <View style={{ position: 'absolute', left: 0, right: 0, top: t + h, bottom: 0, backgroundColor: DIM }} />
       <View style={{ position: 'absolute', top: t, height: h, left: 0, width: l, backgroundColor: DIM }} />
       <View style={{ position: 'absolute', top: t, height: h, left: l + w, right: 0, backgroundColor: DIM }} />
-      {/* glowing highlight ring around the focused element */}
       <View
         style={{
           position: 'absolute',
@@ -119,86 +154,213 @@ function Spotlight({ spot }: { spot?: Spot }) {
   );
 }
 
-export function GoldRoomScreen({ visible, onClose }: GoldRoomScreenProps) {
-  // Linear step counter, 0-based over STEPS (i.e. steps 1..4).
+// ---- Hub: list of training tasks ----
+// Grid tile (2-per-row). Gold-themed; completed shows a green ✓ badge.
+function GoldTaskCard({ task, done, onPress }: { task: Task; done: boolean; onPress: () => void }) {
+  const locked = !task.steps;
+  const state = locked ? '🔒 בקרוב' : done ? 'הושלם ✓' : 'התחל ›';
+  return (
+    <Pressable
+      disabled={locked}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${task.title}${done ? ' (הושלם)' : locked ? ' (בקרוב)' : ''}`}
+      accessibilityState={{ disabled: locked }}
+      style={[styles.tile, { opacity: locked ? 0.6 : 1 }]}
+    >
+      <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.tileFace}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.sheen}
+        />
+        {done ? (
+          <View style={styles.tileCheck}>
+            <Text style={styles.tileCheckText}>✓</Text>
+          </View>
+        ) : null}
+        <Text style={styles.tileBadge}>{task.badge}</Text>
+        <Text style={styles.tileTitle} numberOfLines={1}>
+          {task.title}
+        </Text>
+        <Text style={[styles.tileState, done && styles.tileStateDone]}>{state}</Text>
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+function TrainingHub({
+  tasks,
+  isComplete,
+  onSelect,
+  onClose,
+}: {
+  tasks: Task[];
+  isComplete: (id: string) => boolean;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const doneCount = tasks.filter((tk) => tk.steps && isComplete(tk.id)).length;
+  const totalUnlocked = tasks.filter((tk) => tk.steps).length;
+  return (
+    <View style={styles.root}>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
+      <View style={styles.topbar}>
+        <Text style={styles.hubHeader}>חדר הזהב 🪙</Text>
+        <CloseButton onPress={onClose} />
+      </View>
+      <ScrollView contentContainerStyle={styles.hubScroll} showsVerticalScrollIndicator={false}>
+        <Text style={styles.hubSub}>בחר משימת אימון · הושלמו {doneCount}/{totalUnlocked}</Text>
+        <View style={styles.grid}>
+          {tasks.map((task) => (
+            <GoldTaskCard key={task.id} task={task} done={isComplete(task.id)} onPress={() => task.steps && onSelect(task.id)} />
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* Admin/dev layer tracker — quick status line, dev builds only. */}
+      {__DEV__ ? (
+        <View pointerEvents="none" style={styles.tracker}>
+          <Text style={styles.trackerText}>
+            UI: Hub · Progress {doneCount}/{totalUnlocked} · Sync: AsyncReady ✓
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ---- Task: a single step flow ----
+function TrainingTask({
+  steps,
+  onExit,
+  onComplete,
+  onClose,
+}: {
+  steps: Step[];
+  onExit: () => void;
+  onComplete: () => void;
+  onClose: () => void;
+}) {
   const [index, setIndex] = useState(0);
-  const step = STEPS[index];
-  const isLast = index === STEPS.length - 1;
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const step = steps[index];
+  const isLast = index === steps.length - 1;
 
-  const handleClose = useCallback(() => {
-    setIndex(0);
-    onClose();
-  }, [onClose]);
+  const handleBack = useCallback(() => {
+    setIndex((i) => {
+      if (i > 0) return i - 1;
+      onExit(); // step 1 → back to the Hub (without marking complete)
+      return i;
+    });
+  }, [onExit]);
 
-  const handleBack = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
   const handleNext = useCallback(() => {
-    if (isLast) handleClose();
-    else setIndex((i) => Math.min(STEPS.length - 1, i + 1));
-  }, [isLast, handleClose]);
+    if (isLast) onComplete(); // "סיום" → mark done + back to the Hub
+    else setIndex((i) => Math.min(steps.length - 1, i + 1));
+  }, [isLast, onComplete, steps.length]);
 
   const anchorStyle =
     step.cardAnchor === 'top' ? styles.cardTop : step.cardAnchor === 'bottom' ? styles.cardBottom : styles.cardCenter;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.root}>
-        <Spotlight spot={step.spot} />
+    <View
+      style={styles.root}
+      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+    >
+      <Spotlight spot={step.spot} W={size.w} H={size.h} />
 
-        {/* top bar: skip + close */}
-        <View style={styles.topbar}>
-          <Pressable onPress={handleClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="דלג על ההדרכה">
-            <Text style={styles.skip}>דלג ›</Text>
-          </Pressable>
-          <Pressable onPress={handleClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="יציאה">
-            <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
+      <View style={styles.topbar}>
+        <Pressable onPress={onExit} hitSlop={10} accessibilityRole="button" accessibilityLabel="חזרה לחדר הזהב">
+          <Text style={styles.skip}>דלג ›</Text>
+        </Pressable>
+        <CloseButton onPress={onClose} />
+      </View>
 
-        {/* instruction card — anchored away from the highlighted region */}
-        <View style={[styles.cardLayer, anchorStyle]} pointerEvents="box-none">
-          <View style={styles.cardWidth}>
+      <View style={[styles.cardLayer, anchorStyle]} pointerEvents="box-none">
+        <View style={styles.cardWidth}>
+          <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.plank}>
             <LinearGradient
-              colors={GOLD}
-              locations={[0, 0.3, 0.6, 1]}
+              pointerEvents="none"
+              colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
-              style={styles.plank}
-            >
-              <LinearGradient
-                pointerEvents="none"
-                colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={styles.sheen}
-              />
-              <Text style={styles.stepTag}>{step.tag}</Text>
-              <Text style={styles.title}>{step.title}</Text>
-              <Text style={styles.body}>{step.body}</Text>
-            </LinearGradient>
+              style={styles.sheen}
+            />
+            <Text style={styles.stepTag}>{step.tag}</Text>
+            <Text style={styles.title}>{step.title}</Text>
+            <Text style={styles.body}>{step.body}</Text>
+          </LinearGradient>
 
-            {/* step dots */}
-            <View style={styles.dots}>
-              {STEPS.map((_, i) => (
-                <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
-              ))}
-            </View>
+          <View style={styles.dots}>
+            {steps.map((_, i) => (
+              <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+            ))}
+          </View>
 
-            {/* controls: back + continue/finish */}
-            <View style={styles.controls}>
-              {index > 0 ? (
-                <Pressable onPress={handleBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="חזור">
-                  <Text style={styles.backText}>‹ חזור</Text>
-                </Pressable>
-              ) : (
-                <View style={styles.backSpacer} />
-              )}
-              <View style={styles.nextWrap}>
-                <GoldButton label={isLast ? 'סיום' : 'המשך ›'} onPress={handleNext} fullWidth />
-              </View>
+          <View style={styles.controls}>
+            <Pressable onPress={handleBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={index > 0 ? 'חזור' : 'חזרה לחדר הזהב'}>
+              <Text style={styles.backText}>‹ חזור</Text>
+            </Pressable>
+            <View style={styles.nextWrap}>
+              <GoldButton label={isLast ? 'סיום' : 'המשך ›'} onPress={handleNext} fullWidth />
             </View>
           </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRoomScreenProps) {
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const { isComplete, markComplete } = useTrainingProgress();
+
+  const close = useCallback(() => {
+    setActiveTaskId(null);
+    onClose();
+  }, [onClose]);
+
+  // Selecting a task. "basics" launches the REAL live-practice tutorial
+  // (measured highlights over the real board) when wired; everything else
+  // falls back to the in-room step flow.
+  const handleSelect = useCallback(
+    (id: string) => {
+      if (id === 'basics' && onStartLiveTutorial) {
+        close();
+        onStartLiveTutorial();
+        return;
+      }
+      setActiveTaskId(id);
+    },
+    [close, onStartLiveTutorial],
+  );
+
+  const activeTask = TASKS.find((tk) => tk.id === activeTaskId);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+      {/* On a wide desktop browser, frame the room to a phone-like width and
+          center it so the layout (tiles, top bar, exit button) doesn't smear
+          across the screen. On native this is a no-op full-screen view. */}
+      <View style={styles.backdrop}>
+        <View style={styles.frame}>
+          {activeTask && activeTask.steps ? (
+            <TrainingTask
+              key={activeTask.id}
+              steps={activeTask.steps}
+              onExit={() => setActiveTaskId(null)}
+              onComplete={() => {
+                markComplete(activeTask.id);
+                setActiveTaskId(null);
+              }}
+              onClose={close}
+            />
+          ) : (
+            <TrainingHub tasks={TASKS} isComplete={isComplete} onSelect={handleSelect} onClose={close} />
+          )}
         </View>
       </View>
     </Modal>
@@ -206,6 +368,19 @@ export function GoldRoomScreen({ visible, onClose }: GoldRoomScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  // Phone-like frame: full screen on native; centered, capped width on web
+  // so the room doesn't stretch across a wide browser window.
+  backdrop: {
+    flex: 1,
+    backgroundColor: '#000',
+    ...(Platform.OS === 'web' ? { alignItems: 'center' } : null),
+  },
+  frame: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+    ...(Platform.OS === 'web' ? { maxWidth: 480 } : null),
+  },
   root: { flex: 1 },
   topbar: {
     position: 'absolute',
@@ -223,6 +398,52 @@ const styles = StyleSheet.create({
   closeBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,243,201,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#3A2A10', fontSize: 20, fontWeight: '900', lineHeight: 22 },
 
+  // Hub
+  hubHeader: { color: '#F4CD5A', fontSize: 22, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  hubScroll: { paddingTop: 104, paddingHorizontal: 22, paddingBottom: 40 },
+  hubSub: { color: '#C9B07A', fontSize: 14, fontWeight: '700', textAlign: 'right', marginBottom: 16 },
+
+  // 2-column grid of gold tiles
+  grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between' },
+  tile: { width: '48%', marginBottom: 14 },
+  tileFace: {
+    minHeight: 132,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#8A5A1C',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  tileBadge: { fontSize: 36 },
+  tileTitle: { color: '#2B1D08', fontSize: 16, fontWeight: '900', textAlign: 'center', marginTop: 8 },
+  tileState: { color: '#5E3A10', fontSize: 12.5, fontWeight: '800', textAlign: 'center', marginTop: 6 },
+  tileStateDone: { color: '#1F6A2E' },
+  tileCheck: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#1F6A2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileCheckText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', lineHeight: 16 },
+
+  // dev layer tracker
+  tracker: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: 'rgba(244,205,90,0.16)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(244,205,90,0.3)' },
+  trackerText: { color: '#F4CD5A', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+
+  // Task card layer
   cardLayer: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 22, alignItems: 'center' },
   cardCenter: { top: 0, bottom: 0, justifyContent: 'center' },
   cardTop: { top: 96 },
@@ -253,5 +474,4 @@ const styles = StyleSheet.create({
   nextWrap: { flex: 1 },
   backBtn: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 14, backgroundColor: 'rgba(20,12,4,0.6)', borderWidth: 1.5, borderColor: 'rgba(244,205,90,0.5)' },
   backText: { color: '#F4CD5A', fontSize: 16, fontWeight: '800' },
-  backSpacer: { width: 0 },
 });
