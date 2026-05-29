@@ -682,9 +682,6 @@ function TutorialWelcomeModal({
         },
       ]}
     >
-      <View style={styles.tutorialWelcomeFloatingLanguage}>
-        {renderLanguageButton(t('lang.switch'))}
-      </View>
       <View
         style={[
           styles.tutorialWelcomeCard,
@@ -699,6 +696,9 @@ function TutorialWelcomeModal({
           },
         ]}
       >
+        <View style={styles.tutorialWelcomeLanguageBlock}>
+          {renderLanguageButton(t('lang.switch'))}
+        </View>
         <View style={[styles.tutorialWelcomeTextBlock, { gap: cardGap }]}>
           <Text style={[styles.tutorialWelcomeTitle, { writingDirection: textWritingDirection }]}>
             {t('tutorial.welcome.title')}
@@ -1043,12 +1043,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  tutorialWelcomeFloatingLanguage: {
-    position: 'absolute',
-    top: 12,
-    right: 14,
-    zIndex: 2,
-  },
   tutorialWelcomeTitle: {
     color: '#FACC15',
     fontSize: 24,
@@ -1105,7 +1099,7 @@ const styles = StyleSheet.create({
   tutorialWelcomeLanguageBlock: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 4,
+    marginBottom: 2,
     gap: 8,
   },
   tutorialWelcomeLanguageLabel: {
