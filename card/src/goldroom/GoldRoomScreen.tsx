@@ -27,6 +27,7 @@ import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import { useTrainingProgress } from './useTrainingProgress';
+import { DiceEquationRound } from './DiceEquationRound';
 
 interface GoldRoomScreenProps {
   visible: boolean;
@@ -61,6 +62,10 @@ interface Task {
   title: string;
   desc: string;
   steps?: Step[]; // undefined → "coming soon" (locked card)
+  // Interactive tasks open a custom in-room experience (e.g. the dice/equation
+  // practice round) instead of the linear spotlight step flow. An interactive
+  // task is unlocked even though it has no `steps`.
+  interactive?: boolean;
 }
 
 // ---- Task: "יסודות המשחק" (the basics) ----
@@ -96,6 +101,7 @@ const BASICS_STEPS: Step[] = [
 // ---- The Hub's task catalog ----
 const TASKS: Task[] = [
   { id: 'basics', badge: '🪙', title: 'יסודות המשחק', desc: 'הערימה, המניפה, וחוק הזהב — תוך דקה.', steps: BASICS_STEPS },
+  { id: 'equation-practice', badge: '🎲', title: 'תרגול משוואות', desc: 'בחר קלף, הטל קוביות, ובנה משוואה.', interactive: true },
   { id: 'operations', badge: '➗', title: 'פעולות חשבון', desc: 'חיבור, חיסור, כפל וחילוק על הקלפים.' },
   { id: 'fractions', badge: '½', title: 'שברים', desc: 'איך משחקים עם קלפי שברים.' },
   { id: 'jokers', badge: '🃏', title: 'ג׳וקרים', desc: 'הקלף שמשנה את כללי המשחק.' },
@@ -157,7 +163,7 @@ function Spotlight({ spot, W, H }: { spot?: Spot; W: number; H: number }) {
 // ---- Hub: list of training tasks ----
 // Grid tile (2-per-row). Gold-themed; completed shows a green ✓ badge.
 function GoldTaskCard({ task, done, onPress }: { task: Task; done: boolean; onPress: () => void }) {
-  const locked = !task.steps;
+  const locked = !task.steps && !task.interactive;
   const state = locked ? '🔒 בקרוב' : done ? 'הושלם ✓' : 'התחל ›';
   return (
     <Pressable
@@ -215,7 +221,7 @@ function TrainingHub({
         <Text style={styles.hubSub}>בחר משימת אימון · הושלמו {doneCount}/{totalUnlocked}</Text>
         <View style={styles.grid}>
           {tasks.map((task) => (
-            <GoldTaskCard key={task.id} task={task} done={isComplete(task.id)} onPress={() => task.steps && onSelect(task.id)} />
+            <GoldTaskCard key={task.id} task={task} done={isComplete(task.id)} onPress={() => (task.steps || task.interactive) && onSelect(task.id)} />
           ))}
         </View>
       </ScrollView>
@@ -347,7 +353,20 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
           across the screen. On native this is a no-op full-screen view. */}
       <View style={styles.backdrop}>
         <View style={styles.frame}>
-          {activeTask && activeTask.steps ? (
+          {activeTask && activeTask.interactive ? (
+            <View style={styles.root}>
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
+              <View style={styles.topbar}>
+                <Pressable onPress={() => setActiveTaskId(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="חזרה לחדר הזהב">
+                  <Text style={styles.skip}>‹ חזרה</Text>
+                </Pressable>
+                <CloseButton onPress={close} />
+              </View>
+              <View style={styles.interactiveBody}>
+                <DiceEquationRound />
+              </View>
+            </View>
+          ) : activeTask && activeTask.steps ? (
             <TrainingTask
               key={activeTask.id}
               steps={activeTask.steps}
@@ -382,6 +401,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? { maxWidth: 480 } : null),
   },
   root: { flex: 1 },
+  interactiveBody: { flex: 1, paddingTop: 96 },
   topbar: {
     position: 'absolute',
     top: 0,
