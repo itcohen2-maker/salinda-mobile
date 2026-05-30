@@ -68,11 +68,16 @@ export default function GoldEquationTrack({
   const ready = slots[0] !== null && slots[1] !== null && result !== null;
   return (
     <View style={styles.wrap}>
-      <View style={styles.sourcesRow}>
-        {sources.map((n, i) => (
-          <SourceBubble key={`${n}-${i}`} value={n} onPress={() => onTapSource(n)} />
-        ))}
-      </View>
+      {/* The gold source bubbles. When sources is empty (Gold-Room Stack
+       *  phase) the numbers come from the card fan below instead, so the
+       *  bubble row is omitted entirely. */}
+      {sources.length > 0 ? (
+        <View style={styles.sourcesRow}>
+          {sources.map((n, i) => (
+            <SourceBubble key={`${n}-${i}`} value={n} onPress={() => onTapSource(n)} />
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.track}>
         <View style={styles.slot}><Text style={styles.slotTxt}>{slots[0] ?? ''}</Text></View>
