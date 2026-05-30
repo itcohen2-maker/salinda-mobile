@@ -109,14 +109,18 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
         scrollX.stopAnimation();
       },
       onPanResponderMove: (_e, g) => {
-        const next = startScrollRef.current - g.dx / cardStepRef.current;
+        // Content follows the finger (matches the live hand): drag right → the
+        // cards travel right. (translateX grows with scrollX, so scrollX must
+        // grow with a rightward drag — hence + g.dx, not -.)
+        const next = startScrollRef.current + g.dx / cardStepRef.current;
         scrollX.setValue(clamp(next));
       },
       onPanResponderRelease: (_e, g) => {
         // Project a little past the release point using the fling velocity
         // (vx is px/ms; divide by the per-card travel to get index/ms), then
         // settle with a gentle, slightly springy snap for a premium feel.
-        const vIndex = -g.vx / cardStepRef.current;
+        // Same sign as the drag so momentum continues in the flung direction.
+        const vIndex = g.vx / cardStepRef.current;
         const projected = scrollRef.current + vIndex * 110;
         const target = clamp(Math.round(projected));
         Animated.spring(scrollX, {
