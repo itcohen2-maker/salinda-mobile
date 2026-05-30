@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(244,205,90,0.5)',
   },
   resultSlot: { borderColor: 'rgba(244,205,90,0.85)', backgroundColor: 'rgba(244,205,90,0.12)' },
-  slotTxt: { color: '#F8E08E', fontSize: 22, fontWeight: '900' },
+  slotTxt: { color: '#F8E08E', fontSize: 18, fontWeight: '900' },
   operatorBtn: {
     width: 40,
     height: 40,
@@ -145,6 +145,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#8A5A1C',
   },
-  equals: { color: '#F8E08E', fontSize: 24, fontWeight: '900', marginHorizontal: 2 },
+  equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
   confirmWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 2 },
 });

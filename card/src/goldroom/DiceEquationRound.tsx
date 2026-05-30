@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
   },
-  bubbleText: { color: '#F8E08E', fontSize: 16, fontWeight: '700', textAlign: 'center', lineHeight: 23 },
+  bubbleText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 
   fanRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
   advanceWrap: { alignItems: 'center', gap: 8 },
