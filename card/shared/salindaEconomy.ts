@@ -3,6 +3,11 @@ export const SALINDA_TUTORIAL_REWARDS = {
   advanced: 250,
 } as const;
 
+// One-time Gold Room "collect coins" reward. Granted only after the three
+// foundational training tasks (basics, equation practice, special cards) are
+// complete; see the Gold Room hub.
+export const SALINDA_GOLD_ROOM_REWARD = 500;
+
 export const SALINDA_GAMEPLAY_REWARDS = {
   excellence_meter_full: 1,
   standard_win: 100,
@@ -32,6 +37,7 @@ export const SALINDA_COIN_SOURCES = {
   tutorial_core: 'tutorial_core',
   tutorial_advanced: 'tutorial_advanced',
   tutorial_legacy: 'tutorial_legacy',
+  gold_room_complete: 'gold_room_complete',
 } as const;
 
 export type SalindaCoinSource = typeof SALINDA_COIN_SOURCES[keyof typeof SALINDA_COIN_SOURCES];

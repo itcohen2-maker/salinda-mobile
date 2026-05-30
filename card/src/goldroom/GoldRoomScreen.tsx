@@ -22,12 +22,15 @@
 //     runs over a real game board — no structural change.
 // ============================================================
 
-import React, { useState, useCallback } from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image, Animated, PanResponder } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import { useTrainingProgress } from './useTrainingProgress';
 import { DiceEquationRound } from './DiceEquationRound';
+import SpecialCardsIntro from './SpecialCardsIntro';
+import { useAuthOptional } from '../hooks/useAuth';
+import { SALINDA_COIN_SOURCES, SALINDA_GOLD_ROOM_REWARD } from '../../shared/salindaEconomy';
 
 interface GoldRoomScreenProps {
   visible: boolean;
@@ -54,6 +57,9 @@ interface Step {
   body: string;
   spot?: Spot; // undefined → full dim, centered card (intro / goal)
   cardAnchor: CardAnchor;
+  // Which mock-board element to reveal behind the spotlight for this step.
+  // 'deck' = corner pile of card backs (הערימה); 'fan' = the 7-card hand (המניפה).
+  mock?: 'deck' | 'fan';
 }
 
 interface Task {
@@ -66,7 +72,14 @@ interface Task {
   // practice round) instead of the linear spotlight step flow. An interactive
   // task is unlocked even though it has no `steps`.
   interactive?: boolean;
+  // The one-time "collect coins" reward tile. Stays locked until every task id
+  // in REWARD_REQUIREMENTS is complete; tapping it then grants the reward once.
+  reward?: boolean;
 }
+
+// The foundational tasks the learner must finish before the coin reward
+// unlocks. Fractions and the (still-locked) jokers task are NOT required.
+const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as const;
 
 // ---- Task: "יסודות המשחק" (the basics) ----
 const BASICS_STEPS: Step[] = [
@@ -80,14 +93,16 @@ const BASICS_STEPS: Step[] = [
     tag: 'הערימה',
     title: 'ערימת הקלפים 🂠',
     body: 'ערימת הקלפים — זהו הבנק של המשחק, שנמצא כאן למעלה בפינה.',
-    spot: { top: 0.05, left: 0.05, width: 0.42, height: 0.12 },
+    spot: { top: 0.12, left: 0.48, width: 0.44, height: 0.22 },
     cardAnchor: 'bottom',
+    mock: 'deck',
   },
   {
     tag: 'המניפה',
     title: 'המניפה 🃏',
-    body: 'המניפה — היד שלך. מתחילים את המשחק עם 7 קלפים.',
-    spot: { top: 0.72, left: 0.04, width: 0.92, height: 0.2 },
+    body: 'המניפה — היד שלך. מתחילים את המשחק עם 7 קלפים. גררו אותה כלפי מעלה כדי לראות את כל הקלפים.',
+    // No spot → full dim; the hand fan peeks from the bottom and is draggable.
+    mock: 'fan',
     cardAnchor: 'top',
   },
   {
@@ -100,11 +115,12 @@ const BASICS_STEPS: Step[] = [
 
 // ---- The Hub's task catalog ----
 const TASKS: Task[] = [
-  { id: 'basics', badge: '🪙', title: 'יסודות המשחק', desc: 'הערימה, המניפה, וחוק הזהב — תוך דקה.', steps: BASICS_STEPS },
-  { id: 'equation-practice', badge: '🎲', title: 'תרגול משוואות', desc: 'בחר קלף, הטל קוביות, ובנה משוואה.', interactive: true },
-  { id: 'operations', badge: '➗', title: 'פעולות חשבון', desc: 'חיבור, חיסור, כפל וחילוק על הקלפים.' },
+  { id: 'basics', badge: '🪙', title: 'היסודות', desc: 'הערימה, המניפה, וחוק הזהב — תוך דקה.', steps: BASICS_STEPS },
+  { id: 'equation-practice', badge: '🎲', title: 'תרגול', desc: 'בחר קלף, הטל קוביות, ובנה משוואה.', interactive: true },
+  { id: 'operations', badge: '⚡', title: 'מיוחדים', desc: 'הנשק הסודי — היפטר מקלפים במהירות.', interactive: true },
   { id: 'fractions', badge: '½', title: 'שברים', desc: 'איך משחקים עם קלפי שברים.' },
   { id: 'jokers', badge: '🃏', title: 'ג׳וקרים', desc: 'הקלף שמשנה את כללי המשחק.' },
+  { id: 'coin-collection', badge: '🪙', title: 'מטבעות', desc: 'סיים את הלמידה ואסוף את המענק.', reward: true },
 ];
 
 // Gold tones sampled from the physical gold plank — "polished D" language.
@@ -118,6 +134,138 @@ function CloseButton({ onPress }: { onPress: () => void }) {
         <Text style={styles.closeText}>✕</Text>
       </LinearGradient>
     </Pressable>
+  );
+}
+
+// The live game's branded card back — so the deck/fan mock reads as the
+// real game (same art, 5:7 cards).
+const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
+const CARD_RATIO = 5 / 7; // width / height, matches the physical card
+
+// Layered offsets (from the live DrawPile) so the deck reads as a real,
+// slightly-messy stack rather than one flat rectangle.
+const PILE_ROTATIONS = [
+  { rotate: '-3deg', tx: -3, ty: 4 },
+  { rotate: '2deg', tx: 3, ty: 2 },
+  { rotate: '-1deg', tx: -1, ty: 1 },
+  { rotate: '0deg', tx: 0, ty: 0 },
+];
+
+const cardBackStyle = (w: number, h: number) => ({
+  position: 'absolute' as const,
+  width: w,
+  height: h,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: 'rgba(0,0,0,0.35)',
+});
+
+// The deck (הערימה) — a corner pile of branded card backs, sized to fill the
+// spotlight box at the real 5:7 ratio.
+function MockDeck({ boxH }: { boxH: number }) {
+  const cardH = Math.min(boxH * 0.92, 150);
+  const cardW = cardH * CARD_RATIO;
+  return (
+    <View style={{ width: cardW + 12, height: cardH + 12, alignItems: 'center', justifyContent: 'center' }}>
+      {PILE_ROTATIONS.map((r, i) => (
+        <Image
+          key={i}
+          source={CARD_BACK_IMG}
+          resizeMode="cover"
+          style={[cardBackStyle(cardW, cardH), { transform: [{ rotate: r.rotate }, { translateX: r.tx }, { translateY: r.ty }] }]}
+        />
+      ))}
+    </View>
+  );
+}
+
+// The hand (המניפה) — 7 branded card backs in a shallow arc, anchored to the
+// bottom with only the top HALF visible. Draggable: drag up with a finger to
+// pull the hand fully into view, like lifting your real hand of cards. No
+// frame — it simply peeks from the screen edge over the dimmed board.
+function InteractiveFan({ W, H }: { W: number; H: number }) {
+  const n = 7;
+  const cardH = Math.min(H * 0.27, 168);
+  const cardW = cardH * CARD_RATIO;
+  const spread = Math.min((W * 0.94 - cardW) / (n - 1), cardW * 0.66);
+  const mid = (n - 1) / 2;
+  // translateY: 0 = fully revealed (cards sit just above the bottom edge);
+  // REST (rest position) pushes it down so ~70% of the fan shows. Drag up to 0.
+  const REST = cardH * 0.3;
+  const pan = useRef(new Animated.Value(REST)).current;
+  const cur = useRef(REST); // live value, so a new drag starts from where it is
+  const startY = useRef(REST);
+  React.useEffect(() => {
+    const id = pan.addListener(({ value }) => {
+      cur.current = value;
+    });
+    return () => pan.removeListener(id);
+  }, [pan]);
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 3,
+      onPanResponderGrant: () => {
+        startY.current = cur.current;
+      },
+      onPanResponderMove: (_e, g) => {
+        pan.setValue(Math.max(0, Math.min(REST * 1.25, startY.current + g.dy)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const to = g.dy < -10 ? 0 : REST;
+        Animated.spring(pan, { toValue: to, useNativeDriver: false, bounciness: 8 }).start();
+      },
+    }),
+  ).current;
+  return (
+    <Animated.View
+      {...responder.panHandlers}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: cardH + 48,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingBottom: 14,
+        transform: [{ translateY: pan }],
+      }}
+    >
+      {Array.from({ length: n }).map((_, i) => {
+        const off = i - mid;
+        return (
+          <Image
+            key={i}
+            source={CARD_BACK_IMG}
+            resizeMode="cover"
+            style={[
+              cardBackStyle(cardW, cardH),
+              { transform: [{ translateX: off * spread }, { rotate: `${off * 5}deg` }, { translateY: Math.abs(off) * 6 }] },
+            ]}
+          />
+        );
+      })}
+    </Animated.View>
+  );
+}
+
+// Mock game board drawn BEHIND the spotlight: only the deck this step
+// highlights is rendered, framed exactly by the cutout (same fraction math as
+// Spotlight), so the pile sits inside the highlighted box on every device.
+// (The hand fan is a separate interactive layer drawn ABOVE the dim.)
+function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; kind?: 'deck' | 'fan' }) {
+  if (!spot || kind !== 'deck' || !W || !H) return null;
+  const t = spot.top * H;
+  const l = spot.left * W;
+  const w = spot.width * W;
+  const h = spot.height * H;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={{ position: 'absolute', top: t, left: l, width: w, height: h, alignItems: 'center', justifyContent: 'center' }}>
+        <MockDeck boxH={h} />
+      </View>
+    </View>
   );
 }
 
@@ -139,38 +287,44 @@ function Spotlight({ spot, W, H }: { spot?: Spot; W: number; H: number }) {
       <View style={{ position: 'absolute', left: 0, right: 0, top: t + h, bottom: 0, backgroundColor: DIM }} />
       <View style={{ position: 'absolute', top: t, height: h, left: 0, width: l, backgroundColor: DIM }} />
       <View style={{ position: 'absolute', top: t, height: h, left: l + w, right: 0, backgroundColor: DIM }} />
-      <View
-        style={{
-          position: 'absolute',
-          top: t,
-          left: l,
-          width: w,
-          height: h,
-          borderRadius: 16,
-          borderWidth: 3,
-          borderColor: '#F4CD5A',
-          shadowColor: '#F4CD5A',
-          shadowOpacity: 0.9,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 0 },
-          elevation: 10,
-        }}
-      />
     </View>
   );
 }
 
 // ---- Hub: list of training tasks ----
 // Grid tile (2-per-row). Gold-themed; completed shows a green ✓ badge.
-function GoldTaskCard({ task, done, onPress }: { task: Task; done: boolean; onPress: () => void }) {
-  const locked = !task.steps && !task.interactive;
-  const state = locked ? '🔒 בקרוב' : done ? 'הושלם ✓' : 'התחל ›';
+function GoldTaskCard({ task, done, eligible, onPress }: { task: Task; done: boolean; eligible: boolean; onPress: () => void }) {
+  // The reward tile is locked until eligible (all required tasks done) and,
+  // once collected, shows a settled "collected" state instead of "coming soon".
+  const locked = task.reward ? !eligible && !done : !task.steps && !task.interactive;
+  const state = task.reward
+    ? done
+      ? 'נאסף ✓'
+      : eligible
+        ? 'אסוף ›'
+        : '🔒 סיים ללמוד'
+    : locked
+      ? '🔒 בקרוב'
+      : done
+        ? 'הושלם ✓'
+        : 'התחל ›';
+  const a11ySuffix = task.reward
+    ? done
+      ? ' (נאסף)'
+      : eligible
+        ? ' (זמין לאיסוף)'
+        : ' (נעול — סיים את הלמידה)'
+    : done
+      ? ' (הושלם)'
+      : locked
+        ? ' (בקרוב)'
+        : '';
   return (
     <Pressable
       disabled={locked}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${task.title}${done ? ' (הושלם)' : locked ? ' (בקרוב)' : ''}`}
+      accessibilityLabel={`${task.title}${a11ySuffix}`}
       accessibilityState={{ disabled: locked }}
       style={[styles.tile, { opacity: locked ? 0.6 : 1 }]}
     >
@@ -201,15 +355,19 @@ function TrainingHub({
   tasks,
   isComplete,
   onSelect,
+  onCollectReward,
   onClose,
 }: {
   tasks: Task[];
   isComplete: (id: string) => boolean;
   onSelect: (id: string) => void;
+  onCollectReward: () => void;
   onClose: () => void;
 }) {
   const doneCount = tasks.filter((tk) => tk.steps && isComplete(tk.id)).length;
   const totalUnlocked = tasks.filter((tk) => tk.steps).length;
+  // The reward unlocks only once ALL required foundational tasks are complete.
+  const rewardEligible = REWARD_REQUIREMENTS.every((id) => isComplete(id));
   return (
     <View style={styles.root}>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
@@ -221,7 +379,19 @@ function TrainingHub({
         <Text style={styles.hubSub}>בחר משימת אימון · הושלמו {doneCount}/{totalUnlocked}</Text>
         <View style={styles.grid}>
           {tasks.map((task) => (
-            <GoldTaskCard key={task.id} task={task} done={isComplete(task.id)} onPress={() => (task.steps || task.interactive) && onSelect(task.id)} />
+            <GoldTaskCard
+              key={task.id}
+              task={task}
+              done={isComplete(task.id)}
+              eligible={task.reward ? rewardEligible : true}
+              onPress={() => {
+                if (task.reward) {
+                  if (rewardEligible && !isComplete(task.id)) onCollectReward();
+                } else if (task.steps || task.interactive) {
+                  onSelect(task.id);
+                }
+              }}
+            />
           ))}
         </View>
       </ScrollView>
@@ -276,12 +446,12 @@ function TrainingTask({
       style={styles.root}
       onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
     >
+      <MockBoard spot={step.spot} W={size.w} H={size.h} kind={step.mock} />
       <Spotlight spot={step.spot} W={size.w} H={size.h} />
+      {step.mock === 'fan' && size.w > 0 ? <InteractiveFan W={size.w} H={size.h} /> : null}
 
       <View style={styles.topbar}>
-        <Pressable onPress={onExit} hitSlop={10} accessibilityRole="button" accessibilityLabel="חזרה לחדר הזהב">
-          <Text style={styles.skip}>דלג ›</Text>
-        </Pressable>
+        <GoldButton label="דלג ›" onPress={onExit} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
         <CloseButton onPress={onClose} />
       </View>
 
@@ -307,9 +477,7 @@ function TrainingTask({
           </View>
 
           <View style={styles.controls}>
-            <Pressable onPress={handleBack} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={index > 0 ? 'חזור' : 'חזרה לחדר הזהב'}>
-              <Text style={styles.backText}>‹ חזור</Text>
-            </Pressable>
+            <GoldButton label="‹ חזור" onPress={handleBack} accessibilityLabel={index > 0 ? 'חזור' : 'חזרה לחדר הזהב'} tone="stone" fontSize={16} />
             <View style={styles.nextWrap}>
               <GoldButton label={isLast ? 'סיום' : 'המשך ›'} onPress={handleNext} fullWidth />
             </View>
@@ -323,11 +491,37 @@ function TrainingTask({
 export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRoomScreenProps) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const { isComplete, markComplete } = useTrainingProgress();
+  // Optional so the room can render outside an <AuthProvider> (e.g. previews);
+  // in the live app awardCoins is always available.
+  const auth = useAuthOptional();
+  const [collecting, setCollecting] = useState(false);
+  const [rewardShown, setRewardShown] = useState(false); // success celebration overlay
+  const [collectError, setCollectError] = useState(false);
 
   const close = useCallback(() => {
     setActiveTaskId(null);
+    setRewardShown(false);
+    setCollectError(false);
     onClose();
   }, [onClose]);
+
+  // Collect the one-time reward. Server-side award_coins is itself single-grant
+  // per (player, source), so the coins are safe even if local state is cleared;
+  // we only mark the tile collected + celebrate once the award actually lands.
+  const handleCollectReward = useCallback(async () => {
+    if (collecting || isComplete('coin-collection')) return;
+    setCollecting(true);
+    setCollectError(false);
+    const res = await (auth?.awardCoins?.(SALINDA_GOLD_ROOM_REWARD, SALINDA_COIN_SOURCES.gold_room_complete) ??
+      Promise.resolve<'ok' | 'error'>('error'));
+    setCollecting(false);
+    if (res === 'ok') {
+      markComplete('coin-collection');
+      setRewardShown(true);
+    } else {
+      setCollectError(true);
+    }
+  }, [auth, collecting, isComplete, markComplete]);
 
   // Selecting a task. "basics" launches the REAL live-practice tutorial
   // (measured highlights over the real board) when wired; everything else
@@ -357,13 +551,23 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.root}>
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
               <View style={styles.topbar}>
-                <Pressable onPress={() => setActiveTaskId(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="חזרה לחדר הזהב">
-                  <Text style={styles.skip}>‹ חזרה</Text>
-                </Pressable>
+                <GoldButton label="‹ חזרה" onPress={() => setActiveTaskId(null)} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
                 <CloseButton onPress={close} />
               </View>
               <View style={styles.interactiveBody}>
-                <DiceEquationRound />
+                {activeTask.id === 'operations' ? (
+                  <SpecialCardsIntro
+                    onDone={() => {
+                      markComplete(activeTask.id);
+                      setActiveTaskId(null);
+                    }}
+                  />
+                ) : (
+                  <DiceEquationRound
+                    onExit={() => setActiveTaskId(null)}
+                    onComplete={() => markComplete('equation-practice')}
+                  />
+                )}
               </View>
             </View>
           ) : activeTask && activeTask.steps ? (
@@ -378,8 +582,43 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
               onClose={close}
             />
           ) : (
-            <TrainingHub tasks={TASKS} isComplete={isComplete} onSelect={handleSelect} onClose={close} />
+            <TrainingHub
+              tasks={TASKS}
+              isComplete={isComplete}
+              onSelect={handleSelect}
+              onCollectReward={handleCollectReward}
+              onClose={close}
+            />
           )}
+
+          {/* One-time reward celebration — sits above the Hub once the coins land. */}
+          {rewardShown ? (
+            <View style={styles.rewardOverlay}>
+              <View style={styles.rewardCard}>
+                <Text style={styles.rewardBadge}>🪙</Text>
+                <Text style={styles.rewardTitle}>כל הכבוד!</Text>
+                <Text style={styles.rewardSub}>קיבלת {SALINDA_GOLD_ROOM_REWARD} מטבעות על סיום הלמידה.</Text>
+                <View style={styles.rewardBtnWrap}>
+                  <GoldButton label="מעולה!" onPress={() => setRewardShown(false)} accessibilityLabel="סגור" fullWidth height={54} fontSize={19} />
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Award failed (e.g. offline) — let the learner retry; nothing was marked. */}
+          {collectError ? (
+            <View style={styles.rewardOverlay}>
+              <View style={styles.rewardCard}>
+                <Text style={styles.rewardBadge}>📡</Text>
+                <Text style={styles.rewardTitle}>אופס…</Text>
+                <Text style={styles.rewardSub}>לא הצלחנו לזכות אותך כרגע. נסה שוב בעוד רגע.</Text>
+                <View style={styles.rewardBtnWrap}>
+                  <GoldButton label="נסה שוב" onPress={handleCollectReward} accessibilityLabel="נסה שוב" fullWidth height={50} fontSize={17} />
+                  <GoldButton label="סגור" onPress={() => setCollectError(false)} accessibilityLabel="סגור" tone="stone" fullWidth height={44} fontSize={15} />
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -414,7 +653,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 5,
   },
-  skip: { color: '#FFF3C9', fontSize: 15, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   closeBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,243,201,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#3A2A10', fontSize: 20, fontWeight: '900', lineHeight: 22 },
 
@@ -492,6 +730,35 @@ const styles = StyleSheet.create({
   dotActive: { width: 22, backgroundColor: '#F4CD5A' },
   controls: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   nextWrap: { flex: 1 },
-  backBtn: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 14, backgroundColor: 'rgba(20,12,4,0.6)', borderWidth: 1.5, borderColor: 'rgba(244,205,90,0.5)' },
-  backText: { color: '#F4CD5A', fontSize: 16, fontWeight: '800' },
+
+  // Reward / error overlay (coin collection)
+  rewardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8,5,2,0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 30,
+  },
+  rewardCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#8A5A1C',
+    backgroundColor: 'rgba(17,12,4,0.96)',
+    paddingHorizontal: 26,
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+  rewardBadge: { fontSize: 48 },
+  rewardTitle: { color: '#F4CD5A', fontSize: 26, fontWeight: '900', textAlign: 'center' },
+  rewardSub: { color: '#D8C49A', fontSize: 16, fontWeight: '600', textAlign: 'center', lineHeight: 24, marginBottom: 6 },
+  rewardBtnWrap: { alignSelf: 'stretch', marginTop: 8, gap: 10 },
 });

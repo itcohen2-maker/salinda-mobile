@@ -16,6 +16,7 @@ jest.mock('../feedback/useFeedbackAdmin', () => ({
 jest.mock('../hooks/useAuth', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: jest.fn(),
+  useAuthOptional: () => null,
 }));
 
 jest.mock('../hooks/useMultiplayer', () => ({

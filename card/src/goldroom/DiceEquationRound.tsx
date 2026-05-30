@@ -34,7 +34,7 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
 
@@ -319,7 +319,7 @@ function LayerTracker({ stage }: { stage: Stage }) {
   );
 }
 
-export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
+export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
   const [stage, setStage] = useState<Stage>('stack');
   const [roundKey, setRoundKey] = useState(0); // identifies the current CARD (stack hand)
   const [solveKey, setSolveKey] = useState(0); // forces a fresh equation per solve attempt
@@ -339,8 +339,9 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
 
   const handleResolve = useCallback(() => {
     void playSfx('success', { cooldownMs: 0 }); // reward chime on a legal equation
+    onComplete?.(); // first legal solve marks the practice task complete (gates the coin reward)
     setStage('result'); // freeze the board; surface the Mastery Loop result screen
-  }, []);
+  }, [onComplete]);
 
   // Mastery Loop choices — all explicit, none automatic.
   const handleRetry = useCallback(() => startSimulation(), [startSimulation]); // SAME card, fresh dice
@@ -351,10 +352,15 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
   const handleMenu = useCallback(() => onExit?.(), [onExit]); // back to the Hub
 
   return (
-    // The gold table surface — same ImageBackground mechanism the live game
-    // uses for its felt, in the Gold Room's golden skin, so the practice
-    // feels like sitting at the real table from the first moment.
-    <ImageBackground source={GOLD_TABLE_IMG} resizeMode="cover" style={styles.root}>
+    <View style={styles.root}>
+      {/* The gold table surface — a centered backdrop sized to the frame
+       *  width via a fixed aspect ratio, so the full table always shows
+       *  and can never be cropped. The Gold Room's golden skin makes the
+       *  practice feel like sitting at the real table. */}
+      <View style={styles.tableBackdrop} pointerEvents="none">
+        <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
+      </View>
+
       {/* The deck (הערימה) sits in the corner like the live game — meet the
        *  bank before using the hand. Shown during the intro/stack phase. */}
       {stage === 'stack' ? <GoldDeckPile /> : null}
@@ -366,12 +372,22 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
       {stage === 'result' ? <ResultOverlay onRetry={handleRetry} onNext={handleNext} onMenu={handleMenu} /> : null}
 
       {__DEV__ ? <LayerTracker stage={stage} /> : null}
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'center' },
+  // Centered table backdrop — full width, fixed aspect ratio, never cropped.
+  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  tableImg: {
+    width: '100%',
+    aspectRatio: 1024 / 774,
+    alignSelf: 'center',
+    // Web stays full-width (looks great); on a device, shrink the table so it
+    // gets margins instead of bleeding edge-to-edge.
+    ...(Platform.OS !== 'web' ? { width: '80%', maxWidth: 460 } : null),
+  },
   centerStage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 },
   // Top-anchored instruction/advance zone + bottom-anchored workspace/fan.
   stackStage: { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 12, paddingBottom: 28 },
