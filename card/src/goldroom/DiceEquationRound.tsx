@@ -6,13 +6,12 @@
 //
 //   stack  →  rolling  →  solving   (+ a result overlay)
 //
-//   Phase 1 — Stack (the Challenge Deck)
-//     The premium dark-gold hand fan is anchored at the bottom of the
-//     screen — exactly like the live game's hand — with the UNLOCKED
-//     equation track sitting directly above it for free experimentation.
-//     Tapping a number card in the fan drops its value into the track.
-//     When ready, the learner taps the gold "תראה לי" pill (a minimalist
-//     chevron sits above it) to roll the dice.
+//   Phase 1 — Roll Intro (Stack)
+//     Premium dark-gold layout: the roll instructions up top, the UNLOCKED
+//     equation track + hand fan raised into the middle (track directly above
+//     the hand) for free experimentation, and the premium "בוא נטיל!" roll
+//     button pinned at the very bottom, clear of the fan. Tapping a number
+//     card feeds the track; the button rolls the dice.
 //
 //   Phase 2 — Rolling
 //     generateTutorialSeed() → validated dice → roll animation, under the
@@ -35,7 +34,6 @@
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
 
 // The Gold Room table surface (same asset family the live game uses).
@@ -138,65 +136,31 @@ function eqReducer(state: EquationDraftView, action: EqAction): EquationDraftVie
   }
 }
 
-// ── Phase 1: the Stack (Challenge Deck) — premium dark-gold look, the
-// hand fan anchored at the bottom with an UNLOCKED experimentation track
-// directly above it, and the unified "תראה לי" pill + chevron transition.
-// Tapping a number card feeds its value into the track. ───────────────
+// ── Phase 1: the Roll Intro (Stack). Premium dark-gold layout — the roll
+// instructions up top, the UNLOCKED experimentation track + hand fan raised
+// into the middle (free to try first; track directly above the hand), and the
+// premium "בוא נטיל!" roll button anchored at the very bottom, clear of the
+// fan so it never overlaps. Tapping a number card feeds the track; the button
+// rolls the dice. ─────────────────────────────────────────────────────────
 function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }) {
   const [eq, dispatch] = useReducer(eqReducer, undefined, emptyEq);
-  const chevron = useRef(new Animated.Value(0)).current;
-  const bob = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const appear = Animated.timing(chevron, {
-      toValue: 1,
-      duration: 450,
-      delay: 500,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    });
-    appear.start();
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bob, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(bob, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => {
-      appear.stop();
-      loop.stop();
-    };
-  }, [chevron, bob]);
-
-  const bobY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, 8] });
 
   return (
     <View style={styles.stackStage}>
-      {/* Top zone — instruction bubble + the unified "תראה לי" advance
-       *  control (minimalist chevron above the gold pill). */}
+      {/* Top — the roll instructions. */}
       <View style={styles.stackTop}>
         <View style={styles.bubble}>
-          <Text style={styles.bubbleText}>אתם יכולים לנסות לפתור בעצמכם! מתי שתרצו, לחצו 'תראה לי'.</Text>
-        </View>
-
-        <View style={styles.advanceWrap}>
-          <Animated.View style={{ opacity: chevron, transform: [{ translateY: bobY }] }}>
-            <Svg width={40} height={24} viewBox="0 0 48 30">
-              <Path d="M6 8 L24 24 L42 8" stroke="#F4CD5A" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.85} />
-            </Svg>
-          </Animated.View>
-          <GoldButton label="תראה לי ›" onPress={onAdvance} accessibilityLabel="תראה לי" height={52} fontSize={18} />
+          <Text style={styles.bubbleText}>הטלת הקוביות – המנוע של המשחק. מטילים כדי לקבל את המספרים שירכיבו את המשוואה.</Text>
         </View>
       </View>
 
-      {/* Bottom zone — the equation workspace sits directly ABOVE the card
-       *  fan, which is anchored at the very bottom of the screen, mirroring
-       *  the live game's hand placement. */}
-      <View style={styles.stackBottom}>
-        {/* The SAME equation builder as the tutorial (EquationSlots),
-         *  reused here in its gold skin. Free-experiment phase: no Confirm
-         *  (the learner rolls via "תראה לי"); the fan feeds the sources. */}
+      {/* Middle — the equation workspace sits directly ABOVE the hand fan
+       *  (track-above-hand rule), raised off the bottom so the roll button
+       *  has its own clear zone below. */}
+      <View style={styles.stackMid}>
+        {/* The SAME equation builder as the tutorial (EquationSlots), gold
+         *  skin. Free-experiment phase: no Confirm (rolling is the action);
+         *  the fan feeds the sources. */}
         <EquationSlots
           theme="gold"
           equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
@@ -209,14 +173,19 @@ function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }
           showConfirm={false}
         />
 
-        {/* The hand fan — the SAME curved/scrollable fan geometry as the
-         *  live game (HandFan), fully interactive: tapping a number card
-         *  drops its value into the equation track above. */}
+        {/* The hand fan — the SAME curved/scrollable fan geometry as the live
+         *  game (HandFan), fully interactive: tapping a number card drops its
+         *  value into the equation track above. */}
         <HandFan
           cards={hand}
           canTap={(c) => c.type === 'number'}
           onTapCard={(c) => dispatch({ type: 'TAP_SOURCE', number: (c as { value: number }).value })}
         />
+      </View>
+
+      {/* Bottom — the premium 3D roll button, pinned low and clear of the fan. */}
+      <View style={styles.rollWrap}>
+        <GoldButton label="בוא נטיל! 🎲" onPress={onAdvance} accessibilityLabel="בוא נטיל" fullWidth height={58} fontSize={20} />
       </View>
     </View>
   );
@@ -305,7 +274,7 @@ function ResultOverlay({ onRetry, onNext, onMenu }: { onRetry: () => void; onNex
 // ── Admin/dev layer tracker — mirrors the Hub status line so the active
 // flow layer is always legible during development.
 const TRACKER: Record<Stage, string> = {
-  stack: 'UI: Stack · Flow: Experiment · Action: Try / Show Me',
+  stack: 'UI: Roll Intro · Flow: Experiment · Action: Roll Dice',
   rolling: 'UI: Roll · Flow: Auto · Action: Deal Dice',
   solving: 'UI: Equation · Flow: Solve · Action: Single Track',
   result: 'UI: Result Screen | Flow: User Decision | Action: Mastery Loop',
@@ -389,10 +358,13 @@ const styles = StyleSheet.create({
     ...(Platform.OS !== 'web' ? { width: '80%', maxWidth: 460 } : null),
   },
   centerStage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 },
-  // Top-anchored instruction/advance zone + bottom-anchored workspace/fan.
-  stackStage: { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 12, paddingBottom: 28 },
-  stackTop: { alignItems: 'center', gap: 22 },
-  stackBottom: { alignItems: 'center', gap: 22, width: '100%' },
+  // Roll Intro: instructions on top, the experiment track + raised fan filling
+  // the flexible middle, and the roll button pinned at the bottom (its own
+  // clear zone, so it never touches the fan).
+  stackStage: { flex: 1, alignItems: 'center', paddingHorizontal: 18, paddingTop: 12, paddingBottom: 24, width: '100%' },
+  stackTop: { alignItems: 'center', gap: 22, width: '100%' },
+  stackMid: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, width: '100%' },
+  rollWrap: { width: '100%', maxWidth: 360, alignItems: 'stretch', marginTop: 14 },
   solveStage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 26, paddingHorizontal: 22 },
 
   bubble: {
@@ -405,8 +377,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   bubbleText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
-
-  advanceWrap: { alignItems: 'center', gap: 8 },
 
   // The deck (הערימה) — corner pile of branded card backs.
   deckWrap: { position: 'absolute', top: 8, left: 12, alignItems: 'center', zIndex: 5 },
