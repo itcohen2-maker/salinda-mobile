@@ -23,12 +23,14 @@
 // ============================================================
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image, Animated, PanResponder } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import { useTrainingProgress } from './useTrainingProgress';
 import { DiceEquationRound } from './DiceEquationRound';
 import SpecialCardsIntro from './SpecialCardsIntro';
+import HandFan from '../../components/HandFan';
+import { type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
 import { SALINDA_COIN_SOURCES, SALINDA_GOLD_ROOM_REWARD } from '../../shared/salindaEconomy';
 
@@ -100,8 +102,9 @@ const BASICS_STEPS: Step[] = [
   {
     tag: 'המניפה',
     title: 'המניפה 🃏',
-    body: 'המניפה — היד שלך. מתחילים את המשחק עם 7 קלפים. גררו אותה כלפי מעלה כדי לראות את כל הקלפים.',
-    // No spot → full dim; the hand fan peeks from the bottom and is draggable.
+    body: 'המניפה — היד שלך. מתחילים את המשחק עם 7 קלפים. החליקו לצדדים כדי לעבור ביניהם.',
+    // No spot → full dim; a full, raised hand fan of real cards sits at the
+    // bottom — swipe sideways to browse, like the live hand.
     mock: 'fan',
     cardAnchor: 'top',
   },
@@ -179,74 +182,22 @@ function MockDeck({ boxH }: { boxH: number }) {
   );
 }
 
-// The hand (המניפה) — 7 branded card backs in a shallow arc, anchored to the
-// bottom with only the top HALF visible. Draggable: drag up with a finger to
-// pull the hand fully into view, like lifting your real hand of cards. No
-// frame — it simply peeks from the screen edge over the dimmed board.
-function InteractiveFan({ W, H }: { W: number; H: number }) {
-  const n = 7;
-  const cardH = Math.min(H * 0.27, 168);
-  const cardW = cardH * CARD_RATIO;
-  const spread = Math.min((W * 0.94 - cardW) / (n - 1), cardW * 0.66);
-  const mid = (n - 1) / 2;
-  // translateY: 0 = fully revealed (cards sit just above the bottom edge);
-  // REST (rest position) pushes it down so ~70% of the fan shows. Drag up to 0.
-  const REST = cardH * 0.3;
-  const pan = useRef(new Animated.Value(REST)).current;
-  const cur = useRef(REST); // live value, so a new drag starts from where it is
-  const startY = useRef(REST);
-  React.useEffect(() => {
-    const id = pan.addListener(({ value }) => {
-      cur.current = value;
-    });
-    return () => pan.removeListener(id);
-  }, [pan]);
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 3,
-      onPanResponderGrant: () => {
-        startY.current = cur.current;
-      },
-      onPanResponderMove: (_e, g) => {
-        pan.setValue(Math.max(0, Math.min(REST * 1.25, startY.current + g.dy)));
-      },
-      onPanResponderRelease: (_e, g) => {
-        const to = g.dy < -10 ? 0 : REST;
-        Animated.spring(pan, { toValue: to, useNativeDriver: false, bounciness: 8 }).start();
-      },
-    }),
-  ).current;
+// A friendly demo hand of 7 real number cards (faces up), so the learner sees
+// an actual hand — not card backs. Stable across renders (no reshuffle).
+const DEMO_HAND: Card[] = [5, 2, 8, 1, 6, 3, 7].map((value, i): Card => ({
+  id: `demo-hand-${i}`,
+  type: 'number',
+  value,
+}));
+
+// The hand (המניפה) — the SAME shared HandFan as the live game / practice, shown
+// fully RAISED into view (not peeking from the edge) with the 7 demo cards
+// face-up. Swipe sideways to browse; tapping gives the premium card feedback.
+function DemoHandFan({ W }: { W: number }) {
   return (
-    <Animated.View
-      {...responder.panHandlers}
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: cardH + 48,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingBottom: 14,
-        transform: [{ translateY: pan }],
-      }}
-    >
-      {Array.from({ length: n }).map((_, i) => {
-        const off = i - mid;
-        return (
-          <Image
-            key={i}
-            source={CARD_BACK_IMG}
-            resizeMode="cover"
-            style={[
-              cardBackStyle(cardW, cardH),
-              { transform: [{ translateX: off * spread }, { rotate: `${off * 5}deg` }, { translateY: Math.abs(off) * 6 }] },
-            ]}
-          />
-        );
-      })}
-    </Animated.View>
+    <View style={styles.demoFanWrap} pointerEvents="box-none">
+      <HandFan cards={DEMO_HAND} width={W} onTapCard={() => {}} />
+    </View>
   );
 }
 
@@ -448,7 +399,7 @@ function TrainingTask({
     >
       <MockBoard spot={step.spot} W={size.w} H={size.h} kind={step.mock} />
       <Spotlight spot={step.spot} W={size.w} H={size.h} />
-      {step.mock === 'fan' && size.w > 0 ? <InteractiveFan W={size.w} H={size.h} /> : null}
+      {step.mock === 'fan' && size.w > 0 ? <DemoHandFan W={size.w} /> : null}
 
       <View style={styles.topbar}>
         <GoldButton label="דלג ›" onPress={onExit} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
@@ -730,6 +681,10 @@ const styles = StyleSheet.create({
   dotActive: { width: 22, backgroundColor: '#F4CD5A' },
   controls: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   nextWrap: { flex: 1 },
+
+  // The demo hand (המניפה step) — raised fully into view near the bottom edge,
+  // centered, swipeable. box-none so swipes reach the fan but the dim shows.
+  demoFanWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
 
   // Reward / error overlay (coin collection)
   rewardOverlay: {
