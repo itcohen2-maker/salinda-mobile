@@ -27,15 +27,17 @@
 //     The board freezes and a result overlay offers three explicit
 //     choices: Retry (same card, fresh dice), Next (new card), Menu.
 //
-// Orchestration only: reuses generateTutorialSeed, AnimatedDice, GameCard,
-// and the Gold-Room GoldEquationTrack. No duplicated game logic.
+// Orchestration only: reuses generateTutorialSeed, AnimatedDice, the
+// shared HandFan (same fan geometry as the live game), and the Gold-Room
+// GoldEquationTrack. No duplicated game logic.
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
-import { GameCard, type Card, type Fraction } from '../../components/CardDesign';
+import { type Card, type Fraction } from '../../components/CardDesign';
+import HandFan from '../../components/HandFan';
 import GoldEquationTrack from './GoldEquationTrack';
 import { GoldButton } from '../../components/GoldButton';
 import { applyOperation } from '../utils/arithmetic';
@@ -131,7 +133,6 @@ function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }
   }, [chevron, bob]);
 
   const bobY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, 8] });
-  const mid = (hand.length - 1) / 2;
 
   return (
     <View style={styles.stackStage}>
@@ -165,34 +166,14 @@ function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }
           onToggleOperator={() => dispatch({ type: 'TOGGLE_OP' })}
         />
 
-        {/* The hand fan — fully interactive: tapping a number card drops its
-         *  value into the equation track above. */}
-        <View style={styles.fanRow}>
-          {hand.map((card, i) => {
-            const offset = i - mid;
-            const isNumber = card.type === 'number';
-            const value = isNumber ? (card as { value: number }).value : null;
-            return (
-              <Pressable
-                key={card.id}
-                disabled={!isNumber}
-                onPress={isNumber ? () => dispatch({ type: 'TAP_SOURCE', number: value as number }) : undefined}
-                accessibilityRole={isNumber ? 'button' : undefined}
-                accessibilityLabel={isNumber ? `הוסף ${value}` : undefined}
-                style={({ pressed }) => ({
-                  marginLeft: i === 0 ? 0 : -62,
-                  transform: [
-                    { rotate: `${offset * 6}deg` },
-                    { translateY: Math.abs(offset) * 8 - (pressed && isNumber ? 10 : 0) },
-                  ],
-                  zIndex: i,
-                })}
-              >
-                <GameCard card={card} small />
-              </Pressable>
-            );
-          })}
-        </View>
+        {/* The hand fan — the SAME curved/scrollable fan geometry as the
+         *  live game (HandFan), fully interactive: tapping a number card
+         *  drops its value into the equation track above. */}
+        <HandFan
+          cards={hand}
+          canTap={(c) => c.type === 'number'}
+          onTapCard={(c) => dispatch({ type: 'TAP_SOURCE', number: (c as { value: number }).value })}
+        />
       </View>
     </View>
   );
@@ -354,7 +335,6 @@ const styles = StyleSheet.create({
   },
   bubbleText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 
-  fanRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
   advanceWrap: { alignItems: 'center', gap: 8 },
   slogan: { color: '#F4CD5A', fontSize: 20, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
 
