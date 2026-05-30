@@ -34,9 +34,12 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
+
+// The Gold Room table surface (same asset family the live game uses).
+const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
 import { type Card, type Fraction } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
 import EquationSlots from '../components/onboarding/EquationSlots';
@@ -313,7 +316,10 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
   const handleMenu = useCallback(() => onExit?.(), [onExit]); // back to the Hub
 
   return (
-    <View style={styles.root}>
+    // The gold table surface — same ImageBackground mechanism the live game
+    // uses for its felt, in the Gold Room's golden skin, so the practice
+    // feels like sitting at the real table from the first moment.
+    <ImageBackground source={GOLD_TABLE_IMG} resizeMode="cover" style={styles.root}>
       {stage === 'stack' && <StackStage key={roundKey} hand={hand} onAdvance={startSimulation} />}
       {stage === 'rolling' && <RollingStage dice={dice} onDone={() => setStage('solving')} />}
       {(stage === 'solving' || stage === 'result') && (
@@ -322,7 +328,7 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
       {stage === 'result' ? <ResultOverlay onRetry={handleRetry} onNext={handleNext} onMenu={handleMenu} /> : null}
 
       {__DEV__ ? <LayerTracker stage={stage} /> : null}
-    </View>
+    </ImageBackground>
   );
 }
 
