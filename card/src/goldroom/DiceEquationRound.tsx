@@ -34,12 +34,44 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, ImageBackground, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
 
 // The Gold Room table surface (same asset family the live game uses).
 const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
+// The real game's branded card back — used for the deck pile (הערימה).
+const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
+
+// Layered offsets copied from the live game's DrawPile so the deck reads
+// as a real, slightly-messy stack of cards.
+const PILE_ROTATIONS = [
+  { rotate: '-3deg', tx: -2, ty: 4 },
+  { rotate: '2deg', tx: 3, ty: 2 },
+  { rotate: '-1deg', tx: -1, ty: 1 },
+  { rotate: '0deg', tx: 0, ty: 0 },
+];
+
+// ── The deck (הערימה) — "the bank". A recognizable corner pile of branded
+// card backs, mirroring the live game's DrawPile placement, so the learner
+// meets the deck before using the hand fan. Recognition only (no draw).
+function GoldDeckPile() {
+  return (
+    <View style={styles.deckWrap} pointerEvents="none">
+      <View style={styles.deckStack}>
+        {PILE_ROTATIONS.map((r, i) => (
+          <Image
+            key={i}
+            source={CARD_BACK_IMG}
+            resizeMode="cover"
+            style={[styles.deckCard, { transform: [{ rotate: r.rotate }, { translateX: r.tx }, { translateY: r.ty }] }]}
+          />
+        ))}
+      </View>
+      <Text style={styles.deckLabel}>הערימה</Text>
+    </View>
+  );
+}
 import { type Card, type Fraction } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
 import EquationSlots from '../components/onboarding/EquationSlots';
@@ -323,6 +355,9 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
     // uses for its felt, in the Gold Room's golden skin, so the practice
     // feels like sitting at the real table from the first moment.
     <ImageBackground source={GOLD_TABLE_IMG} resizeMode="cover" style={styles.root}>
+      {/* The deck (הערימה) sits in the corner like the live game — meet the
+       *  bank before using the hand. Shown during the intro/stack phase. */}
+      {stage === 'stack' ? <GoldDeckPile /> : null}
       {stage === 'stack' && <StackStage key={roundKey} hand={hand} onAdvance={startSimulation} />}
       {stage === 'rolling' && <RollingStage dice={dice} onDone={() => setStage('solving')} />}
       {(stage === 'solving' || stage === 'result') && (
@@ -356,6 +391,19 @@ const styles = StyleSheet.create({
   bubbleText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 
   advanceWrap: { alignItems: 'center', gap: 8 },
+
+  // The deck (הערימה) — corner pile of branded card backs.
+  deckWrap: { position: 'absolute', top: 8, left: 12, alignItems: 'center', zIndex: 5 },
+  deckStack: { width: 60, height: 84, alignItems: 'center', justifyContent: 'center' },
+  deckCard: {
+    position: 'absolute',
+    width: 56,
+    height: 78,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(244,205,90,0.45)',
+  },
+  deckLabel: { color: '#F4CD5A', fontSize: 11, fontWeight: '800', marginTop: 3, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   slogan: { color: '#F4CD5A', fontSize: 20, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
 
   diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
