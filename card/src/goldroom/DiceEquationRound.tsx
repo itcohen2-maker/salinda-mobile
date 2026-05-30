@@ -19,17 +19,18 @@
 //     brand slogan beat.
 //
 //   Phase 3 — Solving (single focused track)
-//     ONE equation track (GoldEquationTrack). No dual tracks, no green
-//     Confirm, no countdown timer. The learner builds the equation and
-//     taps the gold "בדוק" button to resolve.
+//     ONE equation built with the SAME shared EquationSlots as the
+//     tutorial (gold skin). No dual tracks, no countdown timer. The
+//     learner builds the equation and taps the gold "בדוק" to resolve.
 //
 //   Result — the Mastery Loop
 //     The board freezes and a result overlay offers three explicit
 //     choices: Retry (same card, fresh dice), Next (new card), Menu.
 //
 // Orchestration only: reuses generateTutorialSeed, AnimatedDice, the
-// shared HandFan (same fan geometry as the live game), and the Gold-Room
-// GoldEquationTrack. No duplicated game logic.
+// shared HandFan (same fan geometry as the live game) and the shared
+// EquationSlots (same equation builder as the tutorial, gold-themed).
+// No duplicated game logic.
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -38,7 +39,7 @@ import Svg, { Path } from 'react-native-svg';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
 import { type Card, type Fraction } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
-import GoldEquationTrack from './GoldEquationTrack';
+import EquationSlots from '../components/onboarding/EquationSlots';
 import { GoldButton } from '../../components/GoldButton';
 import { applyOperation } from '../utils/arithmetic';
 import { generateTutorialSeed } from './generateDiceSet';
@@ -157,13 +158,19 @@ function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }
        *  fan, which is anchored at the very bottom of the screen, mirroring
        *  the live game's hand placement. */}
       <View style={styles.stackBottom}>
-        <GoldEquationTrack
-          slots={eq.slots}
-          operator={eq.operator}
-          result={eq.result}
-          sources={[]}
+        {/* The SAME equation builder as the tutorial (EquationSlots),
+         *  reused here in its gold skin. Free-experiment phase: no Confirm
+         *  (the learner rolls via "תראה לי"); the fan feeds the sources. */}
+        <EquationSlots
+          theme="gold"
+          equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
+          activeEquationIndex={0}
+          sourceNumbers={[]}
+          onSelectEquation={() => {}}
           onTapSource={(n) => dispatch({ type: 'TAP_SOURCE', number: n })}
           onToggleOperator={() => dispatch({ type: 'TOGGLE_OP' })}
+          onConfirmEquation={() => {}}
+          showConfirm={false}
         />
 
         {/* The hand fan — the SAME curved/scrollable fan geometry as the
@@ -221,15 +228,19 @@ function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, numb
         ))}
       </View>
 
-      <GoldEquationTrack
-        slots={eq.slots}
-        operator={eq.operator}
-        result={eq.result}
-        sources={dice}
+      {/* The SAME equation builder as the tutorial (EquationSlots), gold
+       *  skin: the landed dice are the tappable sources; "בדוק" resolves. */}
+      <EquationSlots
+        theme="gold"
+        equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
+        activeEquationIndex={0}
+        sourceNumbers={dice}
+        onSelectEquation={() => {}}
         onTapSource={(n) => dispatch({ type: 'TAP_SOURCE', number: n })}
         onToggleOperator={() => dispatch({ type: 'TOGGLE_OP' })}
-        showConfirm
-        onConfirm={handleConfirm}
+        onConfirmEquation={handleConfirm}
+        confirmLabel="בדוק ✓"
+        confirmDisabledForIndex={() => eq.slots[0] === null || eq.slots[1] === null || eq.result === null}
       />
     </View>
   );
