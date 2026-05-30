@@ -1,3 +1,13 @@
+// ╔══════════════════════════════════════════════════════════╗
+// ║                                                            ║
+// ║   אם אנחנו מתכננים לכבוש את העולם — זה צעד קטן לעומת        ║
+// ║   מה שנשיג.  המטרה: לכבוש את כל קהלי היעד.                  ║
+// ║                                                            ║
+// ║   If we're planning to conquer the world — this is a       ║
+// ║   small step next to what we'll achieve. The goal:         ║
+// ║   win over every single target audience.                   ║
+// ║                                                            ║
+// ╚══════════════════════════════════════════════════════════╝
 // ============================================================
 // index.tsx — Salinda Card Game — FULL SINGLE FILE
 // LinearGradient cards, 3D shadows, rotated deck, thick edges
