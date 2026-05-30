@@ -18,6 +18,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Platform, StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { GameCard, type Card } from './CardDesign';
 import { getNativeHandFanMetrics } from '../src/theme/nativeHandFan';
+import { playSfx } from '../src/audio/sfx';
 
 export interface HandFanProps {
   cards: Card[];
@@ -30,9 +31,12 @@ export interface HandFanProps {
   selectedIds?: Set<string>;
   /** Width used to horizontally center the fan. Defaults to the screen. */
   width?: number;
+  /** Play the UI "tap" sound when a card is selected. Default true — this
+   *  is the premium card-selection feedback. */
+  playTapSound?: boolean;
 }
 
-export default function HandFan({ cards, onTapCard, canTap, selectedIds, width }: HandFanProps) {
+export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, playTapSound = true }: HandFanProps) {
   const metrics = useMemo(() => getNativeHandFanMetrics(Platform.OS), []);
   const cardW = metrics.cardWidth;
   const cardH = metrics.cardHeight;
@@ -86,24 +90,42 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width }
     scrollX.setValue(target);
   }, [count, scrollX]);
 
-  // Horizontal drag → scroll; release → spring-snap to the nearest card.
-  // onStart stays false so plain taps fall through to each card's button;
-  // we only claim the gesture once it is clearly a horizontal drag.
+  // Horizontal drag → scroll; release → momentum projection + soft snap.
+  // Taps must reach each card's button, so onStart stays false and we only
+  // claim the gesture on a clearly horizontal drag. The Capture variant is
+  // the key fix for "the fan doesn't move": once the drag is unmistakably
+  // horizontal it wrests the responder back from a card's TouchableOpacity,
+  // while a still finger (a tap) is never captured and selects the card.
   const startScrollRef = useRef(centerStart);
+  const clamp = (v: number) => Math.max(0, Math.min(countRef.current - 1, v));
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 0.5,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 0.6,
+      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
       onPanResponderGrant: () => {
         startScrollRef.current = scrollRef.current;
+        scrollX.stopAnimation();
       },
       onPanResponderMove: (_e, g) => {
         const next = startScrollRef.current - g.dx / cardStepRef.current;
-        scrollX.setValue(Math.max(0, Math.min(countRef.current - 1, next)));
+        scrollX.setValue(clamp(next));
       },
-      onPanResponderRelease: () => {
-        const target = Math.max(0, Math.min(countRef.current - 1, Math.round(scrollRef.current)));
-        Animated.spring(scrollX, { toValue: target, useNativeDriver: true, tension: 60, friction: 10 }).start();
+      onPanResponderRelease: (_e, g) => {
+        // Project a little past the release point using the fling velocity
+        // (vx is px/ms; divide by the per-card travel to get index/ms), then
+        // settle with a gentle, slightly springy snap for a premium feel.
+        const vIndex = -g.vx / cardStepRef.current;
+        const projected = scrollRef.current + vIndex * 110;
+        const target = clamp(Math.round(projected));
+        Animated.spring(scrollX, {
+          toValue: target,
+          useNativeDriver: true,
+          velocity: vIndex,
+          speed: 11,
+          bounciness: 7,
+        }).start();
       },
     }),
   ).current;
@@ -178,7 +200,17 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width }
             <TouchableOpacity
               activeOpacity={tappable ? 0.7 : 1}
               disabled={!tappable}
-              onPress={tappable ? () => onTapCard!(card) : undefined}
+              touchSoundDisabled
+              onPress={
+                tappable
+                  ? () => {
+                      // Premium card-selection feedback: the same UI tap
+                      // sound the live game uses, played immediately.
+                      if (playTapSound) void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+                      onTapCard!(card);
+                    }
+                  : undefined
+              }
               style={{ width: cardW, height: cardH, alignItems: 'center', justifyContent: 'center' }}
             >
               <View style={renderScale === 1 ? undefined : { transform: [{ scale: renderScale }] }}>
