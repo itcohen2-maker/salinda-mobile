@@ -46,6 +46,7 @@ import EquationSlots from '../components/onboarding/EquationSlots';
 import { GoldButton } from '../../components/GoldButton';
 import { applyOperation } from '../utils/arithmetic';
 import { generateTutorialSeed } from './generateDiceSet';
+import { playSfx } from '../audio/sfx';
 
 const SLOGAN = 'לחשוב מחוץ למשוואה...';
 
@@ -298,12 +299,14 @@ export function DiceEquationRound({ onExit }: { onExit?: () => void }) {
 
   // Roll fresh dice and run the simulation for the CURRENT card.
   const startSimulation = useCallback(() => {
+    void playSfx('transition', { cooldownMs: 0 }); // premium beat as the dice deal
     setDice(generateTutorialSeed());
     setSolveKey((k) => k + 1);
     setStage('rolling');
   }, []);
 
   const handleResolve = useCallback(() => {
+    void playSfx('success', { cooldownMs: 0 }); // reward chime on a legal equation
     setStage('result'); // freeze the board; surface the Mastery Loop result screen
   }, []);
 
