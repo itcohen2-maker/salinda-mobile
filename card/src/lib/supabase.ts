@@ -24,7 +24,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false, // Expo doesn't use URL-based auth redirects
+    detectSessionInUrl: false, // We finalize OAuth manually (createSessionFromUrl), not via URL auto-detect.
+    // PKCE: provider returns ?code= in the query (not tokens in the #hash). Far more robust on web —
+    // implicit-flow #hash tokens were silently dropped on the callback, leaving the client anonymous
+    // even though the server logged a successful login. createSessionFromUrl() exchanges the code.
+    flowType: 'pkce',
     // On web, Supabase uses Navigator.locks to serialize auth token writes.
     // When init() and onAuthStateChange race during OAuth callback, both compete
     // for the same lock and the 10 s timeout fires. Since AsyncStorage on web
