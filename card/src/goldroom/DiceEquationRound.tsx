@@ -29,14 +29,13 @@
 // ============================================================
 
 import React, { useCallback, useMemo, useReducer, useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
 import { type Card, type Fraction } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
 import EquationSlots from '../components/onboarding/EquationSlots';
 import { GoldButton } from '../../components/GoldButton';
 import { applyOperation } from '../utils/arithmetic';
-import { generateTutorialSeed } from './generateDiceSet';
 import { playSfx } from '../audio/sfx';
 
 // The Gold Room table surface (same asset family the live game uses).
@@ -192,36 +191,22 @@ function ResultOverlay({ onRetry, onNext, onMenu }: { onRetry: () => void; onNex
   );
 }
 
-// ── Admin/dev layer tracker — mirrors the Hub status line so the active
-// flow layer is always legible during development.
-const TRACKER: Record<Stage, string> = {
-  roll: 'UI: Roll · Flow: Single Screen · Action: Original Dice Button',
-  solve: 'UI: Equation · Flow: Single Screen · Action: Build / בדוק',
-  result: 'UI: Result · Flow: User Decision · Action: Mastery Loop',
-};
-
-function LayerTracker({ stage }: { stage: Stage }) {
-  return (
-    <View pointerEvents="none" style={styles.tracker}>
-      <Text style={styles.trackerText}>{TRACKER[stage]}</Text>
-    </View>
-  );
-}
-
 export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
   const [stage, setStage] = useState<Stage>('roll');
   const [roundKey, setRoundKey] = useState(0); // new HAND (and dice)
   const [diceKey, setDiceKey] = useState(0); // fresh dice for the SAME hand (retry)
 
-  // A guaranteed-solvable dice set; AnimatedDice lands on exactly these.
-  const dice = useMemo<[number, number, number]>(() => generateTutorialSeed(), [diceKey]);
+  // The dice are rolled for real (random, fully animated) — captured from the
+  // roll. Any +/- pair of dice yields a legal equation, so no seeding needed.
+  const [dice, setDice] = useState<[number, number, number]>([1, 1, 1]);
   const hand = useMemo(() => buildObservationHand(), [roundKey]);
 
   const handleRollStart = useCallback(() => {
     void playSfx('transition', { cooldownMs: 0 }); // the game's roll beat
   }, []);
 
-  const handleRollComplete = useCallback(() => {
+  const handleRollComplete = useCallback((vals: [number, number, number]) => {
+    setDice(vals); // use the values that actually landed
     setStage('solve');
   }, []);
 
@@ -258,10 +243,9 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
       <View style={styles.playArea}>
         {stage === 'roll' ? (
           <View style={styles.rollZone}>
-            <Text style={styles.rollHint}>הטלת הקוביות – המנוע של המשחק. הקש על הכפתור כדי להטיל.</Text>
             <AnimatedDice
               key={`dice-${diceKey}`}
-              fixedFinalValues={dice}
+              size={52}
               hideSumBadge
               onRollStart={handleRollStart}
               onRollComplete={handleRollComplete}
@@ -279,8 +263,6 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
       </View>
 
       {stage === 'result' ? <ResultOverlay onRetry={handleRetry} onNext={handleNext} onMenu={handleMenu} /> : null}
-
-      {__DEV__ ? <LayerTracker stage={stage} /> : null}
     </View>
   );
 }
@@ -288,13 +270,14 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // Table backdrop — raised toward the top (room for the fan + future controls).
-  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  // Table backdrop — a compact table centered in the upper play area, so the
+  // dice sit over it (smaller than the live frame; the room is dark-gold).
+  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   tableImg: {
-    width: '100%',
+    width: '74%',
+    maxWidth: 340,
     aspectRatio: 1024 / 774,
     alignSelf: 'center',
-    ...(Platform.OS !== 'web' ? { width: '82%', maxWidth: 480 } : null),
   },
 
   // The deck (הערימה) — big corner pile of branded card backs, TOP-RIGHT.
@@ -310,10 +293,12 @@ const styles = StyleSheet.create({
   },
   deckLabel: { color: '#F4CD5A', fontSize: 13, fontWeight: '800', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
 
-  // Play area (dice / equation) above the fan.
-  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 18, paddingTop: 80 },
-  rollZone: { alignItems: 'center', gap: 26 },
-  rollHint: { color: '#F8E08E', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22, maxWidth: 340 },
+  // Play area (dice / equation) above the fan — centered over the table.
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 18, paddingTop: 24 },
+  // Scale the whole dice unit down — AnimatedDice's roll button is a fixed,
+  // oversized size, so shrink it (and the dice) together to a compact, game-
+  // like footprint without touching the shared component.
+  rollZone: { alignItems: 'center', gap: 22, transform: [{ scale: 0.8 }] },
   solveZone: { alignItems: 'center', gap: 24, width: '100%' },
 
   diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
@@ -349,20 +334,6 @@ const styles = StyleSheet.create({
   resultTitle: { fontSize: 26, fontWeight: '900', textAlign: 'center' },
   resultSub: { color: '#D8C49A', fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 22, marginBottom: 6 },
   resultActions: { alignSelf: 'stretch', marginTop: 6, gap: 10 },
-
-  tracker: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: 'rgba(244,205,90,0.16)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(244,205,90,0.3)',
-  },
-  trackerText: { color: '#F4CD5A', fontSize: 11, fontWeight: '700', textAlign: 'center' },
 });
 
 export default DiceEquationRound;
