@@ -21092,20 +21092,10 @@ export function PlayModeChoiceScreen({
             {/* ── 4. ADMIN BLOCK ── */}
             {showAdminControls ? (
               <>
-                {/* Admin-only entry to the new, separate gold tutorial.
-                    Uses the app's standard SalindaButton (gold "yellow" tone) so
-                    it matches the rest of the home exactly — same gold-rim pill. */}
-                <SalindaButton
-                  text="🪙 חדר הזהב"
-                  color="yellow"
-                  width={220}
-                  height={42}
-                  fontSize={15}
-                  testID="home-gold-room"
-                  accessibilityLabel="פתח את חדר הזהב"
-                  onPress={() => setGoldRoomOpen(true)}
-                  style={{ alignSelf: 'center', marginTop: primaryStackGap }}
-                />
+                {/* Admin-only entry to the new, separate gold tutorial. */}
+                <View style={{ width: 220, alignSelf: 'center', marginTop: primaryStackGap }}>
+                  <GoldButton label="🪙 חדר הזהב" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="פתח את חדר הזהב" />
+                </View>
                 <SalindaButton
                   text={t('lobby.sendFeedback')}
                   color="blue"
