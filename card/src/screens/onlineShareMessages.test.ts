@@ -24,7 +24,7 @@ describe('online share messages', () => {
     ).toBe(
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
-        'Room code: 1234\n' +
+        'Room code: S-1234\n' +
         "If you don't have the app, use this link to play:\n" +
         'https://salinda.example/?room=1234',
     );
@@ -42,7 +42,7 @@ describe('online share messages', () => {
     ).toBe(
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
-        'Room code: 1234\n' +
+        'Room code: S-1234\n' +
         'Invite code: 987654\n' +
         "If you don't have the app, use this link to play:\n" +
         'https://salinda.example/?room=1234&invite=987654',
@@ -61,7 +61,7 @@ describe('online share messages', () => {
     ).toBe(
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
-        'Room code: 1234\n' +
+        'Room code: S-1234\n' +
         'Invite code: 987654',
     );
   });
@@ -78,7 +78,7 @@ describe('online share messages', () => {
     ).toBe(
       'You were invited to play Salinda.\n' +
         'Share the code so friends can join\n' +
-        'Room code: 1234\n' +
+        'Room code: S-1234\n' +
         'Invite code: 987654\n' +
         "If you don't have the app, use this link to play:\n" +
         'https://salinda.example/?room=1234&invite=987654',

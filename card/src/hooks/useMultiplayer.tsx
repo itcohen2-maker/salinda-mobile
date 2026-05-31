@@ -5,8 +5,9 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { BackHandler, Platform } from 'react-native';
+import { AppState, BackHandler, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { io, type Socket } from 'socket.io-client';
 import { useAuthOptional } from './useAuth';
 import type {

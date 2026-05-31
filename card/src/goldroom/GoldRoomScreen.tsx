@@ -54,7 +54,7 @@ interface Spot {
 }
 
 interface Step {
-  tag: string;
+  tag?: string; // small eyebrow label above the title; omit when it would duplicate the title
   title: string;
   body: string;
   spot?: Spot; // undefined → full dim, centered card (intro / goal)
@@ -100,7 +100,6 @@ const BASICS_STEPS: Step[] = [
     mock: 'deck',
   },
   {
-    tag: 'המניפה',
     title: 'המניפה 🃏',
     body: 'המניפה — היד שלך. מתחילים את המשחק עם 7 קלפים. החליקו לצדדים כדי לעבור ביניהם.',
     // No spot → full dim; a full, raised hand fan of real cards sits at the
@@ -109,9 +108,8 @@ const BASICS_STEPS: Step[] = [
     cardAnchor: 'top',
   },
   {
-    tag: 'חוק הזהב',
     title: 'חוק הזהב ✨',
-    body: 'המטרה: להישאר עם 2 קלפים בדיוק! בונים משוואה, פוגעים בתוצאה, ונפטרים מה-5 הנותרים. מי שמגיע ראשון ל-2 קלפים — לוקח את הכל!',
+    body: 'המטרה: להישאר עם 2 קלפים בדיוק! בונים משוואה, פוגעים בתוצאה, ונפטרים מה-5 הנותרים. מי שמגיע ראשון ל-2 קלפים מנצח!',
     cardAnchor: 'center',
   },
 ];
@@ -416,7 +414,7 @@ function TrainingTask({
               end={{ x: 0, y: 1 }}
               style={styles.sheen}
             />
-            <Text style={styles.stepTag}>{step.tag}</Text>
+            {step.tag ? <Text style={styles.stepTag}>{step.tag}</Text> : null}
             <Text style={styles.title}>{step.title}</Text>
             <Text style={styles.body}>{step.body}</Text>
           </LinearGradient>

@@ -17,6 +17,16 @@ function compactLines(lines: Array<string | null | undefined>): string {
     .join('\n');
 }
 
+/**
+ * Formats a room code for display/sharing with a Google-style "S-" prefix
+ * (e.g. "1234" -> "S-1234"). The internal/stored code stays digits-only.
+ */
+export function formatRoomCode(code: string | null | undefined): string {
+  const normalized = code?.trim();
+  if (!normalized) return '';
+  return `S-${normalized}`;
+}
+
 export function buildRoomShareMessage({
   t,
   roomCode,
@@ -32,7 +42,7 @@ export function buildRoomShareMessage({
   return compactLines([
     t('lobby.shareInviteIntro'),
     t('lobby.shareCodeHint'),
-    `${t('lobby.roomCodeLabel')}: ${normalizedRoomCode}`,
+    `${t('lobby.roomCodeLabel')}: ${formatRoomCode(normalizedRoomCode)}`,
     normalizedInviteCode ? `${t('lobby.inviteCodeLabel')}: ${normalizedInviteCode}` : null,
     normalizedInviteLink ? t('lobby.shareWebLinkHint') : null,
     normalizedInviteLink ?? null,
@@ -54,7 +64,7 @@ export function buildPrivateInviteShareMessage({
   return compactLines([
     t('lobby.shareInviteIntro'),
     t('lobby.shareCodeHint'),
-    normalizedRoomCode ? `${t('lobby.roomCodeLabel')}: ${normalizedRoomCode}` : null,
+    normalizedRoomCode ? `${t('lobby.roomCodeLabel')}: ${formatRoomCode(normalizedRoomCode)}` : null,
     `${t('lobby.inviteCodeLabel')}: ${normalizedInviteCode}`,
     normalizedInviteLink ? t('lobby.shareWebLinkHint') : null,
     normalizedInviteLink ?? null,

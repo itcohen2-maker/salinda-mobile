@@ -18371,6 +18371,27 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           </View>
         ) : null}
       </View>
+      {/* מיתוג: לוגו סלינדה מוקטן בראש השולחן — ממורכז, לא-אינטראקטיבי,
+          בצד הנגדי לקלף (הקלף בימין, החזרה בשמאל), מוצג גם במשחק רשת וגם מקומי. */}
+      {!state.isTutorial && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: topControlsTop + (topControlsLift > 0 ? topControlsLift : 0) + 2,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            zIndex: 399,
+          }}
+        >
+          <Image
+            source={salindaPuzzleGameLogoImg}
+            resizeMode="contain"
+            style={{ width: 108, height: 26, opacity: 0.9 }}
+          />
+        </View>
+      )}
       {/* ?? SLOT 2: תוצאות אפשריות (הערימה ממוקמת לפי Y מוחלט) ?? */}
       <View style={{flexShrink:0,flexDirection:'row',alignItems:'center',justifyContent:'flex-start',flexWrap:'wrap',gap:12,paddingHorizontal:12,paddingVertical:4,zIndex:1}} />
 
@@ -20147,12 +20168,17 @@ function NotificationZone() {
             )}
           </View>
           {needsAck && (
-            <TouchableOpacity activeOpacity={0.9} onPress={dismiss} style={{ alignSelf: 'flex-end', backgroundColor: 'rgba(255,215,0,0.25)', borderWidth: 1.5, borderColor: 'rgba(255,215,0,0.5)', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {notif.emoji ? <Text style={{ color: '#FFD700', fontSize: 15 }}>{notif.emoji}</Text> : null}
-                <Text style={{ color: '#FFD700', fontSize: 15, fontWeight: '800' }}>הבנתי!</Text>
-              </View>
-            </TouchableOpacity>
+            <View style={{ alignSelf: 'flex-end' }}>
+              <GoldButton
+                label={notif.emoji ? notif.emoji + ' הבנתי!' : 'הבנתי!'}
+                onPress={dismiss}
+                accessibilityLabel="הבנתי"
+                height={36}
+                radius={12}
+                raise={6}
+                fontSize={15}
+              />
+            </View>
           )}
         </View>
       </Animated.View>
@@ -20400,6 +20426,10 @@ function OnlineGameWrapper({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (isMyTurn && !prevMyTurn.current) {
       setViewMode('game');
       mpRef.current?.clearToast?.();
+      // תזכורת רכה כשחוזר התור שלי מול יריב — מעיר שחקן שהסיט מבט
+      if (!isEliminatedSpectator && state.soundsEnabled !== false) {
+        void playSfx('transition', { cooldownMs: 600, volumeOverride: 0.4 });
+      }
     } else if (!isMyTurn && prevMyTurn.current && showWaitingSingleDiscardCelebration) {
       setViewMode('player');
     }
@@ -20708,6 +20738,56 @@ function MenuCoinButton({
   );
 }
 
+/** Slogan that fades + slides up on mount. */
+function AnimatedSlogan({ text, compact }: { text: string; compact?: boolean }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <Text style={[brandHeaderStyles.slogan, compact && { fontSize: 14 }]}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+/** Branded home header: wordmark + animated slogan. */
+function BrandHeader({ title, slogan, compact }: { title: string; slogan: string; compact?: boolean }) {
+  return (
+    <View style={[brandHeaderStyles.container, compact && { marginVertical: 20 }]}>
+      <Text style={[brandHeaderStyles.title, compact && { fontSize: 30 }]}>{title}</Text>
+      <AnimatedSlogan text={slogan} compact={compact} />
+    </View>
+  );
+}
+
+const brandHeaderStyles = StyleSheet.create({
+  container: {
+    marginVertical: 40,
+    alignItems: 'center',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 36,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    writingDirection: 'rtl',
+  },
+  slogan: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontStyle: 'italic',
+    marginTop: 5,
+    writingDirection: 'rtl',
+  },
+});
+
 export function PlayModeChoiceScreen({
   onPlay,
   onOpenAuth,
@@ -20739,14 +20819,16 @@ export function PlayModeChoiceScreen({
   const responsive = useResponsiveLayout();
   const preferredNameSeededRef = useRef(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [goldRoomOpen, setGoldRoomOpen] = useState(false);
   // Dev-only preview deep link (?goldroom=1) opens the gold room without an
   // admin login while iterating. Disabled in production builds (__DEV__ false).
+  // Used only as the INITIAL open state so the ✕ close button still works
+  // (otherwise the URL flag would force it permanently open).
   const forceGoldRoom =
     __DEV__ &&
     Platform.OS === 'web' &&
     typeof window !== 'undefined' &&
     /[?&]goldroom=1/.test(window.location.search);
+  const [goldRoomOpen, setGoldRoomOpen] = useState(forceGoldRoom);
   const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 14 : 24;
@@ -20822,15 +20904,17 @@ export function PlayModeChoiceScreen({
             {isFeedbackAdmin && (
               <View style={{ alignItems: 'center', marginBottom: 12, gap: 10 }}>
                 <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
-                {/* Admin-only entry to the new, separate gold tutorial. */}
-                <View style={{ width: 220 }}>
-                  <GoldButton label="🪙 חדר הזהב" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="פתח את חדר הזהב" />
-                </View>
               </View>
             )}
             {/* The room renders only when opened; only its trigger is admin-gated.
                 A dev deep-link (?goldroom=1) can also open it for preview. */}
-            <GoldRoomScreen visible={goldRoomOpen || forceGoldRoom} onClose={() => setGoldRoomOpen(false)} />
+            <GoldRoomScreen
+              visible={goldRoomOpen}
+              onClose={() => setGoldRoomOpen(false)}
+              // Decision (user, 2026-05-30): "יסודות המשחק" runs the in-room gold
+              // spotlight flow (BASICS_STEPS), NOT the old live tutorial. Do not pass
+              // onStartLiveTutorial — the polished-gold in-room flow is THE tutorial.
+            />
 
             {/* ── 1. HERO BUTTON ── */}
             <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
@@ -21008,6 +21092,20 @@ export function PlayModeChoiceScreen({
             {/* ── 4. ADMIN BLOCK ── */}
             {showAdminControls ? (
               <>
+                {/* Admin-only entry to the new, separate gold tutorial.
+                    Uses the app's standard SalindaButton (gold "yellow" tone) so
+                    it matches the rest of the home exactly — same gold-rim pill. */}
+                <SalindaButton
+                  text="🪙 חדר הזהב"
+                  color="yellow"
+                  width={220}
+                  height={42}
+                  fontSize={15}
+                  testID="home-gold-room"
+                  accessibilityLabel="פתח את חדר הזהב"
+                  onPress={() => setGoldRoomOpen(true)}
+                  style={{ alignSelf: 'center', marginTop: primaryStackGap }}
+                />
                 <SalindaButton
                   text={t('lobby.sendFeedback')}
                   color="blue"
@@ -21016,7 +21114,7 @@ export function PlayModeChoiceScreen({
                   fontSize={15}
                   testID="home-feedback-toggle"
                   onPress={() => setFeedbackOpen((prev) => !prev)}
-                  style={{ marginTop: primaryStackGap, alignSelf: 'center' }}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
                 />
                 <SalindaButton
                   text={t('feedbackInbox.open')}
@@ -22462,58 +22560,28 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
               >
                 {Platform.OS === 'android' ? (
                   <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 } as any}>
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={t('game.back')}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    <GoldButton
+                      label={locale === 'he' ? '‹ חזור' : '‹ Back'}
                       onPress={tutorialBack}
+                      tone="stone"
+                      height={34}
+                      fontSize={14}
+                      radius={13}
+                      raise={5}
                       testID="tutorial-header-back"
-                      style={{
-                        minWidth: tutorialHeaderActionMinWidth,
-                        paddingVertical: tutorialHeaderActionPaddingVertical,
-                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(71,85,105,0.92)',
-                        borderWidth: 1.5,
-                        borderColor: 'rgba(148,163,184,0.7)',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.28,
-                        shadowRadius: 6,
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                        {locale === 'he' ? '‹ חזור' : '‹ Back'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={t('previewTeaser.skip')}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityLabel={t('game.back')}
+                    />
+                    <GoldButton
+                      label={t('previewTeaser.skip')}
                       onPress={tutorialSkip}
+                      tone="stone"
+                      height={34}
+                      fontSize={14}
+                      radius={13}
+                      raise={5}
                       testID="tutorial-header-skip"
-                      style={{
-                        minWidth: tutorialHeaderActionMinWidth,
-                        paddingVertical: tutorialHeaderActionPaddingVertical,
-                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(90,95,105,0.92)',
-                        borderWidth: 1.5,
-                        borderColor: 'rgba(180,185,195,0.6)',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.28,
-                        shadowRadius: 6,
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                        {t('previewTeaser.skip')}
-                      </Text>
-                    </TouchableOpacity>
+                      accessibilityLabel={t('previewTeaser.skip')}
+                    />
                   </View>
                 ) : (
                   <TouchableOpacity
@@ -22568,58 +22636,28 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                   </TouchableOpacity>
                 ) : (
                   <View style={{ flexDirection: 'row', writingDirection: 'ltr', alignItems: 'center', gap: 8 } as any}>
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={t('game.back')}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    <GoldButton
+                      label={locale === 'he' ? '‹ חזור' : '‹ Back'}
                       onPress={tutorialBack}
+                      tone="stone"
+                      height={34}
+                      fontSize={14}
+                      radius={13}
+                      raise={5}
                       testID="tutorial-header-back"
-                      style={{
-                        minWidth: tutorialHeaderActionMinWidth,
-                        paddingVertical: tutorialHeaderActionPaddingVertical,
-                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(71,85,105,0.92)',
-                        borderWidth: 1.5,
-                        borderColor: 'rgba(148,163,184,0.7)',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.28,
-                        shadowRadius: 6,
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                        {locale === 'he' ? '‹ חזור' : '‹ Back'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={t('previewTeaser.skip')}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityLabel={t('game.back')}
+                    />
+                    <GoldButton
+                      label={t('previewTeaser.skip')}
                       onPress={tutorialSkip}
+                      tone="stone"
+                      height={34}
+                      fontSize={14}
+                      radius={13}
+                      raise={5}
                       testID="tutorial-header-skip"
-                      style={{
-                        minWidth: tutorialHeaderActionMinWidth,
-                        paddingVertical: tutorialHeaderActionPaddingVertical,
-                        paddingHorizontal: tutorialHeaderActionPaddingHorizontal,
-                        borderRadius: 14,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(90,95,105,0.92)',
-                        borderWidth: 1.5,
-                        borderColor: 'rgba(180,185,195,0.6)',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.28,
-                        shadowRadius: 6,
-                      }}
-                    >
-                      <Text style={{ color: '#FFFFFF', fontSize: 14, lineHeight: 16, fontWeight: '900' }}>
-                        {t('previewTeaser.skip')}
-                      </Text>
-                    </TouchableOpacity>
+                      accessibilityLabel={t('previewTeaser.skip')}
+                    />
                   </View>
                 )}
               </View>

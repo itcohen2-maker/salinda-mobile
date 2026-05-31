@@ -87,7 +87,19 @@
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('expo', {}\\).get\\('web', {}\\), indent=2\\)\\)\")",
       "WebFetch(domain:salinda-mobile.vercel.app)",
       "Bash(cp \"C:/Users/asus/Desktop/סלינדה/salinda.jpg\" web/joker-preview.jpg)",
-      "Bash(cp \"C:/Users/asus/Desktop/סלינדה/salinda.jpg\" dist/joker-preview.jpg)"
+      "Bash(cp \"C:/Users/asus/Desktop/סלינדה/salinda.jpg\" dist/joker-preview.jpg)",
+      "Bash(git --no-pager diff --stat)",
+      "Bash(git rev-list *)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\(x86\\)/Google/Chrome/Application/**)",
+      "Read(//c/Users/User/AppData/Local/Google/Chrome/Application/**)",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --remote-debugging-port=9222 '--user-data-dir=C:\\\\Users\\\\User\\\\.claude\\\\jobs\\\\69d09789\\\\tmp\\\\chrome-supabase' --no-first-run --no-default-browser-check https://supabase.com/dashboard/project/isqxuchcmmabjosxjawt/auth/url-configuration)",
+      "Bash(echo \"launched pid $!\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\User\\\\salinda-mobile\\\\card\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(awk 'NR>=9056 && NR<=9900 && /^function |^const [A-Z].* = .*=>|^export function /{print NR\": \"$0}' index.tsx)",
+      "Bash(awk 'NR>9057 && /^function [A-Z]/{print NR\": \"$0; exit}' index.tsx)",
+      "Bash(findstr :8081)"
     ]
   }
 }

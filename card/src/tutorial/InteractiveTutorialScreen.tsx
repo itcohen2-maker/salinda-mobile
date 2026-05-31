@@ -757,12 +757,6 @@ function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchR
     void playSfx('combo', { cooldownMs: 0, volumeOverride: 0.42 });
     onAck(target);
   }, [onAck, target]);
-  const attachWebAckHandlers = useCallback((node: unknown) => {
-    const button = node as any;
-    if (!button) return;
-    button.onclick = handleAck;
-    button.onpointerup = handleAck;
-  }, [handleAck]);
 
   return (
     <View
@@ -941,58 +935,15 @@ function TutorialCardMatchReminderModal({ onAck, target, t }: TutorialCardMatchR
           </View>
         </View>
 
-        {Platform.OS === 'web'
-          ? React.createElement(
-              'button',
-              {
-                type: 'button',
-                ref: attachWebAckHandlers,
-                onClick: handleAck,
-                onPointerUp: handleAck,
-                'aria-label': ackText,
-                style: {
-                  width: '100%',
-                  minHeight: 58,
-                  borderRadius: 22,
-                  // Polished gold (D): smooth metallic sheen, light top → deep
-                  // bottom, with an inset bevel for volume. No wood grain.
-                  background:
-                    'linear-gradient(180deg, #F8E08E 0%, #F0C659 18%, #D9A23A 55%, #C08A2C 82%, #8A5A1C 100%)',
-                  border: '2px solid #8A5A1C',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '14px 26px',
-                  boxShadow:
-                    'inset 0 2px 0 rgba(255,248,220,0.7), inset 0 -3px 6px rgba(94,58,16,0.5), 0 6px 14px rgba(0,0,0,0.35)',
-                  cursor: 'pointer',
-                  touchAction: 'manipulation',
-                } as any,
-              },
-              React.createElement(
-                'span',
-                {
-                  style: {
-                    color: '#5E3A10',
-                    fontSize: 20,
-                    lineHeight: '24px',
-                    fontWeight: 900,
-                    textAlign: 'center',
-                    fontFamily: 'inherit',
-                    textShadow: '0 1px 0 rgba(248,224,142,0.6)',
-                  } as any,
-                },
-                ackText,
-              ),
-            )
-          : (
-            <GoldButton
-              label={ackText}
-              onPress={handleAck}
-              fullWidth
-              accessibilityLabel={ackText}
-            />
-          )}
+        {/* Focused CTA — not full-width so it reads as a "press me" pill
+         *  rather than a wide rail, but comfortably tappable. */}
+        <GoldButton
+          label={ackText}
+          onPress={handleAck}
+          height={52}
+          fontSize={18}
+          accessibilityLabel={ackText}
+        />
       </View>
     </View>
   );
@@ -5140,9 +5091,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               }
       : isL2BotDemo
         ? {
-            color: '#4A8FB5',
+            color: '#5E3A10',
             fontSize: 15,
-            fontWeight: '600' as const,
+            fontWeight: '700' as const,
           }
       : undefined;
   const bubbleTone: HappyBubbleTone =
@@ -5420,6 +5371,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   // is expected. > 2 such skips blocks the coin reward at core-complete.
   const handleTutorialBack = useCallback(() => {
     if (showWelcomeBubble) return;
+    // Block "back" while the card-match reminder demands acknowledgement.
+    if (pendingCardMatchReminder) return;
     if (
       advancedStartedFromWelcomeRef.current &&
       engine.lessonIndex === MIMIC_FIRST_FRACTION_LESSON_INDEX &&
@@ -5490,11 +5443,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     gameDispatch,
     isL9Lesson,
     l9Stage,
+    pendingCardMatchReminder,
     showWelcomeBubble,
   ]);
 
   const skipForward = useCallback(() => {
     if (showWelcomeBubble) return;
+    // While the "card-match reminder" is up, the learner must acknowledge it
+    // (press "המשך") — skipping is blocked, even via the host header button.
+    if (pendingCardMatchReminder) return;
     if (engine.phase === 'bot-demo' || engine.phase === 'await-mimic') {
       setSkipCount((n) => n + 1);
     }
@@ -5549,6 +5506,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     l11MockupApproved,
     onExit,
     parensMockupApproved,
+    pendingCardMatchReminder,
     showWelcomeBubble,
   ]);
 
@@ -5727,25 +5685,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           {/* "׳”׳'׳ ׳×׳™" button after rolling ג€” blocks auto-advance so learner
               reads the celebrate bubble at their own pace. */}
           {engine.phase === 'celebrate' ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => dispatchEngine({ type: 'CELEBRATE_DONE' })}
-              style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
-            >
-              <View style={{
-                backgroundColor: '#2563EB', borderRadius: 20,
-                paddingVertical: 15, paddingHorizontal: 48,
-                borderWidth: 2, borderColor: '#93C5FD',
-                ...Platform.select({
-                  ios: { shadowColor: '#2563EB', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
-                  android: { elevation: 12 },
-                }),
-              }}>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>
-                  {locale === 'he' ? 'הבנתי ✓' : 'Got it ✓'}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}>
+              <GoldButton
+                label={locale === 'he' ? 'הבנתי ✓' : 'Got it ✓'}
+                onPress={() => dispatchEngine({ type: 'CELEBRATE_DONE' })}
+              />
+            </View>
           ) : null}
 
         </>
@@ -6077,9 +6022,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             dispatchEngine({ type: 'GO_BACK_LAYER' });
           }}
           disabled={
-            engine.lessonIndex === 0 &&
+            !!pendingCardMatchReminder ||
+            (engine.lessonIndex === 0 &&
             engine.stepIndex === 0 &&
-            engine.phase === 'intro'
+            engine.phase === 'intro')
           }
           style={[
             {
@@ -6096,69 +6042,35 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             engine.lessonIndex === 0 &&
               engine.stepIndex === 0 &&
               engine.phase === 'intro' && { opacity: 0.35 },
+            !!pendingCardMatchReminder && { opacity: 0.4 },
           ]}
         >
           <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{'‹ חזור'}</Text>
         </TouchableOpacity>
         {!isAndroidTutorialUi ? (
-          <TouchableOpacity
-            onPress={
-              engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2
-                ? undefined
-                : skipForward
-            }
-            disabled={engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              minWidth: 82,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(90,95,105,0.88)',
-              borderRadius: 14,
-              borderWidth: 1.5,
-              borderColor: 'rgba(180,185,195,0.6)',
-              opacity: engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2 ? 0.3 : 1,
-            }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
-              {engine.phase === 'celebrate' ? 'הבנתי ›' : 'דלג ›'}
-            </Text>
-          </TouchableOpacity>
+          <GoldButton
+            label={engine.phase === 'celebrate' ? 'הבנתי ›' : 'דלג ›'}
+            onPress={skipForward}
+            disabled={!!pendingCardMatchReminder || (engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' && l6CelebrateMiniTapCount < 2)}
+            height={34}
+            radius={13}
+            raise={6}
+            fontSize={14}
+          />
         ) : null}
       </View>
       ) : null}
 
       {/* L6 step 0 celebrate: gated button. It stays instructional until two mini-card taps. */}
       {engine.lessonIndex === 5 && engine.stepIndex === 0 && engine.phase === 'celebrate' ? (
-        <TouchableOpacity
-          activeOpacity={l6CelebrateMiniTapCount >= 2 ? 0.8 : 1}
-          onPress={() => {
-            if (l6CelebrateMiniTapCount < 2) return;
-            skipForward();
-          }}
-          style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
-        >
-          <View style={{
-            backgroundColor: l6CelebrateMiniTapCount >= 2 ? '#15803D' : '#1E3A5F',
-            borderRadius: 20,
-            paddingVertical: 15,
-            paddingHorizontal: 42,
-            borderWidth: 2,
-            borderColor: l6CelebrateMiniTapCount >= 2 ? '#86EFAC' : '#3B82F6',
-            opacity: l6CelebrateMiniTapCount >= 2 ? 1 : 0.85,
-            ...Platform.select({
-              ios: { shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: l6CelebrateMiniTapCount >= 2 ? 0.55 : 0, shadowRadius: 14 },
-              android: { elevation: l6CelebrateMiniTapCount >= 2 ? 12 : 4 },
-            }),
-          }}>
-            <Text style={{ color: '#F0FDF4', fontSize: 17, fontWeight: '900' }}>
-              {l6CelebrateMiniTapCount < 2
-                ? t('tutorial.l6b.continueTap0')
-                : t('tutorial.l6a.continue')}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}>
+          <GoldButton
+            label={l6CelebrateMiniTapCount < 2 ? t('tutorial.l6b.continueTap0') : t('tutorial.l6a.continue')}
+            onPress={skipForward}
+            disabled={!!pendingCardMatchReminder || l6CelebrateMiniTapCount < 2}
+            fontSize={17}
+          />
+        </View>
       ) : null}
 
       {/* Lesson 5.3: tip/mockup after Slinda and before lesson 6. */}
@@ -7367,34 +7279,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         );
       })() : null}
 
-      {/* "תראה לי" gate button — L4 step 0 only, shown while bot waits */}
+      {/* "תראה לי" gate button — L4 step 0 only, shown while bot waits.
+          Gold Room luxury language: the shared 3D GoldButton plank, centered. */}
       {l4ShowMePending && (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => { l4ShowMeResolveRef.current?.(); }}
-          accessibilityRole="button"
-          style={{ position: 'absolute', bottom: l4ShowMeButtonBottom, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}
-        >
-          <View style={{
-            backgroundColor: '#F59E0B',
-            borderRadius: 20,
-            minHeight: 62,
-            paddingVertical: 15,
-            paddingHorizontal: 42,
-            borderWidth: 2,
-            borderColor: '#FCD34D',
-            alignItems: 'center',
-            justifyContent: 'center',
-            ...Platform.select({
-              ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
-              android: { elevation: 12 },
-            }),
-          }}>
-            <Text style={{ color: '#431407', fontSize: 17, lineHeight: 22, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center', writingDirection: 'rtl', includeFontPadding: false }}>
-              תראה לי
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <View style={{ position: 'absolute', bottom: l4ShowMeButtonBottom, left: 0, right: 0, alignItems: 'center', zIndex: 9210 }}>
+          <GoldButton
+            label="תראה לי"
+            onPress={() => { l4ShowMeResolveRef.current?.(); }}
+            fontSize={18}
+            accessibilityLabel="תראה לי"
+          />
+        </View>
       )}
 
       {/* "בוא נמשיך" button — L2 celebrate only */}
@@ -7692,17 +7587,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               </View>
 
               {engine.phase === 'await-mimic' ? (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => setFracIntroStage(1)}
-                  style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}
-                >
-                  <View style={{ backgroundColor: '#2563EB', borderRadius: 20, paddingVertical: 15, paddingHorizontal: 48, borderWidth: 2, borderColor: '#93C5FD', ...Platform.select({ ios: { shadowColor: '#2563EB', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 }, android: { elevation: 12 } }) }}>
-                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>
-                      {locale === 'he' ? 'הבנתי ✓' : 'Got it ✓'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9410 }}>
+                  <GoldButton
+                    label={locale === 'he' ? 'הבנתי ✓' : 'Got it ✓'}
+                    onPress={() => setFracIntroStage(1)}
+                  />
+                </View>
               ) : null}
             </>
           ) : null}
@@ -7737,17 +7627,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 </View>
               </View>
 
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => tutorialBus.emitUserEvent({ kind: 'fracLessonAck' })}
-                style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}
-              >
-                <View style={{ backgroundColor: '#2563EB', borderRadius: 20, paddingVertical: 15, paddingHorizontal: 42, borderWidth: 2, borderColor: '#93C5FD', ...Platform.select({ ios: { shadowColor: '#2563EB', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 }, android: { elevation: 12 } }) }}>
-                  <Text style={{ color: '#fff', fontSize: 17, fontWeight: '900' }}>
-                    {locale === 'he' ? 'הבנתי — בוא ננסה ›' : 'Got it — let\'s try! ›'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9300 }}>
+                <GoldButton
+                  label={locale === 'he' ? 'הבנתי — בוא ננסה ›' : 'Got it — let\'s try! ›'}
+                  onPress={() => tutorialBus.emitUserEvent({ kind: 'fracLessonAck' })}
+                  fontSize={17}
+                />
+              </View>
             </>
           ) : null}
         </>
@@ -7790,28 +7676,13 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
             </View>
           </View>
           {/* "׳”׳'׳ ׳×׳™" button */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setFracDefenseIntroStage(1)}
-            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
-          >
-            <View style={{
-              backgroundColor: '#4F46E5',
-              borderRadius: 20,
-              paddingVertical: 15,
-              paddingHorizontal: 42,
-              borderWidth: 2,
-              borderColor: '#A5B4FC',
-              ...Platform.select({
-                ios: { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
-                android: { elevation: 12 },
-              }),
-            }}>
-              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '900' }}>
-                {locale === 'he' ? 'הבנתי — בוא ננסה ›' : 'Got it — let\'s try! ›'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}>
+            <GoldButton
+              label={locale === 'he' ? 'הבנתי — בוא ננסה ›' : 'Got it — let\'s try! ›'}
+              onPress={() => setFracDefenseIntroStage(1)}
+              fontSize={17}
+            />
+          </View>
         </>
       ) : null}
 

@@ -95,7 +95,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
 
     expect(screen.getByText('Table lobby')).toBeTruthy();
     expect(screen.queryByText('Game setup')).toBeNull();
-    expect(screen.getByText('4821')).toBeTruthy();
+    expect(screen.getByText('S-4821')).toBeTruthy();
     expect(screen.queryByTestId('lobby-summary-section')).toBeNull();
   });
 

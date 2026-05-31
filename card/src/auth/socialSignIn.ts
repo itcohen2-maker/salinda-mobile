@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import * as WebBrowser from 'expo-web-browser';
@@ -17,13 +18,42 @@ export const SOCIAL_AUTH_RETURN_TO_STORAGE_KEY = 'salinda_social_auth_return_to'
 
 WebBrowser.maybeCompleteAuthSession();
 
+/**
+ * Returns the OAuth redirect URI for the current runtime.
+ *
+ * ┌─ Web ──────────── makeRedirectUri() → https origin (allow-listed in Supabase).
+ * ├─ Expo Go ──────── makeRedirectUri() → exp://<host>:8081/--/auth/callback.
+ * └─ Standalone/dev-client build ── salinda:// (prod) or salinda-dev:// (dev).
+ *
+ * ⚠️ Expo Go OAuth gotcha (debugged & confirmed 2026-05-30):
+ *   1. Expo Go can NOT register custom schemes (salinda://) — only exp:// — so we
+ *      must use makeRedirectUri() there.
+ *   2. Supabase/GoTrue REJECTS any redirect whose host is a raw IP address
+ *      (open-redirect protection). A plain `expo start` (LAN) yields
+ *      exp://<LAN-IP>:8081/... → rejected → OAuth silently falls back to the Site
+ *      URL, so you end up logged in on the WEBSITE instead of returning to the app.
+ *
+ *   To test Google/Apple sign-in IN EXPO GO you need a HOSTNAME (not an IP). Use one of:
+ *     • adb reverse tcp:8081 tcp:8081  +  npx expo start --localhost
+ *         → exp://localhost:8081/...  (re-run `adb reverse` after every USB reconnect)
+ *     • npx expo start --tunnel        → exp://<id>.exp.direct/...  (needs @expo/ngrok)
+ *     • a dev-client build (eas build --profile development) → salinda-dev:// — MOST ROBUST,
+ *       behaves exactly like production, no --localhost/adb/tunnel dance.
+ *   Supabase → Auth → URL Configuration → Redirect URLs must include `exp://**` for this path.
+ *
+ * Production/standalone builds use salinda:// (already allow-listed) and need NONE of the above.
+ */
 export function buildSocialAuthRedirectUri(): string {
   if (Platform.OS === 'web') {
     return makeRedirectUri({ path: SOCIAL_AUTH_CALLBACK_PATH });
   }
 
-  // In development builds, makeRedirectUri() may resolve to the dev-client launcher URL.
-  // Supabase must receive the exact native deep link URI that is allow-listed in Auth > Redirect URLs.
+  // Expo Go (executionEnvironment 'storeClient') — see the IP-host caveat in the JSDoc above.
+  if (Constants.executionEnvironment === 'storeClient') {
+    return makeRedirectUri({ path: SOCIAL_AUTH_CALLBACK_PATH });
+  }
+
+  // Standalone / dev-client build: use the native custom scheme that is allow-listed in Supabase.
   return SOCIAL_AUTH_NATIVE_REDIRECT_URI;
 }
 

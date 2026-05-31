@@ -30,7 +30,7 @@ import { brand } from '../theme/brand';
 import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import { CARDS_PER_PLAYER } from '../../shared/gameConstants';
 import { pickQuickMatchTable } from './TablesLobbyScreen';
-import { buildPrivateInviteShareMessage, buildRoomShareMessage } from './onlineShareMessages';
+import { buildPrivateInviteShareMessage, buildRoomShareMessage, formatRoomCode } from './onlineShareMessages';
 import { getScreenSafeTop } from '../theme/screenInsets';
 import { WEB_GAME_PLAYFIELD_MAX_WIDTH } from '../theme/webLayout';
 import { SlindaCoin } from '../../components/SlindaCoin';
@@ -538,7 +538,7 @@ export function LobbyEntry({
           return (
             <View key={table.roomCode} style={styles.tableCard}>
               <View style={styles.tableTopRow}>
-                <Text style={styles.tableCode}>{table.roomCode}</Text>
+                <Text style={styles.tableCode}>{formatRoomCode(table.roomCode)}</Text>
                 <Text style={[styles.tableBadge, table.visibility === 'private_locked' && styles.tableBadgePrivate]}>
                   {table.visibility === 'private_locked' ? t('lobby.tablePrivate') : t('lobby.tablePublic')}
                 </Text>
@@ -576,7 +576,7 @@ export function LobbyEntry({
       {privateJoinRoomCode.length > 0 && (
         <View style={styles.privateJoinCard}>
           <Text style={[styles.label, { marginTop: 0 }]}>{t('lobby.inviteCodeLabel')}</Text>
-          <Text style={styles.privateJoinRoomCode}>{privateJoinRoomCode}</Text>
+          <Text style={styles.privateJoinRoomCode}>{formatRoomCode(privateJoinRoomCode)}</Text>
           <View style={styles.inputShell}>
             <TextInput
               style={styles.input}
@@ -895,7 +895,7 @@ export function LobbyScreen({
   const handleCopyRoomCode = async () => {
     if (!roomCode) return;
     try {
-      await Clipboard.setStringAsync(roomCode);
+      await Clipboard.setStringAsync(formatRoomCode(roomCode));
       setCopyFeedback(null);
     } catch {
       setCopyFeedback(t('lobby.copyFail'));
@@ -1062,7 +1062,7 @@ export function LobbyScreen({
           <>
           <View style={styles.codeBox}>
             <Text style={styles.codeLabel}>{t('lobby.roomCodeLabel')}</Text>
-            <Text testID="room-code" style={styles.codeValue}>{roomCode}</Text>
+            <Text testID="room-code" style={styles.codeValue}>{formatRoomCode(roomCode)}</Text>
             <Text style={[styles.codeHint, { textAlign: ta }]}>{t('lobby.shareCodeHint')}</Text>
             <View style={styles.inviteActionsRow}>
               <TouchableOpacity style={[styles.inviteBtn, !shareRoomMessage && styles.inviteBtnDisabled]} onPress={handleShareRoomCode} disabled={!shareRoomMessage}>

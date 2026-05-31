@@ -318,10 +318,10 @@ function TutorialGameContent({ onExit, gameDispatch, gameState }: TutorialGameSc
             equations={onboardingState.equations}
             activeEquationIndex={onboardingState.activeEquationIndex}
             sourceNumbers={onboardingState.sourceNumbers}
-            onSelectEquation={(index) => onboardingDispatch({ type: 'SET_ACTIVE_EQUATION', index })}
+            onSelectEquation={(index) => onboardingDispatch({ type: 'SET_ACTIVE_EQUATION', index: index as 0 | 1 })}
             onTapSource={(number) => onboardingDispatch({ type: 'TAP_SOURCE_NUMBER', number })}
-            onToggleOperator={(index) => onboardingDispatch({ type: 'TOGGLE_EQUATION_OPERATOR', index })}
-            onConfirmEquation={(index) => onboardingDispatch({ type: 'CONFIRM_EQUATION', index })}
+            onToggleOperator={(index) => onboardingDispatch({ type: 'TOGGLE_EQUATION_OPERATOR', index: index as 0 | 1 })}
+            onConfirmEquation={(index) => onboardingDispatch({ type: 'CONFIRM_EQUATION', index: index as 0 | 1 })}
           />
 
           <View style={styles.mathBottomRow}>

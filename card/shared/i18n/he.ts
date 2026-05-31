@@ -216,7 +216,7 @@ export const he: Record<string, string> = {
   'lobby.continueToRoom': 'שמור',
   'lobby.roomCodeLabel': 'קוד החדר',
   'lobby.shareCodeHint': 'שתף את הקוד עם החברים כדי שיוכלו להצטרף',
-  'lobby.shareWebLinkHint': 'במידה ואין לך אפליקציה אז תשתמש בקישור הזה לשחק:',
+  'lobby.shareWebLinkHint': 'מצאתי את משחק הקלפים שינתק אתכם מהעולם. שקט, חכם, וממכר בטירוף. כנסו לאתגר של סלינדה ישירות מהדפדפן:',
   'lobby.browserInvite': 'קישור אורח לדפדפן',
   'lobby.inviteHintConfigured': 'לינק מלא משתמש ב־{{base}}. להזמנת מישהו מחוץ לרשת המקומית, הזן/י למטה כתובת HTTPS ציבורית של אותו משחק (או הגדר EXPO_PUBLIC_WEB_APP_URL בבנייה).',
   'lobby.inviteHintMobile':
@@ -1257,7 +1257,7 @@ export const he: Record<string, string> = {
   // שיעור 4 — בניית תרגיל
   'tutorial.l4.title': 'בונים תרגיל',
   'tutorial.l4.desc': '.מצרפים שתי קוביות עם פלוס ובוחרים את הקלף שמתאים לתוצאה',
-  'tutorial.l4.botBuild': 'קודם רק צופים: אני בונה מהקוביות תרגיל, ואז אדגיש את הקלף שמתאים לתוצאה. עדיין לא לוחצים.',
+  'tutorial.l4.botBuild': 'אתם יכולים לנסות לפתור בעצמכם! מתי שתרצו, לחצו "תראה לי".',
   'tutorial.l4.hintTap': 'עכשיו תורכם. התרגיל יצא {{result}} — לחצו על קלף {{result}} המודגש במניפה.',
   'tutorial.l4.celebrate': 'יש! אנחנו בדרך לניצחון',
   'tutorial.l4.didYouKnow': 'הידעת?',
