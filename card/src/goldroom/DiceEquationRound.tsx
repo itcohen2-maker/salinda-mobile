@@ -28,7 +28,7 @@
 // HandFan and EquationSlots. No duplicated game logic.
 // ============================================================
 
-import React, { useCallback, useMemo, useReducer, useState } from 'react';
+import React, { useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import AnimatedDice from '../../AnimatedDice';
 import { type Card, type Fraction } from '../../components/CardDesign';
@@ -135,8 +135,16 @@ function eqReducer(state: EquationDraftView, action: EqAction): EquationDraftVie
 // ABOVE the equation (the live "dice pool" convention). Resolves when the
 // learner taps "בדוק" on a legal equation. Frozen = static backdrop for the
 // result overlay.
-function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, number]; frozen: boolean; onResolve: () => void }) {
+function SolvingStage({ dice, frozen, onResolve, onInteract }: { dice: [number, number, number]; frozen: boolean; onResolve: () => void; onInteract?: () => void }) {
   const [eq, dispatch] = useReducer(eqReducer, undefined, emptyEq);
+  // Dismiss the post-roll instruction bubble the moment the learner starts
+  // building (first source tap or operator toggle).
+  const interacted = useRef(false);
+  const markInteract = useCallback(() => {
+    if (interacted.current) return;
+    interacted.current = true;
+    onInteract?.();
+  }, [onInteract]);
 
   const handleConfirm = useCallback(() => {
     if (frozen) return;
@@ -154,8 +162,8 @@ function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, numb
         activeEquationIndex={0}
         sourceNumbers={dice}
         onSelectEquation={() => {}}
-        onTapSource={(n) => dispatch({ type: 'TAP_SOURCE', number: n })}
-        onToggleOperator={() => dispatch({ type: 'TOGGLE_OP' })}
+        onTapSource={(n) => { markInteract(); dispatch({ type: 'TAP_SOURCE', number: n }); }}
+        onToggleOperator={() => { markInteract(); dispatch({ type: 'TOGGLE_OP' }); }}
         onConfirmEquation={handleConfirm}
         confirmLabel="בדוק ✓"
         confirmDisabledForIndex={() => eq.slots[0] === null || eq.slots[1] === null || eq.result === null}
@@ -192,6 +200,9 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
   // The dice are rolled for real (random, fully animated) — captured from the
   // roll. Any +/- pair of dice yields a legal equation, so no seeding needed.
   const [dice, setDice] = useState<[number, number, number]>([1, 1, 1]);
+  // One post-roll instruction bubble — shown the instant solving begins, and
+  // dismissed as soon as the learner starts building the equation.
+  const [solveHintVisible, setSolveHintVisible] = useState(false);
   const hand = useMemo(() => buildObservationHand(), [roundKey]);
 
   const handleRollStart = useCallback(() => {
@@ -200,6 +211,7 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 
   const handleRollComplete = useCallback((vals: [number, number, number]) => {
     setDice(vals); // use the values that actually landed
+    setSolveHintVisible(true); // orient the player the moment the dice land
     setStage('solve');
   }, []);
 
@@ -242,11 +254,27 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
                 onRollComplete={handleRollComplete}
               />
             ) : (
-              <SolvingStage key={`solve-${diceKey}`} dice={dice} frozen={stage === 'result'} onResolve={handleResolve} />
+              <SolvingStage
+                key={`solve-${diceKey}`}
+                dice={dice}
+                frozen={stage === 'result'}
+                onResolve={handleResolve}
+                onInteract={() => setSolveHintVisible(false)}
+              />
             )}
           </View>
         </View>
       </View>
+
+      {/* Post-roll instruction bubble — one elegant orienting line, clear of the
+       *  deck (top-right). Stays until the learner starts building the track. */}
+      {stage === 'solve' && solveHintVisible ? (
+        <View style={styles.solveHint} pointerEvents="none">
+          <Text style={styles.solveHintText}>
+            הקוביות הוטלו! עכשיו, הציבו את המספרים והסימנים במשוואה כדי להגיע בדיוק אל קלף המטרה.
+          </Text>
+        </View>
+      ) : null}
 
       {/* The hand fan — anchored low at the bottom, clear of the dice/button
        *  above it (the live hand placement). */}
@@ -286,6 +314,23 @@ const styles = StyleSheet.create({
   // Hand fan — raised off the bottom edge so there's room BELOW it for the
   // game-style action buttons (discard / results) that come next.
   fanWrap: { alignItems: 'center', paddingBottom: 104 },
+
+  // Post-roll instruction bubble — a premium gold banner near the top, kept
+  // clear of the deck on the right.
+  solveHint: {
+    position: 'absolute',
+    top: 8,
+    left: 14,
+    right: 120,
+    backgroundColor: 'rgba(244,205,90,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(244,205,90,0.45)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    zIndex: 15,
+  },
+  solveHintText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
 
   resultOverlay: {
     ...StyleSheet.absoluteFillObject,
