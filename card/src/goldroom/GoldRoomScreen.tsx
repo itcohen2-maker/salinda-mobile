@@ -22,7 +22,7 @@
 //     runs over a real game board — no structural change.
 // ============================================================
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
@@ -446,6 +446,35 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
   const [collecting, setCollecting] = useState(false);
   const [rewardShown, setRewardShown] = useState(false); // success celebration overlay
   const [collectError, setCollectError] = useState(false);
+
+  // Anchor the room on the web: while it's open, lock the page so it can't be
+  // scrolled / rubber-band dragged behind the full-screen modal (the room is a
+  // fixed overlay; the document underneath must not move). Restored on close.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !visible) return;
+    if (typeof document === 'undefined') return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyOverscroll: body.style.overscrollBehavior,
+      bodyPosition: body.style.position,
+      bodyWidth: body.style.width,
+    };
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+    body.style.position = 'fixed';
+    body.style.width = '100%';
+    return () => {
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.overscrollBehavior = prev.bodyOverscroll;
+      body.style.position = prev.bodyPosition;
+      body.style.width = prev.bodyWidth;
+    };
+  }, [visible]);
 
   const close = useCallback(() => {
     setActiveTaskId(null);

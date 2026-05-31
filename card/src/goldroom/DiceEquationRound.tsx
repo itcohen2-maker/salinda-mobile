@@ -73,7 +73,6 @@ function GoldDeckPile() {
           />
         ))}
       </View>
-      <Text style={styles.deckLabel}>הערימה</Text>
     </View>
   );
 }
@@ -274,7 +273,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(244,205,90,0.5)',
   },
-  deckLabel: { color: '#F4CD5A', fontSize: 13, fontWeight: '800', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
 
   // Play area — fills the space above the fan; the table sits centered in it.
   playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
@@ -285,8 +283,9 @@ const styles = StyleSheet.create({
   tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
   solveZone: { alignItems: 'center', width: '100%' },
 
-  // Hand fan — bottom, lowered and clear of the play area above.
-  fanWrap: { alignItems: 'center', paddingBottom: 14 },
+  // Hand fan — raised off the bottom edge so there's room BELOW it for the
+  // game-style action buttons (discard / results) that come next.
+  fanWrap: { alignItems: 'center', paddingBottom: 88 },
 
   resultOverlay: {
     ...StyleSheet.absoluteFillObject,
