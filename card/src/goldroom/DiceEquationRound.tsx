@@ -30,7 +30,7 @@
 
 import React, { useCallback, useMemo, useReducer, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
+import AnimatedDice from '../../AnimatedDice';
 import { type Card, type Fraction } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
 import EquationSlots from '../components/onboarding/EquationSlots';
@@ -146,15 +146,9 @@ function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, numb
 
   return (
     <View style={styles.solveZone} pointerEvents={frozen ? 'none' : 'auto'}>
-      {/* Landed dice — the pool, above the equation (same as the live game). */}
-      <View style={styles.diceRow}>
-        {dice.map((v, i) => (
-          <GoldDieFace key={i} value={v} size={44} />
-        ))}
-      </View>
-
       {/* The SAME equation builder as the tutorial (EquationSlots), gold skin:
-       *  the landed dice are the tappable sources; "בדוק" resolves. */}
+       *  the landed dice are the tappable source bubbles (above the slots);
+       *  the track is transparent so it sits ON the table; "בדוק" resolves. */}
       <EquationSlots
         theme="gold"
         equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
@@ -230,30 +224,29 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 
   return (
     <View style={styles.root}>
-      {/* The gold table surface — raised toward the top so there's room below
-       *  for the hand fan (and the upcoming discard button / results row). */}
-      <View style={styles.tableBackdrop} pointerEvents="none">
-        <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
-      </View>
-
       {/* The deck (הערימה) — big & prominent in the corner, like the live game. */}
       <GoldDeckPile />
 
-      {/* Play area (dice + equation) — fills the space ABOVE the fan. */}
+      {/* Play area: the gold table is a sized, semi-transparent surface, and the
+       *  dice/roll-button (roll) or the equation (solve) sit CENTERED on it. */}
       <View style={styles.playArea}>
-        {stage === 'roll' ? (
-          <View style={styles.rollZone}>
-            <AnimatedDice
-              key={`dice-${diceKey}`}
-              size={52}
-              hideSumBadge
-              onRollStart={handleRollStart}
-              onRollComplete={handleRollComplete}
-            />
+        <View style={styles.tableZone}>
+          <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
+          <View style={styles.tableOverlay} pointerEvents="box-none">
+            {stage === 'roll' ? (
+              <AnimatedDice
+                key={`dice-${diceKey}`}
+                size={44}
+                hideSumBadge
+                buttonText="🎲 הטל"
+                onRollStart={handleRollStart}
+                onRollComplete={handleRollComplete}
+              />
+            ) : (
+              <SolvingStage key={`solve-${diceKey}`} dice={dice} frozen={stage === 'result'} onResolve={handleResolve} />
+            )}
           </View>
-        ) : (
-          <SolvingStage key={`solve-${diceKey}`} dice={dice} frozen={stage === 'result'} onResolve={handleResolve} />
-        )}
+        </View>
       </View>
 
       {/* The hand fan — anchored low at the bottom, clear of the dice/button
@@ -270,16 +263,6 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // Table backdrop — a compact table centered in the upper play area, so the
-  // dice sit over it (smaller than the live frame; the room is dark-gold).
-  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  tableImg: {
-    width: '74%',
-    maxWidth: 340,
-    aspectRatio: 1024 / 774,
-    alignSelf: 'center',
-  },
-
   // The deck (הערימה) — big corner pile of branded card backs, TOP-RIGHT.
   deckWrap: { position: 'absolute', top: 10, right: 16, alignItems: 'center', zIndex: 5 },
   deckStack: { width: DECK_CARD_W + 14, height: DECK_CARD_H + 12, alignItems: 'center', justifyContent: 'center' },
@@ -293,15 +276,14 @@ const styles = StyleSheet.create({
   },
   deckLabel: { color: '#F4CD5A', fontSize: 13, fontWeight: '800', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
 
-  // Play area (dice / equation) above the fan — centered over the table.
-  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 18, paddingTop: 24 },
-  // Scale the whole dice unit down — AnimatedDice's roll button is a fixed,
-  // oversized size, so shrink it (and the dice) together to a compact, game-
-  // like footprint without touching the shared component.
-  rollZone: { alignItems: 'center', gap: 22, transform: [{ scale: 0.8 }] },
-  solveZone: { alignItems: 'center', gap: 24, width: '100%' },
-
-  diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  // Play area — fills the space above the fan; the table sits centered in it.
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  // The table: a sized, semi-transparent surface. Content is overlaid centered
+  // ON it, so the roll button / equation always sit on the table, not off it.
+  tableZone: { width: '92%', maxWidth: 360, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
+  tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.55 },
+  tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  solveZone: { alignItems: 'center', width: '100%' },
 
   // Hand fan — bottom, lowered and clear of the play area above.
   fanWrap: { alignItems: 'center', paddingBottom: 14 },

@@ -42,7 +42,8 @@ const PALETTES: Record<EquationSlotsTheme, ThemePalette> = {
   },
   gold: {
     sourceBg: '#F0C659', sourceBorder: '#8A5A1C', sourceTxt: '#2B1D08',
-    eqBg: 'rgba(20,12,4,0.55)', eqBorder: 'rgba(244,205,90,0.35)', eqActiveBorder: '#F4CD5A',
+    // Transparent track so the gold table shows through (Gold Room only).
+    eqBg: 'transparent', eqBorder: 'rgba(244,205,90,0.35)', eqActiveBorder: '#F4CD5A',
     slotBg: 'rgba(255,243,201,0.06)', slotBorder: 'rgba(244,205,90,0.5)', slotTxt: '#F8E08E',
     opBg: '#F0C659', opBorder: '#8A5A1C', opGlyph: '#3A2A10',
     equals: '#F8E08E', confirmBg: '#F0C659', confirmTxt: '#2B1D08',
