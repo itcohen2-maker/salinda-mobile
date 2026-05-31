@@ -1,58 +1,66 @@
 // ============================================================
-// DiceEquationRound — Gold Room "Mastery Loop" (Simulation Mode).
+// DiceEquationRound — Gold Room "Mastery Loop", rebuilt as a faithful,
+// SINGLE-SCREEN simulation of the live game. The frame (gold table, the
+// prominent deck, the hand fan) is persistent; only the play state changes:
 //
-// A focused, single-task practice flow on ONE screen — the layout
-// never navigates away; only the stage state changes:
+//   roll  →  solve   (+ a result overlay)
 //
-//   stack  →  rolling  →  solving   (+ a result overlay)
+// Game-faithful dimensions (taken from the live game): the dice use the real
+// AnimatedDice with its ORIGINAL animated roll button; cards use the live
+// 5:7 ratio; the deck (הערימה) is rendered big and prominent in the corner,
+// and the hand fan is anchored low at the bottom — exactly like the table.
 //
-//   Phase 1 — Roll Intro (Stack)
-//     Premium dark-gold layout: the roll instructions up top, the UNLOCKED
-//     equation track + hand fan raised into the middle (track directly above
-//     the hand) for free experimentation, and the premium "בוא נטיל!" roll
-//     button pinned at the very bottom, clear of the fan. Tapping a number
-//     card feeds the track; the button rolls the dice.
+//   Phase 1 — Roll
+//     The live AnimatedDice sits over the gold table with its own animated
+//     roll button. Pressing it shakes + lands the dice (on a guaranteed-
+//     solvable seed) with the game's roll beat, then advances to solve.
 //
-//   Phase 2 — Rolling
-//     generateTutorialSeed() → validated dice → roll animation, under the
-//     brand slogan beat.
+//   Phase 2 — Solve
+//     The landed dice sit ABOVE the equation (same as the live dice pool);
+//     the learner builds one equation with the shared EquationSlots (gold)
+//     and taps "בדוק" to resolve.
 //
-//   Phase 3 — Solving (single focused track)
-//     ONE equation built with the SAME shared EquationSlots as the
-//     tutorial (gold skin). No dual tracks, no countdown timer. The
-//     learner builds the equation and taps the gold "בדוק" to resolve.
+//   Result — the Mastery Loop overlay: Retry (fresh dice), Next (new hand),
+//     Menu. Room is left below the table for the upcoming "discard a card"
+//     button + possible-results, to keep growing toward the full game.
 //
-//   Result — the Mastery Loop
-//     The board freezes and a result overlay offers three explicit
-//     choices: Retry (same card, fresh dice), Next (new card), Menu.
-//
-// Orchestration only: reuses generateTutorialSeed, AnimatedDice, the
-// shared HandFan (same fan geometry as the live game) and the shared
-// EquationSlots (same equation builder as the tutorial, gold-themed).
-// No duplicated game logic.
+// Orchestration only: reuses generateTutorialSeed, AnimatedDice, the shared
+// HandFan and EquationSlots. No duplicated game logic.
 // ============================================================
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useReducer, useState } from 'react';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import AnimatedDice, { GoldDieFace } from '../../AnimatedDice';
+import { type Card, type Fraction } from '../../components/CardDesign';
+import HandFan from '../../components/HandFan';
+import EquationSlots from '../components/onboarding/EquationSlots';
+import { GoldButton } from '../../components/GoldButton';
+import { applyOperation } from '../utils/arithmetic';
+import { generateTutorialSeed } from './generateDiceSet';
+import { playSfx } from '../audio/sfx';
 
 // The Gold Room table surface (same asset family the live game uses).
 const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
 // The real game's branded card back — used for the deck pile (הערימה).
 const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
 
+// Game-faithful card geometry (matches getNativeHandFanMetrics' 100×140 base).
+const CARD_RATIO = 5 / 7;
+const DECK_CARD_H = 150; // big & prominent on entry
+const DECK_CARD_W = Math.round(DECK_CARD_H * CARD_RATIO);
+
 // Layered offsets copied from the live game's DrawPile so the deck reads
 // as a real, slightly-messy stack of cards.
 const PILE_ROTATIONS = [
-  { rotate: '-3deg', tx: -2, ty: 4 },
-  { rotate: '2deg', tx: 3, ty: 2 },
+  { rotate: '-3deg', tx: -3, ty: 5 },
+  { rotate: '2deg', tx: 4, ty: 3 },
   { rotate: '-1deg', tx: -1, ty: 1 },
   { rotate: '0deg', tx: 0, ty: 0 },
 ];
 
-// ── The deck (הערימה) — "the bank". A recognizable corner pile of branded
-// card backs, mirroring the live game's DrawPile placement, so the learner
-// meets the deck before using the hand fan. Recognition only (no draw).
+// ── The deck (הערימה) — "the bank". A big, prominent corner pile of branded
+// card backs in the TOP-RIGHT, mirroring the live game's draw pile, so the
+// learner meets the deck on entry. Recognition only (no draw).
 function GoldDeckPile() {
   return (
     <View style={styles.deckWrap} pointerEvents="none">
@@ -70,22 +78,11 @@ function GoldDeckPile() {
     </View>
   );
 }
-import { type Card, type Fraction } from '../../components/CardDesign';
-import HandFan from '../../components/HandFan';
-import EquationSlots from '../components/onboarding/EquationSlots';
-import { GoldButton } from '../../components/GoldButton';
-import { applyOperation } from '../utils/arithmetic';
-import { generateTutorialSeed } from './generateDiceSet';
-import { playSfx } from '../audio/sfx';
 
-const SLOGAN = 'לחשוב מחוץ למשוואה...';
+type Stage = 'roll' | 'solve' | 'result';
 
-type Stage = 'stack' | 'rolling' | 'solving' | 'result';
-
-// ── The static stack hand ───────────────────────────────────────────
-// Built fresh per round: a few number cards plus one fraction card, so
-// the learner sees the pile can hold both.
-
+// ── A demo hand for the bottom fan (a few number cards + one fraction), so
+// the learner sees a real hand below the table. Built fresh per round.
 const FRACTIONS: Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
 
 function buildObservationHand(): Card[] {
@@ -136,87 +133,10 @@ function eqReducer(state: EquationDraftView, action: EqAction): EquationDraftVie
   }
 }
 
-// ── Phase 1: the Roll Intro (Stack). Premium dark-gold layout — the roll
-// instructions up top, the UNLOCKED experimentation track + hand fan raised
-// into the middle (free to try first; track directly above the hand), and the
-// premium "בוא נטיל!" roll button anchored at the very bottom, clear of the
-// fan so it never overlaps. Tapping a number card feeds the track; the button
-// rolls the dice. ─────────────────────────────────────────────────────────
-function StackStage({ hand, onAdvance }: { hand: Card[]; onAdvance: () => void }) {
-  const [eq, dispatch] = useReducer(eqReducer, undefined, emptyEq);
-
-  return (
-    <View style={styles.stackStage}>
-      {/* Top — the roll instructions. */}
-      <View style={styles.stackTop}>
-        <View style={styles.bubble}>
-          <Text style={styles.bubbleText}>הטלת הקוביות – המנוע של המשחק. מטילים כדי לקבל את המספרים שירכיבו את המשוואה.</Text>
-        </View>
-      </View>
-
-      {/* Middle — the equation workspace sits directly ABOVE the hand fan
-       *  (track-above-hand rule), raised off the bottom so the roll button
-       *  has its own clear zone below. */}
-      <View style={styles.stackMid}>
-        {/* The SAME equation builder as the tutorial (EquationSlots), gold
-         *  skin. Free-experiment phase: no Confirm (rolling is the action);
-         *  the fan feeds the sources. */}
-        <EquationSlots
-          theme="gold"
-          equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
-          activeEquationIndex={0}
-          sourceNumbers={[]}
-          onSelectEquation={() => {}}
-          onTapSource={(n) => dispatch({ type: 'TAP_SOURCE', number: n })}
-          onToggleOperator={() => dispatch({ type: 'TOGGLE_OP' })}
-          onConfirmEquation={() => {}}
-          showConfirm={false}
-        />
-
-        {/* The hand fan — the SAME curved/scrollable fan geometry as the live
-         *  game (HandFan), fully interactive: tapping a number card drops its
-         *  value into the equation track above. */}
-        <HandFan
-          cards={hand}
-          canTap={(c) => c.type === 'number'}
-          onTapCard={(c) => dispatch({ type: 'TAP_SOURCE', number: (c as { value: number }).value })}
-        />
-      </View>
-
-      {/* Bottom — the premium 3D roll button, pinned low and clear of the fan. */}
-      <View style={styles.rollWrap}>
-        <GoldButton label="בוא נטיל! 🎲" onPress={onAdvance} accessibilityLabel="בוא נטיל" fullWidth height={58} fontSize={20} />
-      </View>
-    </View>
-  );
-}
-
-// ── Phase 2: rolling dice + branding slogan ──────────────────────────
-function RollingStage({ dice, onDone }: { dice: [number, number, number]; onDone: () => void }) {
-  const fade = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(fade, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(fade, { toValue: 0.35, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [fade]);
-
-  return (
-    <View style={styles.centerStage}>
-      <AnimatedDice fixedFinalValues={dice} autoRollOnMount hideRollButton hideSumBadge onRollComplete={onDone} />
-      <Animated.Text style={[styles.slogan, { opacity: fade }]}>{SLOGAN}</Animated.Text>
-    </View>
-  );
-}
-
-// ── Phase 3: build the SINGLE equation from the landed dice. No timer.
-// Resolves the round when the learner taps the gold "בדוק" on a legal
-// equation. When frozen, the board is the static backdrop for the
-// result overlay — no taps.
+// ── Phase 2: build the SINGLE equation from the landed dice. The dice sit
+// ABOVE the equation (the live "dice pool" convention). Resolves when the
+// learner taps "בדוק" on a legal equation. Frozen = static backdrop for the
+// result overlay.
 function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, number]; frozen: boolean; onResolve: () => void }) {
   const [eq, dispatch] = useReducer(eqReducer, undefined, emptyEq);
 
@@ -226,15 +146,16 @@ function SolvingStage({ dice, frozen, onResolve }: { dice: [number, number, numb
   }, [frozen, eq, onResolve]);
 
   return (
-    <View style={styles.solveStage} pointerEvents={frozen ? 'none' : 'auto'}>
+    <View style={styles.solveZone} pointerEvents={frozen ? 'none' : 'auto'}>
+      {/* Landed dice — the pool, above the equation (same as the live game). */}
       <View style={styles.diceRow}>
         {dice.map((v, i) => (
-          <GoldDieFace key={i} value={v} size={40} />
+          <GoldDieFace key={i} value={v} size={44} />
         ))}
       </View>
 
-      {/* The SAME equation builder as the tutorial (EquationSlots), gold
-       *  skin: the landed dice are the tappable sources; "בדוק" resolves. */}
+      {/* The SAME equation builder as the tutorial (EquationSlots), gold skin:
+       *  the landed dice are the tappable sources; "בדוק" resolves. */}
       <EquationSlots
         theme="gold"
         equations={[{ targetTileId: null, slots: eq.slots, operator: eq.operator, result: eq.result }]}
@@ -262,8 +183,8 @@ function ResultOverlay({ onRetry, onNext, onMenu }: { onRetry: () => void; onNex
         <Text style={styles.resultSub}>בנית משוואה חוקית ✓</Text>
 
         <View style={styles.resultActions}>
-          <GoldButton label="הבא ›" onPress={onNext} accessibilityLabel="הקלף הבא" fullWidth height={58} fontSize={20} />
-          <GoldButton label="נסה שוב 🔁" onPress={onRetry} accessibilityLabel="נסה שוב על אותו קלף" fullWidth height={50} fontSize={17} />
+          <GoldButton label="הבא ›" onPress={onNext} accessibilityLabel="קלף חדש" fullWidth height={58} fontSize={20} />
+          <GoldButton label="נסה שוב 🔁" onPress={onRetry} accessibilityLabel="הטלה מחדש" fullWidth height={50} fontSize={17} />
           <GoldButton label="יציאה" onPress={onMenu} accessibilityLabel="יציאה לחדר הזהב" tone="stone" fullWidth height={46} fontSize={15} />
         </View>
       </View>
@@ -274,10 +195,9 @@ function ResultOverlay({ onRetry, onNext, onMenu }: { onRetry: () => void; onNex
 // ── Admin/dev layer tracker — mirrors the Hub status line so the active
 // flow layer is always legible during development.
 const TRACKER: Record<Stage, string> = {
-  stack: 'UI: Roll Intro · Flow: Experiment · Action: Roll Dice',
-  rolling: 'UI: Roll · Flow: Auto · Action: Deal Dice',
-  solving: 'UI: Equation · Flow: Solve · Action: Single Track',
-  result: 'UI: Result Screen | Flow: User Decision | Action: Mastery Loop',
+  roll: 'UI: Roll · Flow: Single Screen · Action: Original Dice Button',
+  solve: 'UI: Equation · Flow: Single Screen · Action: Build / בדוק',
+  result: 'UI: Result · Flow: User Decision · Action: Mastery Loop',
 };
 
 function LayerTracker({ stage }: { stage: Stage }) {
@@ -289,21 +209,20 @@ function LayerTracker({ stage }: { stage: Stage }) {
 }
 
 export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
-  const [stage, setStage] = useState<Stage>('stack');
-  const [roundKey, setRoundKey] = useState(0); // identifies the current CARD (stack hand)
-  const [solveKey, setSolveKey] = useState(0); // forces a fresh equation per solve attempt
-  const [dice, setDice] = useState<[number, number, number]>([1, 1, 1]);
+  const [stage, setStage] = useState<Stage>('roll');
+  const [roundKey, setRoundKey] = useState(0); // new HAND (and dice)
+  const [diceKey, setDiceKey] = useState(0); // fresh dice for the SAME hand (retry)
 
-  // Fresh stack hand per CARD. Retry keeps the same roundKey (same card);
-  // Next bumps it (new card).
+  // A guaranteed-solvable dice set; AnimatedDice lands on exactly these.
+  const dice = useMemo<[number, number, number]>(() => generateTutorialSeed(), [diceKey]);
   const hand = useMemo(() => buildObservationHand(), [roundKey]);
 
-  // Roll fresh dice and run the simulation for the CURRENT card.
-  const startSimulation = useCallback(() => {
-    void playSfx('transition', { cooldownMs: 0 }); // premium beat as the dice deal
-    setDice(generateTutorialSeed());
-    setSolveKey((k) => k + 1);
-    setStage('rolling');
+  const handleRollStart = useCallback(() => {
+    void playSfx('transition', { cooldownMs: 0 }); // the game's roll beat
+  }, []);
+
+  const handleRollComplete = useCallback(() => {
+    setStage('solve');
   }, []);
 
   const handleResolve = useCallback(() => {
@@ -313,31 +232,52 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
   }, [onComplete]);
 
   // Mastery Loop choices — all explicit, none automatic.
-  const handleRetry = useCallback(() => startSimulation(), [startSimulation]); // SAME card, fresh dice
+  const handleRetry = useCallback(() => {
+    setDiceKey((k) => k + 1); // SAME hand, fresh dice
+    setStage('roll');
+  }, []);
   const handleNext = useCallback(() => {
-    setRoundKey((k) => k + 1); // NEW card
-    setStage('stack'); // back to the Stack
+    setRoundKey((k) => k + 1); // NEW hand
+    setDiceKey((k) => k + 1); // ...and fresh dice
+    setStage('roll');
   }, []);
   const handleMenu = useCallback(() => onExit?.(), [onExit]); // back to the Hub
 
   return (
     <View style={styles.root}>
-      {/* The gold table surface — a centered backdrop sized to the frame
-       *  width via a fixed aspect ratio, so the full table always shows
-       *  and can never be cropped. The Gold Room's golden skin makes the
-       *  practice feel like sitting at the real table. */}
+      {/* The gold table surface — raised toward the top so there's room below
+       *  for the hand fan (and the upcoming discard button / results row). */}
       <View style={styles.tableBackdrop} pointerEvents="none">
         <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
       </View>
 
-      {/* The deck (הערימה) sits in the corner like the live game — meet the
-       *  bank before using the hand. Shown during the intro/stack phase. */}
-      {stage === 'stack' ? <GoldDeckPile /> : null}
-      {stage === 'stack' && <StackStage key={roundKey} hand={hand} onAdvance={startSimulation} />}
-      {stage === 'rolling' && <RollingStage dice={dice} onDone={() => setStage('solving')} />}
-      {(stage === 'solving' || stage === 'result') && (
-        <SolvingStage key={solveKey} dice={dice} frozen={stage === 'result'} onResolve={handleResolve} />
-      )}
+      {/* The deck (הערימה) — big & prominent in the corner, like the live game. */}
+      <GoldDeckPile />
+
+      {/* Play area (dice + equation) — fills the space ABOVE the fan. */}
+      <View style={styles.playArea}>
+        {stage === 'roll' ? (
+          <View style={styles.rollZone}>
+            <Text style={styles.rollHint}>הטלת הקוביות – המנוע של המשחק. הקש על הכפתור כדי להטיל.</Text>
+            <AnimatedDice
+              key={`dice-${diceKey}`}
+              fixedFinalValues={dice}
+              hideSumBadge
+              onRollStart={handleRollStart}
+              onRollComplete={handleRollComplete}
+            />
+          </View>
+        ) : (
+          <SolvingStage key={`solve-${diceKey}`} dice={dice} frozen={stage === 'result'} onResolve={handleResolve} />
+        )}
+      </View>
+
+      {/* The hand fan — anchored low at the bottom, clear of the dice/button
+       *  above it (the live hand placement). */}
+      <View style={styles.fanWrap} pointerEvents="box-none">
+        <HandFan cards={hand} />
+      </View>
+
       {stage === 'result' ? <ResultOverlay onRetry={handleRetry} onNext={handleNext} onMenu={handleMenu} /> : null}
 
       {__DEV__ ? <LayerTracker stage={stage} /> : null}
@@ -346,53 +286,40 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'center' },
-  // Centered table backdrop — full width, fixed aspect ratio, never cropped.
-  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  root: { flex: 1 },
+
+  // Table backdrop — raised toward the top (room for the fan + future controls).
+  tableBackdrop: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
   tableImg: {
     width: '100%',
     aspectRatio: 1024 / 774,
     alignSelf: 'center',
-    // Web stays full-width (looks great); on a device, shrink the table so it
-    // gets margins instead of bleeding edge-to-edge.
-    ...(Platform.OS !== 'web' ? { width: '80%', maxWidth: 460 } : null),
+    ...(Platform.OS !== 'web' ? { width: '82%', maxWidth: 480 } : null),
   },
-  centerStage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 },
-  // Roll Intro: instructions on top, the experiment track + raised fan filling
-  // the flexible middle, and the roll button pinned at the bottom (its own
-  // clear zone, so it never touches the fan).
-  stackStage: { flex: 1, alignItems: 'center', paddingHorizontal: 18, paddingTop: 12, paddingBottom: 24, width: '100%' },
-  stackTop: { alignItems: 'center', gap: 22, width: '100%' },
-  stackMid: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, width: '100%' },
-  rollWrap: { width: '100%', maxWidth: 360, alignItems: 'stretch', marginTop: 14 },
-  solveStage: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 26, paddingHorizontal: 22 },
 
-  bubble: {
-    maxWidth: 360,
-    backgroundColor: 'rgba(244,205,90,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(244,205,90,0.4)',
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  bubbleText: { color: '#F8E08E', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
-
-  // The deck (הערימה) — corner pile of branded card backs.
-  deckWrap: { position: 'absolute', top: 8, left: 12, alignItems: 'center', zIndex: 5 },
-  deckStack: { width: 60, height: 84, alignItems: 'center', justifyContent: 'center' },
+  // The deck (הערימה) — big corner pile of branded card backs, TOP-RIGHT.
+  deckWrap: { position: 'absolute', top: 10, right: 16, alignItems: 'center', zIndex: 5 },
+  deckStack: { width: DECK_CARD_W + 14, height: DECK_CARD_H + 12, alignItems: 'center', justifyContent: 'center' },
   deckCard: {
     position: 'absolute',
-    width: 56,
-    height: 78,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(244,205,90,0.45)',
+    width: DECK_CARD_W,
+    height: DECK_CARD_H,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,205,90,0.5)',
   },
-  deckLabel: { color: '#F4CD5A', fontSize: 11, fontWeight: '800', marginTop: 3, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
-  slogan: { color: '#F4CD5A', fontSize: 20, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
+  deckLabel: { color: '#F4CD5A', fontSize: 13, fontWeight: '800', marginTop: 5, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
+
+  // Play area (dice / equation) above the fan.
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22, paddingHorizontal: 18, paddingTop: 80 },
+  rollZone: { alignItems: 'center', gap: 26 },
+  rollHint: { color: '#F8E08E', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22, maxWidth: 340 },
+  solveZone: { alignItems: 'center', gap: 24, width: '100%' },
 
   diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+
+  // Hand fan — bottom, lowered and clear of the play area above.
+  fanWrap: { alignItems: 'center', paddingBottom: 14 },
 
   resultOverlay: {
     ...StyleSheet.absoluteFillObject,
