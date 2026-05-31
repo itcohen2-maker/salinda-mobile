@@ -19,9 +19,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// On web, AsyncStorage is NOT backed by localStorage — it's in-memory, so it is
+// wiped by every full-page navigation. That broke OAuth (the PKCE code_verifier
+// vanished during the Google redirect → code exchange failed → user stayed
+// anonymous) and broke session persistence (every reload created a fresh
+// anonymous session → /signup flood + 429s). Use real localStorage on web.
+const webAuthStorage =
+  typeof window !== 'undefined' && window.localStorage ? window.localStorage : undefined;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: Platform.OS === 'web' ? webAuthStorage : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // We finalize OAuth manually (createSessionFromUrl), not via URL auto-detect.
