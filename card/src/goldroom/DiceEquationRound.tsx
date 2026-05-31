@@ -45,7 +45,7 @@ const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
 
 // Game-faithful card geometry (matches getNativeHandFanMetrics' 100×140 base).
 const CARD_RATIO = 5 / 7;
-const DECK_CARD_H = 150; // big & prominent on entry
+const DECK_CARD_H = 134; // prominent on entry, tucked into the corner
 const DECK_CARD_W = Math.round(DECK_CARD_H * CARD_RATIO);
 
 // Layered offsets copied from the live game's DrawPile so the deck reads
@@ -235,7 +235,7 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
             {stage === 'roll' ? (
               <AnimatedDice
                 key={`dice-${diceKey}`}
-                size={44}
+                size={40}
                 hideSumBadge
                 buttonText="🎲 הטל"
                 onRollStart={handleRollStart}
@@ -278,14 +278,14 @@ const styles = StyleSheet.create({
   playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   // The table: a sized, semi-transparent surface. Content is overlaid centered
   // ON it, so the roll button / equation always sit on the table, not off it.
-  tableZone: { width: '92%', maxWidth: 360, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
+  tableZone: { width: '94%', maxWidth: 380, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
   tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.55 },
   tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
   solveZone: { alignItems: 'center', width: '100%' },
 
   // Hand fan — raised off the bottom edge so there's room BELOW it for the
   // game-style action buttons (discard / results) that come next.
-  fanWrap: { alignItems: 'center', paddingBottom: 88 },
+  fanWrap: { alignItems: 'center', paddingBottom: 104 },
 
   resultOverlay: {
     ...StyleSheet.absoluteFillObject,
