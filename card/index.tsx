@@ -20906,7 +20906,7 @@ export function PlayModeChoiceScreen({
                 <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
               </View>
             )}
-            {/* The room renders only when opened; only its trigger is admin-gated.
+            {/* The room renders only when opened; its trigger is open to everyone.
                 A dev deep-link (?goldroom=1) can also open it for preview. */}
             <GoldRoomScreen
               visible={goldRoomOpen}
@@ -21089,13 +21089,14 @@ export function PlayModeChoiceScreen({
               </View>
             ) : null}
 
+            {/* Gold Room — open to EVERYONE (moved out of the admin block). */}
+            <View style={{ width: 220, alignSelf: 'center', marginTop: primaryStackGap }}>
+              <GoldButton label="🪙 חדר הזהב" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="פתח את חדר הזהב" />
+            </View>
+
             {/* ── 4. ADMIN BLOCK ── */}
             {showAdminControls ? (
               <>
-                {/* Admin-only entry to the new, separate gold tutorial. */}
-                <View style={{ width: 220, alignSelf: 'center', marginTop: primaryStackGap }}>
-                  <GoldButton label="🪙 חדר הזהב" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="פתח את חדר הזהב" />
-                </View>
                 <SalindaButton
                   text={t('lobby.sendFeedback')}
                   color="blue"
