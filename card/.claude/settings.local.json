@@ -99,7 +99,8 @@
       "Bash(Select-Object Name, PSIsContainer)",
       "Bash(awk 'NR>=9056 && NR<=9900 && /^function |^const [A-Z].* = .*=>|^export function /{print NR\": \"$0}' index.tsx)",
       "Bash(awk 'NR>9057 && /^function [A-Z]/{print NR\": \"$0; exit}' index.tsx)",
-      "Bash(findstr :8081)"
+      "Bash(findstr :8081)",
+      "Bash(npx eas *)"
     ]
   }
 }

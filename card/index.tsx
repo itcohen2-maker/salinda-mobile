@@ -18371,27 +18371,6 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           </View>
         ) : null}
       </View>
-      {/* מיתוג: לוגו סלינדה מוקטן בראש השולחן — ממורכז, לא-אינטראקטיבי,
-          בצד הנגדי לקלף (הקלף בימין, החזרה בשמאל), מוצג גם במשחק רשת וגם מקומי. */}
-      {!state.isTutorial && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: topControlsTop + (topControlsLift > 0 ? topControlsLift : 0) + 2,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            zIndex: 399,
-          }}
-        >
-          <Image
-            source={salindaPuzzleGameLogoImg}
-            resizeMode="contain"
-            style={{ width: 108, height: 26, opacity: 0.9 }}
-          />
-        </View>
-      )}
       {/* ?? SLOT 2: תוצאות אפשריות (הערימה ממוקמת לפי Y מוחלט) ?? */}
       <View style={{flexShrink:0,flexDirection:'row',alignItems:'center',justifyContent:'flex-start',flexWrap:'wrap',gap:12,paddingHorizontal:12,paddingVertical:4,zIndex:1}} />
 
