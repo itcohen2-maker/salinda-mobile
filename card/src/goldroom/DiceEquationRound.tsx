@@ -43,10 +43,6 @@ const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
 // ── Steps. Each guided step fixes a single operator so the lesson stays sharp.
 type StepId = 'plus' | 'minus';
 const STEP_OP: Record<StepId, '+' | '-'> = { plus: '+', minus: '-' };
-const STEP_TEXT: Record<StepId, string> = {
-  plus: "Look at the dice and the fan. We've put together an addition (+) equation that equals exactly 6. Now, find and tap card 6 in your fan to select it!",
-  minus: "Great job! Now the challenge grows and we move to subtraction (-). We've put together a subtraction equation (5 - 2) that equals exactly 3. Find and tap card 3 in your fan!",
-};
 
 const SEEDED_DICE: [number, number, number] = [2, 4, 5];
 const OPERATOR_PRACTICE_DICE: [number, number, number] = [5, 2, 4];
