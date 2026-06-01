@@ -21077,7 +21077,11 @@ export function PlayModeChoiceScreen({
 
             {/* Gold Room — open to EVERYONE (moved out of the admin block). */}
             <View style={{ width: 220, alignSelf: 'center', marginTop: primaryStackGap }}>
-              <GoldButton label="🪙 The Gold Room" onPress={() => setGoldRoomOpen(true)} accessibilityLabel="Open the Gold Room" />
+              <GoldButton
+                label={locale === 'he' ? '🪙 חדר הזהב' : '🪙 The Gold Room'}
+                onPress={() => setGoldRoomOpen(true)}
+                accessibilityLabel={locale === 'he' ? 'פתח את חדר הזהב' : 'Open the Gold Room'}
+              />
             </View>
 
             {/* ── 4. ADMIN BLOCK ── */}

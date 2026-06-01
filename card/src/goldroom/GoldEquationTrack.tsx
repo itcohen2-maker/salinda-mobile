@@ -19,11 +19,13 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { GoldButton } from '../../components/GoldButton';
+import { interpolateCopy, useGoldRoomCopy } from './goldRoomCopy';
 
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
 
 // A tappable gold source number (e.g. a landed die value). Bobs up on tap.
 function SourceBubble({ value, onPress }: { value: number; onPress: () => void }) {
+  const copy = useGoldRoomCopy();
   const anim = useRef(new Animated.Value(0)).current;
   const handlePress = () => {
     anim.setValue(0);
@@ -35,7 +37,7 @@ function SourceBubble({ value, onPress }: { value: number; onPress: () => void }
   };
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
   return (
-    <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel={`Add ${value}`}>
+    <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel={interpolateCopy(copy.add, { value })}>
       <Animated.View style={{ transform: [{ translateY }] }}>
         <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.source}>
           <Text style={styles.sourceTxt}>{value}</Text>
@@ -75,6 +77,7 @@ export default function GoldEquationTrack({
   onConfirm,
   canConfirm,
 }: GoldEquationTrackProps) {
+  const copy = useGoldRoomCopy();
   const ready = canConfirm ?? (slots[0] !== null && slots[1] !== null && result !== null);
   return (
     <View style={styles.wrap}>
@@ -91,7 +94,7 @@ export default function GoldEquationTrack({
         <View style={styles.slot}><Text style={styles.slotTxt}>{slots[0] ?? ''}</Text></View>
         {hasSecond ? (
           <>
-            <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel="Change action">
+            <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel={copy.changeAction}>
               <OperatorGlyph op={operator} color="#3A2A10" size={22} />
             </Pressable>
             <View style={styles.slot}><Text style={styles.slotTxt}>{slots[1] ?? ''}</Text></View>
@@ -103,7 +106,7 @@ export default function GoldEquationTrack({
 
       {showConfirm ? (
         <View style={styles.confirmWrap}>
-          <GoldButton label="Check ✓" onPress={onConfirm} disabled={!ready} height={50} fontSize={18} accessibilityLabel="Check the equation" />
+          <GoldButton label={copy.checkMark} onPress={onConfirm} disabled={!ready} height={50} fontSize={18} accessibilityLabel={copy.checkEquation} />
         </View>
       ) : null}
     </View>

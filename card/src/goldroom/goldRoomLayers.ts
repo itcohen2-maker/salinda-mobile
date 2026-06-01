@@ -17,6 +17,9 @@
 // green buttons).
 // ============================================================
 
+import type { AppLocale } from '../../shared/i18n';
+import { goldRoomCopyForLocale } from './goldRoomCopy';
+
 export type GoldLayerCard = 'sign' | 'salinda';
 
 export interface GoldLayer {
@@ -38,20 +41,25 @@ export interface GoldLayer {
 export const GOLD_LAYER_SOURCES: number[] = [4, 3, 9];
 
 /** The migrated, in-order gameplay layers (35–44). */
-export const GOLD_LAYERS: readonly GoldLayer[] = [
-  {
-    id: 'place-op',
-    legacyLayers: [35, 36],
-    card: 'sign',
-    caption: 'Build an equation that reaches the target',
-    target: 7,
-  },
-  {
-    id: 'joker-place',
-    legacyLayers: [37, 40],
-    card: 'salinda',
-    caption: "Salinda Card's turn",
-    chip: '👑 Salinda Card Active',
-    target: 7,
-  },
-];
+export function getGoldLayers(locale: AppLocale): readonly GoldLayer[] {
+  const copy = goldRoomCopyForLocale(locale);
+  return [
+    {
+      id: 'place-op',
+      legacyLayers: [35, 36],
+      card: 'sign',
+      caption: copy.buildTarget,
+      target: 7,
+    },
+    {
+      id: 'joker-place',
+      legacyLayers: [37, 40],
+      card: 'salinda',
+      caption: copy.salindaTurn,
+      chip: copy.salindaActive,
+      target: 7,
+    },
+  ];
+}
+
+export const GOLD_LAYERS: readonly GoldLayer[] = getGoldLayers('he');
