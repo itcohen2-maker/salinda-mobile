@@ -23,14 +23,15 @@
 // ============================================================
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from 'react-native';
+import { Animated, Easing, Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
+import AnimatedDice from '../../AnimatedDice';
 import { useTrainingProgress } from './useTrainingProgress';
 import { DiceEquationRound } from './DiceEquationRound';
 import SpecialCardsIntro from './SpecialCardsIntro';
 import HandFan from '../../components/HandFan';
-import { type Card } from '../../components/CardDesign';
+import { GameCard, type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
 import { SALINDA_COIN_SOURCES, SALINDA_GOLD_ROOM_REWARD } from '../../shared/salindaEconomy';
 
@@ -59,9 +60,11 @@ interface Step {
   body: string;
   spot?: Spot; // undefined → full dim, centered card (intro / goal)
   cardAnchor: CardAnchor;
+  requiresFanInteraction?: boolean;
+  requiresAnimationComplete?: boolean;
   // Which mock-board element to reveal behind the spotlight for this step.
-  // 'deck' = corner pile of card backs (הערימה); 'fan' = the 7-card hand (המניפה).
-  mock?: 'deck' | 'fan';
+  // 'deck' = corner pile of card backs; 'fan' = the 7-card hand; 'winFan' = 7→2 win demo; 'dice' = three dice.
+  mock?: 'deck' | 'fan' | 'winFan' | 'dice';
 }
 
 interface Task {
@@ -102,13 +105,30 @@ const BASICS_STEPS: Step[] = [
     mock: 'deck',
   },
   {
-    tag: 'המניפה',
-    title: 'המניפה 🃏',
-    body: 'המניפה — היד שלך, למטה. החליקו לצדדים כדי לעבור בין הקלפים.',
+    // No tag / title here on purpose: the body itself is the clean, single
+    // block of copy — a separate eyebrow + heading would just duplicate "המניפה".
+    title: '',
+    body: 'המניפה. זאת מניפת הקלפים שלך. החליקו לצדדים כדי לעבור בין הקלפים ולבחור את הקלף שמתאים לתרגיל.',
     // No spot → full dim; a full, raised hand fan of real cards sits at the
     // bottom — swipe sideways to browse, like the live hand.
     mock: 'fan',
     cardAnchor: 'top',
+    requiresFanInteraction: true,
+  },
+  {
+    title: '',
+    body: 'הניצחון. מתחילים עם 7 קלפים, ומנצחים כשנשארים עם 2 קלפים או פחות. בכל תרגיל נכון תיפטרו מקלף ותתקרבו לניצחון.',
+    mock: 'winFan',
+    cardAnchor: 'top',
+    requiresAnimationComplete: true,
+  },
+  {
+    title: '',
+    body: 'חומרי הגלם שלכם. בכל תור, 3 קוביות יוטלו על הלוח ויקבעו את גורל הסיבוב. המספרים שיעלו הם הכוח שלכם - מהם תרכיבו את התרגילים שישמידו את קלפי היד שלכם!',
+    spot: { top: 0.13, left: 0.08, width: 0.84, height: 0.2 },
+    mock: 'dice',
+    cardAnchor: 'bottom',
+    requiresAnimationComplete: true,
   },
 ];
 
@@ -124,7 +144,7 @@ const TASKS: Task[] = [
 
 // Gold tones sampled from the physical gold plank — "polished D" language.
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
-const DIM = 'rgba(8,5,2,0.84)';
+const DIM = 'rgba(8,5,2,0.8)';
 
 function CloseButton({ onPress }: { onPress: () => void }) {
   return (
@@ -178,6 +198,76 @@ function MockDeck({ boxH }: { boxH: number }) {
   );
 }
 
+function MockDice({ boxW, boxH, onAnimationComplete }: { boxW: number; boxH: number; onAnimationComplete?: () => void }) {
+  // AnimatedDice settles the outer dice with fixed +/-68px spread, so keep the
+  // die size conservative enough for the whole three-die row to stay in-frame.
+  const die = Math.min(boxH * 0.46, boxW / 8, 42);
+  const shake = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0)).current;
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    completedRef.current = false;
+    shake.setValue(0);
+    glow.setValue(0);
+    return () => {
+      shake.stopAnimation();
+      glow.stopAnimation();
+    };
+  }, [glow, shake]);
+
+  const handleRollComplete = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    Animated.sequence([
+      Animated.timing(shake, { toValue: 1, duration: 34, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -1, duration: 34, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0, duration: 32, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (!finished) return;
+      onAnimationComplete?.();
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glow, { toValue: 1, duration: 720, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+          Animated.timing(glow, { toValue: 0, duration: 720, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        ]),
+      ).start();
+    });
+  }, [glow, onAnimationComplete, shake]);
+
+  const translateX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] });
+  const translateY = shake.interpolate({ inputRange: [-1, 1], outputRange: [2, -2] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.72] });
+  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.13] });
+
+  return (
+    <Animated.View style={[styles.mockDiceStage, { transform: [{ translateX }, { translateY }] }]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.mockDiceGlow,
+          {
+            width: boxW * 0.82,
+            height: Math.max(boxH * 0.68, die * 1.45),
+            borderRadius: Math.max(boxH * 0.32, 30),
+            opacity: glowOpacity,
+            transform: [{ scale: glowScale }],
+          },
+        ]}
+      />
+      <AnimatedDice
+        key={`${Math.round(boxW)}-${Math.round(boxH)}`}
+        size={die}
+        fixedFinalValues={[2, 4, 5]}
+        autoRollOnMount
+        hideRollButton
+        hideSumBadge
+        onRollComplete={handleRollComplete}
+      />
+    </Animated.View>
+  );
+}
+
 // A friendly demo hand of 7 real number cards (faces up), so the learner sees
 // an actual hand — not card backs. Stable across renders (no reshuffle).
 const DEMO_HAND: Card[] = [5, 2, 8, 1, 6, 3, 7].map((value, i): Card => ({
@@ -189,10 +279,139 @@ const DEMO_HAND: Card[] = [5, 2, 8, 1, 6, 3, 7].map((value, i): Card => ({
 // The hand (המניפה) — the SAME shared HandFan as the live game / practice, shown
 // fully RAISED into view (not peeking from the edge) with the 7 demo cards
 // face-up. Swipe sideways to browse; tapping gives the premium card feedback.
-function DemoHandFan({ W }: { W: number }) {
+type FlyingDemoCard = {
+  card: Card;
+  order: number;
+  progress: Animated.Value;
+};
+
+function DemoHandFan({
+  W,
+  mode = 'browse',
+  onInteract,
+  onAnimationComplete,
+}: {
+  W: number;
+  mode?: 'browse' | 'win';
+  onInteract?: () => void;
+  onAnimationComplete?: () => void;
+}) {
+  const [visibleCards, setVisibleCards] = useState<Card[]>(DEMO_HAND);
+  const [flyingCards, setFlyingCards] = useState<FlyingDemoCard[]>([]);
+  const pulse = useRef(new Animated.Value(1)).current;
+  const interactedRef = useRef(false);
+  const animationCompleteRef = useRef(false);
+
+  const markInteracted = useCallback(() => {
+    if (interactedRef.current) return;
+    interactedRef.current = true;
+    onInteract?.();
+  }, [onInteract]);
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let removedCount = 0;
+
+    setVisibleCards(DEMO_HAND);
+    setFlyingCards([]);
+    pulse.setValue(1);
+    interactedRef.current = false;
+    animationCompleteRef.current = false;
+
+    if (mode !== 'win') {
+      return () => {
+        pulse.stopAnimation();
+      };
+    }
+
+    timers.push(
+      setTimeout(() => {
+        interval = setInterval(() => {
+          setVisibleCards((cards) => {
+            if (cards.length <= 2) {
+              if (interval) clearInterval(interval);
+              return cards;
+            }
+
+            const [card, ...rest] = cards;
+            const order = removedCount;
+            removedCount += 1;
+            const progress = new Animated.Value(0);
+            const completesWinDemo = rest.length <= 2;
+            setFlyingCards((current) => [...current, { card, order, progress }]);
+            Animated.timing(progress, {
+              toValue: 1,
+              duration: 360,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start(({ finished }) => {
+              if (finished) {
+                setFlyingCards((current) => current.filter((item) => item.progress !== progress));
+                if (completesWinDemo && !animationCompleteRef.current) {
+                  animationCompleteRef.current = true;
+                  onAnimationComplete?.();
+                }
+              }
+            });
+
+            return rest;
+          });
+        }, 400);
+      }, 1200),
+    );
+
+    return () => {
+      timers.forEach(clearTimeout);
+      if (interval) clearInterval(interval);
+      pulse.stopAnimation();
+    };
+  }, [mode, onAnimationComplete, pulse]);
+
+  useEffect(() => {
+    if (visibleCards.length > 2) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.06, duration: 420, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, visibleCards.length]);
+
+  const winnerIds = visibleCards.length <= 2 ? new Set(visibleCards.map((card) => card.id)) : undefined;
+
   return (
-    <View style={styles.demoFanWrap} pointerEvents="box-none">
-      <HandFan cards={DEMO_HAND} width={W} onTapCard={() => {}} />
+    <View style={styles.demoFanWrap} pointerEvents="box-none" onTouchStart={markInteracted}>
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <HandFan cards={visibleCards} width={W} selectedIds={winnerIds} onTapCard={markInteracted} />
+      </Animated.View>
+      <View pointerEvents="none" style={styles.flyingCardLayer}>
+        {flyingCards.map(({ card, order, progress }) => {
+          const startX = (order - 2) * 34;
+          const endX = startX + (order % 2 === 0 ? -160 : 160);
+          const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [startX, endX] });
+          const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [18, -210] });
+          const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: [`${(order - 2) * 7}deg`, `${order % 2 === 0 ? -34 : 34}deg`] });
+          const opacity = progress.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, 0.95, 0] });
+          return (
+            <Animated.View
+              key={`${card.id}-flying`}
+              style={[
+                styles.flyingCard,
+                {
+                  left: W / 2 - 50,
+                  opacity,
+                  transform: [{ translateX }, { translateY }, { rotate }, { scale: 0.88 }],
+                },
+              ]}
+            >
+              <GameCard card={card} small />
+            </Animated.View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -201,8 +420,20 @@ function DemoHandFan({ W }: { W: number }) {
 // highlights (the deck) is rendered, framed exactly by the cutout (same fraction
 // math as Spotlight), so it sits inside the highlighted box on every device.
 // (The hand fan is a separate interactive layer ABOVE the dim.)
-function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; kind?: 'deck' | 'fan' }) {
-  if (!spot || !W || !H || kind !== 'deck') return null;
+function MockBoard({
+  spot,
+  W,
+  H,
+  kind,
+  onDiceAnimationComplete,
+}: {
+  spot?: Spot;
+  W: number;
+  H: number;
+  kind?: 'deck' | 'fan' | 'winFan' | 'dice';
+  onDiceAnimationComplete?: () => void;
+}) {
+  if (!spot || !W || !H || (kind !== 'deck' && kind !== 'dice')) return null;
   const t = spot.top * H;
   const l = spot.left * W;
   const w = spot.width * W;
@@ -210,7 +441,7 @@ function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; ki
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View style={{ position: 'absolute', top: t, left: l, width: w, height: h, alignItems: 'center', justifyContent: 'center' }}>
-        <MockDeck boxH={h} />
+        {kind === 'deck' ? <MockDeck boxH={h} /> : <MockDice boxW={w} boxH={h} onAnimationComplete={onDiceAnimationComplete} />}
       </View>
     </View>
   );
@@ -369,8 +600,50 @@ function TrainingTask({
 }) {
   const [index, setIndex] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [fanInteracted, setFanInteracted] = useState(false);
+  const [animationComplete, setAnimationComplete] = useState(false);
+  const cardReveal = useRef(new Animated.Value(1)).current;
+  const nextPulse = useRef(new Animated.Value(1)).current;
   const step = steps[index];
   const isLast = index === steps.length - 1;
+  const nextDisabled = (!!step.requiresFanInteraction && !fanInteracted) || (!!step.requiresAnimationComplete && !animationComplete);
+  const isDiceStep = step.mock === 'dice';
+
+  useEffect(() => {
+    setFanInteracted(false);
+    setAnimationComplete(false);
+    cardReveal.stopAnimation();
+    cardReveal.setValue(steps[index]?.mock === 'dice' ? 0 : 1);
+    nextPulse.stopAnimation();
+    nextPulse.setValue(1);
+  }, [cardReveal, index, nextPulse, steps]);
+
+  useEffect(() => {
+    if (!isDiceStep || !animationComplete) return;
+    Animated.timing(cardReveal, {
+      toValue: 1,
+      duration: 460,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(nextPulse, { toValue: 1.035, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(nextPulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animationComplete, cardReveal, isDiceStep, nextPulse]);
+
+  const handleFanAnimationComplete = useCallback(() => {
+    setAnimationComplete(true);
+  }, []);
+
+  const handleDiceAnimationComplete = useCallback(() => {
+    setAnimationComplete(true);
+  }, []);
 
   const handleBack = useCallback(() => {
     setIndex((i) => {
@@ -381,9 +654,10 @@ function TrainingTask({
   }, [onExit]);
 
   const handleNext = useCallback(() => {
+    if (nextDisabled) return;
     if (isLast) onComplete(); // "סיום" → mark done + back to the Hub
     else setIndex((i) => Math.min(steps.length - 1, i + 1));
-  }, [isLast, onComplete, steps.length]);
+  }, [isLast, nextDisabled, onComplete, steps.length]);
 
   const anchorStyle =
     step.cardAnchor === 'top' ? styles.cardTop : step.cardAnchor === 'bottom' ? styles.cardBottom : styles.cardCenter;
@@ -393,16 +667,20 @@ function TrainingTask({
       style={styles.root}
       onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
     >
-      <MockBoard spot={step.spot} W={size.w} H={size.h} kind={step.mock} />
+      <MockBoard spot={step.spot} W={size.w} H={size.h} kind={step.mock} onDiceAnimationComplete={handleDiceAnimationComplete} />
       <Spotlight spot={step.spot} W={size.w} H={size.h} />
-      {step.mock === 'fan' && size.w > 0 ? <DemoHandFan W={size.w} /> : null}
+      {step.mock === 'fan' && size.w > 0 ? <DemoHandFan W={size.w} onInteract={() => setFanInteracted(true)} /> : null}
+      {step.mock === 'winFan' && size.w > 0 ? <DemoHandFan W={size.w} mode="win" onAnimationComplete={handleFanAnimationComplete} /> : null}
 
       <View style={styles.topbar}>
         <GoldButton label="דלג ›" onPress={onExit} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
         <CloseButton onPress={onClose} />
       </View>
 
-      <View style={[styles.cardLayer, anchorStyle]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.cardLayer, anchorStyle, { opacity: cardReveal }]}
+        pointerEvents={isDiceStep && !animationComplete ? 'none' : 'box-none'}
+      >
         <View style={styles.cardWidth}>
           <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.plank}>
             <LinearGradient
@@ -413,7 +691,7 @@ function TrainingTask({
               style={styles.sheen}
             />
             {step.tag ? <Text style={styles.stepTag}>{step.tag}</Text> : null}
-            <Text style={styles.title}>{step.title}</Text>
+            {step.title ? <Text style={styles.title}>{step.title}</Text> : null}
             <Text style={styles.body}>{step.body}</Text>
           </LinearGradient>
 
@@ -425,12 +703,12 @@ function TrainingTask({
 
           <View style={styles.controls}>
             <GoldButton label="‹ חזור" onPress={handleBack} accessibilityLabel={index > 0 ? 'חזור' : 'חזרה לחדר הזהב'} tone="stone" fontSize={16} />
-            <View style={styles.nextWrap}>
-              <GoldButton label={isLast ? 'הבנתי, בוא נתקדם!' : 'המשך ›'} onPress={handleNext} fullWidth fontSize={16} />
-            </View>
+            <Animated.View style={[styles.nextWrap, { transform: [{ scale: nextPulse }] }]}>
+              <GoldButton label={isLast ? 'הבנתי, בוא נתקדם!' : 'המשך ›'} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
+            </Animated.View>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -713,6 +991,31 @@ const styles = StyleSheet.create({
   // The demo hand (המניפה step) — raised fully into view near the bottom edge,
   // centered, swipeable. box-none so swipes reach the fan but the dim shows.
   demoFanWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
+  flyingCardLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 },
+  flyingCard: { position: 'absolute', bottom: 42, width: 100, height: 140, zIndex: 20 },
+  mockDiceStage: { alignItems: 'center', justifyContent: 'center' },
+  mockDiceGlow: {
+    position: 'absolute',
+    backgroundColor: '#F4CD5A',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 22,
+    elevation: 14,
+  },
+  mockDiceRow: { flexDirection: 'row', direction: 'ltr', alignItems: 'center', justifyContent: 'center', gap: 14 },
+  mockDie: {
+    borderWidth: 2,
+    borderColor: '#8A5A1C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 7,
+  },
+  mockDieText: { color: '#2B1D08', fontWeight: '900', lineHeight: 34 },
 
   // Reward / error overlay (coin collection)
   rewardOverlay: {
