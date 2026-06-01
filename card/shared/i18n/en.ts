@@ -64,6 +64,7 @@ export const en: Record<string, string> = {
   'stage.onlyNumberWildOp': 'Only number, wild, or operation cards can be played',
   'stage.oneWildOnly': 'Only one wild card allowed in the play area',
   'stage.oneOpOnly': 'Only one operation sign allowed in the play area',
+  'stage.fractionNotInSum': 'Fraction cards are not part of the sum — pick number or wild cards',
 
   'unstage.wrongPhase': 'Wrong phase',
 

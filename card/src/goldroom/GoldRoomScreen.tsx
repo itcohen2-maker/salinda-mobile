@@ -60,9 +60,8 @@ interface Step {
   spot?: Spot; // undefined → full dim, centered card (intro / goal)
   cardAnchor: CardAnchor;
   // Which mock-board element to reveal behind the spotlight for this step.
-  // 'deck' = corner pile of card backs (הערימה); 'target' = the goal card
-  // (קלף המטרה); 'fan' = the 7-card hand (המניפה).
-  mock?: 'deck' | 'target' | 'fan';
+  // 'deck' = corner pile of card backs (הערימה); 'fan' = the 7-card hand (המניפה).
+  mock?: 'deck' | 'fan';
 }
 
 interface Task {
@@ -86,7 +85,7 @@ const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as con
 
 // ---- Task: "היסודות" (the basics) ----
 // A FAST, visual-only mockup that maps the screen's real estate — no abstract
-// rules (no "Golden Rule"). Each step just names a zone: deck → target → fan.
+// rules (no "Golden Rule"). Each step just names a zone: deck → fan.
 const BASICS_STEPS: Step[] = [
   {
     tag: 'חדר הזהב',
@@ -103,14 +102,6 @@ const BASICS_STEPS: Step[] = [
     mock: 'deck',
   },
   {
-    tag: 'קלף המטרה',
-    title: 'קלף המטרה 🎯',
-    body: 'קלף המטרה — המספר שאליו צריך להגיע במשוואה.',
-    spot: { top: 0.12, left: 0.08, width: 0.4, height: 0.22 },
-    cardAnchor: 'bottom',
-    mock: 'target',
-  },
-  {
     tag: 'המניפה',
     title: 'המניפה 🃏',
     body: 'המניפה — היד שלך, למטה. החליקו לצדדים כדי לעבור בין הקלפים.',
@@ -123,7 +114,7 @@ const BASICS_STEPS: Step[] = [
 
 // ---- The Hub's task catalog ----
 const TASKS: Task[] = [
-  { id: 'basics', badge: '🪙', title: 'היסודות', desc: 'הערימה, קלף המטרה והמניפה — תוך דקה.', steps: BASICS_STEPS },
+  { id: 'basics', badge: '🪙', title: 'היסודות', desc: 'הערימה, המניפה והקוביות — תוך דקה.', steps: BASICS_STEPS },
   { id: 'equation-practice', badge: '🎲', title: 'תרגול', desc: 'בחר קלף, הטל קוביות, ובנה משוואה.', interactive: true },
   { id: 'operations', badge: '⚡', title: 'מיוחדים', desc: 'הנשק הסודי — היפטר מקלפים במהירות.', interactive: true },
   { id: 'fractions', badge: '½', title: 'שברים', desc: 'איך משחקים עם קלפי שברים.' },
@@ -206,24 +197,12 @@ function DemoHandFan({ W }: { W: number }) {
   );
 }
 
-// The target card (קלף המטרה) — a face-up goal card with a sample number, so
-// the learner sees "the number to reach". A mockup value (not gameplay).
-function MockTargetCard({ boxH }: { boxH: number }) {
-  const cardH = Math.min(boxH * 0.92, 132);
-  const cardW = cardH * CARD_RATIO;
-  return (
-    <View style={[styles.targetCard, { width: cardW, height: cardH }]}>
-      <Text style={[styles.targetNum, { fontSize: cardH * 0.42 }]}>10</Text>
-    </View>
-  );
-}
-
 // Mock game board drawn BEHIND the spotlight: only the element this step
-// highlights (deck or target card) is rendered, framed exactly by the cutout
-// (same fraction math as Spotlight), so it sits inside the highlighted box on
-// every device. (The hand fan is a separate interactive layer ABOVE the dim.)
-function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; kind?: 'deck' | 'target' | 'fan' }) {
-  if (!spot || !W || !H || (kind !== 'deck' && kind !== 'target')) return null;
+// highlights (the deck) is rendered, framed exactly by the cutout (same fraction
+// math as Spotlight), so it sits inside the highlighted box on every device.
+// (The hand fan is a separate interactive layer ABOVE the dim.)
+function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; kind?: 'deck' | 'fan' }) {
+  if (!spot || !W || !H || kind !== 'deck') return null;
   const t = spot.top * H;
   const l = spot.left * W;
   const w = spot.width * W;
@@ -231,7 +210,7 @@ function MockBoard({ spot, W, H, kind }: { spot?: Spot; W: number; H: number; ki
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View style={{ position: 'absolute', top: t, left: l, width: w, height: h, alignItems: 'center', justifyContent: 'center' }}>
-        {kind === 'deck' ? <MockDeck boxH={h} /> : <MockTargetCard boxH={h} />}
+        <MockDeck boxH={h} />
       </View>
     </View>
   );
@@ -574,7 +553,10 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
               onExit={() => setActiveTaskId(null)}
               onComplete={() => {
                 markComplete(activeTask.id);
-                setActiveTaskId(null);
+                // The Basics tour (Welcome → Deck → Hand) flows STRAIGHT into
+                // the dynamic dice practice (the rolling phase) — no intervening
+                // equation-track step; every other task returns to the Hub.
+                setActiveTaskId(activeTask.id === 'basics' ? 'equation-practice' : null);
               }}
               onClose={close}
             />
@@ -731,22 +713,6 @@ const styles = StyleSheet.create({
   // The demo hand (המניפה step) — raised fully into view near the bottom edge,
   // centered, swipeable. box-none so swipes reach the fan but the dim shows.
   demoFanWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
-
-  // Target card (קלף המטרה) mock — a face-up goal card with a sample number.
-  targetCard: {
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#F4CD5A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  targetNum: { color: '#1D4ED8', fontWeight: '900' },
 
   // Reward / error overlay (coin collection)
   rewardOverlay: {

@@ -1,17 +1,20 @@
 // ============================================================
 // GoldEquationTrack — Gold Room ONLY single-equation builder.
 //
-// A dark-gold, single-focus equation track for the practice round.
-// Built fresh (not the shared EquationSlots) so the premium look —
-// gold source bubbles, dark slots with a gold rim, ONE track, and a
-// gold "בדוק" confirm — never leaks into / breaks the live tutorial,
-// which keeps using the shared dual-track EquationSlots with its
-// green Confirm.
+// A dark-gold, single-focus equation track for the practice rounds. It supports
+// two input modes (both Gold-Room-local, neither leaks into the live tutorial):
 //
-// Exactly ONE equation track. No countdown timer. No green button.
+//   • Source-bubble mode (SpecialCardsIntro): tappable gold "source" numbers
+//     (e.g. dice) sit ABOVE the track; tapping one fills the next slot.
+//   • Hand mode (DiceEquationRound): the operands are HAND cards the player taps
+//     in the fan; the track just DISPLAYS the placed cards, and `hasSecond`
+//     controls whether the operator + 2nd slot are shown (single- vs two-card).
+//
+// One or two operands: "[a] = [r]" or "[a] [op] [b] = [r]". The premium 3D
+// "בדוק" confirm is gold and dims until the equation is ready.
 // ============================================================
 
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
@@ -19,7 +22,7 @@ import { GoldButton } from '../../components/GoldButton';
 
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
 
-// A tappable gold source number (a landed die value). Bobs up on tap.
+// A tappable gold source number (e.g. a landed die value). Bobs up on tap.
 function SourceBubble({ value, onPress }: { value: number; onPress: () => void }) {
   const anim = useRef(new Animated.Value(0)).current;
   const handlePress = () => {
@@ -46,13 +49,18 @@ export interface GoldEquationTrackProps {
   slots: [number | null, number | null];
   operator: '+' | '-';
   result: number | null;
-  sources: number[];
-  onTapSource: (n: number) => void;
+  /** Source-bubble mode: tappable numbers shown above the track (omit for hand mode). */
+  sources?: number[];
+  onTapSource?: (n: number) => void;
+  /** Whether a SECOND operand exists — renders the operator + 2nd slot.
+   *  Defaults to true (back-compat: both slots always shown). */
+  hasSecond?: boolean;
   onToggleOperator: () => void;
-  /** Show the gold "בדוק" confirm button (solving phase). Phase-1
-   *  free experimentation passes false — pure poke-around, no resolve. */
+  /** Show the gold "בדוק" confirm button (solving phase). */
   showConfirm?: boolean;
   onConfirm?: () => void;
+  /** Override the "בדוק" enabled state; defaults to "both slots filled". */
+  canConfirm?: boolean;
 }
 
 export default function GoldEquationTrack({
@@ -61,30 +69,34 @@ export default function GoldEquationTrack({
   result,
   sources,
   onTapSource,
+  hasSecond = true,
   onToggleOperator,
   showConfirm = false,
   onConfirm,
+  canConfirm,
 }: GoldEquationTrackProps) {
-  const ready = slots[0] !== null && slots[1] !== null && result !== null;
+  const ready = canConfirm ?? (slots[0] !== null && slots[1] !== null && result !== null);
   return (
     <View style={styles.wrap}>
-      {/* The gold source bubbles. When sources is empty (Gold-Room Stack
-       *  phase) the numbers come from the card fan below instead, so the
-       *  bubble row is omitted entirely. */}
-      {sources.length > 0 ? (
+      {/* Source bubbles (omitted in hand mode, where the fan supplies the numbers). */}
+      {sources && sources.length > 0 ? (
         <View style={styles.sourcesRow}>
           {sources.map((n, i) => (
-            <SourceBubble key={`${n}-${i}`} value={n} onPress={() => onTapSource(n)} />
+            <SourceBubble key={`${n}-${i}`} value={n} onPress={() => onTapSource?.(n)} />
           ))}
         </View>
       ) : null}
 
       <View style={styles.track}>
         <View style={styles.slot}><Text style={styles.slotTxt}>{slots[0] ?? ''}</Text></View>
-        <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel="החלף פעולה">
-          <OperatorGlyph op={operator} color="#3A2A10" size={22} />
-        </Pressable>
-        <View style={styles.slot}><Text style={styles.slotTxt}>{slots[1] ?? ''}</Text></View>
+        {hasSecond ? (
+          <>
+            <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel="החלף פעולה">
+              <OperatorGlyph op={operator} color="#3A2A10" size={22} />
+            </Pressable>
+            <View style={styles.slot}><Text style={styles.slotTxt}>{slots[1] ?? ''}</Text></View>
+          </>
+        ) : null}
         <Text style={styles.equals}>=</Text>
         <View style={[styles.slot, styles.resultSlot]}><Text style={styles.slotTxt}>{result ?? '?'}</Text></View>
       </View>
@@ -100,7 +112,7 @@ export default function GoldEquationTrack({
 
 const styles = StyleSheet.create({
   wrap: { gap: 16, alignItems: 'center' },
-  sourcesRow: { flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  sourcesRow: { flexDirection: 'row', direction: 'ltr', gap: 12, justifyContent: 'center' },
   source: {
     width: 52,
     height: 52,
@@ -114,6 +126,9 @@ const styles = StyleSheet.create({
 
   track: {
     flexDirection: 'row',
+    // A math equation always reads left-to-right; force LTR so ambient RTL (the
+    // Hebrew app direction) doesn't mirror it into "result = b + a".
+    direction: 'ltr',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 14,

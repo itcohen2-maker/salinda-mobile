@@ -75,6 +75,7 @@ export const he: Record<string, string> = {
   'stage.onlyNumberWildOp': 'ניתן לשלב רק קלפי מספר, פרא או פעולה',
   'stage.oneWildOnly': 'אפשר רק קלף פרא אחד באזור ההנחה',
   'stage.oneOpOnly': 'אפשר רק סימן פעולה אחד באזור ההנחה',
+  'stage.fractionNotInSum': 'קלף שבר אינו חלק מהסכום — בחר קלפי מספר או פרא',
 
   'unstage.wrongPhase': 'לא בשלב הנכון',
 

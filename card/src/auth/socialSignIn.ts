@@ -50,7 +50,12 @@ export function buildSocialAuthRedirectUri(): string {
 
   // Expo Go (executionEnvironment 'storeClient') — see the IP-host caveat in the JSDoc above.
   if (Constants.executionEnvironment === 'storeClient') {
-    return makeRedirectUri({ path: SOCIAL_AUTH_CALLBACK_PATH });
+    const uri = makeRedirectUri({ path: SOCIAL_AUTH_CALLBACK_PATH });
+    // GoTrue rejects redirects whose host is a raw IP (open-redirect protection).
+    // A localhost/adb-reverse dev server resolves to exp://127.0.0.1:<port>/... —
+    // rewrite the loopback IP to the `localhost` hostname so GoTrue accepts it and
+    // returns into the app instead of falling back to the website Site URL.
+    return uri.replace('://127.0.0.1', '://localhost');
   }
 
   // Standalone / dev-client build: use the native custom scheme that is allow-listed in Supabase.
@@ -118,6 +123,12 @@ export function consumeSocialAuthReturnTo(): string {
   return '/';
 }
 
+// PKCE auth codes are single-use. Both performSocialSignIn() (via openAuthSessionAsync)
+// and the native deep-link finalizer in useAuth can observe the same callback URL, so we
+// remember consumed codes and no-op on the second attempt instead of throwing a spurious
+// "code already used / invalid verifier" error after the user is already signed in.
+const consumedAuthCodes = new Set<string>();
+
 export async function createSessionFromUrl(url: string): Promise<void> {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(errorCode);
@@ -134,8 +145,13 @@ export async function createSessionFromUrl(url: string): Promise<void> {
 
   const authCode = typeof params.code === 'string' ? params.code : null;
   if (authCode) {
+    if (consumedAuthCodes.has(authCode)) return; // already exchanged by the other handler
+    consumedAuthCodes.add(authCode);
     const { error } = await supabase.auth.exchangeCodeForSession(authCode);
-    if (error) throw error;
+    if (error) {
+      consumedAuthCodes.delete(authCode); // allow a genuine retry if the exchange itself failed
+      throw error;
+    }
     return;
   }
 

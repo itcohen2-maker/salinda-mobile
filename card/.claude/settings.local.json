@@ -100,7 +100,11 @@
       "Bash(awk 'NR>=9056 && NR<=9900 && /^function |^const [A-Z].* = .*=>|^export function /{print NR\": \"$0}' index.tsx)",
       "Bash(awk 'NR>9057 && /^function [A-Z]/{print NR\": \"$0; exit}' index.tsx)",
       "Bash(findstr :8081)",
-      "Bash(npx eas *)"
+      "Bash(npx eas *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\User\\\\salinda-mobile\\\\card\" -Recurse -Filter \"*.tsx\" -o)",
+      "Bash(Select-Object -First 20)",
+      "Bash(git log *)",
+      "Bash(git *)"
     ]
   }
 }

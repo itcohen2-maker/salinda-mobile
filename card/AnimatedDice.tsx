@@ -2,7 +2,7 @@
 // Golden dice matching 3D HTML style
 // Phases: Shake → Toss & Settle → Reveal
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Platform,
 } from 'react-native';
@@ -128,6 +128,33 @@ const runAnim = (anim: Animated.CompositeAnimation): Promise<void> =>
   new Promise(resolve => anim.start(() => resolve()));
 
 // ═══════════════════════════════════════
+// ROLL BUTTON — the game's gold 3D roll button, exported so it can be placed
+// anywhere (e.g. pinned to the bottom of the screen) while the dice render
+// elsewhere. Identical styling to the in-game button so they always match.
+// ═══════════════════════════════════════
+export function RollButton({
+  onPress,
+  rolling = false,
+  disabled = false,
+  label,
+}: { onPress?: () => void; rolling?: boolean; disabled?: boolean; label?: string }) {
+  return (
+    <TouchableOpacity
+      style={[(rolling || disabled) && styles.rollBtnDisabled]}
+      onPress={onPress}
+      disabled={rolling || disabled}
+      activeOpacity={0.8}
+    >
+      <View style={styles.rollBtnOuter}>
+        <LinearGradient colors={[...C.btnGrad]} style={styles.rollBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <Text style={styles.rollBtnText}>{rolling ? '🎲 מגלגל...' : (label || '🎲 הטל קוביות')}</Text>
+        </LinearGradient>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ═══════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════
 interface AnimatedDiceProps {
@@ -146,7 +173,13 @@ interface AnimatedDiceProps {
   hideSumBadge?: boolean;
 }
 
-export default function AnimatedDice({
+// Imperative handle: lets a parent trigger a roll from its OWN button (e.g. a
+// bottom-of-screen CTA) while the dice render elsewhere with hideRollButton.
+export interface AnimatedDiceHandle {
+  roll: () => void;
+}
+
+const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function AnimatedDice({
   onRollComplete,
   onRollStart,
   size = DICE_SIZE,
@@ -156,7 +189,7 @@ export default function AnimatedDice({
   autoRollOnMount = false,
   hideRollButton = false,
   hideSumBadge = false,
-}: AnimatedDiceProps) {
+}, ref) {
   const [displayVals, setDisplayVals] = useState<[number, number, number]>([4, 2, 5]);
   const [rolling, setRolling] = useState(false);
   const [showSum, setShowSum] = useState(false);
@@ -354,6 +387,7 @@ export default function AnimatedDice({
 
   const rollDiceRef = useRef(rollDice);
   rollDiceRef.current = rollDice;
+  useImperativeHandle(ref, () => ({ roll: () => { void rollDiceRef.current(); } }), []);
   useEffect(() => {
     if (!autoRollOnMount || disabled) return;
     const tid = setTimeout(() => {
@@ -413,30 +447,15 @@ export default function AnimatedDice({
         })}
       </Animated.View>
 
-      {/* Roll button — gold gradient matching HTML */}
+      {/* Roll button — the shared gold 3D button (same one usable externally). */}
       {!hideRollButton && (
-        <TouchableOpacity
-          style={[(rolling || disabled) && styles.rollBtnDisabled]}
-          onPress={rollDice}
-          disabled={rolling || disabled}
-          activeOpacity={0.8}
-        >
-          <View style={styles.rollBtnOuter}>
-            <LinearGradient
-              colors={[...C.btnGrad]}
-              style={styles.rollBtn}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.rollBtnText}>
-                {rolling ? '🎲 מגלגל...' : (buttonText || '🎲 הטל קוביות')}
-              </Text>
-            </LinearGradient>
-          </View>
-        </TouchableOpacity>
+        <RollButton onPress={rollDice} rolling={rolling} disabled={disabled} label={buttonText} />
       )}
     </View>
   );
-}
+});
+
+export default AnimatedDice;
 
 // ═══════════════════════════════════════
 // STYLES

@@ -35,7 +35,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false, // We finalize OAuth manually (createSessionFromUrl), not via URL auto-detect.
     // PKCE: provider returns ?code= in the query (not tokens in the #hash). Far more robust on web —
     // implicit-flow #hash tokens were silently dropped on the callback, leaving the client anonymous
-    // even though the server logged a successful login. createSessionFromUrl() exchanges the code.
+    // even though the server logged a successful login. createSessionFromUrl() exchanges the code via
+    // /token. Works on native too (Expo Go lacks WebCrypto and falls back to a `plain` challenge,
+    // which GoTrue accepts → /token 200, confirmed in logs).
     flowType: 'pkce',
     // On web, Supabase uses Navigator.locks to serialize auth token writes.
     // When init() and onAuthStateChange race during OAuth callback, both compete

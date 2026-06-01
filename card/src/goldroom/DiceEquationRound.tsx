@@ -1,237 +1,279 @@
 // ============================================================
-// DiceEquationRound — Gold Room "Mastery Loop", rebuilt as a faithful,
-// SINGLE-SCREEN simulation of the live game. The frame (gold table, the
-// prominent deck, the hand fan) is persistent; only the play state changes:
+// DiceEquationRound — Gold Room "Mastery Loop", a fully SELF-CONTAINED
+// onboarding sandbox. It is intentionally DECOUPLED from the live game
+// engine: all flow + validation logic lives locally here, so the room
+// stays a premium, bug-free experience that can never break the real game.
 //
-//   roll  →  solve  →  success
+// THE AUTHENTIC SALINDA RULE (modelled faithfully here):
 //
-// Game-faithful dimensions (taken from the live game): the dice use the real
-// AnimatedDice with its ORIGINAL animated roll button; cards use the live
-// 5:7 ratio; the deck (הערימה) is rendered big and prominent in the corner,
-// and the hand fan is anchored low at the bottom — exactly like the table.
+//   • The DICE are the INPUTS. The player forms an equation FROM the dice on
+//     the GoldEquationTrack — using TWO dice (5 + 3 = 8) or, if they choose,
+//     all THREE (5 + 3 − 2 = 6). They are never obligated to use all three.
+//   • The HAND/FAN holds the TARGET cards. After evaluating the dice equation,
+//     the player TAPS the single hand card whose value equals that result, and
+//     "בדוק" discards it (it flies out of the hand).
 //
-//   Phase 1 — Roll
-//     The live AnimatedDice sits over the gold table with its own animated
-//     roll button. Pressing it shakes + lands the dice with the game's roll
-//     beat. A reachable TARGET card is derived from the landed values, so the
-//     puzzle is fresh every round yet 100% winnable.
+// Two guided steps, then a clean frozen success:
+//   Step 1 — PLUS : add the dice, tap the matching card, clear it.
+//   Step 2 — MINUS: subtract the dice, tap the matching card, clear it. → 🏆
 //
-//   Phase 2 — Solve  (STRICT target matching — "Game of Silence")
-//     The landed dice sit ABOVE the equation as gold source bubbles (the live
-//     "dice pool" convention). The learner builds ONE equation with the
-//     premium GoldEquationTrack; its 3D GoldButton "בדוק" stays dimmed until
-//     the equation is structurally complete, then lights up.
-//       • Exact match  → lock + gold flash → auto-advance to SuccessCelebration.
-//       • Mismatch     → a gentle shake on the track. No loud "wrong" text,
-//                        no popup — the player intuitively swaps a card / sign.
+// Every round is SEEDED so the dice equation always has a matching card in the
+// hand — fresh yet 100% winnable. No game/excellence meters are shown or
+// updated here: this is pure mathematical explanation.
 //
-//   Success — the SuccessCelebration: trophy + finish. No Retry/Next/Menu
-//     choice overlay; the round proceeds with zero intermediate friction.
-//
-// Orchestration only: reuses AnimatedDice, the shared HandFan and the
-// Gold-Room GoldEquationTrack. No duplicated game logic.
+// Orchestration only: reuses AnimatedDice/GoldDieFace, the shared HandFan, the
+// GoldButton and OperatorGlyph. No duplicated/shared game state.
 // ============================================================
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
-import AnimatedDice from '../../AnimatedDice';
-import { type Card, type Fraction } from '../../components/CardDesign';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import AnimatedDice, { type AnimatedDiceHandle, GoldDieFace } from '../../AnimatedDice';
+import { GameCard, type Card } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
-import GoldEquationTrack from './GoldEquationTrack';
 import { GoldButton } from '../../components/GoldButton';
+import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { applyOperation } from '../utils/arithmetic';
 import { playSfx } from '../audio/sfx';
 
 // The Gold Room table surface (same asset family the live game uses).
 const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
-// The real game's branded card back — used for the deck pile (הערימה).
-const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
 
-// Game-faithful card geometry (matches getNativeHandFanMetrics' 100×140 base).
-const CARD_RATIO = 5 / 7;
-const DECK_CARD_H = 134; // prominent on entry, tucked into the corner
-const DECK_CARD_W = Math.round(DECK_CARD_H * CARD_RATIO);
+// ── Steps. Each guided step fixes a single operator so the lesson stays sharp.
+type StepId = 'plus' | 'minus';
+const STEP_OP: Record<StepId, '+' | '-'> = { plus: '+', minus: '-' };
 
-// Layered offsets copied from the live game's DrawPile so the deck reads
-// as a real, slightly-messy stack of cards.
-const PILE_ROTATIONS = [
-  { rotate: '-3deg', tx: -3, ty: 5 },
-  { rotate: '2deg', tx: 4, ty: 3 },
-  { rotate: '-1deg', tx: -1, ty: 1 },
-  { rotate: '0deg', tx: 0, ty: 0 },
-];
+const STEP_TEXT: Record<StepId, string> = {
+  // Step 1 (PLUS) — gentle, inviting "scan": almost every card is reachable, so
+  // wherever the eye lands there is a move. No single "right" card is dictated.
+  plus: 'הסתכלו על הקוביות ועל היד. חברו (+) קוביות כדי לבנות תרגיל ששווה לאחד הקלפים — וסמנו אותו כדי להעיף!',
+  // Step 2 (MINUS) — real discovery: not every card is reachable. The player
+  // scans the hand and picks one they can actually build toward.
+  minus: 'עכשיו חיסור (−). סרקו את היד — לא כל קלף אפשרי. מצאו קלף שאתם יכולים לבנות אליו תרגיל מהקוביות, וסמנו אותו.',
+};
 
-// ── The deck (הערימה) — "the bank". A big, prominent corner pile of branded
-// card backs in the TOP-RIGHT, mirroring the live game's draw pile, so the
-// learner meets the deck on entry. Recognition only (no draw).
-function GoldDeckPile() {
+// ── A round: the three landed dice (inputs), the step operator, and EVERY value
+// the player can reach from those dice under the step's operator (using two dice
+// in any order, or all three). The hand is built from this set so "scanning &
+// discovery" is honest — what's reachable is exactly what a card can match.
+interface Round {
+  dice: [number, number, number];
+  op: '+' | '-';
+  reachable: number[]; // distinct positive integers reachable from the dice
+}
+
+const randInt = (lo: number, hi: number): number => lo + Math.floor(Math.random() * (hi - lo + 1));
+
+// Fisher–Yates shuffle (returns a new array).
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randInt(0, i);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// All orderings of a small index array (length 2 or 3).
+function permutations(arr: number[]): number[][] {
+  if (arr.length <= 1) return [arr];
+  const res: number[][] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    for (const p of permutations(rest)) res.push([arr[i], ...p]);
+  }
+  return res;
+}
+
+// Every distinct POSITIVE integer the player can build from the dice under a
+// single operator, using two dice (any order) or all three. Order matters for
+// subtraction, so we enumerate permutations and keep the positive results.
+function reachableValues(dice: [number, number, number], op: '+' | '-'): number[] {
+  const out = new Set<number>();
+  const subsets: number[][] = [[0, 1], [0, 2], [1, 2], [0, 1, 2]];
+  for (const sub of subsets) {
+    for (const perm of permutations(sub)) {
+      let acc: number | null = dice[perm[0]];
+      for (let i = 1; i < perm.length && acc !== null; i++) {
+        acc = applyOperation(acc, op, dice[perm[i]]);
+      }
+      if (acc !== null && acc > 0 && Number.isInteger(acc)) out.add(acc);
+    }
+  }
+  return [...out];
+}
+
+// Pick `n` distinct DECOY values that are guaranteed NOT reachable from the dice
+// (drawn from a small plausible card range, minus the reachable set).
+function pickDecoys(reachable: number[], n: number): number[] {
+  const blocked = new Set(reachable);
+  const pool: number[] = [];
+  for (let v = 1; v <= 15; v++) if (!blocked.has(v)) pool.push(v);
+  return shuffle(pool).slice(0, n);
+}
+
+// ── Evaluate the dice the player placed on the track, left-to-right, under the
+// step's single operator. Fewer than two operands ⇒ no result yet.
+function calcResult(placed: number[], dice: [number, number, number], op: '+' | '-'): number | null {
+  if (placed.length < 2) return null;
+  let acc = dice[placed[0]];
+  for (let i = 1; i < placed.length; i++) {
+    const next = applyOperation(acc, op, dice[placed[i]]);
+    if (next === null) return null;
+    acc = next;
+  }
+  return acc;
+}
+
+// ── Roll dice for a step, ensuring enough DISTINCT reachable values to build the
+// step's hand: the gentle PLUS intro needs only one, the MINUS discovery round
+// needs at least three (so it can show three real options among decoys).
+function makeRound(step: StepId): Round {
+  const op = STEP_OP[step];
+  const minDistinct = step === 'minus' ? 3 : 1;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const dice: [number, number, number] = [randInt(1, 6), randInt(1, 6), randInt(1, 6)];
+    const reachable = reachableValues(dice, op);
+    if (reachable.length >= minDistinct) return { dice, op, reachable };
+  }
+  // Fallback dice known to clear the bar (defensive — the loop above all but
+  // always succeeds): [6,1,3] gives 5,3,2,4,… for minus; [3,4,5] for plus.
+  const dice: [number, number, number] = step === 'minus' ? [6, 1, 3] : [3, 4, 5];
+  return { dice, op, reachable: reachableValues(dice, op) };
+}
+
+const HAND_SIZE = 7;
+
+// ── Build the step's hand of 7 number cards.
+//
+//   • PLUS  (step 1, "almost everything solvable"): six slots drawn from the
+//     reachable set (repeats allowed) + at most one decoy. Wherever the player
+//     looks there is a move — a gentle, inviting introduction.
+//   • MINUS (step 2, "scan & discover"): exactly three reachable cards among
+//     four guaranteed-unreachable decoys. The player must actually scan and
+//     choose a card they can build toward.
+//
+// Card values match what the dice can produce, never a single dictated target;
+// positions are shuffled so the solvable cards are spread across the fan.
+function buildHand(round: Round, step: StepId): Card[] {
+  const reach = round.reachable;
+  let values: number[];
+  if (step === 'plus') {
+    const solvable: number[] = [];
+    for (let i = 0; i < HAND_SIZE - 1; i++) solvable.push(reach[i % reach.length]);
+    values = [...solvable, ...pickDecoys(reach, 1)];
+  } else {
+    const solvable = shuffle(reach).slice(0, 3);
+    values = [...solvable, ...pickDecoys(reach, HAND_SIZE - solvable.length)];
+  }
+  return shuffle(values).map((value, i) => ({ id: `gr-hand-${step}-${i}-${value}`, type: 'number', value }));
+}
+
+// ── A tappable gold DIE on the track — the landed face the player adds to the
+// equation. Placed dice dim + show a check so it's clear they're "in".
+function DiceChip({ value, placed, order, onPress }: { value: number; placed: boolean; order: number | null; onPress: () => void }) {
   return (
-    <View style={styles.deckWrap} pointerEvents="none">
-      <View style={styles.deckStack}>
-        {PILE_ROTATIONS.map((r, i) => (
-          <Image
-            key={i}
-            source={CARD_BACK_IMG}
-            resizeMode="cover"
-            style={[styles.deckCard, { transform: [{ rotate: r.rotate }, { translateX: r.tx }, { translateY: r.ty }] }]}
-          />
-        ))}
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={placed ? `הסר קובייה ${value}` : `הוסף קובייה ${value}`}>
+      <View style={[styles.diceChip, placed && styles.diceChipPlaced]}>
+        <GoldDieFace value={value} size={38} />
+        {placed && order !== null ? (
+          <View style={styles.diceOrderBadge}><Text style={styles.diceOrderTxt}>{order}</Text></View>
+        ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-type Stage = 'roll' | 'solve' | 'success';
-
-// ── A demo hand for the bottom fan (a few number cards + one fraction), so
-// the learner sees a real hand below the table. Built fresh per round.
-const FRACTIONS: Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
-
-function buildObservationHand(): Card[] {
-  const cards: Card[] = [];
-  for (let i = 0; i < 6; i++) {
-    cards.push({ id: `obs-n-${i}`, type: 'number', value: 1 + Math.floor(Math.random() * 9) });
-  }
-  cards.push({ id: 'obs-frac', type: 'fraction', fraction: FRACTIONS[Math.floor(Math.random() * FRACTIONS.length)] });
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-  return cards;
-}
-
-// ── Derive a reachable TARGET from the LANDED dice. The equation uses two of
-// the three dice under '+'/'-', so we enumerate every legal, non-negative
-// two-die result and pick one. Because the target is built FROM a real
-// equation on these exact dice, the round is always solvable — no seeding,
-// no impossible wall.
-function deriveTarget(dice: [number, number, number]): number {
-  const [a, b, c] = dice;
-  const pairs: Array<[number, number]> = [[a, b], [a, c], [b, c]];
-  const reachable = new Set<number>();
-  for (const [x, y] of pairs) {
-    for (const op of ['+', '-'] as const) {
-      const r = applyOperation(x, op, y);
-      if (r !== null && r >= 0) reachable.add(r);
-      const swapped = applyOperation(y, op, x);
-      if (swapped !== null && swapped >= 0) reachable.add(swapped);
-    }
-  }
-  const options = [...reachable];
-  // `+` always yields a non-negative result, so `options` is never empty.
-  return options[Math.floor(Math.random() * options.length)];
-}
-
-// ── Local equation-builder state (a SINGLE controlled equation) ──────
-interface EquationDraftView {
-  slots: [number | null, number | null];
-  operator: '+' | '-';
+// ── The equation track: THREE fixed dice slots (the player may use two or all
+// three), joined by the step operator, then "= result". Filled slots show the
+// placed die and are tappable to REMOVE it (it returns to the pool); empty slots
+// are faint dashed placeholders so the room for up to three dice is always
+// visible. The third slot reads as optional ("?") since two dice already solve.
+const SLOT_COUNT = 3;
+function EquationTrack({
+  placed,
+  dice,
+  op,
+  result,
+  onRemove,
+}: {
+  placed: number[];
+  dice: [number, number, number];
+  op: '+' | '-';
   result: number | null;
-}
-
-const emptyEq = (): EquationDraftView => ({ slots: [null, null], operator: '+', result: null });
-
-function recompute(eq: EquationDraftView): EquationDraftView {
-  const [a, b] = eq.slots;
-  const result = a !== null && b !== null ? applyOperation(a, eq.operator, b) : null;
-  return { ...eq, result };
-}
-
-type EqAction = { type: 'TAP_SOURCE'; number: number } | { type: 'TOGGLE_OP' } | { type: 'RESET' };
-
-function eqReducer(state: EquationDraftView, action: EqAction): EquationDraftView {
-  switch (action.type) {
-    case 'RESET':
-      return emptyEq();
-    case 'TOGGLE_OP':
-      return recompute({ ...state, operator: state.operator === '+' ? '-' : '+' });
-    case 'TAP_SOURCE': {
-      let slots: [number | null, number | null];
-      if (state.slots[0] === null) slots = [action.number, state.slots[1]];
-      else if (state.slots[1] === null) slots = [state.slots[0], action.number];
-      else slots = [action.number, null];
-      return recompute({ ...state, slots });
-    }
-    default:
-      return state;
-  }
-}
-
-// ── Phase 2: build the SINGLE equation from the landed dice and check it
-// against the TARGET. The premium GoldEquationTrack supplies the 3D "בדוק"
-// button (dimmed until the equation is structurally complete). Resolving with
-// an exact match flashes gold and wins; a mismatch shakes the track.
-function SolvingStage({ dice, target, onWin }: { dice: [number, number, number]; target: number; onWin: () => void }) {
-  const [eq, dispatch] = useReducer(eqReducer, undefined, emptyEq);
-  const [locked, setLocked] = useState(false); // freezes input during the win flash
-  const shake = useRef(new Animated.Value(0)).current;
-  const flash = useRef(new Animated.Value(0)).current;
-
-  // FAILURE — "Game of Silence": a gentle shake, no text, no jarring chime.
-  const doShake = useCallback(() => {
-    shake.setValue(0);
-    Animated.sequence([
-      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 0.55, duration: 55, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -0.55, duration: 55, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: true }),
-    ]).start();
-  }, [shake]);
-
-  // SUCCESS — lock the track, flash gold, then auto-advance.
-  const doWin = useCallback(() => {
-    setLocked(true);
-    void playSfx('success', { cooldownMs: 0 }); // reward chime on the exact match
-    Animated.sequence([
-      Animated.timing(flash, { toValue: 1, duration: 170, useNativeDriver: true }),
-      Animated.timing(flash, { toValue: 0, duration: 430, useNativeDriver: true }),
-    ]).start(() => onWin());
-  }, [flash, onWin]);
-
-  const handleConfirm = useCallback(() => {
-    if (locked || eq.result === null) return; // result === null ⇒ button is dimmed anyway
-    if (eq.result === target) doWin();
-    else doShake();
-  }, [locked, eq.result, target, doWin, doShake]);
-
-  const translateX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-9, 9] });
-
+  onRemove: (diceIdx: number) => void;
+}) {
   return (
-    <View style={styles.solveZone} pointerEvents={locked ? 'none' : 'auto'}>
-      <Animated.View style={{ transform: [{ translateX }] }}>
-        <View>
-          <GoldEquationTrack
-            slots={eq.slots}
-            operator={eq.operator}
-            result={eq.result}
-            sources={dice}
-            onTapSource={(n) => { if (!locked) dispatch({ type: 'TAP_SOURCE', number: n }); }}
-            onToggleOperator={() => { if (!locked) dispatch({ type: 'TOGGLE_OP' }); }}
-            showConfirm
-            onConfirm={handleConfirm}
-          />
-          {/* Gold success flash — a soft glow over the whole track on a match. */}
-          <Animated.View pointerEvents="none" style={[styles.winFlash, { opacity: flash }]} />
-        </View>
-      </Animated.View>
+    <View style={styles.track}>
+      {Array.from({ length: SLOT_COUNT }).map((_, i) => {
+        const diceIdx = placed[i]; // dice index sitting in slot i, or undefined
+        const filled = diceIdx !== undefined;
+        // The operator LEADING INTO this slot is bright only when this slot is
+        // actually filled (i.e. it joins two real operands).
+        const operatorBright = placed.length > i;
+        return (
+          <React.Fragment key={`slot-${i}`}>
+            {i > 0 ? (
+              <OperatorGlyph op={op} color={operatorBright ? '#F8E08E' : 'rgba(244,205,90,0.3)'} size={20} />
+            ) : null}
+            {filled ? (
+              <Pressable onPress={() => onRemove(diceIdx)} accessibilityRole="button" accessibilityLabel={`הסר קובייה ${dice[diceIdx]}`}>
+                <View style={[styles.slot, styles.slotFilled]}>
+                  <Text style={styles.slotTxt}>{dice[diceIdx]}</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <View style={[styles.slot, styles.slotEmpty, i === 2 && styles.slotOptional]}>
+                <Text style={styles.slotHintTxt}>{i === 2 ? '?' : '+'}</Text>
+              </View>
+            )}
+          </React.Fragment>
+        );
+      })}
+      <Text style={styles.equals}>=</Text>
+      <View style={[styles.slot, styles.resultSlot]}><Text style={styles.slotTxt}>{result ?? '?'}</Text></View>
     </View>
   );
 }
 
-// ── The target card (קלף המטרה) — a persistent, face-up goal card the learner
-// must reach EXACTLY, with one concise instruction beside it. Kept clear of
-// the deck on the right.
-function TargetHeader({ target }: { target: number }) {
+// ── The instruction bubble — the rule in one line, pinned to the very TOP black
+// space (Y ≈ 10–25), clear of the dice table below.
+function InstructionBanner({ text }: { text: string }) {
   return (
-    <View style={styles.topHeader} pointerEvents="none">
-      <View style={styles.targetCol}>
-        <Text style={styles.targetLabel}>קלף המטרה</Text>
-        <View style={styles.targetCard}><Text style={styles.targetValue}>{target}</Text></View>
+    <View style={styles.instructionWrap} pointerEvents="none">
+      <View style={styles.instructionBubble}>
+        <Text style={styles.headerText}>{text}</Text>
       </View>
-      <Text style={styles.headerText}>
-        בנו משוואה שמגיעה בדיוק אל קלף המטרה — בחרו שני מספרים וסימן, ולחצו בדוק.
-      </Text>
+    </View>
+  );
+}
+
+// ── The hand fan, revealed smoothly the moment the dice finish rolling: a soft
+// rise + fade as it mounts at the bottom.
+function FanReveal({ children }: { children: React.ReactNode }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(a, { toValue: 1, friction: 7, tension: 80, useNativeDriver: true }).start();
+  }, [a]);
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [44, 0] });
+  return <Animated.View style={{ opacity: a, transform: [{ translateY }] }}>{children}</Animated.View>;
+}
+
+// ── A matched card flying out of the hand toward the deck — the "discard" beat
+// the player earns on a correct equation.
+function FlyingCard({ card, onDone }: { card: Card; onDone: () => void }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    void playSfx('success', { cooldownMs: 0 });
+    Animated.timing(a, { toValue: 1, duration: 620, useNativeDriver: true }).start(() => onDone());
+  }, [a, onDone]);
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -320] });
+  const scale = a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [1, 1.12, 0.7] });
+  const opacity = a.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1, 0] });
+  return (
+    <View pointerEvents="none" style={styles.flyingLayer}>
+      <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
+        <GameCard card={card} small onPress={undefined} />
+      </Animated.View>
     </View>
   );
 }
@@ -249,7 +291,7 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
       <View style={styles.successCard}>
         <Animated.Text style={[styles.successTrophy, { opacity: pop, transform: [{ scale }] }]}>🏆</Animated.Text>
         <Text style={styles.successTitle}>כל הכבוד!</Text>
-        <Text style={styles.successSub}>הגעת בדיוק אל קלף המטרה ✓</Text>
+        <Text style={styles.successSub}>בנית תרגיל מהקוביות ונפטרת מהקלף המתאים ✓</Text>
         <View style={styles.successCta}>
           <GoldButton label="סיום" onPress={onDone} accessibilityLabel="סיום" fullWidth height={56} fontSize={20} />
         </View>
@@ -259,68 +301,183 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
 }
 
 export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
-  const [stage, setStage] = useState<Stage>('roll');
+  // The fan is centered to the ROOM FRAME (capped at 480 on web), not the whole
+  // window — without this the hand mis-centers off-frame and feels "stuck".
+  const { width: winW } = useWindowDimensions();
+  const fanW = Math.min(winW, 480);
 
-  // The dice are rolled for real (random, fully animated) — captured from the
-  // roll. The TARGET is then derived from the landed values, so any round is
-  // both fresh and guaranteed solvable.
-  const [dice, setDice] = useState<[number, number, number]>([1, 1, 1]);
-  const [target, setTarget] = useState(0);
-  const hand = useMemo(() => buildObservationHand(), []);
+  const diceRef = useRef<AnimatedDiceHandle>(null);
 
-  const handleRollStart = useCallback(() => {
-    void playSfx('transition', { cooldownMs: 0 }); // the game's roll beat
+  // ── Round + flow state ──────────────────────────────────────────────────
+  const initialRound = useRef(makeRound('plus')).current;
+  const [step, setStep] = useState<StepId>('plus');
+  const [substage, setSubstage] = useState<'roll' | 'solve'>('roll');
+  const [round, setRound] = useState<Round>(initialRound);
+  const [hand, setHand] = useState<Card[]>(() => buildHand(initialRound, 'plus'));
+
+  // The dice the player has placed on the track (dice indices, in tap order),
+  // and the hand card they've marked as the matching target.
+  const [placed, setPlaced] = useState<number[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [resolving, setResolving] = useState(false); // freezes input during the win
+  const [flying, setFlying] = useState<Card | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const shake = useRef(new Animated.Value(0)).current;
+
+  const op = round.op;
+  const result = useMemo(() => calcResult(placed, round.dice, op), [placed, round.dice, op]);
+  const selectedIds = useMemo(() => (selectedId ? new Set([selectedId]) : new Set<string>()), [selectedId]);
+  const selectedCard = useMemo(() => hand.find((c) => c.id === selectedId) ?? null, [hand, selectedId]);
+  // The button LIGHTS UP as soon as the dice form a valid equation — TWO dice is
+  // enough (a third is optional). The matching hand card is verified at press
+  // time, so the player never sees a dead button after placing two dice.
+  const hasEquation = result !== null && placed.length >= 2;
+
+  // FAILURE — "Game of Silence": a gentle shake, no text, no jarring chime.
+  const doShake = useCallback(() => {
+    shake.setValue(0);
+    Animated.sequence([
+      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0.55, duration: 55, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -0.55, duration: 55, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  }, [shake]);
+
+  // The dice finished rolling — reveal the track + hand for this step.
+  const handleRollComplete = useCallback(() => {
+    setSubstage('solve');
   }, []);
 
-  const handleRollComplete = useCallback((vals: [number, number, number]) => {
-    setDice(vals); // use the values that actually landed
-    setTarget(deriveTarget(vals)); // a reachable goal for THESE dice
-    setStage('solve');
+  // Tap a die: add it to the equation (in order) or remove it if already placed.
+  const tapDie = useCallback(
+    (idx: number) => {
+      if (resolving) return;
+      setPlaced((prev) => {
+        if (prev.includes(idx)) return prev.filter((i) => i !== idx);
+        if (prev.length >= 3) return prev;
+        return [...prev, idx];
+      });
+    },
+    [resolving],
+  );
+
+  // Tap a hand card: mark (or unmark) it as the matching target card.
+  const tapCard = useCallback(
+    (card: Card) => {
+      if (resolving || typeof card.value !== 'number') return;
+      setSelectedId((cur) => (cur === card.id ? null : card.id));
+    },
+    [resolving],
+  );
+
+  // Reset the placed dice / selection for a fresh round.
+  const resetSelections = useCallback(() => {
+    setPlaced([]);
+    setSelectedId(null);
   }, []);
 
-  // Exact match → mark the practice complete (gates the coin reward) and
-  // advance straight to the celebration.
-  const handleWin = useCallback(() => {
-    onComplete?.();
-    setStage('success');
-  }, [onComplete]);
+  // After the matched card flies out: clear it from the hand, then either move
+  // to the MINUS step (after PLUS) or freeze on the success state (after MINUS).
+  const finishWin = useCallback(() => {
+    const clearedId = selectedId;
+    setFlying(null);
+    setHand((h) => h.filter((c) => c.id !== clearedId));
+    setResolving(false);
+    resetSelections();
+    if (step === 'plus') {
+      const next = makeRound('minus');
+      setRound(next);
+      setHand(buildHand(next, 'minus'));
+      setStep('minus');
+      setSubstage('roll');
+    } else {
+      onComplete?.();
+      setShowSuccess(true);
+    }
+  }, [selectedId, step, resetSelections, onComplete]);
+
+  // "בדוק": does the dice equation equal the marked hand card? Success → the
+  // card flies out; failure (wrong card, or no card chosen yet) → a quiet shake
+  // (no popup) that nudges the player to mark the matching card.
+  const handleCheck = useCallback(() => {
+    if (!hasEquation || resolving) return;
+    if (selectedCard && selectedCard.value === result) {
+      setResolving(true);
+      setFlying(selectedCard); // FlyingCard's onDone calls finishWin
+    } else {
+      doShake();
+    }
+  }, [hasEquation, resolving, result, selectedCard, doShake]);
+
+  const translateX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-9, 9] });
 
   return (
     <View style={styles.root}>
-      {/* The deck (הערימה) — big & prominent in the corner, like the live game. */}
-      <GoldDeckPile />
+      {/* The instruction bubble — pinned to the very top black space. */}
+      <InstructionBanner text={STEP_TEXT[step]} />
 
-      {/* Target card + instruction — persistent at the top during solving. */}
-      {stage === 'solve' ? <TargetHeader target={target} /> : null}
-
-      {/* Play area: the gold table is a sized, semi-transparent surface, and the
-       *  dice/roll-button (roll) or the equation (solve) sit CENTERED on it. */}
+      {/* Play area: the dice roll on the gold table; once landed, the equation
+       *  track (dice chips → equation) takes the table's place. */}
       <View style={styles.playArea}>
         <View style={styles.tableZone}>
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
           <View style={styles.tableOverlay} pointerEvents="box-none">
-            {stage === 'roll' ? (
+            {substage === 'roll' ? (
               <AnimatedDice
+                key={step}
+                ref={diceRef}
                 size={40}
+                fixedFinalValues={round.dice}
+                autoRollOnMount
+                hideRollButton
                 hideSumBadge
-                buttonText="🎲 הטל"
-                onRollStart={handleRollStart}
                 onRollComplete={handleRollComplete}
               />
-            ) : stage === 'solve' ? (
-              <SolvingStage dice={dice} target={target} onWin={handleWin} />
-            ) : null}
+            ) : (
+              <Animated.View style={[styles.solveZone, { transform: [{ translateX }] }]}>
+                {/* The landed dice, now tappable inputs for the equation. */}
+                <View style={styles.diceRow}>
+                  {round.dice.map((v, idx) => {
+                    const pos = placed.indexOf(idx);
+                    return (
+                      <DiceChip
+                        key={idx}
+                        value={v}
+                        placed={pos >= 0}
+                        order={pos >= 0 ? pos + 1 : null}
+                        onPress={() => tapDie(idx)}
+                      />
+                    );
+                  })}
+                </View>
+                <EquationTrack placed={placed} dice={round.dice} op={op} result={result} />
+                <View style={styles.confirmWrap}>
+                  <GoldButton label="בדוק ✓" onPress={handleCheck} disabled={!hasEquation} height={50} fontSize={18} accessibilityLabel="בדוק את המשוואה" />
+                  <Text style={styles.confirmHint}>שתי קוביות מספיקות — קובייה שלישית היא רשות, לא חובה.</Text>
+                </View>
+              </Animated.View>
+            )}
           </View>
         </View>
       </View>
 
-      {/* The hand fan — anchored low at the bottom, clear of the dice/button
-       *  above it (the live hand placement). */}
-      <View style={styles.fanWrap} pointerEvents="box-none">
-        <HandFan cards={hand} />
-      </View>
+      {/* The hand fan (solve stage) — the TARGET cards. Tap the one equal to the
+       *  dice equation's result; on "בדוק" it flies out of the hand. */}
+      {substage === 'solve' ? (
+        <FanReveal>
+          <View style={styles.fanWrap} pointerEvents={resolving ? 'none' : 'box-none'}>
+            <HandFan cards={hand} width={fanW} selectedIds={selectedIds} onTapCard={tapCard} />
+          </View>
+        </FanReveal>
+      ) : null}
 
-      {stage === 'success' ? <SuccessCelebration onDone={onExit} /> : null}
+      {flying ? <FlyingCard card={flying} onDone={finishWin} /> : null}
+
+      {showSuccess ? <SuccessCelebration onDone={onExit} /> : null}
     </View>
   );
 }
@@ -328,64 +485,96 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // The deck (הערימה) — big corner pile of branded card backs, TOP-RIGHT.
-  deckWrap: { position: 'absolute', top: 10, right: 16, alignItems: 'center', zIndex: 5 },
-  deckStack: { width: DECK_CARD_W + 14, height: DECK_CARD_H + 12, alignItems: 'center', justifyContent: 'center' },
-  deckCard: {
-    position: 'absolute',
-    width: DECK_CARD_W,
-    height: DECK_CARD_H,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: 'rgba(244,205,90,0.5)',
-  },
-
-  // Play area — fills the space above the fan; the table sits centered in it.
-  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  // Play area — fills the space above the bottom hand; the table centers.
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 12 },
   // The table: a sized, semi-transparent surface. Content is overlaid centered
-  // ON it, so the roll button / equation always sit on the table, not off it.
+  // ON it, so the dice / equation always sit on the table, not off it.
   tableZone: { width: '94%', maxWidth: 380, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
   tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.55 },
   tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  solveZone: { alignItems: 'center', width: '100%' },
+  solveZone: { alignItems: 'center', width: '100%', gap: 14 },
 
-  // The gold success flash — a soft gold wash over the equation track.
-  winFlash: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 18,
-    backgroundColor: 'rgba(248,224,142,0.55)',
+  // The landed dice, shown as tappable gold chips above the equation track.
+  diceRow: { flexDirection: 'row', direction: 'ltr', gap: 12, justifyContent: 'center', alignItems: 'center' },
+  diceChip: {
+    padding: 4,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-
-  // Hand fan — raised off the bottom edge so there's room BELOW it for the
-  // game-style action buttons (discard / results) that come next.
-  fanWrap: { alignItems: 'center', paddingBottom: 104 },
-
-  // Target card + instruction header — premium gold, near the top, kept clear
-  // of the deck on the right.
-  topHeader: {
+  diceChipPlaced: {
+    borderColor: 'rgba(244,205,90,0.9)',
+    backgroundColor: 'rgba(244,205,90,0.16)',
+    opacity: 0.85,
+  },
+  diceOrderBadge: {
     position: 'absolute',
-    top: 10,
-    left: 14,
-    right: 116,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    zIndex: 15,
-  },
-  targetCol: { alignItems: 'center' },
-  targetLabel: { color: '#D8C49A', fontSize: 11, fontWeight: '800', marginBottom: 4 },
-  targetCard: {
-    width: 52,
-    height: 72,
-    borderRadius: 11,
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: '#8A5A1C',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(244,205,90,0.14)',
-    borderWidth: 2,
-    borderColor: 'rgba(244,205,90,0.85)',
   },
-  targetValue: { color: '#F8E08E', fontSize: 30, fontWeight: '900' },
-  headerText: { flex: 1, color: '#F8E08E', fontSize: 13, fontWeight: '700', lineHeight: 19, textAlign: 'right' },
+  diceOrderTxt: { color: '#FFF7DA', fontSize: 11, fontWeight: '900' },
+
+  // The equation track — dice operands, operator glyphs, "= result".
+  track: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(20,12,4,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(244,205,90,0.35)',
+  },
+  slot: {
+    minWidth: 44,
+    height: 44,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,243,201,0.06)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,205,90,0.5)',
+  },
+  slotEmpty: { borderStyle: 'dashed', borderColor: 'rgba(244,205,90,0.3)' },
+  // The optional third slot (when two dice already form a valid equation): faded
+  // so it clearly reads as "open for more", not "required".
+  slotOptional: { opacity: 0.4 },
+  resultSlot: { borderColor: 'rgba(244,205,90,0.85)', backgroundColor: 'rgba(244,205,90,0.12)' },
+  slotTxt: { color: '#F8E08E', fontSize: 18, fontWeight: '900' },
+  slotHintTxt: { color: 'rgba(244,205,90,0.35)', fontSize: 18, fontWeight: '900' },
+  equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
+  confirmWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 2 },
+  confirmHint: { color: 'rgba(244,205,90,0.6)', fontSize: 12.5, fontWeight: '700', textAlign: 'center', marginTop: 8 },
+
+  // Hand fan — anchored low at the bottom of the screen, swipeable; only a small
+  // safe-area gap below it (clear of the iPhone home indicator).
+  fanWrap: { alignItems: 'center', paddingBottom: 28 },
+
+  // The matched card flying out toward the deck.
+  flyingLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 120, zIndex: 18 },
+
+  // The instruction bubble — pinned to the very TOP black space (Y ≈ 10–25),
+  // full width, well clear of the centered dice table.
+  instructionWrap: { position: 'absolute', top: 14, left: 16, right: 16, zIndex: 15 },
+  instructionBubble: {
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(20,12,4,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(244,205,90,0.35)',
+  },
+  headerText: { color: '#F8E08E', fontSize: 13.5, fontWeight: '700', lineHeight: 20, textAlign: 'right' },
 
   // Success celebration — full-screen, explicit finish.
   successOverlay: {

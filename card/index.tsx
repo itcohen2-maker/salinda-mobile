@@ -2935,7 +2935,7 @@ function gameReducer(
       }
       if (st.stagedCards.some(c => c.id === action.card.id)) return st;
       if (action.card.type !== 'number' && action.card.type !== 'operation' && action.card.type !== 'wild') return st;
-      if (action.card.type === 'wild' && st.stagedCards.some(c => c.type === 'wild')) return st;
+      if (action.card.type === 'wild' && st.stagedCards.some(c => c.type === 'wild')) return { ...st, message: tf('stage.oneWildOnly') };
       // Lift from dice-equation UI into staging (same physical card — clear slot/pick first)
       let base: typeof st = st;
       if (isCardInEquationHand(st, action.card.id)) {
@@ -10571,6 +10571,13 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       }
       else if (card.type === 'fraction') {
         if (fracTapIntercept.fn && fracTapIntercept.fn(card)) return;
+        // Picking cards for the equation result: a fraction is an attack card,
+        // not part of the sum. If the player already staged cards, explain that
+        // instead of silently firing an attack that throws away their selection.
+        if (!state.isTutorial && !hasFracDefense && state.stagedCards.length > 0) {
+          dispatch({ type: 'SET_MESSAGE', message: t('stage.fractionNotInSum') });
+          return;
+        }
         if (state.isTutorial && tutorialBus.getFracGuidedMode() && !hasFracDefense) {
           if (!validateFractionPlay(card, td)) return;
           dispatch({ type: 'PLAY_FRACTION', card });
@@ -11034,16 +11041,13 @@ function FloatingDieSvg({ size, face, color }: { size: number; face: number; col
 }
 
 function FloatingMathBackground() {
-  const { t } = useLocale();
   const items = useMemo<FloatItem[]>(() => {
-    // Higher-frequency branding: always show at least one random-language brand.
-    const hebrewBrand = t('brand.salindaHebrew');
+    // Higher-frequency branding: always show the Latin brand (no Hebrew floater).
     const makeBrandItem = (): FloatItem => {
-      const rtl = Math.random() < 0.5;
       return {
         kind: 'brand',
-        text: rtl ? hebrewBrand : 'Salinda',
-        rtlLabel: rtl,
+        text: 'Salinda',
+        rtlLabel: false,
         left: `${10 + Math.floor(Math.random() * 76)}%`,
         startY: 0.08 + Math.random() * 0.8,
         size: 13 + Math.floor(Math.random() * 4),
@@ -11056,7 +11060,7 @@ function FloatingMathBackground() {
     // Often show a second logo for stronger presence.
     if (Math.random() < 0.75) brandItems.push(makeBrandItem());
     return [...FLOAT_ITEMS, ...brandItems];
-  }, [t]);
+  }, []);
 
   // Ensure anim arrays always cover all items (items length may change when `t` changes)
   const floatAnimsRef = useRef<Animated.Value[]>([]);
@@ -17423,7 +17427,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     // Tutorial (lesson 6 step 6.1) watches for this event as the outcome
     // predicate — without the emit the lesson never advances.
     if (state.isTutorial) tutorialBus.emitUserEvent({ kind: 'resultsChipTapped' });
-    const shouldCountUseThisOpen = !state.possibleResultsInfoCountedThisTurn;
+    // רק אם הכפתור באמת מציג פתרון מהיד נחשב/נחייב שימוש. בלי תוצאות תואמות־יד
+    // הלחיצה לא נותנת שירות — אז לא נספר אותה ולא נקרב את השחקן לעונש השליפה.
+    const hasUsableResults = filteredResultsForHand.length > 0;
+    const shouldCountUseThisOpen = hasUsableResults && !state.possibleResultsInfoCountedThisTurn;
     const nextInfoUse = state.possibleResultsInfoUses + 1;
     if (shouldCountUseThisOpen) {
       dispatch({ type: 'USE_POSSIBLE_RESULTS_INFO' });
@@ -17475,7 +17482,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     if (!shouldCountUseThisOpen || nextInfoUse !== 2) {
       showOnb('onb_results', '', '', t('onb.results.body'));
     }
-  }, [canUseActiveTurnUi, resultsOpen, midGameHintsUnlocked, tutLoaded, showOnb, state.identicalAlert, state.pendingFractionTarget, state.possibleResultsInfoUses, state.possibleResultsInfoCountedThisTurn, state.guidanceEnabled, state.isTutorial, dispatch, hasWildForResults, showGuidance, t, playMiniResultTapSound, isBotTurnAny]);
+  }, [canUseActiveTurnUi, resultsOpen, midGameHintsUnlocked, tutLoaded, showOnb, state.identicalAlert, state.pendingFractionTarget, state.possibleResultsInfoUses, state.possibleResultsInfoCountedThisTurn, state.guidanceEnabled, state.isTutorial, dispatch, hasWildForResults, showGuidance, t, playMiniResultTapSound, isBotTurnAny, filteredResultsForHand.length]);
 
   useEffect(() => {
     if (!resultsOpen || resultsMiniPulseSeen || !tutLoaded) return;

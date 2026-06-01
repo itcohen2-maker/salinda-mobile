@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 import {
   consumeSocialAuthReturnTo,
   createSessionFromUrl,
@@ -173,6 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // True once the initial getSession()/anonymous-bootstrap has finished. During
+  // init, a stale stored session makes supabase-js emit SIGNED_OUT *while*
+  // getSession() runs — init's own fallback already recreates a guest session
+  // there, so the SIGNED_OUT handler must NOT also recreate one (that would
+  // create two anonymous users). After init, a genuine mid-session SIGNED_OUT
+  // (e.g. a server-rejected refresh token) is the handler's job to recover from.
+  const initializedRef = useRef(false);
+  // Set while an explicit signOut()/signOutToGuest() is in flight so the
+  // SIGNED_OUT handler doesn't fight them (signOutToGuest recreates its own
+  // guest session; signOut deliberately leaves the user logged out).
+  const intentionalSignOutRef = useRef(false);
+
   const user = session?.user ?? null;
   const isAuthenticated = !!session;
   const isAnonymous = isAnonymousAuthUser(user);
@@ -275,6 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[auth] getSession threw:', e);
       } finally {
         setLoading(false);
+        initializedRef.current = true;
       }
     };
 
@@ -287,8 +301,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           void fetchProfile(s.user.id);
         } else {
           setProfile(null);
-          if ((event as string) === 'TOKEN_REFRESH_FAILED') {
-            void beginAnonymousSession();
+          // supabase-js has no TOKEN_REFRESH_FAILED event — a server-rejected
+          // refresh token surfaces as SIGNED_OUT with no session. Re-establish a
+          // guest session so the player is never stranded mid-game. Only after
+          // init (init handles the launch case) and never during an explicit
+          // sign-out. Deferred via setTimeout because calling an auth method
+          // synchronously inside an onAuthStateChange callback can deadlock
+          // supabase-js.
+          if (
+            event === 'SIGNED_OUT' &&
+            initializedRef.current &&
+            !intentionalSignOutRef.current
+          ) {
+            setTimeout(() => { void beginAnonymousSession(); }, 0);
           }
         }
       });
@@ -301,6 +326,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try { subscription?.unsubscribe(); } catch (_) {}
     };
   }, [fetchProfile, handleWebOAuthCallback]);
+
+  // Native deep-link OAuth finalizer. On Android the Chrome Custom Tab can cause
+  // Expo Go (or a build) to be killed/relaunched during the Google round-trip, so
+  // the openAuthSessionAsync() promise in performSocialSignIn() never resolves.
+  // When the app re-opens via the `exp://.../auth/callback` (or `salinda://…`)
+  // deep link — either as the initial URL on a cold start or a live `url` event —
+  // finalize the session here so the user lands back IN the app, logged in,
+  // instead of being stranded on the website / a "Something went wrong" screen.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    let cancelled = false;
+    const finalizeFromUrl = async (url: string | null | undefined) => {
+      if (cancelled || !url || !isSocialAuthCallbackUrl(url)) return;
+      try {
+        await createSessionFromUrl(url);
+        const { data } = await supabase.auth.getSession();
+        if (!cancelled) await applySession(data?.session ?? null);
+      } catch (e) {
+        console.warn('[auth] deep-link OAuth finalize failed:', e);
+      }
+    };
+
+    void Linking.getInitialURL().then(finalizeFromUrl);
+    const sub = Linking.addEventListener('url', (event) => void finalizeFromUrl(event.url));
+
+    return () => {
+      cancelled = true;
+      try { sub.remove(); } catch (_) {}
+    };
+  }, [applySession]);
 
   /**
    * Links email + password to the current anonymous session (preserving coins/rating).
@@ -521,12 +577,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOutFn = useCallback(async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
+    intentionalSignOutRef.current = true;
+    try {
+      await supabase.auth.signOut();
+      setSession(null);
+      setProfile(null);
+    } finally {
+      intentionalSignOutRef.current = false;
+    }
   }, []);
 
   const signOutToGuest = useCallback(async () => {
+    intentionalSignOutRef.current = true;
     try {
       const { error } = await supabase.auth.signOut();
       if (error) return { error: error.message };
@@ -535,6 +597,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return {
         error: error instanceof Error ? error.message : 'Could not switch to guest mode.',
       };
+    } finally {
+      intentionalSignOutRef.current = false;
     }
   }, [beginAnonymousSession]);
 
