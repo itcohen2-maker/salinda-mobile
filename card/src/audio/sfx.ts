@@ -5,6 +5,8 @@ import { getAudioLoadStatus, getAudioReplayStatus } from './playbackStatus';
 
 export type SfxKey =
   | 'tap'
+  | 'diceRoll'
+  | 'place'
   | 'success'
   | 'combo'
   | 'errorSoft'
@@ -27,6 +29,8 @@ type SfxState = {
 
 const SOURCES: Record<SfxKey, number> = {
   tap: require('../../assets/sounds/sfx_ui_tap.wav'),
+  diceRoll: require('../../assets/dice_roll.mp3'),
+  place: require('../../assets/card_place_multiple.mp3'),
   success: require('../../assets/sounds/sfx_ui_success.wav'),
   combo: require('../../assets/sounds/sfx_ui_combo.wav'),
   errorSoft: require('../../assets/sounds/sfx_ui_error_soft.wav'),
@@ -44,6 +48,8 @@ const SOURCES: Record<SfxKey, number> = {
 
 const REGISTRY: Record<SfxKey, SfxState> = {
   tap: { sound: null, loading: false, lastPlayedAt: 0 },
+  diceRoll: { sound: null, loading: false, lastPlayedAt: 0 },
+  place: { sound: null, loading: false, lastPlayedAt: 0 },
   success: { sound: null, loading: false, lastPlayedAt: 0 },
   combo: { sound: null, loading: false, lastPlayedAt: 0 },
   errorSoft: { sound: null, loading: false, lastPlayedAt: 0 },

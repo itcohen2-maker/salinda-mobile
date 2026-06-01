@@ -31,12 +31,14 @@ export interface HandFanProps {
   selectedIds?: Set<string>;
   /** Width used to horizontally center the fan. Defaults to the screen. */
   width?: number;
+  /** Keep a specific card centered when the guided flow needs the next target. */
+  centerCardId?: string | null;
   /** Play the UI "tap" sound when a card is selected. Default true — this
    *  is the premium card-selection feedback. */
   playTapSound?: boolean;
 }
 
-export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, playTapSound = true }: HandFanProps) {
+export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, centerCardId = null, playTapSound = true }: HandFanProps) {
   const metrics = useMemo(() => getNativeHandFanMetrics(Platform.OS), []);
   const cardW = metrics.cardWidth;
   const cardH = metrics.cardHeight;
@@ -89,6 +91,17 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
     setCenterIdx(target);
     scrollX.setValue(target);
   }, [count, scrollX]);
+
+  useEffect(() => {
+    if (!centerCardId) return;
+    const target = cards.findIndex((card) => card.id === centerCardId);
+    if (target < 0) return;
+    scrollX.stopAnimation();
+    scrollRef.current = target;
+    centerIdxRef.current = target;
+    setCenterIdx(target);
+    scrollX.setValue(target);
+  }, [cards, centerCardId, scrollX]);
 
   // Horizontal drag → scroll; release → momentum projection + soft snap.
   // Taps must reach each card's button, so onStart stays false and we only

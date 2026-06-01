@@ -33,6 +33,7 @@ import SpecialCardsIntro from './SpecialCardsIntro';
 import HandFan from '../../components/HandFan';
 import { GameCard, type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
+import { playSfx } from '../audio/sfx';
 import { SALINDA_COIN_SOURCES, SALINDA_GOLD_ROOM_REWARD } from '../../shared/salindaEconomy';
 
 interface GoldRoomScreenProps {
@@ -124,7 +125,7 @@ const BASICS_STEPS: Step[] = [
   },
   {
     title: '',
-    body: 'חומרי הגלם שלכם. בכל תור, 3 קוביות יוטלו על הלוח ויקבעו את גורל הסיבוב. המספרים שיעלו הם הכוח שלכם - מהם תרכיבו את התרגילים שישמידו את קלפי היד שלכם!',
+    body: 'בכל תור, שלוש קוביות שיוטלו על הלוח ויקבעו את גורל הסיבוב. מהמספרים שיעלו תרכיבו את התרגילים שבעזרתם תיפטרו מקלפי המניפה שלכם.',
     spot: { top: 0.13, left: 0.08, width: 0.84, height: 0.2 },
     mock: 'dice',
     cardAnchor: 'bottom',
@@ -262,6 +263,9 @@ function MockDice({ boxW, boxH, onAnimationComplete }: { boxW: number; boxH: num
         autoRollOnMount
         hideRollButton
         hideSumBadge
+        onRollStart={() => {
+          void playSfx('diceRoll', { cooldownMs: 0, volumeOverride: 0.48 });
+        }}
         onRollComplete={handleRollComplete}
       />
     </Animated.View>
@@ -692,7 +696,7 @@ function TrainingTask({
             />
             {step.tag ? <Text style={styles.stepTag}>{step.tag}</Text> : null}
             {step.title ? <Text style={styles.title}>{step.title}</Text> : null}
-            <Text style={styles.body}>{step.body}</Text>
+            <Text style={[styles.body, step.mock === 'dice' && styles.bodyCenter]}>{step.body}</Text>
           </LinearGradient>
 
           <View style={styles.dots}>
@@ -982,6 +986,7 @@ const styles = StyleSheet.create({
   stepTag: { color: '#5E3A10', fontSize: 13, fontWeight: '800', letterSpacing: 1, opacity: 0.7, textAlign: 'right' },
   title: { color: '#2B1D08', fontSize: 25, fontWeight: '900', marginTop: 6, marginBottom: 12, textAlign: 'right' },
   body: { color: '#3D2A0E', fontSize: 16, lineHeight: 24, fontWeight: '600', textAlign: 'right' },
+  bodyCenter: { textAlign: 'center' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 18, marginBottom: 16 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,243,201,0.35)' },
   dotActive: { width: 22, backgroundColor: '#F4CD5A' },

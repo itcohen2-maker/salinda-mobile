@@ -27,6 +27,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import AnimatedDice, { type AnimatedDiceHandle, GoldDieFace } from '../../AnimatedDice';
 import { GameCard, type Card } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
@@ -47,11 +48,27 @@ const STEP_TEXT: Record<StepId, string> = {
   plus: 'הביטו בקוביות ובמניפה. הרכבנו עבורכם תרגיל חיבור (+) שמגיע בדיוק ל-6. עכשיו, מצאו ולחצו על קלף 6 במניפה שלכם כדי לבחור אותו!',
   // Step 2 (MINUS) — real discovery: not every card is reachable. The player
   // scans the hand and picks one they can actually build toward.
-  minus: 'עבודה מעולה! עכשיו האתגר גדל ועוברים לחיסור (-). איך תוכלו להשתמש בקוביות שעל הלוח כדי להיפטר מקלף 3? זכרו שהסדר שבו תלחצו על הקוביות קובע את התוצאה!',
+  minus: 'עבודה מעולה! עכשיו האתגר גדל ועוברים לחיסור (-). הרכבנו עבורכם תרגיל חיסור (5 - 2) שמגיע בדיוק ל-3. מצאו ולחצו על קלף 3 במניפה שלכם!',
 };
 
 const SEEDED_DICE: [number, number, number] = [2, 4, 5];
 const FIXED_HAND_VALUES = [12, 6, 3, 9, 15, 20, 1] as const;
+const OPERATOR_LESSON_HAND: Card[] = [
+  { id: 'op-lesson-num-12', type: 'number', value: 12 },
+  { id: 'op-lesson-num-9', type: 'number', value: 9 },
+  { id: 'op-lesson-num-3', type: 'number', value: 3 },
+  { id: 'op-lesson-plus', type: 'operation', operation: '+' },
+  { id: 'op-lesson-target-6', type: 'number', value: 6 },
+  { id: 'op-lesson-num-15', type: 'number', value: 15 },
+  { id: 'op-lesson-num-1', type: 'number', value: 1 },
+];
+const OPERATOR_LESSON_PLUS_ID = 'op-lesson-plus';
+const OPERATOR_LESSON_TARGET_ID = 'op-lesson-target-6';
+const SEND_BUTTON_WIDTH = 140;
+const SEND_BUTTON_HEIGHT = 26;
+const SEND_BUTTON_RADIUS = 12;
+const SEND_BUTTON_RAISE = 5;
+const SEND_BUTTON_FONT_SIZE = 13;
 
 // ── A round: the three landed dice (inputs) and the fixed operator for this
 // guided step.
@@ -168,12 +185,20 @@ function InstructionBanner({ text }: { text: string }) {
 // ── A matched card flying out of the hand toward the deck — the "discard" beat
 // the player earns on a correct equation. The success chime plays LOUD and clear
 // here — this is the player's first win, the dopamine moment.
-function FlyingCard({ card, onDone }: { card: Card; onDone: () => void }) {
+function FlyingCard({ card, onDone, doneDelayMs = 0 }: { card: Card; onDone: () => void; doneDelayMs?: number }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    let doneTimer: ReturnType<typeof setTimeout> | null = null;
     void playSfx('success', { cooldownMs: 0, volumeOverride: 0.95 });
-    Animated.timing(a, { toValue: 1, duration: 620, useNativeDriver: true }).start(() => onDone());
-  }, [a, onDone]);
+    const animation = Animated.timing(a, { toValue: 1, duration: 620, useNativeDriver: true });
+    animation.start(() => {
+      doneTimer = setTimeout(onDone, doneDelayMs);
+    });
+    return () => {
+      animation.stop();
+      if (doneTimer) clearTimeout(doneTimer);
+    };
+  }, [a, doneDelayMs, onDone]);
   const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -320] });
   const scale = a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [1, 1.12, 0.7] });
   const opacity = a.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1, 0] });
@@ -208,7 +233,211 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
   );
 }
 
-export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
+function MiniOperatorCard({ op }: { op: '+' }) {
+  return (
+    <LinearGradient colors={['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C']} locations={[0, 0.35, 0.68, 1]} style={styles.operatorMiniCard}>
+      <Text style={styles.operatorMiniText}>{op}</Text>
+    </LinearGradient>
+  );
+}
+
+function FlyingMiniOperator() {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    void playSfx('success', { cooldownMs: 0, volumeOverride: 0.9 });
+    Animated.timing(a, { toValue: 1, duration: 680, useNativeDriver: true }).start();
+  }, [a]);
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -340] });
+  const translateX = a.interpolate({ inputRange: [0, 1], outputRange: [0, 72] });
+  const rotate = a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '22deg'] });
+  const scale = a.interpolate({ inputRange: [0, 0.28, 1], outputRange: [1, 1.16, 0.68] });
+  const opacity = a.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] });
+  return (
+    <View pointerEvents="none" style={styles.flyingLayer}>
+      <Animated.View style={{ opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }}>
+        <MiniOperatorCard op="+" />
+      </Animated.View>
+    </View>
+  );
+}
+
+function OperatorLessonTrack({
+  operatorInserted,
+  operatorReady,
+  pulse,
+  onPlaceOperator,
+}: {
+  operatorInserted: boolean;
+  operatorReady: boolean;
+  pulse: Animated.Value;
+  onPlaceOperator: () => void;
+}) {
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.9] });
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.1] });
+  const slot = (
+    <View style={[styles.operatorHole, operatorReady && styles.operatorHoleReady]}>
+      {operatorReady ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.operatorHoleGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]}
+        />
+      ) : null}
+      {operatorInserted ? <MiniOperatorCard op="+" /> : <Text style={styles.operatorHoleHint}>?</Text>}
+    </View>
+  );
+
+  return (
+    <View style={styles.track}>
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>2</Text></View>
+      {operatorReady ? (
+        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="מקם קלף פלוס בחריץ הסימן">
+          {slot}
+        </Pressable>
+      ) : slot}
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>4</Text></View>
+      <Text style={styles.equals}>=</Text>
+      <View style={[styles.slot, styles.resultSlot]}><Text style={styles.slotTxt}>6</Text></View>
+    </View>
+  );
+}
+
+function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
+  const { width: winW } = useWindowDimensions();
+  const fanW = Math.min(winW, 480);
+  const [hand, setHand] = useState<Card[]>(OPERATOR_LESSON_HAND);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [operatorInserted, setOperatorInserted] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [flyingOperator, setFlyingOperator] = useState(false);
+  const slotPulse = useRef(new Animated.Value(0)).current;
+
+  const selectedCard = useMemo(() => hand.find((card) => card.id === selectedId) ?? null, [hand, selectedId]);
+  const selectedIds = useMemo(() => (selectedId ? new Set([selectedId]) : new Set<string>()), [selectedId]);
+  const plusSelected = selectedCard?.type === 'operation' && selectedCard.operation === '+';
+  const targetSelected = operatorInserted && selectedCard?.type === 'number' && selectedCard.value === 6;
+  const operatorReady = plusSelected && !operatorInserted && !resolving;
+  const focusedFanCardId = operatorInserted ? OPERATOR_LESSON_TARGET_ID : OPERATOR_LESSON_PLUS_ID;
+
+  const instructionText = useMemo(() => {
+    if (targetSelected) return "מעולה! עכשיו לחצו על כפתור 'שגר' כדי להעיף את הקלף ולסיים את השיעור!";
+    if (operatorInserted) return 'התרגיל מושלם: 2 + 4 = 6. עכשיו מצאו ולחצו על קלף 6 במניפה שלכם.';
+    if (plusSelected) return 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה כדי למקם את הקלף שם.';
+    return 'הכירו את קלפי הסימן! הם מאפשרים לכם להשלים תרגילים וגם להיפטר מקלפים מהיד. כאן מחכה לכם תרגיל של 2 ו-4 ששווה ל-6, אך חסר סימן החיבור. לחצו על קלף הפלוס (+) במניפה שלכם!';
+  }, [operatorInserted, plusSelected, targetSelected]);
+
+  useEffect(() => {
+    if (!operatorReady) {
+      slotPulse.stopAnimation();
+      slotPulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(slotPulse, { toValue: 1, duration: 520, useNativeDriver: true }),
+        Animated.timing(slotPulse, { toValue: 0, duration: 520, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [operatorReady, slotPulse]);
+
+  const canTapCard = useCallback((card: Card) => {
+    if (resolving) return false;
+    if (!operatorInserted) return card.type === 'operation' && card.operation === '+';
+    return card.type === 'number' && card.value === 6;
+  }, [operatorInserted, resolving]);
+
+  const tapCard = useCallback((card: Card) => {
+    if (!canTapCard(card)) return;
+    setSelectedId((current) => (current === card.id ? null : card.id));
+  }, [canTapCard]);
+
+  const placeOperator = useCallback(() => {
+    if (!operatorReady || !selectedId) return;
+    void playSfx('place', { cooldownMs: 0, volumeOverride: 0.4 });
+    setOperatorInserted(true);
+    setHand((cards) => cards.filter((card) => card.id !== selectedId));
+    setSelectedId(null);
+  }, [operatorReady, selectedId]);
+
+  const launch = useCallback(() => {
+    if (!targetSelected || resolving) return;
+    setResolving(true);
+    setFlyingOperator(true);
+    void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
+    setTimeout(() => {
+      onComplete?.();
+    }, 700);
+  }, [onComplete, resolving, targetSelected]);
+
+  return (
+    <View style={styles.root}>
+      <InstructionBanner text={instructionText} />
+
+      <View style={styles.playArea}>
+        <View style={styles.tableZone}>
+          <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
+          <View style={styles.tableOverlay} pointerEvents="box-none">
+            <View style={styles.operatorLessonArea}>
+              <View style={styles.diceRow}>
+                {SEEDED_DICE.map((value, idx) => (
+                  <View key={idx} style={styles.diceChip}>
+                    <GoldDieFace value={value} size={48} />
+                  </View>
+                ))}
+              </View>
+              <OperatorLessonTrack
+                operatorInserted={operatorInserted}
+                operatorReady={operatorReady}
+                pulse={slotPulse}
+                onPlaceOperator={placeOperator}
+              />
+              <View style={styles.fixedActionWrap}>
+                <GoldButton
+                  label={targetSelected ? 'שגר' : 'בחר קלפים'}
+                  onPress={launch}
+                  disabled={!targetSelected || resolving}
+                  fullWidth
+                  height={SEND_BUTTON_HEIGHT}
+                  radius={SEND_BUTTON_RADIUS}
+                  raise={SEND_BUTTON_RAISE}
+                  fontSize={SEND_BUTTON_FONT_SIZE}
+                  textStyle={styles.fixedActionText}
+                  accessibilityLabel={targetSelected ? 'שגר' : 'בחר קלפים'}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.fanWrap} pointerEvents={resolving ? 'none' : 'box-none'}>
+        <HandFan
+          cards={hand}
+          width={fanW}
+          selectedIds={selectedIds}
+          onTapCard={tapCard}
+          canTap={canTapCard}
+          centerCardId={focusedFanCardId}
+        />
+      </View>
+
+      {flyingOperator ? <FlyingMiniOperator /> : null}
+    </View>
+  );
+}
+
+type DiceEquationRoundProps = {
+  onExit?: () => void;
+  onComplete?: () => void;
+  mode?: 'practice' | 'operators';
+};
+
+export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: DiceEquationRoundProps) {
+  if (mode === 'operators') {
+    return <OperatorCardsLesson onComplete={onComplete} />;
+  }
+
   // The fan is centered to the ROOM FRAME (capped at 480 on web), not the whole
   // window — without this the hand mis-centers off-frame and feels "stuck".
   const { width: winW } = useWindowDimensions();
@@ -237,55 +466,32 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
   // 1 = solving (solve UI lit, fan fully lit + interactive). Nothing unmounts —
   // every element stays rendered and is governed only by opacity / pointerEvents.
   const reveal = useRef(new Animated.Value(0)).current;
-  const checkPulse = useRef(new Animated.Value(1)).current;
   const didPlusGuidedPrefill = useRef(false);
+  const didMinusGuidedPrefill = useRef(false);
 
   const op = round.op;
   const result = useMemo(() => calcResult(placed, round.dice, op), [placed, round.dice, op]);
   const selectedIds = useMemo(() => (selectedId ? new Set([selectedId]) : new Set<string>()), [selectedId]);
   const selectedCard = useMemo(() => hand.find((c) => c.id === selectedId) ?? null, [hand, selectedId]);
+  const expectedTarget = step === 'plus' ? 6 : 3;
   const instructionText = useMemo(() => {
     if (step === 'plus' && selectedId !== null) {
-      return 'מעולה! עכשיו לחצו על כפתור \'שגר\' המהבהב כדי להעיף את הקלף הראשון!';
+      return 'מעולה! עכשיו לחצו על כפתור \'שגר\' כדי להעיף את הקלף הראשון!';
+    }
+    if (step === 'minus' && selectedCard?.value === 3) {
+      return "מצוין! לחצו על כפתור 'שגר' כדי להעיף את הקלף!";
     }
     return STEP_TEXT[step];
-  }, [selectedId, step]);
+  }, [selectedCard?.value, selectedId, step]);
   const checkButtonLabel = useMemo(() => {
     if (placed.length >= 2 && selectedId === null) return 'בחר קלפים';
     if (placed.length >= 2 && selectedId !== null) return 'שגר';
     return 'בדוק';
   }, [placed.length, selectedId]);
-  // The check button becomes pressable once there are enough dice to evaluate.
-  // Missing/incorrect card selection is handled inside handleCheck with a quiet
-  // shake, so the button never feels "dead" during the guided round.
-  const canAttemptCheck = placed.length >= 2 && !resolving;
-  const shouldPulseCheck =
-    step === 'plus' &&
-    substage === 'solve' &&
-    canAttemptCheck &&
-    result === 6 &&
-    selectedCard?.value === 6 &&
-    !flying;
-
-  useEffect(() => {
-    if (!shouldPulseCheck) {
-      checkPulse.stopAnimation();
-      checkPulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(checkPulse, { toValue: 1.06, duration: 430, useNativeDriver: true }),
-        Animated.timing(checkPulse, { toValue: 1, duration: 430, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      checkPulse.setValue(1);
-    };
-  }, [checkPulse, shouldPulseCheck]);
-
+  const equationReady = placed.length >= 2;
+  // The action is intentionally locked until the matching fan card is selected;
+  // the label still reflects that the equation itself is ready.
+  const canAttemptCheck = equationReady && selectedCard?.value === expectedTarget && !resolving;
   // FAILURE — "Game of Silence": a gentle shake, no text, no jarring chime.
   const doShake = useCallback(() => {
     shake.setValue(0);
@@ -308,19 +514,29 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
       setPlaced([0, 1]); // [2,4] => 6, the guided first win.
       setSelectedId(null);
     }
+    if (step === 'minus' && !didMinusGuidedPrefill.current) {
+      didMinusGuidedPrefill.current = true;
+      setPlaced([2, 0]); // [5,2] => 3, the guided subtraction win.
+      setSelectedId(null);
+    }
   }, [reveal, step]);
 
   // Tap a die: add it to the equation (in order) or remove it if already placed.
   const tapDie = useCallback(
     (idx: number) => {
       if (resolving) return;
-      setPlaced((prev) => {
-        if (prev.includes(idx)) return prev.filter((i) => i !== idx);
-        if (prev.length >= 3) return prev;
-        return [...prev, idx];
-      });
+      if (step === 'minus' && substage === 'solve') return;
+      const alreadyPlaced = placed.includes(idx);
+      if (alreadyPlaced) {
+        void playSfx('transition', { cooldownMs: 0, volumeOverride: 0.24 });
+        setPlaced((prev) => prev.filter((i) => i !== idx));
+        return;
+      }
+      if (placed.length >= 3) return;
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.34 });
+      setPlaced((prev) => (prev.includes(idx) || prev.length >= 3 ? prev : [...prev, idx]));
     },
-    [resolving],
+    [placed, resolving, step, substage],
   );
 
   // Tap a hand card: mark (or unmark) it as the matching target card.
@@ -436,6 +652,9 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
                 autoRollOnMount
                 hideRollButton
                 hideSumBadge
+                onRollStart={() => {
+                  void playSfx('diceRoll', { cooldownMs: 0, volumeOverride: 0.5 });
+                }}
                 onRollComplete={handleRollComplete}
               />
             </Animated.View>
@@ -463,9 +682,20 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
               </View>
               <EquationTrack placed={placed} dice={round.dice} op={op} result={result} onRemove={tapDie} />
               <View style={styles.confirmWrap}>
-                <Animated.View style={[styles.checkPulseWrap, shouldPulseCheck && styles.checkPulseGlow, { transform: [{ scale: checkPulse }] }]}>
-                  <GoldButton label={checkButtonLabel} onPress={handleCheck} disabled={!canAttemptCheck} height={50} fontSize={18} accessibilityLabel={checkButtonLabel} />
-                </Animated.View>
+                <View style={styles.checkPulseWrap}>
+                  <GoldButton
+                    label={checkButtonLabel}
+                    onPress={handleCheck}
+                    disabled={!canAttemptCheck}
+                    fullWidth
+                    height={SEND_BUTTON_HEIGHT}
+                    radius={SEND_BUTTON_RADIUS}
+                    raise={SEND_BUTTON_RAISE}
+                    fontSize={SEND_BUTTON_FONT_SIZE}
+                    textStyle={styles.fixedActionText}
+                    accessibilityLabel={checkButtonLabel}
+                  />
+                </View>
                 <Text style={styles.confirmHint}>שתי קוביות מספיקות — קובייה שלישית היא רשות, לא חובה.</Text>
               </View>
             </Animated.View>
@@ -480,7 +710,7 @@ export function DiceEquationRound({ onExit, onComplete }: { onExit?: () => void;
         <HandFan cards={hand} width={fanW} selectedIds={selectedIds} onTapCard={tapCard} />
       </Animated.View>
 
-      {flying ? <FlyingCard card={flying} onDone={finishWin} /> : null}
+      {flying ? <FlyingCard card={flying} onDone={finishWin} doneDelayMs={step === 'minus' ? 700 : 0} /> : null}
 
       {showSuccess ? <SuccessCelebration onDone={onExit} /> : null}
     </View>
@@ -530,6 +760,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   diceOrderTxt: { color: '#FFF7DA', fontSize: 11, fontWeight: '900' },
+  operatorLessonArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    gap: 12,
+    paddingHorizontal: 4,
+  },
 
   // The equation track — dice operands, operator glyphs, "= result".
   track: {
@@ -571,16 +808,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
-  confirmWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 2 },
-  checkPulseWrap: { alignSelf: 'center', borderRadius: 22 },
-  checkPulseGlow: {
+  operatorHole: {
+    width: 42,
+    height: 44,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(244,205,90,0.48)',
+    backgroundColor: 'rgba(255,243,201,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  operatorHoleReady: {
+    borderColor: '#F8E08E',
+    backgroundColor: 'rgba(244,205,90,0.12)',
+  },
+  operatorHoleGlow: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F4CD5A',
     shadowColor: '#F8E08E',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.75,
-    shadowRadius: 14,
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
     elevation: 12,
   },
+  operatorHoleHint: { color: 'rgba(244,205,90,0.48)', fontSize: 22, fontWeight: '900' },
+  operatorMiniCard: {
+    width: 32,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#8A5A1C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  operatorMiniText: {
+    color: '#3D2A0E',
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 30,
+    textAlign: 'center',
+  },
+  equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
+  confirmWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 2 },
+  checkPulseWrap: { alignSelf: 'center', width: SEND_BUTTON_WIDTH, borderRadius: SEND_BUTTON_RADIUS },
+  fixedActionWrap: { alignSelf: 'center', width: SEND_BUTTON_WIDTH, borderRadius: SEND_BUTTON_RADIUS },
+  fixedActionText: { textAlign: 'center' as const },
   confirmHint: { color: 'rgba(244,205,90,0.65)', fontSize: 14.5, fontWeight: '700', textAlign: 'center', marginTop: 8 },
 
   // Hand fan — anchored low at the bottom of the screen, swipeable; only a small
