@@ -92,15 +92,15 @@ const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as con
 // rules (no "Golden Rule"). Each step just names a zone: deck → fan.
 const BASICS_STEPS: Step[] = [
   {
-    tag: 'חדר הזהב',
-    title: 'ברוך הבא! 🪙',
-    body: 'נכיר במהירות את המסך — שלושה חלקים בלבד, ואז יוצאים לשחק.',
+    tag: 'The Gold Room',
+    title: 'Welcome! 🪙',
+    body: "Let's quickly get to know the screen — only three parts, and then we play.",
     cardAnchor: 'center',
   },
   {
-    tag: 'הערימה',
-    title: 'הערימה 🂠',
-    body: 'הערימה — בנק הקלפים, כאן למעלה בפינה.',
+    tag: 'The Deck',
+    title: 'The Deck 🂠',
+    body: 'The Deck — the card bank, right up here in the corner.',
     spot: { top: 0.12, left: 0.48, width: 0.44, height: 0.22 },
     cardAnchor: 'bottom',
     mock: 'deck',
@@ -109,7 +109,7 @@ const BASICS_STEPS: Step[] = [
     // No tag / title here on purpose: the body itself is the clean, single
     // block of copy — a separate eyebrow + heading would just duplicate "המניפה".
     title: '',
-    body: 'המניפה. זאת מניפת הקלפים שלך. החליקו לצדדים כדי לעבור בין הקלפים ולבחור את הקלף שמתאים לתרגיל.',
+    body: 'The Fan. This is your hand of cards. Swipe sideways to cycle through the cards and choose the one that fits the equation.',
     // No spot → full dim; a full, raised hand fan of real cards sits at the
     // bottom — swipe sideways to browse, like the live hand.
     mock: 'fan',
@@ -118,14 +118,14 @@ const BASICS_STEPS: Step[] = [
   },
   {
     title: '',
-    body: 'הניצחון. מתחילים עם 7 קלפים, ומנצחים כשנשארים עם 2 קלפים או פחות. בכל תרגיל נכון תיפטרו מקלף ותתקרבו לניצחון.',
+    body: "Victory. Start with 7 cards, and win when left with 2 cards or less. With each correct equation, you'll get rid of a card and get closer to victory.",
     mock: 'winFan',
     cardAnchor: 'top',
     requiresAnimationComplete: true,
   },
   {
     title: '',
-    body: 'בכל תור, שלוש קוביות שיוטלו על הלוח ויקבעו את גורל הסיבוב. מהמספרים שיעלו תרכיבו את התרגילים שבעזרתם תיפטרו מקלפי המניפה שלכם.',
+    body: "Each turn, three dice will be rolled on the board and determine the fate of the round. From the numbers that come up, you'll build the equations to get rid of your fan cards.",
     spot: { top: 0.13, left: 0.08, width: 0.84, height: 0.2 },
     mock: 'dice',
     cardAnchor: 'bottom',
@@ -133,14 +133,21 @@ const BASICS_STEPS: Step[] = [
   },
 ];
 
+const SPECIALS_STEPS = [
+  'Hands-on minus operator practice',
+  'Meet the Salinda Joker',
+  'Hands-on Salinda Joker practice',
+  'Finale and victory transition',
+] as const;
+
 // ---- The Hub's task catalog ----
 const TASKS: Task[] = [
-  { id: 'basics', badge: '🪙', title: 'היסודות', desc: 'הערימה, המניפה והקוביות — תוך דקה.', steps: BASICS_STEPS },
-  { id: 'equation-practice', badge: '🎲', title: 'תרגול', desc: 'בחר קלף, הטל קוביות, ובנה משוואה.', interactive: true },
-  { id: 'operations', badge: '⚡', title: 'מיוחדים', desc: 'הנשק הסודי — היפטר מקלפים במהירות.', interactive: true },
-  { id: 'fractions', badge: '½', title: 'שברים', desc: 'איך משחקים עם קלפי שברים.' },
-  { id: 'jokers', badge: '🃏', title: 'ג׳וקרים', desc: 'הקלף שמשנה את כללי המשחק.' },
-  { id: 'coin-collection', badge: '🪙', title: 'מטבעות', desc: 'סיים את הלמידה ואסוף את המענק.', reward: true },
+  { id: 'basics', badge: '🪙', title: 'The Basics', desc: 'The Deck, the Fan, and the Dice — in under a minute.', steps: BASICS_STEPS },
+  { id: 'equation-practice', badge: '🎲', title: 'Practice', desc: 'Choose a card, roll dice, and build an equation.', interactive: true },
+  { id: 'operations', badge: '⚡', title: 'Specials', desc: SPECIALS_STEPS.join(' · '), interactive: true },
+  { id: 'fractions', badge: '½', title: 'Fractions', desc: 'How to play with fraction cards.' },
+  { id: 'jokers', badge: '🃏', title: 'Jokers', desc: 'The card that changes the rules of the game.' },
+  { id: 'coin-collection', badge: '🪙', title: 'Coins', desc: 'Finish learning and collect the reward.', reward: true },
 ];
 
 // Gold tones sampled from the physical gold plank — "polished D" language.
@@ -149,7 +156,7 @@ const DIM = 'rgba(8,5,2,0.8)';
 
 function CloseButton({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel="יציאה">
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel="Exit">
       <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.closeBtn}>
         <Text style={styles.closeText}>✕</Text>
       </LinearGradient>
@@ -481,25 +488,25 @@ function GoldTaskCard({ task, done, eligible, onPress }: { task: Task; done: boo
   const locked = task.reward ? !eligible && !done : !task.steps && !task.interactive;
   const state = task.reward
     ? done
-      ? 'נאסף ✓'
+      ? 'Collected ✓'
       : eligible
-        ? 'אסוף ›'
-        : '🔒 סיים ללמוד'
+        ? 'Collect ›'
+        : '🔒 Finish Learning'
     : locked
-      ? '🔒 בקרוב'
+      ? '🔒 Coming Soon'
       : done
-        ? 'הושלם ✓'
-        : 'התחל ›';
+        ? 'Completed ✓'
+        : 'Start ›';
   const a11ySuffix = task.reward
     ? done
-      ? ' (נאסף)'
+      ? ' (Collected)'
       : eligible
-        ? ' (זמין לאיסוף)'
-        : ' (נעול — סיים את הלמידה)'
+        ? ' (Available to collect)'
+        : ' (Locked — finish learning)'
     : done
-      ? ' (הושלם)'
+      ? ' (Completed)'
       : locked
-        ? ' (בקרוב)'
+        ? ' (Coming soon..)'
         : '';
   return (
     <Pressable
@@ -554,11 +561,11 @@ function TrainingHub({
     <View style={styles.root}>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
       <View style={styles.topbar}>
-        <Text style={styles.hubHeader}>חדר הזהב 🪙</Text>
+        <Text style={styles.hubHeader}>The Gold Room 🪙</Text>
         <CloseButton onPress={onClose} />
       </View>
       <ScrollView contentContainerStyle={styles.hubScroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.hubSub}>בחר משימת אימון · הושלמו {doneCount}/{totalUnlocked}</Text>
+        <Text style={styles.hubSub}>Choose a training task · Completed {doneCount}/{totalUnlocked}</Text>
         <View style={styles.grid}>
           {tasks.map((task) => (
             <GoldTaskCard
@@ -677,7 +684,7 @@ function TrainingTask({
       {step.mock === 'winFan' && size.w > 0 ? <DemoHandFan W={size.w} mode="win" onAnimationComplete={handleFanAnimationComplete} /> : null}
 
       <View style={styles.topbar}>
-        <GoldButton label="דלג ›" onPress={onExit} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+        <GoldButton label="Skip ›" onPress={onExit} accessibilityLabel="Back to the Gold Room" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
         <CloseButton onPress={onClose} />
       </View>
 
@@ -706,9 +713,9 @@ function TrainingTask({
           </View>
 
           <View style={styles.controls}>
-            <GoldButton label="‹ חזור" onPress={handleBack} accessibilityLabel={index > 0 ? 'חזור' : 'חזרה לחדר הזהב'} tone="stone" fontSize={16} />
+            <GoldButton label="‹ Back" onPress={handleBack} accessibilityLabel={index > 0 ? 'Back' : 'Back to the Gold Room'} tone="stone" fontSize={16} />
             <Animated.View style={[styles.nextWrap, { transform: [{ scale: nextPulse }] }]}>
-              <GoldButton label={isLast ? 'הבנתי, בוא נתקדם!' : 'המשך ›'} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
+              <GoldButton label={isLast ? "Got it, let's move forward!" : 'Continue ›'} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
             </Animated.View>
           </View>
         </View>
@@ -809,7 +816,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.root}>
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
               <View style={styles.topbar}>
-                <GoldButton label="‹ חזרה" onPress={() => setActiveTaskId(null)} accessibilityLabel="חזרה לחדר הזהב" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+                <GoldButton label="‹ Back" onPress={() => setActiveTaskId(null)} accessibilityLabel="Back to the Gold Room" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
                 <CloseButton onPress={close} />
               </View>
               <View style={styles.interactiveBody}>
@@ -857,10 +864,10 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.rewardOverlay}>
               <View style={styles.rewardCard}>
                 <Text style={styles.rewardBadge}>🪙</Text>
-                <Text style={styles.rewardTitle}>כל הכבוד!</Text>
-                <Text style={styles.rewardSub}>קיבלת {SALINDA_GOLD_ROOM_REWARD} מטבעות על סיום הלמידה.</Text>
+                <Text style={styles.rewardTitle}>Well done!</Text>
+                <Text style={styles.rewardSub}>You received {SALINDA_GOLD_ROOM_REWARD} coins for completing the training.</Text>
                 <View style={styles.rewardBtnWrap}>
-                  <GoldButton label="מעולה!" onPress={() => setRewardShown(false)} accessibilityLabel="סגור" fullWidth height={54} fontSize={19} />
+                  <GoldButton label="Awesome!" onPress={() => setRewardShown(false)} accessibilityLabel="Close" fullWidth height={54} fontSize={19} />
                 </View>
               </View>
             </View>
@@ -871,11 +878,11 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.rewardOverlay}>
               <View style={styles.rewardCard}>
                 <Text style={styles.rewardBadge}>📡</Text>
-                <Text style={styles.rewardTitle}>אופס…</Text>
-                <Text style={styles.rewardSub}>לא הצלחנו לזכות אותך כרגע. נסה שוב בעוד רגע.</Text>
+                <Text style={styles.rewardTitle}>Oops…</Text>
+                <Text style={styles.rewardSub}>We couldn't credit your reward right now. Please try again in a moment.</Text>
                 <View style={styles.rewardBtnWrap}>
-                  <GoldButton label="נסה שוב" onPress={handleCollectReward} accessibilityLabel="נסה שוב" fullWidth height={50} fontSize={17} />
-                  <GoldButton label="סגור" onPress={() => setCollectError(false)} accessibilityLabel="סגור" tone="stone" fullWidth height={44} fontSize={15} />
+                  <GoldButton label="Try Again" onPress={handleCollectReward} accessibilityLabel="Try Again" fullWidth height={50} fontSize={17} />
+                  <GoldButton label="Close" onPress={() => setCollectError(false)} accessibilityLabel="Close" tone="stone" fullWidth height={44} fontSize={15} />
                 </View>
               </View>
             </View>

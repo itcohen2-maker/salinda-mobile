@@ -52,20 +52,41 @@ const STEP_TEXT: Record<StepId, string> = {
 };
 
 const SEEDED_DICE: [number, number, number] = [2, 4, 5];
+const OPERATOR_PRACTICE_DICE: [number, number, number] = [5, 2, 4];
 const FIXED_HAND_VALUES = [12, 6, 3, 9, 15, 20, 1] as const;
 const OPERATOR_LESSON_HAND: Card[] = [
   { id: 'op-lesson-num-12', type: 'number', value: 12 },
   { id: 'op-lesson-num-9', type: 'number', value: 9 },
-  { id: 'op-lesson-num-3', type: 'number', value: 3 },
-  { id: 'op-lesson-plus', type: 'operation', operation: '+' },
-  { id: 'op-lesson-target-6', type: 'number', value: 6 },
+  { id: 'op-lesson-target-3', type: 'number', value: 3 },
+  { id: 'op-lesson-minus', type: 'operation', operation: '-' },
+  { id: 'op-lesson-num-6', type: 'number', value: 6 },
   { id: 'op-lesson-num-15', type: 'number', value: 15 },
   { id: 'op-lesson-num-1', type: 'number', value: 1 },
 ];
-const OPERATOR_LESSON_PLUS_ID = 'op-lesson-plus';
-const OPERATOR_LESSON_TARGET_ID = 'op-lesson-target-6';
-const SEND_BUTTON_WIDTH = 140;
-const SEND_BUTTON_HEIGHT = 26;
+const OPERATOR_LESSON_MINUS_ID = 'op-lesson-minus';
+const OPERATOR_LESSON_TARGET_ID = 'op-lesson-target-3';
+const JOKER_INTRO_HAND: Card[] = [
+  { id: 'joker-intro-num-2', type: 'number', value: 2 },
+  { id: 'joker-intro-num-5', type: 'number', value: 5 },
+  { id: 'joker-intro-num-11', type: 'number', value: 11 },
+  { id: 'joker-intro-card', type: 'joker' },
+  { id: 'joker-intro-num-7', type: 'number', value: 7 },
+  { id: 'joker-intro-num-10', type: 'number', value: 10 },
+  { id: 'joker-intro-num-13', type: 'number', value: 13 },
+];
+const JOKER_PRACTICE_HAND: Card[] = [
+  { id: 'joker-practice-num-2', type: 'number', value: 2 },
+  { id: 'joker-practice-num-5', type: 'number', value: 5 },
+  { id: 'joker-practice-num-11', type: 'number', value: 11 },
+  { id: 'joker-practice-card', type: 'joker', resolvedValue: 8 },
+  { id: 'joker-practice-num-7', type: 'number', value: 7 },
+  { id: 'joker-practice-num-10', type: 'number', value: 10 },
+  { id: 'joker-practice-num-13', type: 'number', value: 13 },
+];
+const JOKER_INTRO_ID = 'joker-intro-card';
+const JOKER_PRACTICE_ID = 'joker-practice-card';
+const SEND_BUTTON_WIDTH = 180;
+const SEND_BUTTON_HEIGHT = 30;
 const SEND_BUTTON_RADIUS = 12;
 const SEND_BUTTON_RAISE = 5;
 const SEND_BUTTON_FONT_SIZE = 13;
@@ -185,12 +206,12 @@ function InstructionBanner({ text }: { text: string }) {
 // ── A matched card flying out of the hand toward the deck — the "discard" beat
 // the player earns on a correct equation. The success chime plays LOUD and clear
 // here — this is the player's first win, the dopamine moment.
-function FlyingCard({ card, onDone, doneDelayMs = 0 }: { card: Card; onDone: () => void; doneDelayMs?: number }) {
+function FlyingCard({ card, onDone, doneDelayMs = 0, durationMs = 620 }: { card: Card; onDone: () => void; doneDelayMs?: number; durationMs?: number }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let doneTimer: ReturnType<typeof setTimeout> | null = null;
     void playSfx('success', { cooldownMs: 0, volumeOverride: 0.95 });
-    const animation = Animated.timing(a, { toValue: 1, duration: 620, useNativeDriver: true });
+    const animation = Animated.timing(a, { toValue: 1, duration: durationMs, useNativeDriver: true });
     animation.start(() => {
       doneTimer = setTimeout(onDone, doneDelayMs);
     });
@@ -198,7 +219,7 @@ function FlyingCard({ card, onDone, doneDelayMs = 0 }: { card: Card; onDone: () 
       animation.stop();
       if (doneTimer) clearTimeout(doneTimer);
     };
-  }, [a, doneDelayMs, onDone]);
+  }, [a, doneDelayMs, durationMs, onDone]);
   const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -320] });
   const scale = a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [1, 1.12, 0.7] });
   const opacity = a.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1, 0] });
@@ -233,7 +254,7 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
   );
 }
 
-function MiniOperatorCard({ op }: { op: '+' }) {
+function MiniOperatorCard({ op }: { op: '+' | '-' }) {
   return (
     <LinearGradient colors={['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C']} locations={[0, 0.35, 0.68, 1]} style={styles.operatorMiniCard}>
       <Text style={styles.operatorMiniText}>{op}</Text>
@@ -241,36 +262,26 @@ function MiniOperatorCard({ op }: { op: '+' }) {
   );
 }
 
-function FlyingMiniOperator() {
-  const a = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    void playSfx('success', { cooldownMs: 0, volumeOverride: 0.9 });
-    Animated.timing(a, { toValue: 1, duration: 680, useNativeDriver: true }).start();
-  }, [a]);
-  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -340] });
-  const translateX = a.interpolate({ inputRange: [0, 1], outputRange: [0, 72] });
-  const rotate = a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '22deg'] });
-  const scale = a.interpolate({ inputRange: [0, 0.28, 1], outputRange: [1, 1.16, 0.68] });
-  const opacity = a.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] });
-  return (
-    <View pointerEvents="none" style={styles.flyingLayer}>
-      <Animated.View style={{ opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }}>
-        <MiniOperatorCard op="+" />
-      </Animated.View>
-    </View>
-  );
-}
-
-function OperatorLessonTrack({
+function SpecialEquationTrack({
+  left,
+  right,
+  op,
+  result,
   operatorInserted,
   operatorReady,
   pulse,
   onPlaceOperator,
+  resultGlow = false,
 }: {
+  left: number;
+  right: number;
+  op: '+' | '-';
+  result: number;
   operatorInserted: boolean;
   operatorReady: boolean;
   pulse: Animated.Value;
-  onPlaceOperator: () => void;
+  onPlaceOperator?: () => void;
+  resultGlow?: boolean;
 }) {
   const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.9] });
   const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.1] });
@@ -282,49 +293,99 @@ function OperatorLessonTrack({
           style={[styles.operatorHoleGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]}
         />
       ) : null}
-      {operatorInserted ? <MiniOperatorCard op="+" /> : <Text style={styles.operatorHoleHint}>?</Text>}
+      {operatorInserted ? <MiniOperatorCard op={op} /> : <Text style={styles.operatorHoleHint}>?</Text>}
     </View>
   );
 
   return (
     <View style={styles.track}>
-      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>2</Text></View>
-      {operatorReady ? (
-        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="מקם קלף פלוס בחריץ הסימן">
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{left}</Text></View>
+      {operatorReady && onPlaceOperator ? (
+        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="מקם קלף סימן בחריץ הריק">
           {slot}
         </Pressable>
       ) : slot}
-      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>4</Text></View>
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{right}</Text></View>
       <Text style={styles.equals}>=</Text>
-      <View style={[styles.slot, styles.resultSlot]}><Text style={styles.slotTxt}>6</Text></View>
+      <View style={[styles.slot, styles.resultSlot, resultGlow && styles.resultSlotGlow]}><Text style={styles.slotTxt}>{result}</Text></View>
     </View>
   );
 }
 
+function FlyingSpecialCard({ card, onDone, variant = 'card' }: { card: Card; onDone: () => void; variant?: 'card' | 'joker' }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    void playSfx(variant === 'joker' ? 'complete' : 'success', { cooldownMs: 0, volumeOverride: variant === 'joker' ? 0.9 : 0.75 });
+    const animation = Animated.timing(a, { toValue: 1, duration: 700, useNativeDriver: true });
+    animation.start(onDone);
+    return () => animation.stop();
+  }, [a, onDone, variant]);
+
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -360] });
+  const translateX = a.interpolate({ inputRange: [0, 1], outputRange: [0, variant === 'joker' ? 96 : 42] });
+  const rotate = a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', variant === 'joker' ? '28deg' : '14deg'] });
+  const scale = a.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, variant === 'joker' ? 1.18 : 1.1, 0.66] });
+  const opacity = a.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, 1, 0] });
+
+  return (
+    <View pointerEvents="none" style={styles.flyingLayer}>
+      <Animated.View style={{ opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }}>
+        <GameCard card={card} selected={variant === 'joker'} small onPress={undefined} />
+      </Animated.View>
+    </View>
+  );
+}
+
+type SpecialsStage = 'minus' | 'jokerIntro' | 'jokerPractice';
+
 function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
   const { width: winW } = useWindowDimensions();
   const fanW = Math.min(winW, 480);
+  const [stage, setStage] = useState<SpecialsStage>('minus');
   const [hand, setHand] = useState<Card[]>(OPERATOR_LESSON_HAND);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [operatorInserted, setOperatorInserted] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const [flyingOperator, setFlyingOperator] = useState(false);
+  const [flyingCard, setFlyingCard] = useState<Card | null>(null);
   const slotPulse = useRef(new Animated.Value(0)).current;
+  const sendPulse = useRef(new Animated.Value(1)).current;
+  const jokerPulse = useRef(new Animated.Value(0)).current;
 
   const selectedCard = useMemo(() => hand.find((card) => card.id === selectedId) ?? null, [hand, selectedId]);
   const selectedIds = useMemo(() => (selectedId ? new Set([selectedId]) : new Set<string>()), [selectedId]);
-  const plusSelected = selectedCard?.type === 'operation' && selectedCard.operation === '+';
-  const targetSelected = operatorInserted && selectedCard?.type === 'number' && selectedCard.value === 6;
-  const operatorReady = plusSelected && !operatorInserted && !resolving;
-  const focusedFanCardId = operatorInserted ? OPERATOR_LESSON_TARGET_ID : OPERATOR_LESSON_PLUS_ID;
+  const minusSelected = stage === 'minus' && selectedCard?.type === 'operation' && selectedCard.operation === '-';
+  const targetSelected = stage === 'minus' && operatorInserted && selectedCard?.type === 'number' && selectedCard.value === 3;
+  const jokerSelected = stage === 'jokerPractice' && selectedCard?.type === 'joker';
+  const operatorReady = minusSelected && !operatorInserted && !resolving;
+  const sendReady = targetSelected || jokerSelected;
+  const focusedFanCardId =
+    stage === 'minus'
+      ? operatorInserted
+        ? OPERATOR_LESSON_TARGET_ID
+        : OPERATOR_LESSON_MINUS_ID
+      : stage === 'jokerIntro'
+        ? JOKER_INTRO_ID
+        : JOKER_PRACTICE_ID;
 
   const instructionText = useMemo(() => {
-    if (targetSelected) return "מעולה! עכשיו לחצו על כפתור 'שגר' כדי להעיף את הקלף ולסיים את השיעור!";
-    if (operatorInserted) return 'התרגיל מושלם: 2 + 4 = 6. עכשיו מצאו ולחצו על קלף 6 במניפה שלכם.';
-    if (plusSelected) return 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה כדי למקם את הקלף שם.';
-    return 'הכירו את קלפי הסימן! הם מאפשרים לכם להשלים תרגילים וגם להיפטר מקלפים מהיד. כאן מחכה לכם תרגיל של 2 ו-4 ששווה ל-6, אך חסר סימן החיבור. לחצו על קלף הפלוס (+) במניפה שלכם!';
-  }, [operatorInserted, plusSelected, targetSelected]);
+    if (stage === 'jokerIntro') {
+      return 'לפעמים התרגיל על הלוח דורש מספר שאין לכם ביד. אל דאגה! הכירו את ג׳וקר סלינדה - הקלף החזק ביותר במשחק שיכול להחליף כל מספר שחסר לכם!';
+    }
+    if (stage === 'jokerPractice') {
+      if (jokerSelected) return "מבריק! הג'וקר הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח את חדר הזהב!";
+      return 'בואו ננסה! התרגיל דורש את המספר 8, אבל אין לכם אותו ביד. לחצו על הג׳וקר במניפה שלכם כדי להשלים את התרגיל!';
+    }
+    if (operatorInserted) return "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
+    if (minusSelected) return 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה.';
+    return 'עכשיו תורכם בחיסור! כאן מחכה תרגיל של 5 ו-2 ששווה ל-3, אך חסר סימן החיסור. לחצו על קלף המינוס (-) במניפה!';
+  }, [jokerSelected, minusSelected, operatorInserted, stage]);
+  const buttonLabel = useMemo(() => {
+    if (stage === 'jokerIntro') return 'הבנתי, בוא נתקדם!';
+    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'שגר';
+    return 'בחר קלפים';
+  }, [jokerSelected, operatorInserted, stage]);
 
+  const buttonPulseReady = (stage === 'minus' && operatorInserted) || sendReady;
   useEffect(() => {
     if (!operatorReady) {
       slotPulse.stopAnimation();
@@ -341,14 +402,54 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
     return () => loop.stop();
   }, [operatorReady, slotPulse]);
 
+  useEffect(() => {
+    if (!buttonPulseReady) {
+      sendPulse.stopAnimation();
+      sendPulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sendPulse, { toValue: 1.055, duration: 460, useNativeDriver: true }),
+        Animated.timing(sendPulse, { toValue: 1, duration: 460, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [buttonPulseReady, sendPulse]);
+
+  useEffect(() => {
+    const shouldPulseJoker = stage === 'jokerIntro' || stage === 'jokerPractice';
+    if (!shouldPulseJoker) {
+      jokerPulse.stopAnimation();
+      jokerPulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(jokerPulse, { toValue: 1, duration: 680, useNativeDriver: true }),
+        Animated.timing(jokerPulse, { toValue: 0, duration: 680, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [jokerPulse, stage]);
+
   const canTapCard = useCallback((card: Card) => {
     if (resolving) return false;
-    if (!operatorInserted) return card.type === 'operation' && card.operation === '+';
-    return card.type === 'number' && card.value === 6;
-  }, [operatorInserted, resolving]);
+    if (stage === 'minus') {
+      if (!operatorInserted) return card.type === 'operation' && card.operation === '-';
+      return card.type === 'number' && card.value === 3;
+    }
+    if (stage === 'jokerPractice') return card.type === 'joker';
+    return false;
+  }, [operatorInserted, resolving, stage]);
 
   const tapCard = useCallback((card: Card) => {
     if (!canTapCard(card)) return;
+    if (card.type === 'joker') {
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.42 });
+    }
     setSelectedId((current) => (current === card.id ? null : card.id));
   }, [canTapCard]);
 
@@ -360,18 +461,45 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
     setSelectedId(null);
   }, [operatorReady, selectedId]);
 
+  const advanceToJokerPractice = useCallback(() => {
+    setStage('jokerPractice');
+    setHand(JOKER_PRACTICE_HAND);
+    setSelectedId(null);
+    setResolving(false);
+    setFlyingCard(null);
+  }, []);
+
   const launch = useCallback(() => {
-    if (!targetSelected || resolving) return;
+    if (resolving) return;
+    if (stage === 'jokerIntro') {
+      advanceToJokerPractice();
+      return;
+    }
+    if (!sendReady || !selectedCard) return;
     setResolving(true);
-    setFlyingOperator(true);
-    void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
-    setTimeout(() => {
-      onComplete?.();
-    }, 700);
-  }, [onComplete, resolving, targetSelected]);
+    setFlyingCard(selectedCard);
+  }, [advanceToJokerPractice, resolving, selectedCard, sendReady, stage]);
+
+  const handleFlyingDone = useCallback(() => {
+    if (stage === 'minus') {
+      setStage('jokerIntro');
+      setHand(JOKER_INTRO_HAND);
+      setSelectedId(null);
+      setResolving(false);
+      setFlyingCard(null);
+      return;
+    }
+    onComplete?.();
+  }, [onComplete, stage]);
+
+  const equation = stage === 'minus'
+    ? { dice: OPERATOR_PRACTICE_DICE, left: 5, right: 2, op: '-' as const, result: 3, operatorInserted }
+    : { dice: [4, 4] as const, left: 4, right: 4, op: '+' as const, result: 8, operatorInserted: true };
+  const jokerScale = jokerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.045] });
+  const jokerHaloOpacity = jokerPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.82] });
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} pointerEvents={resolving ? 'none' : 'auto'}>
       <InstructionBanner text={instructionText} />
 
       <View style={styles.playArea}>
@@ -380,49 +508,59 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
           <View style={styles.tableOverlay} pointerEvents="box-none">
             <View style={styles.operatorLessonArea}>
               <View style={styles.diceRow}>
-                {SEEDED_DICE.map((value, idx) => (
+                {equation.dice.map((value, idx) => (
                   <View key={idx} style={styles.diceChip}>
                     <GoldDieFace value={value} size={48} />
                   </View>
                 ))}
               </View>
-              <OperatorLessonTrack
-                operatorInserted={operatorInserted}
+              <SpecialEquationTrack
+                left={equation.left}
+                right={equation.right}
+                op={equation.op}
+                result={equation.result}
+                operatorInserted={equation.operatorInserted}
                 operatorReady={operatorReady}
                 pulse={slotPulse}
                 onPlaceOperator={placeOperator}
+                resultGlow={jokerSelected}
               />
-              <View style={styles.fixedActionWrap}>
+              <Animated.View style={[styles.fixedActionWrap, { transform: [{ scale: sendPulse }] }]}>
                 <GoldButton
-                  label={targetSelected ? 'שגר' : 'בחר קלפים'}
+                  label={buttonLabel}
                   onPress={launch}
-                  disabled={!targetSelected || resolving}
+                  disabled={stage !== 'jokerIntro' && !sendReady}
                   fullWidth
                   height={SEND_BUTTON_HEIGHT}
                   radius={SEND_BUTTON_RADIUS}
                   raise={SEND_BUTTON_RAISE}
                   fontSize={SEND_BUTTON_FONT_SIZE}
                   textStyle={styles.fixedActionText}
-                  accessibilityLabel={targetSelected ? 'שגר' : 'בחר קלפים'}
+                  accessibilityLabel={buttonLabel}
                 />
-              </View>
+              </Animated.View>
             </View>
           </View>
         </View>
       </View>
 
       <View style={styles.fanWrap} pointerEvents={resolving ? 'none' : 'box-none'}>
-        <HandFan
-          cards={hand}
-          width={fanW}
-          selectedIds={selectedIds}
-          onTapCard={tapCard}
-          canTap={canTapCard}
-          centerCardId={focusedFanCardId}
-        />
+        <Animated.View style={{ transform: [{ scale: stage === 'minus' ? 1 : jokerScale }] }}>
+          {stage !== 'minus' ? (
+            <Animated.View pointerEvents="none" style={[styles.jokerFanHalo, { opacity: jokerHaloOpacity }]} />
+          ) : null}
+          <HandFan
+            cards={hand}
+            width={fanW}
+            selectedIds={selectedIds}
+            onTapCard={tapCard}
+            canTap={canTapCard}
+            centerCardId={focusedFanCardId}
+          />
+        </Animated.View>
       </View>
 
-      {flyingOperator ? <FlyingMiniOperator /> : null}
+      {flyingCard ? <FlyingSpecialCard card={flyingCard} onDone={handleFlyingDone} variant={stage === 'jokerPractice' ? 'joker' : 'card'} /> : null}
     </View>
   );
 }
@@ -836,6 +974,15 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   operatorHoleHint: { color: 'rgba(244,205,90,0.48)', fontSize: 22, fontWeight: '900' },
+  resultSlotGlow: {
+    borderColor: '#F8E08E',
+    backgroundColor: 'rgba(244,205,90,0.24)',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 14,
+    elevation: 14,
+  },
   operatorMiniCard: {
     width: 32,
     height: 40,
@@ -862,6 +1009,21 @@ const styles = StyleSheet.create({
   // Hand fan — anchored low at the bottom of the screen, swipeable; only a small
   // safe-area gap below it (clear of the iPhone home indicator).
   fanWrap: { alignItems: 'center', paddingBottom: 28 },
+  jokerFanHalo: {
+    position: 'absolute',
+    left: '50%',
+    top: 28,
+    width: 132,
+    height: 178,
+    marginLeft: -66,
+    borderRadius: 22,
+    backgroundColor: 'rgba(248,224,142,0.25)',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.85,
+    shadowRadius: 18,
+    elevation: 16,
+  },
 
   // The matched card flying out toward the deck.
   flyingLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 120, zIndex: 18 },
