@@ -231,6 +231,8 @@ export function GoldButton({
             />
             <Text
               allowFontScaling={false}
+              adjustsFontSizeToFit
+              minimumFontScale={0.55}
               numberOfLines={1}
               style={[
                 {
