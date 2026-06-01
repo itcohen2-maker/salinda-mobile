@@ -43,15 +43,15 @@ export const GOLD_LAYERS: readonly GoldLayer[] = [
     id: 'place-op',
     legacyLayers: [35, 36],
     card: 'sign',
-    caption: 'בנו משוואה שמגיעה ליעד',
+    caption: 'Build an equation that reaches the target',
     target: 7,
   },
   {
     id: 'joker-place',
     legacyLayers: [37, 40],
     card: 'salinda',
-    caption: 'תורו של קלף סלינדה',
-    chip: '👑 קלף סלינדה פעיל',
+    caption: "Salinda Card's turn",
+    chip: '👑 Salinda Card Active',
     target: 7,
   },
 ];

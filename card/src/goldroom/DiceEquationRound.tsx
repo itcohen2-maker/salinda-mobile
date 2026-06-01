@@ -45,10 +45,10 @@ const STEP_OP: Record<StepId, '+' | '-'> = { plus: '+', minus: '-' };
 
 const STEP_TEXT: Record<StepId, string> = {
   // Step 1 (PLUS) — keep the first action crisp: read dice + fan, then press check.
-  plus: 'הביטו בקוביות ובמניפה. הרכבנו עבורכם תרגיל חיבור (+) שמגיע בדיוק ל-6. עכשיו, מצאו ולחצו על קלף 6 במניפה שלכם כדי לבחור אותו!',
+  plus: "Look at the dice and the fan. We've put together an addition (+) equation that equals exactly 6. Now, find and tap card 6 in your fan to select it!",
   // Step 2 (MINUS) — real discovery: not every card is reachable. The player
   // scans the hand and picks one they can actually build toward.
-  minus: 'עבודה מעולה! עכשיו האתגר גדל ועוברים לחיסור (-). הרכבנו עבורכם תרגיל חיסור (5 - 2) שמגיע בדיוק ל-3. מצאו ולחצו על קלף 3 במניפה שלכם!',
+  minus: "Great job! Now the challenge grows and we move to subtraction (-). We've put together a subtraction equation (5 - 2) that equals exactly 3. Find and tap card 3 in your fan!",
 };
 
 const SEEDED_DICE: [number, number, number] = [2, 4, 5];
@@ -126,7 +126,7 @@ function buildTutorialHand(): Card[] {
 // equation. Placed dice dim + show a check so it's clear they're "in".
 function DiceChip({ value, placed, order, onPress }: { value: number; placed: boolean; order: number | null; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={placed ? `הסר קובייה ${value}` : `הוסף קובייה ${value}`}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={placed ? `Remove die ${value}` : `Add die ${value}`}>
       <View style={[styles.diceChip, placed && styles.diceChipPlaced]}>
         <GoldDieFace value={value} size={52} />
         {placed && order !== null ? (
@@ -172,7 +172,7 @@ function EquationTrack({
               </View>
             ) : null}
             {filled ? (
-              <Pressable onPress={() => onRemove(diceIdx)} accessibilityRole="button" accessibilityLabel={`הסר קובייה ${dice[diceIdx]}`}>
+              <Pressable onPress={() => onRemove(diceIdx)} accessibilityRole="button" accessibilityLabel={`Remove die ${dice[diceIdx]}`}>
                 <View style={[styles.slot, styles.slotFilled]}>
                   <Text style={styles.slotTxt}>{dice[diceIdx]}</Text>
                 </View>
@@ -244,10 +244,10 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
     <View style={styles.successOverlay}>
       <View style={styles.successCard}>
         <Animated.Text style={[styles.successTrophy, { opacity: pop, transform: [{ scale }] }]}>🏆</Animated.Text>
-        <Text style={styles.successTitle}>כל הכבוד!</Text>
-        <Text style={styles.successSub}>בנית תרגיל מהקוביות ונפטרת מהקלף המתאים ✓</Text>
+        <Text style={styles.successTitle}>Well done!</Text>
+        <Text style={styles.successSub}>You built an equation from the dice and got rid of the matching card ✓</Text>
         <View style={styles.successCta}>
-          <GoldButton label="סיום" onPress={onDone} accessibilityLabel="סיום" fullWidth height={56} fontSize={20} />
+          <GoldButton label="Finish" onPress={onDone} accessibilityLabel="Finish" fullWidth height={56} fontSize={20} />
         </View>
       </View>
     </View>
@@ -301,7 +301,7 @@ function SpecialEquationTrack({
     <View style={styles.track}>
       <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{left}</Text></View>
       {operatorReady && onPlaceOperator ? (
-        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="מקם קלף סימן בחריץ הריק">
+        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="Place a plus card in the sign slot">
           {slot}
         </Pressable>
       ) : slot}
@@ -369,20 +369,20 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
 
   const instructionText = useMemo(() => {
     if (stage === 'jokerIntro') {
-      return 'לפעמים התרגיל על הלוח דורש מספר שאין לכם ביד. אל דאגה! הכירו את ג׳וקר סלינדה - הקלף החזק ביותר במשחק שיכול להחליף כל מספר שחסר לכם!';
+      return "Sometimes the equation on the board requires a number you don't have in hand. Don't worry! Meet the Salinda Joker — the strongest card in the game, which can replace any number you're missing!";
     }
     if (stage === 'jokerPractice') {
-      if (jokerSelected) return "מבריק! הג'וקר הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח את חדר הזהב!";
-      return 'בואו ננסה! התרגיל דורש את המספר 8, אבל אין לכם אותו ביד. לחצו על הג׳וקר במניפה שלכם כדי להשלים את התרגיל!';
+      if (jokerSelected) return "Brilliant! The Joker turned into an 8 and completed the equation. Tap the 'Launch' button to win the Gold Room!";
+      return "Let's try it! The equation requires the number 8, but you don't have it in your hand. Tap the Joker in your fan to complete the equation!";
     }
-    if (operatorInserted) return "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
-    if (minusSelected) return 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה.';
-    return 'עכשיו תורכם בחיסור! כאן מחכה תרגיל של 5 ו-2 ששווה ל-3, אך חסר סימן החיסור. לחצו על קלף המינוס (-) במניפה!';
+    if (operatorInserted) return "The equation is perfect! Tap card 3 in the fan and then 'Launch' to fly it!";
+    if (minusSelected) return 'Excellent! Now tap the empty sign slot in the equation above.';
+    return "Now it's your turn with subtraction! Here is an equation of 5 and 2 that equals 3, but the subtraction sign is missing. Tap the minus (-) card in the fan!";
   }, [jokerSelected, minusSelected, operatorInserted, stage]);
   const buttonLabel = useMemo(() => {
-    if (stage === 'jokerIntro') return 'הבנתי, בוא נתקדם!';
-    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'שגר';
-    return 'בחר קלפים';
+    if (stage === 'jokerIntro') return "Got it, let's move forward!";
+    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'Launch';
+    return 'Choose Cards';
   }, [jokerSelected, operatorInserted, stage]);
 
   const buttonPulseReady = (stage === 'minus' && operatorInserted) || sendReady;
@@ -614,17 +614,17 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
   const expectedTarget = step === 'plus' ? 6 : 3;
   const instructionText = useMemo(() => {
     if (step === 'plus' && selectedId !== null) {
-      return 'מעולה! עכשיו לחצו על כפתור \'שגר\' כדי להעיף את הקלף הראשון!';
+      return "Awesome! Now tap the 'Launch' button to fly your first card!";
     }
     if (step === 'minus' && selectedCard?.value === 3) {
-      return "מצוין! לחצו על כפתור 'שגר' כדי להעיף את הקלף!";
+      return "Excellent! Tap the 'Launch' button to fly the card!";
     }
     return STEP_TEXT[step];
   }, [selectedCard?.value, selectedId, step]);
   const checkButtonLabel = useMemo(() => {
-    if (placed.length >= 2 && selectedId === null) return 'בחר קלפים';
-    if (placed.length >= 2 && selectedId !== null) return 'שגר';
-    return 'בדוק';
+    if (placed.length >= 2 && selectedId === null) return 'Choose Cards';
+    if (placed.length >= 2 && selectedId !== null) return 'Launch';
+    return 'Check';
   }, [placed.length, selectedId]);
   const equationReady = placed.length >= 2;
   // The action is intentionally locked until the matching fan card is selected;
@@ -834,7 +834,7 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
                     accessibilityLabel={checkButtonLabel}
                   />
                 </View>
-                <Text style={styles.confirmHint}>שתי קוביות מספיקות — קובייה שלישית היא רשות, לא חובה.</Text>
+                <Text style={styles.confirmHint}>Two dice are enough — a third die is optional, not mandatory.</Text>
               </View>
             </Animated.View>
           </View>

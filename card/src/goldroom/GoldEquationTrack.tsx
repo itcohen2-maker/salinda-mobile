@@ -35,7 +35,7 @@ function SourceBubble({ value, onPress }: { value: number; onPress: () => void }
   };
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
   return (
-    <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel={`הוסף ${value}`}>
+    <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel={`Add ${value}`}>
       <Animated.View style={{ transform: [{ translateY }] }}>
         <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.source}>
           <Text style={styles.sourceTxt}>{value}</Text>
@@ -91,7 +91,7 @@ export default function GoldEquationTrack({
         <View style={styles.slot}><Text style={styles.slotTxt}>{slots[0] ?? ''}</Text></View>
         {hasSecond ? (
           <>
-            <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel="החלף פעולה">
+            <Pressable style={styles.operatorBtn} onPress={onToggleOperator} accessibilityRole="button" accessibilityLabel="Change action">
               <OperatorGlyph op={operator} color="#3A2A10" size={22} />
             </Pressable>
             <View style={styles.slot}><Text style={styles.slotTxt}>{slots[1] ?? ''}</Text></View>
@@ -103,7 +103,7 @@ export default function GoldEquationTrack({
 
       {showConfirm ? (
         <View style={styles.confirmWrap}>
-          <GoldButton label="בדוק ✓" onPress={onConfirm} disabled={!ready} height={50} fontSize={18} accessibilityLabel="בדוק את המשוואה" />
+          <GoldButton label="Check ✓" onPress={onConfirm} disabled={!ready} height={50} fontSize={18} accessibilityLabel="Check the equation" />
         </View>
       ) : null}
     </View>
