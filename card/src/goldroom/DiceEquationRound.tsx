@@ -369,20 +369,20 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
 
   const instructionText = useMemo(() => {
     if (stage === 'jokerIntro') {
-      return "Sometimes the equation on the board requires a number you don't have in hand. Don't worry! Meet the Salinda Joker — the strongest card in the game, which can replace any number you're missing!";
+      return 'לפעמים התרגיל על הלוח דורש מספר שאין לכם ביד. אל דאגה! הכירו את ג׳וקר סלינדה - הקלף החזק ביותר במשחק שיכול להחליף כל מספר שחסר לכם!';
     }
     if (stage === 'jokerPractice') {
-      if (jokerSelected) return "Brilliant! The Joker turned into an 8 and completed the equation. Tap the 'Launch' button to win the Gold Room!";
-      return "Let's try it! The equation requires the number 8, but you don't have it in your hand. Tap the Joker in your fan to complete the equation!";
+      if (jokerSelected) return "מבריק! הג'וקר הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח את חדר הזהב!";
+      return 'בואו ננסה! התרגיל דורש את המספר 8, אבל אין לכם אותו ביד. לחצו על הג׳וקר במניפה שלכם כדי להשלים את התרגיל!';
     }
-    if (operatorInserted) return "The equation is perfect! Tap card 3 in the fan and then 'Launch' to fly it!";
-    if (minusSelected) return 'Excellent! Now tap the empty sign slot in the equation above.';
-    return "Now it's your turn with subtraction! Here is an equation of 5 and 2 that equals 3, but the subtraction sign is missing. Tap the minus (-) card in the fan!";
+    if (operatorInserted) return "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
+    if (minusSelected) return 'מצוין! עכשיו לחצו על החריץ הריק במשוואה כדי למקם שם את קלף המינוס.';
+    return 'עכשיו תורכם בחיסור! כאן מחכה תרגיל של 5 ו-2 ששווה ל-3, אך חסר סימן החיסור. לחצו על קלף המינוס (-) במניפה!';
   }, [jokerSelected, minusSelected, operatorInserted, stage]);
   const buttonLabel = useMemo(() => {
-    if (stage === 'jokerIntro') return "Got it, let's move forward!";
-    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'Launch';
-    return 'Choose Cards';
+    if (stage === 'jokerIntro') return 'הבנתי, בוא נתקדם!';
+    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'שגר';
+    return 'בחר קלפים';
   }, [jokerSelected, operatorInserted, stage]);
 
   const buttonPulseReady = (stage === 'minus' && operatorInserted) || sendReady;
