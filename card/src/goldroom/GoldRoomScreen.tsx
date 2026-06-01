@@ -22,7 +22,7 @@
 //     runs over a real game board — no structural change.
 // ============================================================
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Animated, Easing, Modal, View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
@@ -35,6 +35,7 @@ import { GameCard, type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
 import { playSfx } from '../audio/sfx';
 import { SALINDA_COIN_SOURCES, SALINDA_GOLD_ROOM_REWARD } from '../../shared/salindaEconomy';
+import { interpolateCopy, type GoldRoomCopy, useGoldRoomCopy } from './goldRoomCopy';
 
 interface GoldRoomScreenProps {
   visible: boolean;
@@ -90,17 +91,18 @@ const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as con
 // ---- Task: "היסודות" (the basics) ----
 // A FAST, visual-only mockup that maps the screen's real estate — no abstract
 // rules (no "Golden Rule"). Each step just names a zone: deck → fan.
-const BASICS_STEPS: Step[] = [
+function buildBasicsSteps(copy: GoldRoomCopy): Step[] {
+  return [
   {
-    tag: 'The Gold Room',
-    title: 'Welcome! 🪙',
-    body: "Let's quickly get to know the screen — only three parts, and then we play.",
+    tag: copy.roomName,
+    title: copy.welcomeTitle,
+    body: copy.welcomeBody,
     cardAnchor: 'center',
   },
   {
-    tag: 'The Deck',
-    title: 'The Deck 🂠',
-    body: 'The Deck — the card bank, right up here in the corner.',
+    tag: copy.deckTag,
+    title: copy.deckTitle,
+    body: copy.deckBody,
     spot: { top: 0.12, left: 0.48, width: 0.44, height: 0.22 },
     cardAnchor: 'bottom',
     mock: 'deck',
@@ -109,7 +111,7 @@ const BASICS_STEPS: Step[] = [
     // No tag / title here on purpose: the body itself is the clean, single
     // block of copy — a separate eyebrow + heading would just duplicate "המניפה".
     title: '',
-    body: 'The Fan. This is your hand of cards. Swipe sideways to cycle through the cards and choose the one that fits the equation.',
+    body: copy.fanBody,
     // No spot → full dim; a full, raised hand fan of real cards sits at the
     // bottom — swipe sideways to browse, like the live hand.
     mock: 'fan',
@@ -118,45 +120,42 @@ const BASICS_STEPS: Step[] = [
   },
   {
     title: '',
-    body: "Victory. Start with 7 cards, and win when left with 2 cards or less. With each correct equation, you'll get rid of a card and get closer to victory.",
+    body: copy.victoryBody,
     mock: 'winFan',
     cardAnchor: 'top',
     requiresAnimationComplete: true,
   },
   {
     title: '',
-    body: "Each turn, three dice will be rolled on the board and determine the fate of the round. From the numbers that come up, you'll build the equations to get rid of your fan cards.",
+    body: copy.diceBody,
     spot: { top: 0.13, left: 0.08, width: 0.84, height: 0.2 },
     mock: 'dice',
     cardAnchor: 'bottom',
     requiresAnimationComplete: true,
   },
-];
-
-const SPECIALS_STEPS = [
-  'Hands-on minus operator practice',
-  'Meet the Salinda Joker',
-  'Hands-on Salinda Joker practice',
-  'Finale and victory transition',
-] as const;
+  ];
+}
 
 // ---- The Hub's task catalog ----
-const TASKS: Task[] = [
-  { id: 'basics', badge: '🪙', title: 'The Basics', desc: 'The Deck, the Fan, and the Dice — in under a minute.', steps: BASICS_STEPS },
-  { id: 'equation-practice', badge: '🎲', title: 'Practice', desc: 'Choose a card, roll dice, and build an equation.', interactive: true },
-  { id: 'operations', badge: '⚡', title: 'Specials', desc: SPECIALS_STEPS.join(' · '), interactive: true },
-  { id: 'fractions', badge: '½', title: 'Fractions', desc: 'How to play with fraction cards.' },
-  { id: 'jokers', badge: '🃏', title: 'Jokers', desc: 'The card that changes the rules of the game.' },
-  { id: 'coin-collection', badge: '🪙', title: 'Coins', desc: 'Finish learning and collect the reward.', reward: true },
-];
+function buildTasks(copy: GoldRoomCopy): Task[] {
+  return [
+    { id: 'basics', badge: '🪙', title: copy.basicsTitle, desc: copy.basicsDesc, steps: buildBasicsSteps(copy) },
+    { id: 'equation-practice', badge: '🎲', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true },
+    { id: 'operations', badge: '⚡', title: copy.specialsTitle, desc: copy.specialsSteps.join(' · '), interactive: true },
+    { id: 'fractions', badge: '½', title: copy.fractionsTitle, desc: copy.fractionsDesc },
+    { id: 'jokers', badge: '🃏', title: copy.jokersTitle, desc: copy.jokersDesc },
+    { id: 'coin-collection', badge: '🪙', title: copy.coinsTitle, desc: copy.coinsDesc, reward: true },
+  ];
+}
 
 // Gold tones sampled from the physical gold plank — "polished D" language.
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
 const DIM = 'rgba(8,5,2,0.8)';
 
 function CloseButton({ onPress }: { onPress: () => void }) {
+  const copy = useGoldRoomCopy();
   return (
-    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel="Exit">
+    <Pressable onPress={onPress} hitSlop={10} accessibilityRole="button" accessibilityLabel={copy.exit}>
       <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.closeBtn}>
         <Text style={styles.closeText}>✕</Text>
       </LinearGradient>
@@ -483,30 +482,31 @@ function Spotlight({ spot, W, H }: { spot?: Spot; W: number; H: number }) {
 // ---- Hub: list of training tasks ----
 // Grid tile (2-per-row). Gold-themed; completed shows a green ✓ badge.
 function GoldTaskCard({ task, done, eligible, onPress }: { task: Task; done: boolean; eligible: boolean; onPress: () => void }) {
+  const copy = useGoldRoomCopy();
   // The reward tile is locked until eligible (all required tasks done) and,
   // once collected, shows a settled "collected" state instead of "coming soon".
   const locked = task.reward ? !eligible && !done : !task.steps && !task.interactive;
   const state = task.reward
     ? done
-      ? 'Collected ✓'
+      ? copy.collected
       : eligible
-        ? 'Collect ›'
-        : '🔒 Finish Learning'
+        ? copy.collect
+        : copy.finishLearning
     : locked
-      ? '🔒 Coming Soon'
+      ? copy.comingSoon
       : done
-        ? 'Completed ✓'
-        : 'Start ›';
+        ? copy.completed
+        : copy.start;
   const a11ySuffix = task.reward
     ? done
-      ? ' (Collected)'
+      ? copy.collectedA11y
       : eligible
-        ? ' (Available to collect)'
-        : ' (Locked — finish learning)'
+        ? copy.collectAvailableA11y
+        : copy.finishLearningA11y
     : done
-      ? ' (Completed)'
+      ? copy.completedA11y
       : locked
-        ? ' (Coming soon..)'
+        ? copy.comingSoonA11y
         : '';
   return (
     <Pressable
@@ -553,6 +553,7 @@ function TrainingHub({
   onCollectReward: () => void;
   onClose: () => void;
 }) {
+  const copy = useGoldRoomCopy();
   const doneCount = tasks.filter((tk) => tk.steps && isComplete(tk.id)).length;
   const totalUnlocked = tasks.filter((tk) => tk.steps).length;
   // The reward unlocks only once ALL required foundational tasks are complete.
@@ -561,11 +562,11 @@ function TrainingHub({
     <View style={styles.root}>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
       <View style={styles.topbar}>
-        <Text style={styles.hubHeader}>The Gold Room 🪙</Text>
+        <Text style={styles.hubHeader}>{copy.roomTitle}</Text>
         <CloseButton onPress={onClose} />
       </View>
       <ScrollView contentContainerStyle={styles.hubScroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.hubSub}>Choose a training task · Completed {doneCount}/{totalUnlocked}</Text>
+        <Text style={styles.hubSub}>{interpolateCopy(copy.chooseTask, { doneCount, totalUnlocked })}</Text>
         <View style={styles.grid}>
           {tasks.map((task) => (
             <GoldTaskCard
@@ -609,6 +610,7 @@ function TrainingTask({
   onComplete: () => void;
   onClose: () => void;
 }) {
+  const copy = useGoldRoomCopy();
   const [index, setIndex] = useState(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [fanInteracted, setFanInteracted] = useState(false);
@@ -684,7 +686,7 @@ function TrainingTask({
       {step.mock === 'winFan' && size.w > 0 ? <DemoHandFan W={size.w} mode="win" onAnimationComplete={handleFanAnimationComplete} /> : null}
 
       <View style={styles.topbar}>
-        <GoldButton label="Skip ›" onPress={onExit} accessibilityLabel="Back to the Gold Room" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+        <GoldButton label={copy.skip} onPress={onExit} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
         <CloseButton onPress={onClose} />
       </View>
 
@@ -713,9 +715,9 @@ function TrainingTask({
           </View>
 
           <View style={styles.controls}>
-            <GoldButton label="‹ Back" onPress={handleBack} accessibilityLabel={index > 0 ? 'Back' : 'Back to the Gold Room'} tone="stone" fontSize={16} />
+            <GoldButton label={copy.back} onPress={handleBack} accessibilityLabel={index > 0 ? copy.backPlain : copy.backToRoom} tone="stone" fontSize={16} />
             <Animated.View style={[styles.nextWrap, { transform: [{ scale: nextPulse }] }]}>
-              <GoldButton label={isLast ? "Got it, let's move forward!" : 'Continue ›'} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
+              <GoldButton label={isLast ? copy.gotIt : copy.continue} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
             </Animated.View>
           </View>
         </View>
@@ -725,6 +727,7 @@ function TrainingTask({
 }
 
 export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRoomScreenProps) {
+  const copy = useGoldRoomCopy();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const { isComplete, markComplete } = useTrainingProgress();
   // Optional so the room can render outside an <AuthProvider> (e.g. previews);
@@ -733,6 +736,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
   const [collecting, setCollecting] = useState(false);
   const [rewardShown, setRewardShown] = useState(false); // success celebration overlay
   const [collectError, setCollectError] = useState(false);
+  const tasks = useMemo(() => buildTasks(copy), [copy]);
 
   // Anchor the room on the web: while it's open, lock the page so it can't be
   // scrolled / rubber-band dragged behind the full-screen modal (the room is a
@@ -803,7 +807,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
     [close, onStartLiveTutorial],
   );
 
-  const activeTask = TASKS.find((tk) => tk.id === activeTaskId);
+  const activeTask = tasks.find((tk) => tk.id === activeTaskId);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -816,7 +820,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.root}>
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
               <View style={styles.topbar}>
-                <GoldButton label="‹ Back" onPress={() => setActiveTaskId(null)} accessibilityLabel="Back to the Gold Room" tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+                <GoldButton label={copy.backShort} onPress={() => setActiveTaskId(null)} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
                 <CloseButton onPress={close} />
               </View>
               <View style={styles.interactiveBody}>
@@ -851,7 +855,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             />
           ) : (
             <TrainingHub
-              tasks={TASKS}
+              tasks={tasks}
               isComplete={isComplete}
               onSelect={handleSelect}
               onCollectReward={handleCollectReward}
@@ -864,10 +868,10 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.rewardOverlay}>
               <View style={styles.rewardCard}>
                 <Text style={styles.rewardBadge}>🪙</Text>
-                <Text style={styles.rewardTitle}>Well done!</Text>
-                <Text style={styles.rewardSub}>You received {SALINDA_GOLD_ROOM_REWARD} coins for completing the training.</Text>
+                <Text style={styles.rewardTitle}>{copy.rewardTitle}</Text>
+                <Text style={styles.rewardSub}>{interpolateCopy(copy.rewardSub, { reward: SALINDA_GOLD_ROOM_REWARD })}</Text>
                 <View style={styles.rewardBtnWrap}>
-                  <GoldButton label="Awesome!" onPress={() => setRewardShown(false)} accessibilityLabel="Close" fullWidth height={54} fontSize={19} />
+                  <GoldButton label={copy.awesome} onPress={() => setRewardShown(false)} accessibilityLabel={copy.close} fullWidth height={54} fontSize={19} />
                 </View>
               </View>
             </View>
@@ -878,11 +882,11 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
             <View style={styles.rewardOverlay}>
               <View style={styles.rewardCard}>
                 <Text style={styles.rewardBadge}>📡</Text>
-                <Text style={styles.rewardTitle}>Oops…</Text>
-                <Text style={styles.rewardSub}>We couldn't credit your reward right now. Please try again in a moment.</Text>
+                <Text style={styles.rewardTitle}>{copy.errorTitle}</Text>
+                <Text style={styles.rewardSub}>{copy.errorSub}</Text>
                 <View style={styles.rewardBtnWrap}>
-                  <GoldButton label="Try Again" onPress={handleCollectReward} accessibilityLabel="Try Again" fullWidth height={50} fontSize={17} />
-                  <GoldButton label="Close" onPress={() => setCollectError(false)} accessibilityLabel="Close" tone="stone" fullWidth height={44} fontSize={15} />
+                  <GoldButton label={copy.tryAgain} onPress={handleCollectReward} accessibilityLabel={copy.tryAgain} fullWidth height={50} fontSize={17} />
+                  <GoldButton label={copy.close} onPress={() => setCollectError(false)} accessibilityLabel={copy.close} tone="stone" fullWidth height={44} fontSize={15} />
                 </View>
               </View>
             </View>

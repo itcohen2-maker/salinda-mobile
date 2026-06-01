@@ -35,6 +35,7 @@ import { GoldButton } from '../../components/GoldButton';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
 import { applyOperation } from '../utils/arithmetic';
 import { playSfx } from '../audio/sfx';
+import { interpolateCopy, useGoldRoomCopy } from './goldRoomCopy';
 
 // The Gold Room table surface (same asset family the live game uses).
 const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
@@ -42,12 +43,8 @@ const GOLD_TABLE_IMG = require('../../assets/table_golden_nobg.png');
 // ── Steps. Each guided step fixes a single operator so the lesson stays sharp.
 type StepId = 'plus' | 'minus';
 const STEP_OP: Record<StepId, '+' | '-'> = { plus: '+', minus: '-' };
-
 const STEP_TEXT: Record<StepId, string> = {
-  // Step 1 (PLUS) — keep the first action crisp: read dice + fan, then press check.
   plus: "Look at the dice and the fan. We've put together an addition (+) equation that equals exactly 6. Now, find and tap card 6 in your fan to select it!",
-  // Step 2 (MINUS) — real discovery: not every card is reachable. The player
-  // scans the hand and picks one they can actually build toward.
   minus: "Great job! Now the challenge grows and we move to subtraction (-). We've put together a subtraction equation (5 - 2) that equals exactly 3. Find and tap card 3 in your fan!",
 };
 
@@ -125,8 +122,13 @@ function buildTutorialHand(): Card[] {
 // ── A tappable gold DIE on the track — the landed face the player adds to the
 // equation. Placed dice dim + show a check so it's clear they're "in".
 function DiceChip({ value, placed, order, onPress }: { value: number; placed: boolean; order: number | null; onPress: () => void }) {
+  const copy = useGoldRoomCopy();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={placed ? `Remove die ${value}` : `Add die ${value}`}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={interpolateCopy(placed ? copy.removeDie : copy.addDie, { value })}
+    >
       <View style={[styles.diceChip, placed && styles.diceChipPlaced]}>
         <GoldDieFace value={value} size={52} />
         {placed && order !== null ? (
@@ -156,6 +158,7 @@ function EquationTrack({
   result: number | null;
   onRemove: (diceIdx: number) => void;
 }) {
+  const copy = useGoldRoomCopy();
   return (
     <View style={styles.track}>
       {Array.from({ length: SLOT_COUNT }).map((_, i) => {
@@ -172,7 +175,7 @@ function EquationTrack({
               </View>
             ) : null}
             {filled ? (
-              <Pressable onPress={() => onRemove(diceIdx)} accessibilityRole="button" accessibilityLabel={`Remove die ${dice[diceIdx]}`}>
+              <Pressable onPress={() => onRemove(diceIdx)} accessibilityRole="button" accessibilityLabel={interpolateCopy(copy.removeDie, { value: dice[diceIdx] })}>
                 <View style={[styles.slot, styles.slotFilled]}>
                   <Text style={styles.slotTxt}>{dice[diceIdx]}</Text>
                 </View>
@@ -235,6 +238,7 @@ function FlyingCard({ card, onDone, doneDelayMs = 0, durationMs = 620 }: { card:
 // ── Success — the explicit finish. A trophy pops, then a single "סיום"
 // returns to the Hub. No Retry/Next/Menu choice overlay.
 function SuccessCelebration({ onDone }: { onDone?: () => void }) {
+  const copy = useGoldRoomCopy();
   const pop = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(pop, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }).start();
@@ -244,10 +248,10 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
     <View style={styles.successOverlay}>
       <View style={styles.successCard}>
         <Animated.Text style={[styles.successTrophy, { opacity: pop, transform: [{ scale }] }]}>🏆</Animated.Text>
-        <Text style={styles.successTitle}>Well done!</Text>
-        <Text style={styles.successSub}>You built an equation from the dice and got rid of the matching card ✓</Text>
+        <Text style={styles.successTitle}>{copy.rewardTitle}</Text>
+        <Text style={styles.successSub}>{copy.successSub}</Text>
         <View style={styles.successCta}>
-          <GoldButton label="Finish" onPress={onDone} accessibilityLabel="Finish" fullWidth height={56} fontSize={20} />
+          <GoldButton label={copy.finish} onPress={onDone} accessibilityLabel={copy.finish} fullWidth height={56} fontSize={20} />
         </View>
       </View>
     </View>
@@ -283,6 +287,7 @@ function SpecialEquationTrack({
   onPlaceOperator?: () => void;
   resultGlow?: boolean;
 }) {
+  const copy = useGoldRoomCopy();
   const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.9] });
   const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.1] });
   const slot = (
@@ -301,7 +306,7 @@ function SpecialEquationTrack({
     <View style={styles.track}>
       <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{left}</Text></View>
       {operatorReady && onPlaceOperator ? (
-        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel="Place a plus card in the sign slot">
+        <Pressable onPress={onPlaceOperator} accessibilityRole="button" accessibilityLabel={copy.placeSignCard}>
           {slot}
         </Pressable>
       ) : slot}
@@ -339,6 +344,7 @@ function FlyingSpecialCard({ card, onDone, variant = 'card' }: { card: Card; onD
 type SpecialsStage = 'minus' | 'jokerIntro' | 'jokerPractice';
 
 function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
+  const copy = useGoldRoomCopy();
   const { width: winW } = useWindowDimensions();
   const fanW = Math.min(winW, 480);
   const [stage, setStage] = useState<SpecialsStage>('minus');
@@ -369,21 +375,21 @@ function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
 
   const instructionText = useMemo(() => {
     if (stage === 'jokerIntro') {
-      return 'לפעמים התרגיל על הלוח דורש מספר שאין לכם ביד. אל דאגה! הכירו את ג׳וקר סלינדה - הקלף החזק ביותר במשחק שיכול להחליף כל מספר שחסר לכם!';
+      return copy.jokerIntro;
     }
     if (stage === 'jokerPractice') {
-      if (jokerSelected) return "מבריק! הג'וקר הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח את חדר הזהב!";
-      return 'בואו ננסה! התרגיל דורש את המספר 8, אבל אין לכם אותו ביד. לחצו על הג׳וקר במניפה שלכם כדי להשלים את התרגיל!';
+      if (jokerSelected) return copy.jokerSelected;
+      return copy.jokerPractice;
     }
-    if (operatorInserted) return "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
-    if (minusSelected) return 'מצוין! עכשיו לחצו על החריץ הריק במשוואה כדי למקם שם את קלף המינוס.';
-    return 'עכשיו תורכם בחיסור! כאן מחכה תרגיל של 5 ו-2 ששווה ל-3, אך חסר סימן החיסור. לחצו על קלף המינוס (-) במניפה!';
-  }, [jokerSelected, minusSelected, operatorInserted, stage]);
+    if (operatorInserted) return copy.operatorReady;
+    if (minusSelected) return copy.minusSlotReady;
+    return copy.minusIntro;
+  }, [copy, jokerSelected, minusSelected, operatorInserted, stage]);
   const buttonLabel = useMemo(() => {
-    if (stage === 'jokerIntro') return 'הבנתי, בוא נתקדם!';
-    if ((stage === 'minus' && operatorInserted) || jokerSelected) return 'שגר';
-    return 'בחר קלפים';
-  }, [jokerSelected, operatorInserted, stage]);
+    if (stage === 'jokerIntro') return copy.gotIt;
+    if ((stage === 'minus' && operatorInserted) || jokerSelected) return copy.launch;
+    return copy.chooseCards;
+  }, [copy, jokerSelected, operatorInserted, stage]);
 
   const buttonPulseReady = (stage === 'minus' && operatorInserted) || sendReady;
   useEffect(() => {
@@ -572,6 +578,7 @@ type DiceEquationRoundProps = {
 };
 
 export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: DiceEquationRoundProps) {
+  const copy = useGoldRoomCopy();
   if (mode === 'operators') {
     return <OperatorCardsLesson onComplete={onComplete} />;
   }
@@ -614,18 +621,18 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
   const expectedTarget = step === 'plus' ? 6 : 3;
   const instructionText = useMemo(() => {
     if (step === 'plus' && selectedId !== null) {
-      return "Awesome! Now tap the 'Launch' button to fly your first card!";
+      return copy.firstCardLaunch;
     }
     if (step === 'minus' && selectedCard?.value === 3) {
-      return "Excellent! Tap the 'Launch' button to fly the card!";
+      return copy.cardLaunch;
     }
-    return STEP_TEXT[step];
-  }, [selectedCard?.value, selectedId, step]);
+    return step === 'plus' ? copy.practicePlus : copy.practiceMinus;
+  }, [copy, selectedCard?.value, selectedId, step]);
   const checkButtonLabel = useMemo(() => {
-    if (placed.length >= 2 && selectedId === null) return 'Choose Cards';
-    if (placed.length >= 2 && selectedId !== null) return 'Launch';
-    return 'Check';
-  }, [placed.length, selectedId]);
+    if (placed.length >= 2 && selectedId === null) return copy.chooseCards;
+    if (placed.length >= 2 && selectedId !== null) return copy.launch;
+    return copy.check;
+  }, [copy, placed.length, selectedId]);
   const equationReady = placed.length >= 2;
   // The action is intentionally locked until the matching fan card is selected;
   // the label still reflects that the equation itself is ready.
@@ -834,7 +841,7 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
                     accessibilityLabel={checkButtonLabel}
                   />
                 </View>
-                <Text style={styles.confirmHint}>Two dice are enough — a third die is optional, not mandatory.</Text>
+                <Text style={styles.confirmHint}>{copy.twoDiceHint}</Text>
               </View>
             </Animated.View>
           </View>
