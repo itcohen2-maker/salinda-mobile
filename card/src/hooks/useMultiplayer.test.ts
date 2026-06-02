@@ -224,7 +224,7 @@ describe('playerViewToGameState', () => {
 
 describe('actionToSocketEvent', () => {
   it('sends both equationCommits and legacy equationCommit for a single committed operator', () => {
-    const commit = { cardId: 'op-1', position: 0 as const, jokerAs: null };
+    const commit = { cardId: 'op-1', position: 0 as const, salindaAs: null };
     const event = __actionToSocketEvent({
       type: 'CONFIRM_EQUATION',
       result: 7,
@@ -244,7 +244,7 @@ describe('actionToSocketEvent', () => {
   });
 
   it('preserves legacy single-commit payloads when only equationCommit is provided', () => {
-    const commit = { cardId: 'joker-1', position: 1 as const, jokerAs: '+' };
+    const commit = { cardId: 'salinda-1', position: 1 as const, salindaAs: '+' };
     const event = __actionToSocketEvent({
       type: 'CONFIRM_EQUATION',
       result: 9,

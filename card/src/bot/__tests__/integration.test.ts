@@ -345,13 +345,13 @@ test('M4.5.3b — building phase exposes staged queue before final confirm', () 
 test('M4.5.4 — frozen bot: no valid plan causes drawCard fallback; botTickSeq always increases', () => {
   // NOTE: Skipped until M5.4.
   //
-  // A bot whose entire hand is joker cards cannot stage any equation (jokers
+  // A bot whose entire hand is salinda cards cannot stage any equation (salindas
   // have no numeric value and are not counted in candidates by buildBotStagedPlan).
   // The planner returns null; the BOT_STEP reducer falls back to drawCard.
   // Eventually hasDrawnCard flips true and the bot ends its turn.
 
-  const joker1 = { id: 'j1', type: 'joker' as const };
-  const joker2 = { id: 'j2', type: 'joker' as const };
+  const salinda1 = { id: 'j1', type: 'salinda' as const };
+  const salinda2 = { id: 'j2', type: 'salinda' as const };
 
   const startState = makeTwoPlayerBotState({
     phase: 'building',
@@ -368,7 +368,7 @@ test('M4.5.4 — frozen bot: no valid plan causes drawCard fallback; botTickSeq 
       {
         id: 1,
         name: 'Bot',
-        hand: [joker1, joker2],  // jokers only — planner produces null
+        hand: [salinda1, salinda2],  // salindas only — planner produces null
         hasOneCardLeft: false,
         isBot: true,
       },

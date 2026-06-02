@@ -6,7 +6,7 @@
 // number is computed as (cumulative lesson steps × 4) + phase offset, so
 // lesson-05 occupies layers 33–44:
 //   • 35–36  place-op     — build `4 ? 3 = 7` by placing a SIGN card.
-//   • 37–40  joker-place   — the SAME puzzle, solved with the SALINDA card.
+//   • 37–40  salinda-place   — the SAME puzzle, solved with the SALINDA card.
 //   • 41–44  important-tip  — acknowledgement only (folded into success).
 //
 // The exercise is rigged by the legacy host as dice 4,3,9 with operands
@@ -52,7 +52,7 @@ export function getGoldLayers(locale: AppLocale): readonly GoldLayer[] {
       target: 7,
     },
     {
-      id: 'joker-place',
+      id: 'salinda-place',
       legacyLayers: [37, 40],
       card: 'salinda',
       caption: copy.salindaTurn,

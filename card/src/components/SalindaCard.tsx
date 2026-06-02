@@ -1,11 +1,11 @@
 import React from "react";
 
-interface JokerCardProps {
+interface SalindaCardProps {
   isSelected?: boolean;
   onClick?: () => void;
 }
 
-export default function JokerCard({ isSelected, onClick }: JokerCardProps) {
+export default function SalindaCard({ isSelected, onClick }: SalindaCardProps) {
   return (
     <div
       onClick={onClick}
@@ -21,8 +21,8 @@ export default function JokerCard({ isSelected, onClick }: JokerCardProps) {
       ].join(" ")}
       style={{ fontFamily: "'Fredoka', sans-serif" }}
     >
-      <span className="text-3xl">★</span>
-      <span className="text-sm font-bold text-yellow-600 mt-1">ג'וקר</span>
+      <span className="text-5xl font-black leading-none text-green-700">S</span>
+      <span className="text-xs font-bold text-yellow-700 mt-1">סלינדה</span>
     </div>
   );
 }

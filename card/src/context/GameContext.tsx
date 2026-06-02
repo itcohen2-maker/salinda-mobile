@@ -31,7 +31,7 @@ const initialState: GameState = {
   message: '',
   targetNumber: null,
   validTargets: [],
-  jokerModalOpen: false,
+  salindaModalOpen: false,
   difficulty: 'full',
   hasPlayedCards: false,
   hasDrawnCard: false,
@@ -132,7 +132,7 @@ function gameReducer(
         const op = state.activeOperation
         const currentPlayer = state.players[state.currentPlayerIndex]
         const hasCounter = currentPlayer.hand.some(
-          (c) => (c.type === 'operation' && c.operation === op) || c.type === 'joker'
+          (c) => (c.type === 'operation' && c.operation === op) || c.type === 'salinda'
         )
         if (hasCounter) {
           return {
@@ -397,15 +397,15 @@ function gameReducer(
       return newState
     }
 
-    case 'OPEN_JOKER_MODAL': {
-      return { ...state, jokerModalOpen: true, selectedCards: [action.card] }
+    case 'OPEN_SALINDA_MODAL': {
+      return { ...state, salindaModalOpen: true, selectedCards: [action.card] }
     }
 
-    case 'CLOSE_JOKER_MODAL': {
-      return { ...state, jokerModalOpen: false, selectedCards: [] }
+    case 'CLOSE_SALINDA_MODAL': {
+      return { ...state, salindaModalOpen: false, selectedCards: [] }
     }
 
-    case 'PLAY_JOKER': {
+    case 'PLAY_SALINDA': {
       const currentPlayer = state.players[state.currentPlayerIndex]
       const newHand = currentPlayer.hand.filter((c) => c.id !== action.card.id)
       const newPlayers = state.players.map((p, i) =>
@@ -418,9 +418,9 @@ function gameReducer(
         discardPile: [...state.discardPile, action.card],
         activeOperation: action.chosenOperation,
         selectedCards: [],
-        jokerModalOpen: false,
+        salindaModalOpen: false,
         hasPlayedCards: true,
-        message: tf('legacy.jokerPlayedAs', { op: action.chosenOperation }),
+        message: tf('legacy.salindaPlayedAs', { op: action.chosenOperation }),
       }
 
       newState = checkWin(newState, tf)

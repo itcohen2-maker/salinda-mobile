@@ -1291,7 +1291,7 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
     { id: `${prefix}-num-b-${ts}`, type: 'number', value: addB },
     { id: `${prefix}-zero-${ts}`, type: 'number', value: 0 },
     { id: `${prefix}-frac-${ts}`, type: 'fraction', fraction: '1/2' },
-    { id: `${prefix}-joker-${ts}`, type: 'joker' },
+    { id: `${prefix}-salinda-${ts}`, type: 'salinda' },
   ];
 }
 
@@ -1399,25 +1399,25 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   //   `[a] [op] [b] = [result]`  where result updates live as op changes.
   // Number pairs are curated so all 4 operations yield integers (e.g. 4/2).
   // Step 5a: learner cycles the `?` slot through +, -, ×, ÷ ג€” advances once
-  // all four signs have been visited. Step 5b: learner taps the joker card,
+  // all four signs have been visited. Step 5b: learner taps the salinda card,
   // picks a sign in the modal, then taps the slot to place it.
   type L5Op = '+' | '-' | 'x' | '÷';
   const L5_CYCLE: readonly L5Op[] = ['+', '-', 'x', '÷'];
   const [l5Config, setL5Config] = useState<{ a: number; b: number } | null>(null);
   const [l5SelectedOp, setL5SelectedOp] = useState<L5Op | null>(null);
-  const [l5JokerOpen, setL5JokerOpen] = useState(false);
+  const [l5SalindaOpen, setL5SalindaOpen] = useState(false);
   // Signs the learner has visited via the `?` cycle ג€” for step 5a outcome.
   const [l5CycledSigns, setL5CycledSigns] = useState<Set<L5Op>>(() => new Set());
-  // Sign picked in the joker modal but not yet placed in the slot.
-  const [l5PendingJokerOp, setL5PendingJokerOp] = useState<L5Op | null>(null);
+  // Sign picked in the salinda modal but not yet placed in the slot.
+  const [l5PendingSalindaOp, setL5PendingSalindaOp] = useState<L5Op | null>(null);
   // Random dice for L5.1+L5.2 ג€” generated once per lesson entry.
   const l5DiceRef = useRef<{ d1: number; d2: number; d3: number }>({ d1: 4, d2: 3, d3: 9 });
   // L5.1 wrong-card feedback: shown 2s then auto-cleared.
   const [l5PlaceWrong, setL5PlaceWrong] = useState(false);
   const l5PlaceWrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // L5.2 wrong-sign feedback: shown 2s when Slinda is placed with wrong op.
-  const [l5JokerWrong, setL5JokerWrong] = useState(false);
-  const l5JokerWrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [l5SalindaWrong, setL5SalindaWrong] = useState(false);
+  const l5SalindaWrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const l5SlotPulse = useRef(new Animated.Value(0)).current;
   // Fractions lesson ג€” pulse halo around the discard pile so the learner's
   // eye lands on the pile card (8 ג†' 9 ג†' fraction attack ג†' fraction attack)
@@ -1448,7 +1448,7 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
     fracSetupCacheRef.current[key] = setup;
     return setup;
   }, []);
-const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' | 'placeSign'>('tapJoker');
+const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal' | 'placeSign'>('tapSalinda');
   // L6.2 (tap-mini) await-mimic: "׳”׳'׳ ׳×׳™" button appears ~1.5s after the hint
   // bubble so the learner has time to read "׳׳—׳¦׳• ׳¢׳ ׳׳™׳ ׳™ ׳§׳׳£" before the button shows.
   const [showL6TapMiniContinue, setShowL6TapMiniContinue] = useState(false);
@@ -1902,8 +1902,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       tutorialBus.setL6CopyConfig(null);
     }
     // eqReset only clears the EquationBuilder's local dice/op state. Any
-    // operator or joker card the learner placed into equationHandSlots in
-    // the previous step (e.g. L5.2's joker on an op slot) is still held in
+    // operator or salinda card the learner placed into equationHandSlots in
+    // the previous step (e.g. L5.2's salinda on an op slot) is still held in
     // game state, and the L5.1 self-prefill bails out while any slot is
     // non-null ג€” producing the "empty equation, `?` sign" on GO_BACK into
     // L5.1. CLEAR_EQ_HAND is idempotent for lessons that don't populate
@@ -2244,7 +2244,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     const isL4Step3 = engine.lessonIndex === 3 && engine.stepIndex === 3;
     const isL4CardMatchOnly = engine.lessonIndex === 3 && (engine.stepIndex === 0 || engine.stepIndex === 1);
     // Lesson 5 is a two-step placement lesson ג€” fan taps are always the
-    // intended first action (pick an operator card in 5.1, tap the joker
+    // intended first action (pick an operator card in 5.1, tap the salinda
     // in 5.2), so they should NEVER trigger the "wrong answer" shake.
     const isL5 = engine.lessonIndex === 4;
     const isL11 = engine.lessonIndex === MIMIC_MULTI_PLAY_LESSON_INDEX;
@@ -2424,7 +2424,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => tutorialBus.setBotDemoActive(false);
   }, [engine.phase]);
 
-  // Lesson 5 runs on the real game UI (EquationBuilder + joker modal).
+  // Lesson 5 runs on the real game UI (EquationBuilder + salinda modal).
   useEffect(() => {
     const on = engine.lessonIndex === 4 && (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
     tutorialBus.setL5GuidedMode(on);
@@ -2433,8 +2433,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
 
   useEffect(() => {
     const on = engine.lessonIndex === 4 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
-    tutorialBus.setL5bJokerOnlyMode(on);
-    return () => tutorialBus.setL5bJokerOnlyMode(false);
+    tutorialBus.setL5bSalindaOnlyMode(on);
+    return () => tutorialBus.setL5bSalindaOnlyMode(false);
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   // L5 is now a pure "place an operator card" lesson ג€” no cycle-on-tap. The
@@ -2450,7 +2450,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     return () => tutorialBus.setL5BlockOpCycle(false);
   }, [engine.lessonIndex, engine.phase]);
 
-  // L5.1 (place-op) AND L5.2 (joker-place): lock the pre-filled dice slots
+  // L5.1 (place-op) AND L5.2 (salinda-place): lock the pre-filled dice slots
   // so the learner can't accidentally empty the equation while searching
   // for the operator slot. `setL5aBlockFanTaps` drives that lock in
   // renderDiceSlot / unplaced-dice-button onPress. Leaves fan card taps
@@ -2643,33 +2643,33 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   ]);
 
   useEffect(() => {
-    // Joker-place is now stepIndex 1 (the new place-op step took over
+    // Salinda-place is now stepIndex 1 (the new place-op step took over
     // stepIndex 0 and the old cycle-signs / pick-place / solve-for-op
-    // steps were retired). Sub-hint flow: tap joker ג†' pick sign in modal
+    // steps were retired). Sub-hint flow: tap salinda ג†' pick sign in modal
     // ג†' place on slot.
     const isL5bAwait = engine.lessonIndex === 4 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
     if (!isL5bAwait) return;
-    setL5FlowHintPhase('tapJoker');
+    setL5FlowHintPhase('tapSalinda');
     return tutorialBus.subscribeUserEvent((evt) => {
-      if (evt.kind === 'l5JokerModalOpened') setL5FlowHintPhase('pickModal');
-      else if (evt.kind === 'l5JokerPickedInModal') setL5FlowHintPhase('placeSign');
+      if (evt.kind === 'l5SalindaModalOpened') setL5FlowHintPhase('pickModal');
+      else if (evt.kind === 'l5SalindaPickedInModal') setL5FlowHintPhase('placeSign');
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase]);
 
   // ג”€ג”€ L5.2 wrong-sign feedback: when Slinda is placed with a non-`+` op,
   //    clear the slot, reset the flow hint, and show an error bubble for 2s. ג”€ג”€
   useEffect(() => {
-    setL5JokerWrong(false);
-    if (l5JokerWrongTimerRef.current) clearTimeout(l5JokerWrongTimerRef.current);
+    setL5SalindaWrong(false);
+    if (l5SalindaWrongTimerRef.current) clearTimeout(l5SalindaWrongTimerRef.current);
     if (engine.lessonIndex !== 4 || engine.stepIndex !== 1 || engine.phase !== 'await-mimic') return;
     return tutorialBus.subscribeUserEvent((evt) => {
-      if (evt.kind !== 'l5JokerFlowCompleted' || evt.op === '+') return;
-      setL5JokerWrong(true);
-      setL5FlowHintPhase('tapJoker');
+      if (evt.kind !== 'l5SalindaFlowCompleted' || evt.op === '+') return;
+      setL5SalindaWrong(true);
+      setL5FlowHintPhase('tapSalinda');
       tutorialBus.emitFanDemo({ kind: 'eqReset' });
       gameDispatch({ type: 'CLEAR_EQ_HAND' });
-      if (l5JokerWrongTimerRef.current) clearTimeout(l5JokerWrongTimerRef.current);
-      l5JokerWrongTimerRef.current = setTimeout(() => setL5JokerWrong(false), 2000);
+      if (l5SalindaWrongTimerRef.current) clearTimeout(l5SalindaWrongTimerRef.current);
+      l5SalindaWrongTimerRef.current = setTimeout(() => setL5SalindaWrong(false), 2000);
     });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameDispatch]);
 
@@ -3021,8 +3021,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     tutorialBus.emitFanDemo({ kind: 'eqReset' });
   }, [engine.lessonIndex, engine.stepIndex, engine.phase, gameState?.phase, gameState?.players, gameDispatch]);
 
-  // ג”€ג”€ Lesson 5 (op/joker) must run on the real EquationBuilder. Ensure the
-  //    game is in `building` with visible dice and a hand that includes a joker. ג”€ג”€
+  // ג”€ג”€ Lesson 5 (op/salinda) must run on the real EquationBuilder. Ensure the
+  //    game is in `building` with visible dice and a hand that includes a salinda. ג”€ג”€
   useEffect(() => {
     if (engine.lessonIndex !== 4) return;
     if (engine.phase === 'intro') {
@@ -3047,7 +3047,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       // card to complete it. Dice are fixed (not rolled) so the exercise
       // stays deterministic; d1 and d2 are intentionally distinct and the
       // target (7 = 4+3) maps to exactly one correct operator.
-      // No joker in this hand ג€” the joker is introduced in step 5.2, and
+      // No salinda in this hand ג€” the salinda is introduced in step 5.2, and
       // exposing it here would let the learner bypass the "pick the right
       // operation card" decision that step 5.1 is teaching.
       const d1 = 2 + Math.floor(Math.random() * 7); // 2..8
@@ -3118,26 +3118,26 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
   }, [engine.phase, engine.lessonIndex, engine.stepIndex, dicePulse]);
 
   // ג”€ג”€ Lesson 5: pick a fresh (a, b) pair on entry + reset per-lesson state
-  //    (cycled signs, pending joker op, modal) so each run starts clean. ג”€ג”€
+  //    (cycled signs, pending salinda op, modal) so each run starts clean. ג”€ג”€
   useEffect(() => {
     if (engine.lessonIndex !== 4) {
-      setL5JokerOpen(false);
+      setL5SalindaOpen(false);
       return;
     }
     const cfg = pickL5Pair();
     setL5Config(cfg);
     setL5SelectedOp(null);
-    setL5JokerOpen(false);
+    setL5SalindaOpen(false);
     setL5CycledSigns(new Set());
-    setL5PendingJokerOp(null);
+    setL5PendingSalindaOp(null);
     setL5Exercises(generateL5Exercises());
     setL5ExIndex(0);
     tutorialBus.setL5Config(cfg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.lessonIndex]);
 
-  // ג”€ג”€ Between lesson-5 steps (place-op ג†' joker), reset per-step state so
-  //    each step starts on a clean slate (modal closed, no pending joker
+  // ג”€ג”€ Between lesson-5 steps (place-op ג†' salinda), reset per-step state so
+  //    each step starts on a clean slate (modal closed, no pending salinda
   //    pick). Step 0 (place-op) rigging ג€” full 3-dice layout with `+` on
   //    both operator slots ג€” lives in the lesson-entry rigging block (see
   //    the L5 dice/hand useEffect above). ג”€ג”€
@@ -3145,17 +3145,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
     if (engine.lessonIndex !== 4) return;
     if (engine.phase !== 'bot-demo') return;
     if (engine.stepIndex > 0) {
-      setL5JokerOpen(false);
-      setL5PendingJokerOp(null);
+      setL5SalindaOpen(false);
+      setL5PendingSalindaOp(null);
     }
     if (engine.stepIndex === 2) {
-      // Step 5.3 (important-tip): clear any joker the learner placed in step
+      // Step 5.3 (important-tip): clear any salinda the learner placed in step
       // 5.2 so ok=false and the confirm button is hidden while the tip shows.
       gameDispatch({ type: 'CLEAR_EQ_HAND' });
       tutorialBus.emitFanDemo({ kind: 'eqReset' });
     }
     if (engine.stepIndex === 1) {
-      // Step 5.2 (joker-place ג€” "meet Slinda"): mirror 5.1. Keep the 5.1
+      // Step 5.2 (salinda-place ג€” "meet Slinda"): mirror 5.1. Keep the 5.1
       // dice (4, 3, 9) on the table; clear the placed `+` card and the
       // op/result state; swap in a 5-card hand with Slinda centred at
       // index 2; then re-pre-fill d1 and d2 so the equation reads
@@ -3168,14 +3168,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       const playerHand = [
         { id: `tut-l5b-op-plus-${ts}`, type: 'operation' as const, operation: '+' as const },
         { id: `tut-l5b-op-minus-${ts}`, type: 'operation' as const, operation: '-' as const },
-        { id: `tut-l5b-joker-${ts}`, type: 'joker' as const },
+        { id: `tut-l5b-salinda-${ts}`, type: 'salinda' as const },
         { id: `tut-l5b-op-times-${ts}`, type: 'operation' as const, operation: 'x' as const },
         { id: `tut-l5b-op-divide-${ts}`, type: 'operation' as const, operation: '÷' as const },
       ];
       const botHand = [
         { id: `tut-l5b-bot-op-plus-${ts}`, type: 'operation' as const, operation: '+' as const },
         { id: `tut-l5b-bot-op-minus-${ts}`, type: 'operation' as const, operation: '-' as const },
-        { id: `tut-l5b-bot-joker-${ts}`, type: 'joker' as const },
+        { id: `tut-l5b-bot-salinda-${ts}`, type: 'salinda' as const },
         { id: `tut-l5b-bot-op-times-${ts}`, type: 'operation' as const, operation: 'x' as const },
         { id: `tut-l5b-bot-op-divide-${ts}`, type: 'operation' as const, operation: '÷' as const },
       ];
@@ -3183,11 +3183,11 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       // currentPlayerIndex (which is 0 at L5b entry ג€” the previous turn
       // belonged to the learner/player-1, so endTurnLogic advanced to
       // player-0). The fan always shows hands[currentPlayerIndex]; putting
-      // the learner's joker there prevents the bot's ghost joker from
+      // the learner's salinda there prevents the bot's ghost salinda from
       // appearing in the fan and triggering a broken card-tap path.
       gameDispatch({ type: 'TUTORIAL_SET_HANDS', hands: [playerHand, botHand] });
       // Keep the rigged hand order as-is ג€” the default sort would push
-      // Slinda to the end (operations before jokers), but we rigged her at
+      // Slinda to the end (operations before salindas), but we rigged her at
       // the centre index 2 on purpose. Flag is cleared when the lesson/step
       // changes (see the cleanup effect right below this one).
       tutorialBus.setTutorialPreserveHandOrder(true);
@@ -4879,14 +4879,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
        : l4Step3Phase === 'pressPlay' ? 'tutorial.l4c.hintPressPlay'
        : null)
     : null;
-  // Lesson 5 step 5b (joker-place, now stepIndex 1) dynamic bubble:
-  // tap joker ג†' pick ג†' place.
+  // Lesson 5 step 5b (salinda-place, now stepIndex 1) dynamic bubble:
+  // tap salinda ג†' pick ג†' place.
   const isL5bAwait = engine.lessonIndex === 4 && engine.stepIndex === 1 && engine.phase === 'await-mimic';
   const l5bHintKey: string | null = isL5bAwait
-    ? (l5JokerWrong ? 'tutorial.l5b.wrongSign'
+    ? (l5SalindaWrong ? 'tutorial.l5b.wrongSign'
        : l5FlowHintPhase === 'pickModal' ? 'tutorial.l5b.hintPickInModal'
        : l5FlowHintPhase === 'placeSign' ? 'tutorial.l5b.hintPlaceSign'
-       : 'tutorial.l5b.hintTapJoker')
+       : 'tutorial.l5b.hintTapSalinda')
     : null;
   // Three-phase hint for L5.1 (place-op):
   //   1. no card selected yet ג†' "choose an op card that solves {{result}}"
@@ -5699,14 +5699,14 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
       {/* Lesson 5 runs on the real game UI (EquationBuilder + hand).
           Step 5.1 (place-op) pre-fills the full equation + sets `+` on both
           operator slots; the learner drops an operation card on op1.
-          Step 5.2 (joker-place) introduces Slinda the joker. */}
+          Step 5.2 (salinda-place) introduces Slinda the salinda. */}
 
       {/* (Legacy solve-for-op puzzle kept commented out ג€” the step was
           retired when the lesson was reduced to two screens.) */}
       {false ? (() => {
         const current = l5Exercises[l5ExIndex];
         if (!current) return null;
-        const displayOp: L5Op | null = l5PendingJokerOp ?? l5SelectedOp;
+        const displayOp: L5Op | null = l5PendingSalindaOp ?? l5SelectedOp;
         const liveResult = computeL5Result(current.a, current.b, displayOp);
         const confirmEnabled = displayOp !== null;
         const isCorrect = displayOp !== null && computeL5Result(current.a, current.b, displayOp) === current.result;
@@ -5719,8 +5719,8 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
               // Advance to exercise 2 with a clean slot.
               setL5ExIndex(1);
               setL5SelectedOp(null);
-              setL5PendingJokerOp(null);
-              setL5JokerOpen(false);
+              setL5PendingSalindaOp(null);
+              setL5SalindaOpen(false);
             } else {
               // Both done ג€” fire the step outcome.
               setL5ExIndex(2);
@@ -5732,10 +5732,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
           }
         };
         const onSlotTap = () => {
-          // If a joker sign is pending, placing it in the slot commits it.
-          if (l5PendingJokerOp !== null) {
-            setL5SelectedOp(l5PendingJokerOp);
-            setL5PendingJokerOp(null);
+          // If a salinda sign is pending, placing it in the slot commits it.
+          if (l5PendingSalindaOp !== null) {
+            setL5SelectedOp(l5PendingSalindaOp);
+            setL5PendingSalindaOp(null);
             return;
           }
           // Otherwise cycle through the four signs.
@@ -5746,7 +5746,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
         };
         const onOpCardTap = (op: L5Op) => {
           setL5SelectedOp(op);
-          setL5PendingJokerOp(null);
+          setL5PendingSalindaOp(null);
         };
         return (
           <>
@@ -5835,7 +5835,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 </Text>
               ) : null}
             </View>
-            {/* Op cards row + joker (all tappable). */}
+            {/* Op cards row + salinda (all tappable). */}
             <View
               pointerEvents="box-none"
               style={{ position: 'absolute', top: HEADER_COL_H + 260, left: 0, right: 0, alignItems: 'center', zIndex: 9100 }}
@@ -5855,7 +5855,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                     </View>
                   </TouchableOpacity>
                 ))}
-                <TouchableOpacity activeOpacity={0.85} onPress={() => setL5JokerOpen(true)}>
+                <TouchableOpacity activeOpacity={0.85} onPress={() => setL5SalindaOpen(true)}>
                   <View
                     style={{
                       width: 56, height: 72, borderRadius: 12, borderWidth: 2, borderColor: '#EAB308',
@@ -5864,7 +5864,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   >
                     <Text style={{ fontSize: 20, color: '#CA8A04', fontWeight: '900' }}>ג˜…</Text>
                     <Text style={{ fontSize: 10, color: '#CA8A04', fontWeight: '800', marginTop: 2 }}>
-                      {t('tutorial.l5.jokerLabel')}
+                      {t('tutorial.l5.salindaLabel')}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -5888,10 +5888,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                 </Text>
               </TouchableOpacity>
             </View>
-            {/* Joker modal ג€” reuse the same modal body as lesson 5b. Picking
-                a sign sets `l5PendingJokerOp`; the learner then taps the slot
+            {/* Salinda modal ג€” reuse the same modal body as lesson 5b. Picking
+                a sign sets `l5PendingSalindaOp`; the learner then taps the slot
                 to place it (or taps an op card directly). */}
-            {l5JokerOpen ? (
+            {l5SalindaOpen ? (
               <View
                 pointerEvents="auto"
                 style={{
@@ -5907,7 +5907,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                   }}
                 >
                   <Text style={{ color: '#FEF9C3', fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 16 }}>
-                    {t('tutorial.l5.jokerPickTitle')}
+                    {t('tutorial.l5.salindaPickTitle')}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center' }}>
                     {(['+', '-', 'x', '÷'] as L5Op[]).map((op) => (
@@ -5915,9 +5915,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                         key={op}
                         activeOpacity={0.85}
                         onPress={() => {
-                          setL5JokerOpen(false);
-                          setL5PendingJokerOp(op);
-                          tutorialBus.emitUserEvent({ kind: 'opSelected', op, via: 'joker' });
+                          setL5SalindaOpen(false);
+                          setL5PendingSalindaOp(op);
+                          tutorialBus.emitUserEvent({ kind: 'opSelected', op, via: 'salinda' });
                         }}
                         style={{
                           width: 54, height: 54, borderRadius: 12, backgroundColor: '#FFF7ED',
@@ -5929,7 +5929,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapJoker' | 'pickModal' 
                     ))}
                   </View>
                   <TouchableOpacity
-                    onPress={() => setL5JokerOpen(false)}
+                    onPress={() => setL5SalindaOpen(false)}
                     style={{ marginTop: 18, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 18, borderRadius: 10, backgroundColor: 'rgba(71,85,105,0.92)' }}
                   >
                     <Text style={{ color: '#fff', fontWeight: '800' }}>ג•</Text>

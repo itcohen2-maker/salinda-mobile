@@ -284,8 +284,8 @@ describe('solo mode reducer', () => {
       equationResult: 5,
       lastEquationDisplay: '2+2+1=5',
       equationHandSlots: [
-        { card: slotA, jokerAs: null },
-        { card: slotB, jokerAs: null },
+        { card: slotA, salindaAs: null },
+        { card: slotB, salindaAs: null },
       ],
       soloSessionStats: makeSoloStats({ startedAtMs: Date.now() - 4_500 }),
     };

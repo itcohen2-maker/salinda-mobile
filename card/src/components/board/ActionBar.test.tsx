@@ -17,9 +17,9 @@ jest.mock('../../hooks/useGame', () => ({
       hasPlayedCards: false,
       hasDrawnCard: false,
       activeOperation: null,
-      selectedCards: [{ id: 'joker-1' }],
+      selectedCards: [{ id: 'salinda-1' }],
       message: '',
-      jokerModalOpen: true,
+      salindaModalOpen: true,
     },
   }),
 }));
@@ -84,8 +84,8 @@ describe('ActionBar responsive layout', () => {
 
     render(<ActionBar />);
 
-    expect(StyleSheet.flatten(screen.getByTestId('action-bar-joker-grid').props.style).flexDirection).toBe('column');
+    expect(StyleSheet.flatten(screen.getByTestId('action-bar-salinda-grid').props.style).flexDirection).toBe('column');
     expect(StyleSheet.flatten(screen.getByTestId('action-bar-draw').props.style).width).toBe('100%');
-    expect(StyleSheet.flatten(screen.getByTestId('action-bar-joker-+').props.style).width).toBe('100%');
+    expect(StyleSheet.flatten(screen.getByTestId('action-bar-salinda-+').props.style).width).toBe('100%');
   });
 });

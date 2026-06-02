@@ -31,7 +31,7 @@ function makeRecordingApi(fanLength: number): {
   return { api, scrollCalls, pulseCalls };
 }
 
-describe('lesson-05 step 2 (joker-place) botDemo', () => {
+describe('lesson-05 step 2 (salinda-place) botDemo', () => {
   it('scrolls to the middle of a 5-card fan (Slinda at index 2)', async () => {
     const { api, scrollCalls, pulseCalls } = makeRecordingApi(5);
     const step = lesson05OpCycle.steps[1];

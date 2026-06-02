@@ -99,8 +99,8 @@ function opCard(op: Operation): Card {
   return { id: tutId(), type: 'operation', operation: op };
 }
 
-function jokerCard(): Card {
-  return { id: tutId(), type: 'joker' };
+function salindaCard(): Card {
+  return { id: tutId(), type: 'salinda' };
 }
 
 function wildCard(): Card {
@@ -241,12 +241,12 @@ export function generateTutorialHand(
     }
 
     case 2: {
-      // Round 3: joker card (user chooses operation)
+      // Round 3: salinda card (user chooses operation)
       const pick = pickOperationTarget(targets, lesson.enabledOperators, lesson.maxRange);
       if (pick) {
         targetEq = pick.target;
         solutionCards.push(numCard(pick.a), numCard(pick.b));
-        specialCards.push(jokerCard());
+        specialCards.push(salindaCard());
         if (variant === 1) {
           const fallbackOp = lesson.enabledOperators.find((op) => op !== '+');
           if (fallbackOp) specialCards.push(opCard(fallbackOp));
@@ -336,7 +336,7 @@ function generateBotHand(targets: EquationOption[], lesson: LessonConfig): Card[
 
   // Add special cards for bot demonstration per lesson
   if (lesson.index === 1) cards.push(opCard(lesson.enabledOperators[1] ?? 'x'));
-  if (lesson.index === 2) cards.push(jokerCard());
+  if (lesson.index === 2) cards.push(salindaCard());
   if (lesson.index === 3) cards.push(wildCard());
   if (lesson.index === 4 && lesson.fractionKinds?.length) {
     cards.push(fractionCard(lesson.fractionKinds[0]));

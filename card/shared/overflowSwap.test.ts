@@ -8,7 +8,7 @@ function makeNumber(id: string, value: number): Card {
 describe('overflow swap shared helpers', () => {
   it('orders hand cards the same way the fan is rendered', () => {
     const hand: Card[] = [
-      { id: 'joker', type: 'joker' },
+      { id: 'salinda', type: 'salinda' },
       { id: 'fraction', type: 'fraction', fraction: '1/3' },
       { id: 'wild', type: 'wild' },
       makeNumber('n-4', 4),
@@ -22,7 +22,7 @@ describe('overflow swap shared helpers', () => {
       'wild',
       'fraction',
       'operation',
-      'joker',
+      'salinda',
     ]);
   });
 

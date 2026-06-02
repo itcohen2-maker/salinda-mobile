@@ -33,7 +33,7 @@ export interface LessonConfig {
   /** Max number range for card values */
   maxRange: 12 | 25;
   /** Special card types that MUST be in the user's hand */
-  requiredSpecials: ('operation' | 'joker' | 'wild' | 'fraction' | 'identical')[];
+  requiredSpecials: ('operation' | 'salinda' | 'wild' | 'fraction' | 'identical')[];
   /** Whether this is free-play (no gating) */
   freePlay: boolean;
   /** Fraction kinds available (if showFractions) */
@@ -163,7 +163,7 @@ export const LESSONS: LessonConfig[] = [
       USER_CONFIRM_EQ, USER_STAGE, USER_CONFIRM_STAGED, USER_END],
   },
 
-  // Round 3: Joker card
+  // Round 3: Salinda card
   {
     index: 2,
     titleKey: 'tutorial.lesson3.title',
@@ -171,13 +171,13 @@ export const LESSONS: LessonConfig[] = [
     enabledOperators: ['+', '-', 'x'],
     showFractions: false,
     maxRange: 12,
-    requiredSpecials: ['joker'],
+    requiredSpecials: ['salinda'],
     freePlay: false,
     botSteps: [BOT_BEGIN, BOT_ROLL,
-      { actor: 'bot', gamePhase: 'building', allowedActions: [], textKey: 'tutorial.bot.useJoker', botDelayMs: 2500 },
+      { actor: 'bot', gamePhase: 'building', allowedActions: [], textKey: 'tutorial.bot.useSalinda', botDelayMs: 2500 },
       BOT_STAGE, BOT_END],
     userSteps: [USER_BEGIN, USER_ROLL,
-      { actor: 'user', gamePhase: 'building', allowedActions: ['SELECT_EQ_JOKER', 'OPEN_JOKER_MODAL'], textKey: 'tutorial.hint.useJoker' },
+      { actor: 'user', gamePhase: 'building', allowedActions: ['SELECT_EQ_SALINDA', 'OPEN_SALINDA_MODAL'], textKey: 'tutorial.hint.useSalinda' },
       USER_CONFIRM_EQ, USER_STAGE, USER_CONFIRM_STAGED, USER_END],
   },
 

@@ -39,7 +39,7 @@ export type MimicAction =
   | { type: 'EXIT' };
 
 /** Last core lesson index (0-based) before optional fractions branch.
- *  Core lessons: 0 fan, 1 tap, 2 dice, 3 equation, 4 op-cycle+joker,
+ *  Core lessons: 0 fan, 1 tap, 2 dice, 3 equation, 4 op-cycle+salinda,
  *  5 possible-results (chip + mini-cards + wild-card handoff). */
 export const MIMIC_LAST_CORE_LESSON_INDEX = 5;
 

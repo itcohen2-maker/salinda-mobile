@@ -29,7 +29,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AnimatedDice, { type AnimatedDiceHandle, GoldDieFace } from '../../AnimatedDice';
-import { GameCard, type Card } from '../../components/CardDesign';
+import { GameCard, type Card, type Operation } from '../../components/CardDesign';
 import HandFan from '../../components/HandFan';
 import { GoldButton } from '../../components/GoldButton';
 import OperatorGlyph from '../components/ui/OperatorGlyph';
@@ -45,44 +45,80 @@ type StepId = 'plus' | 'minus';
 const STEP_OP: Record<StepId, '+' | '-'> = { plus: '+', minus: '-' };
 
 const SEEDED_DICE: [number, number, number] = [2, 4, 5];
-const OPERATOR_PRACTICE_DICE: [number, number, number] = [5, 2, 4];
 const FIXED_HAND_VALUES = [12, 6, 3, 9, 15, 20, 1] as const;
-const OPERATOR_LESSON_HAND: Card[] = [
+const OPERATOR_PRACTICE_DICE: [number, number, number] = [5, 2, 4];
+const SALINDA_OPERATOR_HAND: Card[] = [
   { id: 'op-lesson-num-12', type: 'number', value: 12 },
   { id: 'op-lesson-num-9', type: 'number', value: 9 },
   { id: 'op-lesson-target-3', type: 'number', value: 3 },
-  { id: 'op-lesson-minus', type: 'operation', operation: '-' },
+  { id: 'op-lesson-salinda', type: 'salinda' },
   { id: 'op-lesson-num-6', type: 'number', value: 6 },
   { id: 'op-lesson-num-15', type: 'number', value: 15 },
   { id: 'op-lesson-num-1', type: 'number', value: 1 },
 ];
-const OPERATOR_LESSON_MINUS_ID = 'op-lesson-minus';
+const OPERATOR_LESSON_SALINDA_ID = 'op-lesson-salinda';
 const OPERATOR_LESSON_TARGET_ID = 'op-lesson-target-3';
-const JOKER_INTRO_HAND: Card[] = [
-  { id: 'joker-intro-num-2', type: 'number', value: 2 },
-  { id: 'joker-intro-num-5', type: 'number', value: 5 },
-  { id: 'joker-intro-num-11', type: 'number', value: 11 },
-  { id: 'joker-intro-card', type: 'joker' },
-  { id: 'joker-intro-num-7', type: 'number', value: 7 },
-  { id: 'joker-intro-num-10', type: 'number', value: 10 },
-  { id: 'joker-intro-num-13', type: 'number', value: 13 },
+type SalindaOperatorStage = 'tapSalinda' | 'chooseOperator' | 'placeOperator' | 'selectTarget';
+const OPERATOR_PLUS_CARD_ID = 'operator-training-plus';
+const OPERATOR_MINUS_CARD_ID = 'operator-training-minus';
+const OPERATOR_TARGET_CARD_ID = 'operator-training-target-3';
+const OPERATOR_TRAINING_HAND: Card[] = [
+  { id: 'operator-training-num-6', type: 'number', value: 6 },
+  { id: OPERATOR_PLUS_CARD_ID, type: 'operation', operation: '+' },
+  { id: 'operator-training-num-8', type: 'number', value: 8 },
+  { id: OPERATOR_MINUS_CARD_ID, type: 'operation', operation: '-' },
+  { id: OPERATOR_TARGET_CARD_ID, type: 'number', value: 3 },
+  { id: 'operator-training-num-11', type: 'number', value: 11 },
 ];
-const JOKER_PRACTICE_HAND: Card[] = [
-  { id: 'joker-practice-num-2', type: 'number', value: 2 },
-  { id: 'joker-practice-num-5', type: 'number', value: 5 },
-  { id: 'joker-practice-num-11', type: 'number', value: 11 },
-  { id: 'joker-practice-card', type: 'joker', resolvedValue: 8 },
-  { id: 'joker-practice-num-7', type: 'number', value: 7 },
-  { id: 'joker-practice-num-10', type: 'number', value: 10 },
-  { id: 'joker-practice-num-13', type: 'number', value: 13 },
+const OPERATOR_INTRO_TEXT = 'הכירו את קלפי הסימן +, -, *, /. הציבו אותם בתרגיל וכך תיפטרו מהם';
+const OPERATOR_SLOT_HINT_TEXT = 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה.';
+const OPERATOR_READY_TEXT = "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
+
+// ── Specials sequence (three continuous on-board substeps) ──────────────────
+// Substep 1 — sign cards (+/-): the board is pre-seeded with 5 _ 2 = 3; the hand
+// carries the minus sign card plus the target number 3.
+const SIGN_STEP_DICE: [number, number, number] = [5, 2, 4];
+const SIGN_MINUS_ID = 'sign-minus';
+const SIGN_TARGET_ID = 'sign-target-3';
+const SIGN_HAND: Card[] = [
+  { id: 'sign-num-7', type: 'number', value: 7 },
+  { id: SIGN_MINUS_ID, type: 'operation', operation: '-' },
+  { id: SIGN_TARGET_ID, type: 'number', value: 3 },
+  { id: 'sign-num-9', type: 'number', value: 9 },
+  { id: 'sign-num-5', type: 'number', value: 5 },
 ];
-const JOKER_INTRO_ID = 'joker-intro-card';
-const JOKER_PRACTICE_ID = 'joker-practice-card';
+
+// Substep 2 — Salinda wild operator: the board is pre-seeded with 4 _ 3 = 12; the
+// hand carries the gold Salinda plus the target number 12. The correct sign is ×.
+const SALINDA_STEP_DICE: [number, number, number] = [4, 3, 6];
+const SALINDA_CARD_ID = 'salinda-wild';
+const SALINDA_TARGET_ID = 'salinda-target-12';
+const SALINDA_HAND: Card[] = [
+  { id: 'salinda-num-5', type: 'number', value: 5 },
+  { id: SALINDA_CARD_ID, type: 'salinda' },
+  { id: SALINDA_TARGET_ID, type: 'number', value: 12 },
+  { id: 'salinda-num-7', type: 'number', value: 7 },
+  { id: 'salinda-num-9', type: 'number', value: 9 },
+];
+
+// Substep 3 — wild number card: the board shows the ready equation 6 + 2 = ?; the
+// wild card fills the missing 8. The hand never already contains an 8.
+const WILD_STEP_DICE: [number, number] = [6, 2];
+const WILD_CARD_ID = 'wild-number';
+const WILD_RESULT = 8;
+const WILD_HAND: Card[] = [
+  { id: 'wild-num-4', type: 'number', value: 4 },
+  { id: WILD_CARD_ID, type: 'wild' },
+  { id: 'wild-num-7', type: 'number', value: 7 },
+  { id: 'wild-num-2', type: 'number', value: 2 },
+  { id: 'wild-num-5', type: 'number', value: 5 },
+];
+
 const SEND_BUTTON_WIDTH = 180;
-const SEND_BUTTON_HEIGHT = 30;
+const SEND_BUTTON_HEIGHT = 50;
 const SEND_BUTTON_RADIUS = 12;
 const SEND_BUTTON_RAISE = 5;
-const SEND_BUTTON_FONT_SIZE = 13;
+const SEND_BUTTON_FONT_SIZE = 22;
 
 // ── A round: the three landed dice (inputs) and the fixed operator for this
 // guided step.
@@ -254,10 +290,21 @@ function SuccessCelebration({ onDone }: { onDone?: () => void }) {
   );
 }
 
-function MiniOperatorCard({ op }: { op: '+' | '-' }) {
+function MiniOperatorCard({ op }: { op: Operation }) {
   return (
     <LinearGradient colors={['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C']} locations={[0, 0.35, 0.68, 1]} style={styles.operatorMiniCard}>
-      <Text style={styles.operatorMiniText}>{op}</Text>
+      <OperatorGlyph op={op} color="#3D2A0E" size={26} />
+    </LinearGradient>
+  );
+}
+
+function MiniSalindaOperatorCard({ op }: { op: Operation }) {
+  return (
+    <LinearGradient colors={['#FFF7CC', '#F8E08E', '#D9A23A', '#2E7D43']} locations={[0, 0.32, 0.68, 1]} style={styles.operatorMiniCard}>
+      <Text style={styles.salindaMiniLetter}>S</Text>
+      <View style={styles.salindaMiniOpWrap}>
+        <OperatorGlyph op={op} color="#3D2A0E" size={22} />
+      </View>
     </LinearGradient>
   );
 }
@@ -272,16 +319,18 @@ function SpecialEquationTrack({
   pulse,
   onPlaceOperator,
   resultGlow = false,
+  salindaOperator = false,
 }: {
   left: number;
   right: number;
-  op: '+' | '-';
+  op: Operation;
   result: number;
   operatorInserted: boolean;
   operatorReady: boolean;
   pulse: Animated.Value;
   onPlaceOperator?: () => void;
   resultGlow?: boolean;
+  salindaOperator?: boolean;
 }) {
   const copy = useGoldRoomCopy();
   const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.9] });
@@ -294,7 +343,7 @@ function SpecialEquationTrack({
           style={[styles.operatorHoleGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]}
         />
       ) : null}
-      {operatorInserted ? <MiniOperatorCard op={op} /> : <Text style={styles.operatorHoleHint}>?</Text>}
+      {operatorInserted ? (salindaOperator ? <MiniSalindaOperatorCard op={op} /> : <MiniOperatorCard op={op} />) : null}
     </View>
   );
 
@@ -313,260 +362,511 @@ function SpecialEquationTrack({
   );
 }
 
-function FlyingSpecialCard({ card, onDone, variant = 'card' }: { card: Card; onDone: () => void; variant?: 'card' | 'joker' }) {
+function FlyingSpecialCard({ card, onDone, variant = 'card' }: { card: Card; onDone: () => void; variant?: 'card' | 'salinda' }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    void playSfx(variant === 'joker' ? 'complete' : 'success', { cooldownMs: 0, volumeOverride: variant === 'joker' ? 0.9 : 0.75 });
+    void playSfx(variant === 'salinda' ? 'complete' : 'success', { cooldownMs: 0, volumeOverride: variant === 'salinda' ? 0.9 : 0.75 });
     const animation = Animated.timing(a, { toValue: 1, duration: 700, useNativeDriver: true });
     animation.start(onDone);
     return () => animation.stop();
   }, [a, onDone, variant]);
 
   const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -360] });
-  const translateX = a.interpolate({ inputRange: [0, 1], outputRange: [0, variant === 'joker' ? 96 : 42] });
-  const rotate = a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', variant === 'joker' ? '28deg' : '14deg'] });
-  const scale = a.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, variant === 'joker' ? 1.18 : 1.1, 0.66] });
+  const translateX = a.interpolate({ inputRange: [0, 1], outputRange: [0, variant === 'salinda' ? 96 : 42] });
+  const rotate = a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', variant === 'salinda' ? '28deg' : '14deg'] });
+  const scale = a.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, variant === 'salinda' ? 1.18 : 1.1, 0.66] });
   const opacity = a.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, 1, 0] });
 
   return (
     <View pointerEvents="none" style={styles.flyingLayer}>
       <Animated.View style={{ opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }}>
-        <GameCard card={card} selected={variant === 'joker'} small onPress={undefined} />
+        <GameCard card={card} selected={variant === 'salinda'} small onPress={undefined} />
       </Animated.View>
     </View>
   );
 }
 
-type SpecialsStage = 'minus' | 'jokerIntro' | 'jokerPractice';
-
-function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
-  const copy = useGoldRoomCopy();
-  const { width: winW } = useWindowDimensions();
-  const fanW = Math.min(winW, 480);
-  const [stage, setStage] = useState<SpecialsStage>('minus');
-  const [hand, setHand] = useState<Card[]>(OPERATOR_LESSON_HAND);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [operatorInserted, setOperatorInserted] = useState(false);
-  const [resolving, setResolving] = useState(false);
-  const [flyingCard, setFlyingCard] = useState<Card | null>(null);
-  const slotPulse = useRef(new Animated.Value(0)).current;
-  const sendPulse = useRef(new Animated.Value(1)).current;
-  const jokerPulse = useRef(new Animated.Value(0)).current;
-
-  const selectedCard = useMemo(() => hand.find((card) => card.id === selectedId) ?? null, [hand, selectedId]);
-  const selectedIds = useMemo(() => (selectedId ? new Set([selectedId]) : new Set<string>()), [selectedId]);
-  const minusSelected = stage === 'minus' && selectedCard?.type === 'operation' && selectedCard.operation === '-';
-  const targetSelected = stage === 'minus' && operatorInserted && selectedCard?.type === 'number' && selectedCard.value === 3;
-  const jokerSelected = stage === 'jokerPractice' && selectedCard?.type === 'joker';
-  const operatorReady = minusSelected && !operatorInserted && !resolving;
-  const sendReady = targetSelected || jokerSelected;
-  const focusedFanCardId =
-    stage === 'minus'
-      ? operatorInserted
-        ? OPERATOR_LESSON_TARGET_ID
-        : OPERATOR_LESSON_MINUS_ID
-      : stage === 'jokerIntro'
-        ? JOKER_INTRO_ID
-        : JOKER_PRACTICE_ID;
-
-  const instructionText = useMemo(() => {
-    if (stage === 'jokerIntro') {
-      return copy.jokerIntro;
-    }
-    if (stage === 'jokerPractice') {
-      if (jokerSelected) return copy.jokerSelected;
-      return copy.jokerPractice;
-    }
-    if (operatorInserted) return copy.operatorReady;
-    if (minusSelected) return copy.minusSlotReady;
-    return copy.minusIntro;
-  }, [copy, jokerSelected, minusSelected, operatorInserted, stage]);
-  const buttonLabel = useMemo(() => {
-    if (stage === 'jokerIntro') return copy.gotIt;
-    if ((stage === 'minus' && operatorInserted) || jokerSelected) return copy.launch;
-    return copy.chooseCards;
-  }, [copy, jokerSelected, operatorInserted, stage]);
-
-  const buttonPulseReady = (stage === 'minus' && operatorInserted) || sendReady;
+// ── A reusable looping pulse: runs `value` between `from`↔`to` while `active`,
+// and snaps back to `from` (stopping the loop) the instant it turns off. Used for
+// the operator-slot glow hint and the launch-button "ready" pulse.
+function usePulseLoop(value: Animated.Value, active: boolean, from: number, to: number, duration: number) {
   useEffect(() => {
-    if (!operatorReady) {
-      slotPulse.stopAnimation();
-      slotPulse.setValue(0);
+    if (!active) {
+      value.stopAnimation();
+      value.setValue(from);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(slotPulse, { toValue: 1, duration: 520, useNativeDriver: true }),
-        Animated.timing(slotPulse, { toValue: 0, duration: 520, useNativeDriver: true }),
+        Animated.timing(value, { toValue: to, duration, useNativeDriver: true }),
+        Animated.timing(value, { toValue: from, duration, useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [operatorReady, slotPulse]);
+  }, [active, duration, from, to, value]);
+}
 
-  useEffect(() => {
-    if (!buttonPulseReady) {
-      sendPulse.stopAnimation();
-      sendPulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sendPulse, { toValue: 1.055, duration: 460, useNativeDriver: true }),
-        Animated.timing(sendPulse, { toValue: 1, duration: 460, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [buttonPulseReady, sendPulse]);
-
-  useEffect(() => {
-    const shouldPulseJoker = stage === 'jokerIntro' || stage === 'jokerPractice';
-    if (!shouldPulseJoker) {
-      jokerPulse.stopAnimation();
-      jokerPulse.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(jokerPulse, { toValue: 1, duration: 680, useNativeDriver: true }),
-        Animated.timing(jokerPulse, { toValue: 0, duration: 680, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [jokerPulse, stage]);
-
-  const canTapCard = useCallback((card: Card) => {
-    if (resolving) return false;
-    if (stage === 'minus') {
-      if (!operatorInserted) return card.type === 'operation' && card.operation === '-';
-      return card.type === 'number' && card.value === 3;
-    }
-    if (stage === 'jokerPractice') return card.type === 'joker';
-    return false;
-  }, [operatorInserted, resolving, stage]);
-
-  const tapCard = useCallback((card: Card) => {
-    if (!canTapCard(card)) return;
-    if (card.type === 'joker') {
-      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.42 });
-    }
-    setSelectedId((current) => (current === card.id ? null : card.id));
-  }, [canTapCard]);
-
-  const placeOperator = useCallback(() => {
-    if (!operatorReady || !selectedId) return;
-    void playSfx('place', { cooldownMs: 0, volumeOverride: 0.4 });
-    setOperatorInserted(true);
-    setHand((cards) => cards.filter((card) => card.id !== selectedId));
-    setSelectedId(null);
-  }, [operatorReady, selectedId]);
-
-  const advanceToJokerPractice = useCallback(() => {
-    setStage('jokerPractice');
-    setHand(JOKER_PRACTICE_HAND);
-    setSelectedId(null);
-    setResolving(false);
-    setFlyingCard(null);
-  }, []);
-
-  const launch = useCallback(() => {
-    if (resolving) return;
-    if (stage === 'jokerIntro') {
-      advanceToJokerPractice();
-      return;
-    }
-    if (!sendReady || !selectedCard) return;
-    setResolving(true);
-    setFlyingCard(selectedCard);
-  }, [advanceToJokerPractice, resolving, selectedCard, sendReady, stage]);
-
-  const handleFlyingDone = useCallback(() => {
-    if (stage === 'minus') {
-      setStage('jokerIntro');
-      setHand(JOKER_INTRO_HAND);
-      setSelectedId(null);
-      setResolving(false);
-      setFlyingCard(null);
-      return;
-    }
-    onComplete?.();
-  }, [onComplete, stage]);
-
-  const equation = stage === 'minus'
-    ? { dice: OPERATOR_PRACTICE_DICE, left: 5, right: 2, op: '-' as const, result: 3, operatorInserted }
-    : { dice: [4, 4] as const, left: 4, right: 4, op: '+' as const, result: 8, operatorInserted: true };
-  const jokerScale = jokerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.045] });
-  const jokerHaloOpacity = jokerPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.82] });
-
+// ── The wild-card track (substep 3): a READY equation with a fixed operator,
+// where the RESULT slot is the empty target the wild card fills in (and then
+// pulses gold).
+function WildEquationTrack({ left, right, op, result, filled, pulse }: { left: number; right: number; op: Operation; result: number; filled: boolean; pulse: Animated.Value }) {
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.95] });
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.12] });
   return (
-    <View style={styles.root} pointerEvents={resolving ? 'none' : 'auto'}>
-      <InstructionBanner text={instructionText} />
+    <View style={styles.track}>
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{left}</Text></View>
+      <View style={styles.trackOperatorGlyph}><OperatorGlyph op={op} color="#F8E08E" size={32} /></View>
+      <View style={[styles.slot, styles.slotFilled]}><Text style={styles.slotTxt}>{right}</Text></View>
+      <Text style={styles.equals}>=</Text>
+      <View style={[styles.slot, styles.resultSlot, filled && styles.resultSlotGlow]}>
+        {filled ? (
+          <Animated.View pointerEvents="none" style={[styles.resultGlowRing, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+        ) : null}
+        <Text style={styles.slotTxt}>{filled ? result : '?'}</Text>
+      </View>
+    </View>
+  );
+}
 
+// ── Shared on-board shell for every specials substep: instruction banner pinned
+// at the top, the gold table with the seeded dice / equation track / fixed-width
+// launch button centered on it, then the hand fan below — plus optional selector
+// + flying-card overlays. Fades in on mount so each substep reads as a fresh
+// "board refresh".
+function SpecialsBoard({
+  instruction,
+  dice,
+  resolving,
+  track,
+  button,
+  fan,
+  overlay,
+  selector,
+}: {
+  instruction: string;
+  dice?: number[];
+  resolving: boolean;
+  track: React.ReactNode;
+  button: React.ReactNode;
+  fan: React.ReactNode;
+  overlay?: React.ReactNode;
+  selector?: React.ReactNode;
+}) {
+  const intro = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(intro, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+  }, [intro]);
+  return (
+    <Animated.View style={[styles.root, { opacity: intro }]} pointerEvents={resolving ? 'none' : 'auto'}>
+      <InstructionBanner text={instruction} />
       <View style={styles.playArea}>
         <View style={styles.tableZone}>
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
           <View style={styles.tableOverlay} pointerEvents="box-none">
             <View style={styles.operatorLessonArea}>
-              <View style={styles.diceRow}>
-                {equation.dice.map((value, idx) => (
-                  <View key={idx} style={styles.diceChip}>
-                    <GoldDieFace value={value} size={48} />
-                  </View>
-                ))}
-              </View>
-              <SpecialEquationTrack
-                left={equation.left}
-                right={equation.right}
-                op={equation.op}
-                result={equation.result}
-                operatorInserted={equation.operatorInserted}
-                operatorReady={operatorReady}
-                pulse={slotPulse}
-                onPlaceOperator={placeOperator}
-                resultGlow={jokerSelected}
-              />
-              <Animated.View style={[styles.fixedActionWrap, { transform: [{ scale: sendPulse }] }]}>
-                <GoldButton
-                  label={buttonLabel}
-                  onPress={launch}
-                  disabled={stage !== 'jokerIntro' && !sendReady}
-                  fullWidth
-                  height={SEND_BUTTON_HEIGHT}
-                  radius={SEND_BUTTON_RADIUS}
-                  raise={SEND_BUTTON_RAISE}
-                  fontSize={SEND_BUTTON_FONT_SIZE}
-                  textStyle={styles.fixedActionText}
-                  accessibilityLabel={buttonLabel}
-                />
-              </Animated.View>
+              {dice ? (
+                <View style={styles.diceRow}>
+                  {dice.map((value, idx) => (
+                    <View key={idx} style={styles.diceChip}>
+                      <GoldDieFace value={value} size={48} />
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {track}
+              {button}
             </View>
           </View>
         </View>
       </View>
-
       <View style={styles.fanWrap} pointerEvents={resolving ? 'none' : 'box-none'}>
-        <Animated.View style={{ transform: [{ scale: stage === 'minus' ? 1 : jokerScale }] }}>
-          {stage !== 'minus' ? (
-            <Animated.View pointerEvents="none" style={[styles.jokerFanHalo, { opacity: jokerHaloOpacity }]} />
+        {fan}
+      </View>
+      {selector}
+      {overlay}
+    </Animated.View>
+  );
+}
+
+const SELECTOR_OPS: Operation[] = ['+', '-'];
+
+function SalindaOperatorSelector({ title, body, onPick, onClose }: { title: string; body: string; onPick: (op: Operation) => void; onClose: () => void }) {
+  const copy = useGoldRoomCopy();
+  const scale = useRef(new Animated.Value(0.92)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 7, tension: 150, useNativeDriver: true }),
+    ]).start();
+  }, [opacity, scale]);
+
+  return (
+    <View style={styles.selectorOverlay}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={copy.close} />
+      <Animated.View style={[styles.selectorCard, { opacity, transform: [{ scale }] }]}>
+        <Text style={styles.selectorTitle}>{title}</Text>
+        <Text style={styles.selectorBody}>{body}</Text>
+        <View style={styles.selectorOps}>
+          {SELECTOR_OPS.map((op) => (
+            <Pressable key={op} onPress={() => onPick(op)} accessibilityRole="button" accessibilityLabel={interpolateCopy(copy.chooseOperatorA11y, { op })} style={styles.selectorOpButton}>
+              <LinearGradient colors={['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C']} style={styles.selectorOpFace}>
+                <OperatorGlyph op={op} color="#3D2A0E" size={38} />
+              </LinearGradient>
+            </Pressable>
+          ))}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+type SpecialsStepId =
+  | 'signIntro'
+  | 'signPractice'
+  | 'salindaIntro'
+  | 'salindaPractice'
+  | 'wildIntro'
+  | 'wildPractice';
+
+const SIGN_INTRO_HAND: Card[] = [
+  { id: 'specials-intro-plus', type: 'operation', operation: '+' },
+  { id: 'specials-intro-minus', type: 'operation', operation: '-' },
+  { id: 'specials-intro-times', type: 'operation', operation: 'x' },
+  { id: 'specials-intro-divide', type: 'operation', operation: '÷' },
+];
+const SALINDA_INTRO_HAND: Card[] = [
+  { id: 'specials-salinda-intro-num-4', type: 'number', value: 4 },
+  { id: 'specials-salinda-intro-plus', type: 'operation', operation: '+' },
+  { id: 'specials-salinda-intro', type: 'salinda' },
+  { id: 'specials-salinda-intro-minus', type: 'operation', operation: '-' },
+  { id: 'specials-salinda-intro-num-9', type: 'number', value: 9 },
+];
+const SALINDA_PRACTICE_CARD_ID = 'specials-salinda-card';
+const SALINDA_PRACTICE_TARGET_ID = 'specials-salinda-target-6';
+const SALINDA_PRACTICE_HAND: Card[] = [
+  { id: 'specials-salinda-num-9', type: 'number', value: 9 },
+  { id: 'specials-salinda-num-4', type: 'number', value: 4 },
+  { id: SALINDA_PRACTICE_CARD_ID, type: 'salinda' },
+  { id: SALINDA_PRACTICE_TARGET_ID, type: 'number', value: 6 },
+  { id: 'specials-salinda-num-11', type: 'number', value: 11 },
+];
+const WILD_INTRO_HAND: Card[] = [
+  { id: 'specials-wild-intro-num-2', type: 'number', value: 2 },
+  { id: 'specials-wild-intro-num-6', type: 'number', value: 6 },
+  { id: 'specials-wild-intro', type: 'wild' },
+  { id: 'specials-wild-intro-num-10', type: 'number', value: 10 },
+  { id: 'specials-wild-intro-num-13', type: 'number', value: 13 },
+];
+const WILD_PRACTICE_CARD_ID = 'specials-wild-card';
+const WILD_PRACTICE_HAND: Card[] = [
+  { id: 'specials-wild-num-3', type: 'number', value: 3 },
+  { id: 'specials-wild-num-5', type: 'number', value: 5 },
+  { id: WILD_PRACTICE_CARD_ID, type: 'wild' },
+  { id: 'specials-wild-num-10', type: 'number', value: 10 },
+  { id: 'specials-wild-num-13', type: 'number', value: 13 },
+];
+
+function OperatorCardsLesson({ onComplete }: { onComplete?: () => void }) {
+  const { width: winW } = useWindowDimensions();
+  const fanW = Math.min(winW, 480);
+  const [step, setStep] = useState<SpecialsStepId>('signIntro');
+  const [hand, setHand] = useState<Card[]>(SIGN_INTRO_HAND);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [signOperatorPlaced, setSignOperatorPlaced] = useState(false);
+  const [salindaOperator, setSalindaOperator] = useState<Operation | null>(null);
+  const [salindaOperatorPlaced, setSalindaOperatorPlaced] = useState(false);
+  const [salindaModalOpen, setSalindaModalOpen] = useState(false);
+  const [wildPlaced, setWildPlaced] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [flyingCard, setFlyingCard] = useState<Card | null>(null);
+  const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slotPulse = useRef(new Animated.Value(0)).current;
+  const buttonPulse = useRef(new Animated.Value(1)).current;
+  const fanPulse = useRef(new Animated.Value(0)).current;
+  const fanShake = useRef(new Animated.Value(0)).current;
+
+  const selectedCard = useMemo(() => hand.find((card) => card.id === selectedCardId) ?? null, [hand, selectedCardId]);
+  const selectedIds = useMemo(() => (selectedCardId ? new Set([selectedCardId]) : new Set<string>()), [selectedCardId]);
+  const isIntroStep = step === 'signIntro' || step === 'salindaIntro' || step === 'wildIntro';
+  const signSlotReady = step === 'signPractice' && selectedCardId === OPERATOR_MINUS_CARD_ID && !signOperatorPlaced && !resolving;
+  const signTargetSelected = step === 'signPractice' && signOperatorPlaced && selectedCardId === OPERATOR_TARGET_CARD_ID;
+  const salindaSlotReady = step === 'salindaPractice' && salindaOperator === '+' && !salindaOperatorPlaced && !resolving;
+  const salindaTargetSelected = step === 'salindaPractice' && salindaOperatorPlaced && selectedCardId === SALINDA_PRACTICE_TARGET_ID;
+  const wildReady = step === 'wildPractice' && wildPlaced && !resolving;
+  const launchReady = signTargetSelected || salindaTargetSelected || wildReady;
+  const actionLabel = isIntroStep ? 'הבנתי, בוא נתרגל!' : launchReady ? 'שגר' : 'בחר קלפים';
+  const actionDisabled = !isIntroStep && !launchReady;
+  const fanCenterCardId = useMemo(() => {
+    if (step === 'signPractice') return signOperatorPlaced ? OPERATOR_TARGET_CARD_ID : OPERATOR_MINUS_CARD_ID;
+    if (step === 'salindaPractice') return salindaOperatorPlaced ? SALINDA_PRACTICE_TARGET_ID : SALINDA_PRACTICE_CARD_ID;
+    if (step === 'wildPractice' && !wildPlaced) return WILD_PRACTICE_CARD_ID;
+    return null;
+  }, [salindaOperatorPlaced, signOperatorPlaced, step, wildPlaced]);
+
+  usePulseLoop(slotPulse, signSlotReady || salindaSlotReady || (step === 'wildPractice' && !wildPlaced), 0, 1, 520);
+  usePulseLoop(buttonPulse, launchReady || isIntroStep || actionDisabled, 1, 1.055, 520);
+  usePulseLoop(fanPulse, isIntroStep, 0, 1, 720);
+
+  useEffect(() => (
+    () => {
+      if (transitionTimer.current) clearTimeout(transitionTimer.current);
+    }
+  ), []);
+
+  const resetTimers = useCallback(() => {
+    if (transitionTimer.current) {
+      clearTimeout(transitionTimer.current);
+      transitionTimer.current = null;
+    }
+  }, []);
+
+  const goToStep = useCallback((next: SpecialsStepId) => {
+    resetTimers();
+    setStep(next);
+    setSelectedCardId(null);
+    setResolving(false);
+    setFlyingCard(null);
+    setSalindaModalOpen(false);
+    if (next === 'signIntro') {
+      setHand(SIGN_INTRO_HAND);
+      setSignOperatorPlaced(false);
+    } else if (next === 'signPractice') {
+      setHand(OPERATOR_TRAINING_HAND);
+      setSignOperatorPlaced(false);
+    } else if (next === 'salindaIntro') {
+      setHand(SALINDA_INTRO_HAND);
+      setSalindaOperator(null);
+      setSalindaOperatorPlaced(false);
+    } else if (next === 'salindaPractice') {
+      setHand(SALINDA_PRACTICE_HAND);
+      setSalindaOperator(null);
+      setSalindaOperatorPlaced(false);
+    } else if (next === 'wildIntro') {
+      setHand(WILD_INTRO_HAND);
+      setWildPlaced(false);
+    } else {
+      setHand(WILD_PRACTICE_HAND);
+      setWildPlaced(false);
+    }
+  }, [resetTimers]);
+
+  const completeAfterFlying = useCallback((nextStep?: SpecialsStepId) => {
+    transitionTimer.current = setTimeout(() => {
+      if (nextStep) {
+        goToStep(nextStep);
+      } else {
+        onComplete?.();
+      }
+    }, 700);
+  }, [goToStep, onComplete]);
+
+  const instructionText = useMemo(() => {
+    if (step === 'signIntro') return OPERATOR_INTRO_TEXT;
+    if (step === 'signPractice') {
+      if (signOperatorPlaced) return "התרגיל מושלם! לחצו על קלף 3 במניפה ואז על 'שגר' כדי להעיף אותו!";
+      if (selectedCardId === OPERATOR_MINUS_CARD_ID) return 'מצוין! עכשיו לחצו על חריץ הסימן הריק שבמשוואה למעלה.';
+      return OPERATOR_INTRO_TEXT;
+    }
+    if (step === 'salindaIntro') {
+      return 'הכירו את קלף סלינדה. הוא מכיל את כל הסימנים יחד! בחרו סימן, הציבו בתרגיל וכך תיפטרו מהקלף.';
+    }
+    if (step === 'salindaPractice') {
+      if (salindaOperatorPlaced) return "מבריק! לחצו על קלף 6 במניפה ואז על 'שגר' כדי להעיף אותו!";
+      if (salindaOperator === '+') return 'מעולה! עכשיו לחצו על חריץ הסימן הריק במשוואה כדי למקם את קלף סלינדה.';
+      return 'לחצו על קלף סלינדה במניפה כדי לבחור סימן.';
+    }
+    if (step === 'wildIntro') {
+      return 'חגיגה! הכירו את קלף הפרא — הקלף הכי חזק במשחק. הוא הופך לכל מספר שחסר לכם כדי להשלים את התרגיל!';
+    }
+    if (wildPlaced) return "הקלף הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח!";
+    return 'לחצו על קלף הפרא במניפה כדי להפוך אותו ל-8 ולהשלים את התרגיל.';
+  }, [salindaOperator, salindaOperatorPlaced, selectedCardId, signOperatorPlaced, step, wildPlaced]);
+
+  const canTapCard = useCallback((card: Card) => {
+    if (resolving || isIntroStep || salindaModalOpen) return false;
+    if (step === 'signPractice') {
+      if (!signOperatorPlaced) return card.id === OPERATOR_MINUS_CARD_ID || card.id === OPERATOR_PLUS_CARD_ID;
+      return card.id === OPERATOR_TARGET_CARD_ID;
+    }
+    if (step === 'salindaPractice') {
+      if (!salindaOperator) return card.id === SALINDA_PRACTICE_CARD_ID;
+      if (!salindaOperatorPlaced) return false;
+      return card.id === SALINDA_PRACTICE_TARGET_ID;
+    }
+    if (step === 'wildPractice') return !wildPlaced && card.id === WILD_PRACTICE_CARD_ID;
+    return false;
+  }, [isIntroStep, resolving, salindaModalOpen, salindaOperator, salindaOperatorPlaced, signOperatorPlaced, step, wildPlaced]);
+
+  const tapCard = useCallback((card: Card) => {
+    if (!canTapCard(card)) return;
+    if (step === 'signPractice' && !signOperatorPlaced && card.id === OPERATOR_PLUS_CARD_ID) {
+      void playSfx('errorSoft', { cooldownMs: 0, volumeOverride: 0.45 });
+      fanShake.setValue(0);
+      Animated.sequence([
+        Animated.timing(fanShake, { toValue: 1, duration: 55, useNativeDriver: true }),
+        Animated.timing(fanShake, { toValue: -1, duration: 55, useNativeDriver: true }),
+        Animated.timing(fanShake, { toValue: 0.55, duration: 50, useNativeDriver: true }),
+        Animated.timing(fanShake, { toValue: 0, duration: 50, useNativeDriver: true }),
+      ]).start();
+      return;
+    }
+    if (step === 'salindaPractice' && card.id === SALINDA_PRACTICE_CARD_ID) {
+      setSelectedCardId(card.id);
+      setSalindaModalOpen(true);
+      void playSfx('meterCelebrateIntro', { cooldownMs: 0, volumeOverride: 0.72 });
+      return;
+    }
+    if (step === 'wildPractice' && card.id === WILD_PRACTICE_CARD_ID) {
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.75 });
+      const resolvedWild: Card = { ...card, resolvedValue: 8 };
+      setSelectedCardId(null);
+      setWildPlaced(true);
+      setHand((cards) => cards.filter((item) => item.id !== WILD_PRACTICE_CARD_ID));
+      setFlyingCard(resolvedWild);
+      return;
+    }
+    setSelectedCardId(card.id);
+  }, [canTapCard, fanShake, signOperatorPlaced, step]);
+
+  const chooseSalindaOperator = useCallback((op: Operation) => {
+    if (op !== '+') {
+      void playSfx('errorSoft', { cooldownMs: 0, volumeOverride: 0.5 });
+      return;
+    }
+    setSalindaOperator('+');
+    setSalindaModalOpen(false);
+    void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
+  }, []);
+
+  const placeOperator = useCallback(() => {
+    if (signSlotReady) {
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.45 });
+      setHand((cards) => cards.filter((card) => card.id !== OPERATOR_MINUS_CARD_ID));
+      setSelectedCardId(null);
+      setSignOperatorPlaced(true);
+      return;
+    }
+    if (salindaSlotReady) {
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.45 });
+      setHand((cards) => cards.filter((card) => card.id !== SALINDA_PRACTICE_CARD_ID));
+      setSelectedCardId(null);
+      setSalindaOperatorPlaced(true);
+    }
+  }, [salindaSlotReady, signSlotReady]);
+
+  const launch = useCallback(() => {
+    if (resolving) return;
+    if (step === 'signIntro') {
+      goToStep('signPractice');
+      return;
+    }
+    if (step === 'salindaIntro') {
+      goToStep('salindaPractice');
+      return;
+    }
+    if (step === 'wildIntro') {
+      goToStep('wildPractice');
+      return;
+    }
+    if (step === 'signPractice' && signTargetSelected && selectedCard) {
+      setResolving(true);
+      setFlyingCard(selectedCard);
+      completeAfterFlying('salindaIntro');
+      return;
+    }
+    if (step === 'salindaPractice' && salindaTargetSelected && selectedCard) {
+      setResolving(true);
+      setFlyingCard(selectedCard);
+      completeAfterFlying('wildIntro');
+      return;
+    }
+    if (step === 'wildPractice' && wildReady) {
+      setResolving(true);
+      setFlyingCard({ id: 'specials-wild-final-8', type: 'wild', resolvedValue: 8 });
+      completeAfterFlying();
+    }
+  }, [completeAfterFlying, goToStep, resolving, salindaTargetSelected, selectedCard, signTargetSelected, step, wildReady]);
+
+  const fanScale = fanPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
+  const fanHaloOpacity = fanPulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.84] });
+  const fanShakeX = fanShake.interpolate({ inputRange: [-1, 1], outputRange: [-8, 8] });
+
+  const introTrack = (
+    <View style={styles.introBoardDim}>
+      <Text style={styles.introBoardDimText}>{step === 'signIntro' ? '+  -  x  ÷' : step === 'salindaIntro' ? 'S' : '★'}</Text>
+    </View>
+  );
+
+  const practiceTrack = step === 'wildPractice' ? (
+    <WildEquationTrack left={6} right={2} op="+" result={8} filled={wildPlaced} pulse={slotPulse} />
+  ) : (
+    <SpecialEquationTrack
+      left={step === 'salindaPractice' ? 4 : 5}
+      right={2}
+      op={step === 'salindaPractice' ? '+' : '-'}
+      result={step === 'salindaPractice' ? 6 : 3}
+      operatorInserted={step === 'salindaPractice' ? salindaOperatorPlaced : signOperatorPlaced}
+      operatorReady={step === 'salindaPractice' ? salindaSlotReady : signSlotReady}
+      pulse={slotPulse}
+      onPlaceOperator={placeOperator}
+      resultGlow={step === 'salindaPractice' ? salindaTargetSelected : signTargetSelected}
+      salindaOperator={step === 'salindaPractice'}
+    />
+  );
+
+  return (
+    <SpecialsBoard
+      instruction={instructionText}
+      resolving={resolving}
+      dice={isIntroStep ? undefined : step === 'salindaPractice' ? [4, 2, 5] : step === 'wildPractice' ? undefined : [5, 2, 4]}
+      track={isIntroStep ? introTrack : practiceTrack}
+      button={(
+        <Animated.View style={[styles.operatorActionWrap, { transform: [{ scale: buttonPulse }] }]}>
+          <GoldButton
+            label={actionLabel}
+            onPress={launch}
+            disabled={actionDisabled}
+            fullWidth
+            height={SEND_BUTTON_HEIGHT}
+            radius={SEND_BUTTON_RADIUS}
+            raise={SEND_BUTTON_RAISE}
+            fontSize={SEND_BUTTON_FONT_SIZE}
+            style={actionDisabled ? styles.litDisabledActionButton : undefined}
+            textStyle={styles.fixedActionText}
+            accessibilityLabel={actionLabel}
+          />
+        </Animated.View>
+      )}
+      fan={(
+        <Animated.View style={{ transform: [{ translateX: fanShakeX }, { scale: fanScale }] }}>
+          {isIntroStep ? (
+            <Animated.View pointerEvents="none" style={[styles.specialsFanHalo, { opacity: fanHaloOpacity }]} />
           ) : null}
           <HandFan
             cards={hand}
             width={fanW}
             selectedIds={selectedIds}
-            onTapCard={tapCard}
-            canTap={canTapCard}
-            centerCardId={focusedFanCardId}
+            onTapCard={isIntroStep ? undefined : tapCard}
+            canTap={isIntroStep ? undefined : canTapCard}
+            centerCardId={fanCenterCardId}
           />
         </Animated.View>
-      </View>
-
-      {flyingCard ? <FlyingSpecialCard card={flyingCard} onDone={handleFlyingDone} variant={stage === 'jokerPractice' ? 'joker' : 'card'} /> : null}
-    </View>
+      )}
+      selector={salindaModalOpen ? (
+        <SalindaOperatorSelector
+          title="בחרו סימן"
+          body="בחרו את הסימן שאתם צריכים כדי לפתור את התרגיל!"
+          onPick={chooseSalindaOperator}
+          onClose={() => setSalindaModalOpen(false)}
+        />
+      ) : null}
+      overlay={flyingCard ? <FlyingSpecialCard card={flyingCard} onDone={() => undefined} /> : null}
+    />
   );
 }
-
 type DiceEquationRoundProps = {
   onExit?: () => void;
   onComplete?: () => void;
@@ -986,6 +1286,18 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 14,
   },
+  resultGlowRing: {
+    position: 'absolute',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(248,224,142,0.22)',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 12,
+    elevation: 12,
+  },
   operatorMiniCard: {
     width: 32,
     height: 40,
@@ -1002,17 +1314,79 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     textAlign: 'center',
   },
+  salindaMiniLetter: {
+    position: 'absolute',
+    top: 3,
+    left: 5,
+    color: '#2E7D43',
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+  },
+  salindaMiniOpWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  salindaMiniOp: {
+    color: '#3D2A0E',
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+    textAlign: 'center',
+  },
   equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
   confirmWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 2 },
   checkPulseWrap: { alignSelf: 'center', width: SEND_BUTTON_WIDTH, borderRadius: SEND_BUTTON_RADIUS },
   fixedActionWrap: { alignSelf: 'center', width: SEND_BUTTON_WIDTH, borderRadius: SEND_BUTTON_RADIUS },
+  operatorActionWrap: { alignSelf: 'center', width: 280, maxWidth: '80%', borderRadius: SEND_BUTTON_RADIUS },
+  litDisabledActionButton: {
+    opacity: 1,
+    shadowColor: '#F8E08E',
+    shadowOpacity: 0.52,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
   fixedActionText: { textAlign: 'center' as const },
   confirmHint: { color: 'rgba(244,205,90,0.65)', fontSize: 14.5, fontWeight: '700', textAlign: 'center', marginTop: 8 },
+  introBoardDim: {
+    width: '100%',
+    minHeight: 126,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(244,205,90,0.18)',
+    backgroundColor: 'rgba(0,0,0,0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.72,
+  },
+  introBoardDimText: {
+    color: 'rgba(248,224,142,0.34)',
+    fontSize: 34,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
 
   // Hand fan — anchored low at the bottom of the screen, swipeable; only a small
   // safe-area gap below it (clear of the iPhone home indicator).
   fanWrap: { alignItems: 'center', paddingBottom: 28 },
-  jokerFanHalo: {
+  specialsFanHalo: {
+    position: 'absolute',
+    left: '50%',
+    top: 24,
+    width: 260,
+    height: 182,
+    marginLeft: -130,
+    borderRadius: 92,
+    backgroundColor: 'rgba(46,125,67,0.22)',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 24,
+    elevation: 18,
+  },
+  salindaFanHalo: {
     position: 'absolute',
     left: '50%',
     top: 28,
@@ -1026,6 +1400,63 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.85,
     shadowRadius: 18,
     elevation: 16,
+  },
+  selectorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    backgroundColor: 'rgba(8,5,2,0.68)',
+  },
+  selectorCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#F8E08E',
+    backgroundColor: 'rgba(20,12,4,0.96)',
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 18,
+  },
+  selectorTitle: {
+    color: '#F8E08E',
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  selectorBody: {
+    color: '#F5E6BF',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  selectorOps: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  selectorOpButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+  },
+  selectorOpFace: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#FFF1A8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // The matched card flying out toward the deck.

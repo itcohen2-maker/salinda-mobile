@@ -85,7 +85,7 @@ interface Task {
 }
 
 // The foundational tasks the learner must finish before the coin reward
-// unlocks. Fractions and the (still-locked) jokers task are NOT required.
+// unlocks. Fractions are not required.
 const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as const;
 
 // ---- Task: "היסודות" (the basics) ----
@@ -143,7 +143,7 @@ function buildTasks(copy: GoldRoomCopy): Task[] {
     { id: 'equation-practice', badge: '🎲', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true },
     { id: 'operations', badge: '⚡', title: copy.specialsTitle, desc: copy.specialsSteps.join(' · '), interactive: true },
     { id: 'fractions', badge: '½', title: copy.fractionsTitle, desc: copy.fractionsDesc },
-    { id: 'jokers', badge: '🃏', title: copy.jokersTitle, desc: copy.jokersDesc },
+    { id: 'salindas', badge: 'S', title: copy.salindasTitle, desc: copy.salindasDesc, interactive: true },
     { id: 'coin-collection', badge: '🪙', title: copy.coinsTitle, desc: copy.coinsDesc, reward: true },
   ];
 }
@@ -717,7 +717,7 @@ function TrainingTask({
           <View style={styles.controls}>
             <GoldButton label={copy.back} onPress={handleBack} accessibilityLabel={index > 0 ? copy.backPlain : copy.backToRoom} tone="stone" fontSize={16} />
             <Animated.View style={[styles.nextWrap, { transform: [{ scale: nextPulse }] }]}>
-              <GoldButton label={isLast ? copy.gotIt : copy.continue} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={18} />
+              <GoldButton label={isLast ? copy.gotIt : copy.continue} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={22} />
             </Animated.View>
           </View>
         </View>
@@ -825,6 +825,15 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
               </View>
               <View style={styles.interactiveBody}>
                 {activeTask.id === 'operations' ? (
+                  <DiceEquationRound
+                    mode="operators"
+                    onExit={() => setActiveTaskId(null)}
+                    onComplete={() => {
+                      markComplete(activeTask.id);
+                      setActiveTaskId(null);
+                    }}
+                  />
+                ) : activeTask.id === 'salindas' ? (
                   <SpecialCardsIntro
                     onDone={() => {
                       markComplete(activeTask.id);

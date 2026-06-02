@@ -45,9 +45,9 @@ export function generateDeck(difficulty: 'easy' | 'full'): Card[] {
     }
   }
 
-  // Joker cards: 4
+  // Salinda cards: 4
   for (let i = 0; i < 4; i++) {
-    cards.push({ id: makeId(), type: 'joker' })
+    cards.push({ id: makeId(), type: 'salinda' })
   }
 
   return cards

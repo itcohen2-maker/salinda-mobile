@@ -81,7 +81,7 @@ import {
   defendFractionSolve,
   defendFractionPenalty,
   playOperation,
-  playJoker,
+  playSalinda,
   drawCard,
   doEndTurn,
   getPlayerView,
@@ -252,7 +252,7 @@ function cardLabelForLocale(state: ServerGameState, cardId: string, locale: AppL
   if (card.type === 'fraction') return String(card.fraction ?? '?');
   if (card.type === 'operation') return String(card.operation ?? '?');
   if (card.type === 'wild') return t(locale, 'labels.wild');
-  if (card.type === 'joker') return t(locale, 'labels.joker');
+  if (card.type === 'salinda') return t(locale, 'labels.salinda');
   return '—';
 }
 
@@ -783,7 +783,7 @@ function handleBotBuilding(io: IOServer, room: Room, state: ServerGameState): vo
   }
 
   emitBotStepToast(io, room, (locale, name) => {
-    const jokerCommit = picked.equationCommits.find((c) => c.jokerAs != null);
+    const salindaCommit = picked.equationCommits.find((c) => c.salindaAs != null);
     const operationCommit = picked.equationCommits.find((c) => {
       const card = state.players[state.currentPlayerIndex]?.hand.find((h) => h.id === c.cardId);
       return card?.type === 'operation';
@@ -793,7 +793,7 @@ function handleBotBuilding(io: IOServer, room: Room, state: ServerGameState): vo
       name,
       equation: picked.equationDisplay,
       target: String(picked.target),
-      jokerOp: jokerCommit ? String(jokerCommit.jokerAs ?? '+') : undefined,
+      salindaOp: salindaCommit ? String(salindaCommit.salindaAs ?? '+') : undefined,
       operationLabel: operationCommit ? cardLabelForLocale(state, operationCommit.cardId, locale) : undefined,
     });
   });
@@ -1686,7 +1686,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       if (!cp) return { error: { key: 'game.invalidAction' } };
       const replacedCard = cp.hand.find((c) => c.id === cardId);
       if (!replacedCard) return { error: { key: 'game.invalidAction' } };
-      const newCard = { id: randomUUID(), type: 'joker' as const };
+      const newCard = { id: randomUUID(), type: 'salinda' as const };
       return {
         ...state,
         players: state.players.map((pl, idx) =>
@@ -1905,7 +1905,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     applyAction(io, socket, room, playerId, (state) => playOperation(state, cid));
   });
 
-  socket.on('play_joker', ({ cardId, chosenOperation }) => {
+  socket.on('play_salinda', ({ cardId, chosenOperation }) => {
     if (rateLimited()) return;
     const cid = validateCardId(cardId);
     const op = validateOperation(chosenOperation);
@@ -1921,7 +1921,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       socket.emit('error', { message: t(playerLocale(room, playerId), canAct.reason.key, canAct.reason.params) });
       return;
     }
-    applyAction(io, socket, room, playerId, (state) => playJoker(state, cid, op));
+    applyAction(io, socket, room, playerId, (state) => playSalinda(state, cid, op));
   });
 
   socket.on('draw_card', () => {

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import NumberCard from "@/components/NumberCard";
 import OperatorCard from "@/components/OperatorCard";
-import JokerCard from "@/components/JokerCard";
+import SalindaCard from "@/components/SalindaCard";
 import FractionCard from "@/components/FractionCard";
 import "@fontsource/fredoka/400.css";
 import "@fontsource/fredoka/700.css";
@@ -155,7 +155,7 @@ const Index = () => {
           })}
         </div>
 
-        {/* ─── Joker Card ─── */}
+        {/* ─── Salinda Card ─── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -169,7 +169,7 @@ const Index = () => {
             Special Card
           </h2>
           <p className="mt-3 text-muted-foreground text-lg">
-            The rare Joker card
+            The rare Salinda card
           </p>
         </motion.div>
 
@@ -179,7 +179,7 @@ const Index = () => {
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
             transition={{ duration: 0.5, delay: 1.0, type: "spring" }}
           >
-            <JokerCard />
+            <SalindaCard />
           </motion.div>
         </div>
       </div>

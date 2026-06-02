@@ -65,8 +65,8 @@ export type UserEvent =
   | { kind: 'eqUserPickedDice'; idx: number }
   | ({ kind: 'l4EquationProgress' } & L4EquationProgress)
   /** Lesson 5: learner chose an operation for the scratch equation slot
-   *  (by tapping the slot to cycle, or by picking one in the joker modal). */
-  | { kind: 'opSelected'; op: '+' | '-' | 'x' | '÷'; via: 'cycle' | 'joker' }
+   *  (by tapping the slot to cycle, or by picking one in the salinda modal). */
+  | { kind: 'opSelected'; op: '+' | '-' | 'x' | '÷'; via: 'cycle' | 'salinda' }
   /** Lesson 4 step 3 (guided full build) signals. `eqReadyToConfirm` fires
    *  continuously while the equation is valid but not yet confirmed — the
    *  tutorial uses it to switch into "press the confirm button" sub-phase.
@@ -79,13 +79,13 @@ export type UserEvent =
   | { kind: 'userPlayedCards'; count?: number; hasZero?: boolean; hasWild?: boolean; positiveNumberCount?: number }
   /** Lesson 5 (operation signs) progress signals. `l5AllSignsCycled` fires
    *  once the learner has cycled the `?` slot through all four operation
-   *  symbols (+, -, ×, ÷). `l5JokerPlaced` fires after the learner picked a
-   *  sign from the joker modal and then tapped the slot to place it. */
+   *  symbols (+, -, ×, ÷). `l5SalindaPlaced` fires after the learner picked a
+   *  sign from the salinda modal and then tapped the slot to place it. */
   | { kind: 'l5AllSignsCycled' }
-  | { kind: 'l5JokerModalOpened' }
-  | { kind: 'l5JokerPickedInModal'; op: '+' | '-' | 'x' | '÷' }
-  | { kind: 'l5JokerPlaced'; op: '+' | '-' | 'x' | '÷' }
-  | { kind: 'l5JokerFlowCompleted'; op: '+' | '-' | 'x' | '÷' }
+  | { kind: 'l5SalindaModalOpened' }
+  | { kind: 'l5SalindaPickedInModal'; op: '+' | '-' | 'x' | '÷' }
+  | { kind: 'l5SalindaPlaced'; op: '+' | '-' | 'x' | '÷' }
+  | { kind: 'l5SalindaFlowCompleted'; op: '+' | '-' | 'x' | '÷' }
   /** Lesson 5c (solve-for-op) signals. `l5OpSolveCorrect` fires each time
    *  the learner correctly confirms one of the two exercises; the final
    *  `l5OpExercisesDone` fires after both are done and drives the step
@@ -94,7 +94,7 @@ export type UserEvent =
   | { kind: 'l5OpSolveWrong' }
   | { kind: 'l5OpExercisesDone' }
   /** Lesson 5 "pick & place operator card" (the new step 5.2, inserted
-   *  between cycle-signs and joker-place). The learner picks an operator
+   *  between cycle-signs and salinda-place). The learner picks an operator
    *  card from their fan (like the real game) and drops it in the op1
    *  slot; `l5OpPickPlaceDone` fires after both exercises (first minus,
    *  then plus) are completed and drives the step outcome. Correct/wrong
@@ -102,7 +102,7 @@ export type UserEvent =
   | { kind: 'l5OpPickPlaceCorrect'; exerciseIdx: 0 | 1 }
   | { kind: 'l5OpPickPlaceWrong' }
   | { kind: 'l5OpPickPlaceDone' }
-  /** Fired every time the learner successfully places a non-joker
+  /** Fired every time the learner successfully places a non-salinda
    *  operator card (PLACE_EQ_OP) from their hand onto an op slot.
    *  The host uses it during L5 pick-place to detect correct vs wrong
    *  picks (and can be used by future lessons). */
@@ -197,7 +197,7 @@ let l5Config: { a: number; b: number } | null = null;
 let l4Step3Mode = false;
 let l4GuidedEqValidationMode = false;
 let l5GuidedMode = false;
-/** While true + L5 guided: hide the hand strip (step 5a — signs only; step 5b shows hand for joker). */
+/** While true + L5 guided: hide the hand strip (step 5a — signs only; step 5b shows hand for salinda). */
 let l5HideFan = false;
 
 /** While true, fan card taps during L5a are swallowed before reaching SELECT_EQ_OP. */
@@ -218,13 +218,13 @@ let l5aTargetResult: number | null = null;
  *  real game. */
 let l5BlockOpCycle = false;
 /** While true (L5.2 only), only Slinda can be tapped in the fan. */
-let l5bJokerOnlyMode = false;
+let l5bSalindaOnlyMode = false;
 
 /** While true, the player hand renders in the EXACT order that the
  *  tutorial rigged it — `sortHandCards` becomes a no-op. Used in L5.2
- *  (joker-place) so Slinda stays in the visual centre of the fan
+ *  (salinda-place) so Slinda stays in the visual centre of the fan
  *  (rigged as index 2 of 5) instead of being pushed to the end by the
- *  default "operations before jokers" sort rule. */
+ *  default "operations before salindas" sort rule. */
 let tutorialPreserveHandOrder = false;
 
 /** While true, fraction PLAY/DEFEND taps emit tutorial user events for outcomes. */
@@ -508,12 +508,12 @@ export const tutorialBus = {
     return l5BlockOpCycle;
   },
 
-  setL5bJokerOnlyMode(on: boolean): void {
-    l5bJokerOnlyMode = on;
+  setL5bSalindaOnlyMode(on: boolean): void {
+    l5bSalindaOnlyMode = on;
     notifyL5Ui();
   },
-  getL5bJokerOnlyMode(): boolean {
-    return l5bJokerOnlyMode;
+  getL5bSalindaOnlyMode(): boolean {
+    return l5bSalindaOnlyMode;
   },
 
   setTutorialPreserveHandOrder(on: boolean): void {
@@ -713,7 +713,7 @@ export const tutorialBus = {
     l5aDiceUnlocked = false;
     l5aTargetResult = null;
     l5BlockOpCycle = false;
-    l5bJokerOnlyMode = false;
+    l5bSalindaOnlyMode = false;
     tutorialPreserveHandOrder = false;
     fracGuidedMode = false;
     l6MiniLocked = false;

@@ -14,7 +14,7 @@ export function orderHandForFan(cards: readonly Card[]): Card[] {
     wild: 0,
     fraction: 1,
     operation: 2,
-    joker: 2,
+    salinda: 2,
   };
 
   return [...cards].sort((a, b) => {
@@ -32,8 +32,8 @@ export function orderHandForFan(cards: readonly Card[]): Card[] {
     if (a.type === 'operation' && b.type === 'operation') {
       return (a.operation ?? '').localeCompare(b.operation ?? '', 'en');
     }
-    if (a.type === 'operation' && b.type === 'joker') return -1;
-    if (a.type === 'joker' && b.type === 'operation') return 1;
+    if (a.type === 'operation' && b.type === 'salinda') return -1;
+    if (a.type === 'salinda' && b.type === 'operation') return 1;
 
     return 0;
   });
@@ -48,7 +48,7 @@ function incomingScore(card: Card): number {
   switch (card.type) {
     case 'wild':
       return 500;
-    case 'joker':
+    case 'salinda':
       return 400;
     case 'number':
       return 300 + Math.max(0, card.value ?? 0);
@@ -69,7 +69,7 @@ function outgoingScore(card: Card): number {
       return 400;
     case 'number':
       return 300 + Math.max(0, card.value ?? 0);
-    case 'joker':
+    case 'salinda':
       return 200;
     case 'wild':
       return 100;

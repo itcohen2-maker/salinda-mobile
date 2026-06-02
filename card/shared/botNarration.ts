@@ -9,7 +9,7 @@ export type BotNarrationInput =
   | { kind: 'defendFractionSolveWild'; name: string; card: string; value: string; penalty: string }
   | { kind: 'defendFractionSolveNumber'; name: string; card: string; penalty: string }
   | { kind: 'defendFractionPenalty'; name: string; penalty: string }
-  | { kind: 'confirmEquation'; name: string; equation: string; target: string; jokerOp?: string; operationLabel?: string }
+  | { kind: 'confirmEquation'; name: string; equation: string; target: string; salindaOp?: string; operationLabel?: string }
   | { kind: 'stageNumber'; name: string; card: string }
   | { kind: 'stageWild'; name: string; card: string }
   | { kind: 'stageOperation'; name: string; card: string }
@@ -81,8 +81,8 @@ export function renderBotNarration(tf: TranslateFn, input: BotNarrationInput): B
           equation: input.equation,
           target: input.target,
         }),
-        body: input.jokerOp != null
-          ? tf('botOffline.explain.confirmEquationJoker', { name: input.name, op: input.jokerOp })
+        body: input.salindaOp != null
+          ? tf('botOffline.explain.confirmEquationSalinda', { name: input.name, op: input.salindaOp })
           : input.operationLabel != null
             ? tf('botOffline.explain.confirmEquationOperation', { name: input.name, op: input.operationLabel })
             : '',

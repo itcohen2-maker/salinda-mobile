@@ -1,4 +1,4 @@
-﻿/** English strings — keys map 1:1 to he.ts */
+/** English strings — keys map 1:1 to he.ts */
 export const en: Record<string, string> = {
   'room.notFound': 'Room not found',
   'room.gameAlreadyStarted': 'Game already started',
@@ -44,8 +44,8 @@ export const en: Record<string, string> = {
   'equation.commitCardNotInHand': 'Equation card not found in hand',
   'equation.invalidCommitCard': 'Invalid card for equation',
   'equation.invalidOpPosition': 'Invalid operator slot',
-  'equation.chooseJokerOp': 'Choose an operation for Salinda',
-  'equation.regularOpNoJoker': 'A regular operation card does not need Salinda choice',
+  'equation.chooseSalindaOp': 'Choose an operation for Salinda',
+  'equation.regularOpNoSalinda': 'A regular operation card does not need Salinda choice',
   'equation.tooManyCommits': 'Too many operation cards in the equation',
   'equation.duplicateOpPosition': 'Duplicate operator slot in equation',
   'equation.duplicateCommitCard': 'Same card committed twice',
@@ -90,13 +90,13 @@ export const en: Record<string, string> = {
   'draw.cannotDrawNow': 'Cannot draw a card now',
 
   'operation.onlyInEquation': 'Operation cards are only used inside the equation',
-  'joker.onlyInEquation': 'Slinda is only used inside the equation',
+  'salinda.onlyInEquation': 'Slinda is only used inside the equation',
 
   'call.notAvailable': 'This action is not available',
 
   'labels.player': 'Player',
   'labels.wild': 'Wild',
-  'labels.joker': 'Slinda',
+  'labels.salinda': 'Slinda',
   'labels.wildWithValue': 'Wild ({{value}})',
 
   'toast.threeCardsLeft': '⚠️ {{name}} has only 3 cards left!',
@@ -404,7 +404,7 @@ export const en: Record<string, string> = {
 
   'gameTip.start': 'Start a game to see turn tips.',
   'gameTip.fractionDefend': 'Tip: Play a card divisible by {{d}} (or a wild with that value), a matching fraction, or draw 1 card.',
-  'gameTip.identical': 'Tip: Before rolling, you may play a card matching the top of the pile and skip the dice. This works for the same number, fraction, operator, joker on joker, and a wild on a number or wild.',
+  'gameTip.identical': 'Tip: Before rolling, you may play a card matching the top of the pile and skip the dice. This works for the same number, fraction, operator, salinda on salinda, and a wild on a number or wild.',
   'gameTip.rollOrMatch': 'Tip: Roll dice or check whether you have a card matching the top of the pile.',
   'gameTip.opInEquation': 'Tip: Use an operation / Slinda inside the equation to discard it.',
   'gameTip.buildEquation': 'Tip: Build an equation from the dice (2 or 3 dice).',
@@ -415,8 +415,8 @@ export const en: Record<string, string> = {
   'catalog.numberBody': 'Each card shows a value in {{range}}. Used in equations or to defend a fraction attack.',
   'catalog.opTitle': '➕ Operation card (+, −, ×, ÷)',
   'catalog.opBody': 'Place the sign in the equation to discard the card.',
-  'catalog.jokerTitle': 'Slinda',
-  'catalog.jokerBody': 'Choose which operation Slinda represents. Use her in the equation to discard the card. Cannot defend a fraction attack.',
+  'catalog.salindaTitle': 'Slinda',
+  'catalog.salindaBody': 'Choose which operation Slinda represents. Use her in the equation to discard the card. Cannot defend a fraction attack.',
   'catalog.wildTitle': '★ Wild',
   'catalog.wildBody': 'Counts as any value in the active range (beginner tracks: 0–12 or 0–25). Choose its value in the equation; it can also be played as a matching card.',
   'catalog.fracTitle': '½ ⅓ ¼ ⅕ Fraction',
@@ -425,7 +425,7 @@ export const en: Record<string, string> = {
   'rulesLine.numCard': 'Number — for equations or fraction defense.',
   'rulesLine.fracCard': '½ ⅓ ¼ ⅕ Fraction — attack: next player needs a divisible card, another fraction, or draws 1 card.',
   'rulesLine.opCard': '➕ Operation — place the sign in the equation to discard.',
-  'rulesLine.jokerCard': 'Slinda — pick her operation; use in the equation to discard. No fraction defense.',
+  'rulesLine.salindaCard': 'Slinda — pick her operation; use in the equation to discard. No fraction defense.',
   'rulesLine.wildCard': '★ Wild — any value in the active range (0–12/0–25 for beginners); can match when top is a number.',
 
   'ui.gotIt': 'Got it',
@@ -452,7 +452,7 @@ export const en: Record<string, string> = {
   'game.takePenalty': 'Take penalty',
   'game.drawCard': 'Draw card',
   'game.endTurn': 'End turn',
-  'game.pickJokerOp': 'Choose Slinda operation',
+  'game.pickSalindaOp': 'Choose Slinda operation',
   'game.yourHand': '{{name}}\'s hand',
   'game.discardPile': 'Discard',
   'game.discardEmpty': 'Empty',
@@ -500,7 +500,7 @@ export const en: Record<string, string> = {
   'cardLabel.number': 'Number',
   'cardLabel.fraction': 'Fraction',
   'cardLabel.operation': 'Op',
-  'cardLabel.joker': 'Slinda',
+  'cardLabel.salinda': 'Slinda',
   'sound.demoTitle': 'Sound demo',
   'sound.demoSubtitle': 'Lightweight sounds, strong feedback',
   'sound.back': 'Back',
@@ -516,7 +516,7 @@ export const en: Record<string, string> = {
   'startScreen.rulesAlt.line2': '2. Goal: Discard your cards. First to reach exactly 2 cards wins.',
   'startScreen.rulesAlt.t1': '3. Roll three dice and get a target number.',
   'startScreen.rulesAlt.t2': '4. Build an equation and play number cards that sum to the target.',
-  'startScreen.rulesAlt.t3': '5. Before rolling, you may immediately play a matching card: same number, same fraction, same operator, joker on joker, or a wild on a number/wild.',
+  'startScreen.rulesAlt.t3': '5. Before rolling, you may immediately play a matching card: same number, same fraction, same operator, salinda on salinda, or a wild on a number/wild.',
   'startScreen.rulesAlt.c1': '6. Triple dice: the roller gets an excellence-meter bonus.',
   'startScreen.rulesAlt.c2': '7. With one card left you must call near-finish or draw a penalty.',
   'startScreen.cardTypes': 'Card types',
@@ -547,7 +547,7 @@ export const en: Record<string, string> = {
   'guidance.welcomeBody': 'Welcome aboard. Do you want tactical tips and tutorial systems running alongside real-time loops?',
   'guidance.hint.matchTopCard': 'You have a card matching the top discard. Play it now and skip the dice.',
   'guidance.identicalTitle': '♻️ You have a matching card',
-  'guidance.identicalBody': 'The matching-card rule works only before rolling. You may play it immediately when it matches the top of the pile: same number, same fraction, same operator, joker on joker, or a wild on a number/wild.',
+  'guidance.identicalBody': 'The matching-card rule works only before rolling. You may play it immediately when it matches the top of the pile: same number, same fraction, same operator, salinda on salinda, or a wild on a number/wild.',
   'guidance.identicalShort': 'Before rolling: play a matching card to skip the dice.',
   'guidance.hint.drawFromDeck': 'No match yet? Draw a card from this deck.',
 
@@ -563,7 +563,7 @@ export const en: Record<string, string> = {
   'tutorial.multiPlayGiftZero.cta': 'Got it',
   'tutorial.identicalCard.title': 'Matching card',
   'tutorial.identicalCard.subtitle': 'Did you know?',
-  'tutorial.identicalCard.desc': 'This is an easy chance to get rid of a card before rolling the dice! You may immediately play a card matching the top of the pile: same number, same fraction, same operator, joker on joker, or a wild on a number/wild.',
+  'tutorial.identicalCard.desc': 'This is an easy chance to get rid of a card before rolling the dice! You may immediately play a card matching the top of the pile: same number, same fraction, same operator, salinda on salinda, or a wild on a number/wild.',
   'tutorial.identicalCard.opportunityDesc': 'This is an easy chance to get rid of a card before rolling the dice.',
   'tutorial.identicalCard.opportunityCallout': 'If you have a card matching the top of the pile, play it immediately.',
   'tutorial.identicalCard.opportunityHint': 'You skip the dice, drop a card from your hand, and get closer to finishing.',
@@ -697,7 +697,7 @@ export const en: Record<string, string> = {
   'legacy.notOperationCard': 'That is not an operation card!',
   'legacy.operationPlayed': 'Played operation {{op}}! End your turn.',
   'legacy.fractionPlayedMath': 'Played {{frac}}! {{top}} ÷ {{denom}} = {{result}}. End your turn.',
-  'legacy.jokerPlayedAs': 'Slinda played as {{op}}! End your turn.',
+  'legacy.salindaPlayedAs': 'Slinda played as {{op}}! End your turn.',
   'legacy.endTurnAfterPlay': 'You already played this turn! End your turn.',
   'legacy.noCardsToDraw': 'No cards left to draw!',
   'legacy.drewCardCount': 'Drew a card ({{n}} in hand)',
@@ -715,7 +715,7 @@ export const en: Record<string, string> = {
   'sound.label.complete': 'Complete',
   'sound.label.transition': 'Transition',
 
-  'joker.banner': '★ Slinda! ★',
+  'salinda.banner': '★ Slinda! ★',
 
   'wildModal.title': 'Wild — pick a value divisible by the denominator',
   'game.placeCards': 'Launch',
@@ -1120,7 +1120,7 @@ export const en: Record<string, string> = {
   'botOffline.explain.defendWild': '{{name}} chose wild card {{card}} (value {{value}}) divisible by {{penalty}}.',
   'botOffline.explain.defendPenalty': '{{name}} has no valid defense and draws 1 penalty card.',
   'botOffline.explain.confirmEquation': '{{name}} built an equation: {{equation}} (target {{target}}).',
-  'botOffline.explain.confirmEquationJoker': '{{name}} uses Slinda as {{op}} in the equation.',
+  'botOffline.explain.confirmEquationSalinda': '{{name}} uses Slinda as {{op}} in the equation.',
   'botOffline.explain.confirmEquationOperation': '{{name}} includes an operation card {{op}} in the equation.',
   'botOffline.explain.stageCard': '{{name}} places {{card}} from hand for the solved target.',
   'botOffline.explain.stageNumber': '{{name}} chooses number card {{card}} for the solved target.',
@@ -1183,7 +1183,7 @@ export const en: Record<string, string> = {
   'tutorial.bot.staging': 'Now I discard my cards to match the target.',
   'tutorial.bot.endTurn': 'Done! Your turn next.',
   'tutorial.bot.useOperation': 'I have an operation card! I can place it in the equation for more options.',
-  'tutorial.bot.useJoker': 'Slinda can be any operation — I choose the one I need.',
+  'tutorial.bot.useSalinda': 'Slinda can be any operation — I choose the one I need.',
   'tutorial.bot.useWild': 'My wild card can be any number! I set it to the value I need.',
 
   // User hints
@@ -1194,7 +1194,7 @@ export const en: Record<string, string> = {
   'tutorial.hint.confirmStaged': 'Tap Confirm to play your cards.',
   'tutorial.hint.endTurn': 'Tap End Turn to finish.',
   'tutorial.hint.placeOperation': 'Tap your operation card, then place it in an equation slot.',
-  'tutorial.hint.useJoker': 'Tap Slinda and choose an operation for her',
+  'tutorial.hint.useSalinda': 'Tap Slinda and choose an operation for her',
   'tutorial.hint.useWild': 'Tap your wild card — it can be any number you need',
   'tutorial.hint.playIdentical': 'You have a matching card! Tap it to play before rolling.',
   'tutorial.hint.wrongAction': 'Not quite — try the highlighted action instead',
@@ -1281,7 +1281,7 @@ export const en: Record<string, string> = {
   'tutorial.l4c.finishBody': 'Now, let\'s look at the special cards.',
   'tutorial.l4c.celebrate': 'Brilliant! You completed your first independent move toward victory!',
 
-  // Lesson 5 — Operation cards + joker
+  // Lesson 5 — Operation cards + salinda
   'tutorial.l5.title': 'Operation signs',
   'tutorial.l5.desc': 'Pick an operation sign for your equation — Slinda works too.',
   // Step 5.1 (place-op): the equation is pre-filled with `+` on the
@@ -1305,7 +1305,7 @@ export const en: Record<string, string> = {
   'tutorial.l5op.correctOne': 'Nice! Let\'s try one more equation.',
   'tutorial.l5op.celebrate': 'Perfect — you picked the right card!',
   'tutorial.l5b.botIntro': 'Meet Slinda — she stands for any operator you need.',
-  'tutorial.l5b.hintTapJoker': 'Tap Slinda',
+  'tutorial.l5b.hintTapSalinda': 'Tap Slinda',
   'tutorial.l5b.hintPickInModal': 'Pick a sign',
   'tutorial.l5b.hintPlaceSign': 'Now tap the slot on the equation board.',
   'tutorial.l5b.wrongSign': 'Try again',
@@ -1316,12 +1316,12 @@ export const en: Record<string, string> = {
   'tutorial.l5c.wrong': 'Not quite — try a different operator.',
   'tutorial.l5c.celebrate': 'Well done — you\'ve mastered the operators!',
   'tutorial.l5.tipCelebrate': 'I picked this path and got {{result}}!\nTap Card {{result}} in your hand to discard it.',
-  'tutorial.l5.jokerPickTitle': 'Select the operator that solves the equation.',
+  'tutorial.l5.salindaPickTitle': 'Select the operator that solves the equation.',
   'tutorial.l5.opCardLabel.plus': 'Plus',
   'tutorial.l5.opCardLabel.minus': 'Minus',
   'tutorial.l5.opCardLabel.mul': 'Times',
   'tutorial.l5.opCardLabel.div': 'Divide',
-  'tutorial.l5.jokerLabel': 'Slinda',
+  'tutorial.l5.salindaLabel': 'Slinda',
 
   // Welcome bubble — shown before the first lesson
   'tutorial.welcome.title': 'Welcome to Selinda',
@@ -1397,7 +1397,7 @@ export const en: Record<string, string> = {
   'tutorial.l6c.turnModalBodyAfterBuild': ' that lands exactly on its value!',
   'tutorial.l6c.turnModalCta': 'Let’s go! 🚀',
   'wildCard.title': '✨ You found a Wild Card! ✨',
-  'wildCard.body': 'Salinda’s Joker is in your hand!\nUse it as any value to complete an equation easily and get closer to 2 cards left!',
+  'wildCard.body': 'Salinda’s Salinda is in your hand!\nUse it as any value to complete an equation easily and get closer to 2 cards left!',
   'wildCard.button': 'Use the move! 🚀',
   'tutorial.l6c.wildMockupBody': 'Acts as any number you need.',
   'tutorial.l6c.hintCopy': 'Combine your Wild card with another hand card. This trick lets you discard two cards at once!',
@@ -1638,7 +1638,7 @@ export const en: Record<string, string> = {
   'game.swapBrackets': 'Move parentheses',
   'a11y.card': 'Card data block {{value}}',
   'a11y.die': 'Active die face reading {{value}}',
-  'a11y.joker': 'Slinda core card unit',
+  'a11y.salinda': 'Slinda core card unit',
 
   'analytics.title': 'Analytics',
   'analytics.back': 'Back',

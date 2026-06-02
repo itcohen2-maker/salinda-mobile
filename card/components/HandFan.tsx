@@ -57,6 +57,9 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
   const fanHeight = Math.ceil(cardH * CENTER_SCALE + cardH * 0.36 + Math.round(cardH * 0.14) + 8);
 
   const count = cards.length;
+  const previewOnly = !onTapCard;
+  const previewOnlyRef = useRef(previewOnly);
+  previewOnlyRef.current = previewOnly;
   const centerStart = Math.floor(Math.max(0, count - 1) / 2);
 
   // scrollX is a floating card index: when scrollX === i, card i is centered.
@@ -113,8 +116,8 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
   const clamp = (v: number) => Math.max(0, Math.min(countRef.current - 1, v));
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
+      onStartShouldSetPanResponder: () => previewOnlyRef.current,
+      onStartShouldSetPanResponderCapture: () => previewOnlyRef.current,
       onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 0.6,
       onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
       onPanResponderGrant: () => {
@@ -148,7 +151,7 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
   ).current;
 
   return (
-    <View style={[styles.viewport, { height: fanHeight, width: fanWidth }]} {...pan.panHandlers}>
+    <View style={[styles.viewport, { height: fanHeight, width: fanWidth }, { touchAction: 'none' } as any]} {...pan.panHandlers}>
       {cards.map((card, i) => {
         const ir = [i - 5, i - 3, i - 2, i - 1, i, i + 1, i + 2, i + 3, i + 5];
         const maxA = MAX_ANGLE;
@@ -203,6 +206,7 @@ export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, 
         return (
           <Animated.View
             key={card.id}
+            pointerEvents={tappable ? 'auto' : 'none'}
             style={{
               position: 'absolute',
               left: fanWidth / 2 - cardW / 2,

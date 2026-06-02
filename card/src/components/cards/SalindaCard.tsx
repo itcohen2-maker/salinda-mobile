@@ -11,13 +11,13 @@ interface Props {
   small?: boolean
 }
 
-export default function JokerCard({ card: _card, selected, onPress, small }: Props) {
+export default function SalindaCard({ card: _card, selected, onPress, small }: Props) {
   const { t } = useLocale()
   return (
     <Card borderColor="#EAB308" bgColor="#FEFCE8" selected={selected} onPress={onPress} small={small}>
       <View style={styles.inner}>
-        <Text style={[styles.star, { fontSize: small ? 14 : 20 }]}>★</Text>
-        <Text style={[styles.text, { fontSize: small ? 10 : 13 }]}>{t('cardLabel.joker')}</Text>
+        <Text style={[styles.letter, { fontSize: small ? 26 : 34 }]}>S</Text>
+        <Text style={[styles.text, { fontSize: small ? 9 : 12 }]}>{t('cardLabel.salinda')}</Text>
       </View>
     </Card>
   )
@@ -25,6 +25,6 @@ export default function JokerCard({ card: _card, selected, onPress, small }: Pro
 
 const styles = StyleSheet.create({
   inner: { alignItems: 'center' },
-  star: { color: '#CA8A04' },
+  letter: { color: '#15803D', fontWeight: '900', lineHeight: 36 },
   text: { color: '#CA8A04', fontWeight: '800' },
 })

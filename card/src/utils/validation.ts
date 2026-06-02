@@ -33,8 +33,8 @@ export function validateIdenticalPlay(
       return card.fraction === topDiscard.fraction
     case 'operation':
       return card.operation === topDiscard.operation
-    case 'joker':
-      return topDiscard.type === 'joker'
+    case 'salinda':
+      return topDiscard.type === 'salinda'
     default:
       return false
   }
@@ -65,8 +65,8 @@ export function canPlayAnything(
   // Check operation cards (always playable)
   if (hand.some((c) => c.type === 'operation')) return true
 
-  // Check joker cards (always playable)
-  if (hand.some((c) => c.type === 'joker')) return true
+  // Check salinda cards (always playable)
+  if (hand.some((c) => c.type === 'salinda')) return true
 
   // Check fraction cards
   for (const card of hand) {

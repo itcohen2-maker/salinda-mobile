@@ -340,7 +340,7 @@ describe('מולטיפלייר: doRollDice / confirmEquation', () => {
       ],
     };
     const bad = confirmEquation(st, 2, '1 + 1 = 2', [
-      { cardId: 'op-x', position: 0, jokerAs: null },
+      { cardId: 'op-x', position: 0, salindaAs: null },
     ]);
     expect('error' in bad && bad.error.key).toBe('equation.commitOpMismatch');
   });

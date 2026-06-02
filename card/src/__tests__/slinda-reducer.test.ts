@@ -91,7 +91,7 @@ describe('slinda replacement reducer', () => {
 
     expect(next.players[0].hand).toHaveLength(4);
     expect(next.players[0].hand[0]).toEqual(numberCard);
-    expect(next.players[0].hand[1].type).toBe('joker');
+    expect(next.players[0].hand[1].type).toBe('salinda');
     expect(next.players[0].hand[1].id).not.toBe('o1');
     expect(next.players[0].hand[2]).toEqual(extraNumberCard);
     expect(next.players[0].hand[3]).toEqual(extraFractionCard);
@@ -180,7 +180,7 @@ describe('slinda replacement reducer', () => {
 
     expect(afterWildReplace.slindaAttemptedThisTurn).toBe(true);
     expect(afterWildReplace.wildAttemptedThisTurn).toBe(true);
-    expect(afterWildReplace.players[0].hand.some((card) => card.type === 'joker')).toBe(true);
+    expect(afterWildReplace.players[0].hand.some((card) => card.type === 'salinda')).toBe(true);
     expect(afterWildReplace.players[0].hand.some((card) => card.type === 'wild')).toBe(true);
   });
 

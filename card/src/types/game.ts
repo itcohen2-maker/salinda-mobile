@@ -1,4 +1,4 @@
-export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild'
+export type CardType = 'number' | 'fraction' | 'operation' | 'salinda' | 'wild'
 export type Operation = '+' | '-' | 'x' | '÷'
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5'
 
@@ -50,7 +50,7 @@ export interface GameState {
   message: string
   targetNumber: number | null
   validTargets: EquationOption[]
-  jokerModalOpen: boolean
+  salindaModalOpen: boolean
   difficulty: 'easy' | 'full'
   hasPlayedCards: boolean
   hasDrawnCard: boolean
@@ -75,12 +75,12 @@ export type GameAction =
   | { type: 'PLAY_IDENTICAL'; card: Card }
   | { type: 'PLAY_OPERATION'; card: Card }
   | { type: 'PLAY_FRACTION'; card: Card }
-  | { type: 'PLAY_JOKER'; card: Card; chosenOperation: Operation }
+  | { type: 'PLAY_SALINDA'; card: Card; chosenOperation: Operation }
   | { type: 'DRAW_CARD' }
   | { type: 'TRIGGER_LAST_CARD_ALERT' }
   | { type: 'END_TURN' }
   | { type: 'CONFIRM_EQUATION'; equationResult: number }
   | { type: 'SET_MESSAGE'; message: string }
-  | { type: 'OPEN_JOKER_MODAL'; card: Card }
-  | { type: 'CLOSE_JOKER_MODAL' }
+  | { type: 'OPEN_SALINDA_MODAL'; card: Card }
+  | { type: 'CLOSE_SALINDA_MODAL' }
   | { type: 'RESET_GAME' }

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SalindaLogoOption06 from './branding/SalindaLogoOption06';
@@ -38,7 +38,7 @@ function BigVisual({ type }: { type: Slide['visual'] }) {
   if (type === 'cards') return <Text style={styles.bigVisual}>4 + 5</Text>;
   if (type === 'special') {
     const miniCards = [
-      { symbol: '🃏', label: 'JOKER', border: '#FBBC05' },
+      { symbol: '🃏', label: 'SALINDA', border: '#FBBC05' },
       { symbol: '★', label: '0-25', border: '#A78BFA' },
       { symbol: '½', label: '1/2', border: '#2196F3' },
     ];

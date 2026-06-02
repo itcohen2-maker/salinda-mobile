@@ -11,7 +11,7 @@
 // sign slot to complete `4 + 3 = 7`. Wrong ops don't advance
 // the step (the learner sees the mismatched result and can
 // remove + retry). No cycle-on-tap.
-// Step 5.2 (joker-place): mirrors the 5.1 exercise exactly —
+// Step 5.2 (salinda-place): mirrors the 5.1 exercise exactly —
 // dice 4,3,9, d1=4 and d2=3 prefilled, target 7 in the result box,
 // sign slot empty — but the player's hand swaps the `+` card for
 // Slinda sitting in the centre of the fan. The learner taps Slinda
@@ -46,22 +46,22 @@ export const lesson05OpCycle: Lesson = {
       celebrateKey: 'tutorial.l5a.celebrate',
     },
     {
-      id: 'joker-place',
+      id: 'salinda-place',
       // Slinda is rigged at index 2 (centre of the 5-card L5.2 hand — see
       // InteractiveTutorialScreen's L5.2 rigging block). We hardcode 2
       // rather than floor(fanLength/2) because fanLength may still report
       // 0 at the moment botDemo runs (the fan hasn't re-rendered the new
       // hand yet), which would scroll to index 0 instead of Slinda.
       botDemo: async (api) => {
-        const jokerIdx = 2;
-        await api.scrollFanTo(jokerIdx, { durationMs: 0 });
+        const salindaIdx = 2;
+        await api.scrollFanTo(salindaIdx, { durationMs: 0 });
         await api.wait(600);
-        await api.scrollFanTo(jokerIdx, { durationMs: 700, easing: 'settle' });
+        await api.scrollFanTo(salindaIdx, { durationMs: 700, easing: 'settle' });
         await api.wait(250);
-        await api.pulseCard(jokerIdx, 2200);
+        await api.pulseCard(salindaIdx, 2200);
       },
-      outcome: (event) => event.kind === 'l5JokerFlowCompleted' && event.op === '+',
-      hintKey: 'tutorial.l5b.hintTapJoker',
+      outcome: (event) => event.kind === 'l5SalindaFlowCompleted' && event.op === '+',
+      hintKey: 'tutorial.l5b.hintTapSalinda',
       botHintKey: 'tutorial.l5b.botIntro',
       celebrateKey: 'tutorial.l5b.celebrate',
     },

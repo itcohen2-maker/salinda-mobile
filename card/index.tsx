@@ -735,7 +735,7 @@ function useGameSafeArea() {
 //  TYPES
 // ???????????????????????????????????????????????????????????????
 
-type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
+type CardType = 'number' | 'fraction' | 'operation' | 'salinda' | 'wild';
 type Operation = '+' | '-' | 'x' | '÷';
 type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
 
@@ -791,10 +791,10 @@ interface Card {
   resolvedTarget?: number;
 }
 
-/** קלף פעולה/סלינדה משובץ במשבצת 0 או 1 במבנה הקוביות; jokerAs רלוונטי רק לסלינדה */
+/** קלף פעולה/סלינדה משובץ במשבצת 0 או 1 במבנה הקוביות; salindaAs רלוונטי רק לסלינדה */
 interface EquationHandSlot {
   card: Card;
-  jokerAs: Operation | null;
+  salindaAs: Operation | null;
 }
 
 interface Player {
@@ -1020,7 +1020,7 @@ interface GameState {
   /** Frozen turn-transition state to apply after the pending meter animation ends. */
   pendingTurnState: GameState | null;
   identicalAlert: { playerName: string; cardDisplay: string; consecutive: number } | null;
-  jokerModalOpen: boolean;
+  salindaModalOpen: boolean;
   /** משבצות 0/1 — קלפים מהיד בתרגיל הקוביות */
   equationHandSlots: [EquationHandSlot | null, EquationHandSlot | null];
   /** נבחר מהיד וממתין ללחיצה על משבצת אופרטור */
@@ -1441,11 +1441,11 @@ function TournamentInfoModal({
 function sortHandCards(cards: Card[]): Card[] {
   const isL5bRiggedHand = cards.some(
     (card) =>
-      card.type === 'joker' &&
-      (card.id.startsWith('tut-l5b-joker-') || card.id.startsWith('tut-l5b-bot-joker-')),
+      card.type === 'salinda' &&
+      (card.id.startsWith('tut-l5b-salinda-') || card.id.startsWith('tut-l5b-bot-salinda-')),
   );
-  // Tutorial opt-out: when L5.2 (joker-place) rigs Slinda at the middle
-  // index of the fan, the default "operations before jokers" rule would
+  // Tutorial opt-out: when L5.2 (salinda-place) rigs Slinda at the middle
+  // index of the fan, the default "operations before salindas" rule would
   // push her to the end. Skip the sort so the learner sees Slinda right
   // where the bot is about to pulse her.
   if (tutorialBus.getTutorialPreserveHandOrder() || isL5bRiggedHand) return cards;
@@ -1488,7 +1488,7 @@ interface MoveHistoryEntry {
   description: string;
 }
 
-export type EquationCommitPayload = { cardId: string; position: 0 | 1; jokerAs: Operation | null };
+export type EquationCommitPayload = { cardId: string; position: 0 | 1; salindaAs: Operation | null };
 
 type GameAction =
   | { type: 'START_GAME'; players: { name: string; isBot?: boolean; progress?: StoredPlayerProgressSnapshot | null }[]; difficulty: 'easy' | 'full'; fractions: boolean; fractionKinds?: Fraction[]; showPossibleResults: boolean; showSolveExercise: boolean; timerSetting: '15' | '60' | '90' | 'off' | 'custom'; timerCustomSeconds?: number; difficultyStage?: DifficultyStageId | string; enabledOperators?: Operation[]; allowNegativeTargets?: boolean; mathRangeMax?: 12 | 25; abVariant?: AbVariant; mode: 'pass-and-play' | 'vs-bot' | 'solo'; botDifficulty?: BotDifficulty; isTutorial?: boolean }
@@ -1511,17 +1511,17 @@ type GameAction =
   | { type: 'REMOVE_EQ_HAND_SLOT'; position: 0 | 1 }
   | { type: 'CLEAR_EQ_HAND' }
   | { type: 'CLEAR_EQ_HAND_PICK' }
-  | { type: 'SELECT_EQ_JOKER'; card: Card; chosenOperation: Operation }
+  | { type: 'SELECT_EQ_SALINDA'; card: Card; chosenOperation: Operation }
   | { type: 'PLAY_FRACTION'; card: Card }
   | { type: 'DEFEND_FRACTION_SOLVE'; card: Card; wildResolve?: number }
   | { type: 'DEFEND_FRACTION_PENALTY' }
-  | { type: 'PLAY_JOKER'; card: Card; chosenOperation: Operation }
+  | { type: 'PLAY_SALINDA'; card: Card; chosenOperation: Operation }
   | { type: 'DRAW_CARD'; reason?: 'manual' | 'turn-timeout' }
   | { type: 'TRIGGER_LAST_CARD_ALERT' }
   | { type: 'END_TURN' }
   | { type: 'SET_MESSAGE'; message: string }
-  | { type: 'OPEN_JOKER_MODAL'; card: Card }
-  | { type: 'CLOSE_JOKER_MODAL' }
+  | { type: 'OPEN_SALINDA_MODAL'; card: Card }
+  | { type: 'CLOSE_SALINDA_MODAL' }
   | { type: 'ADD_SLINDA_TO_HAND' }
   | { type: 'MARK_SLINDA_ATTEMPT' }
   | { type: 'UNMARK_SLINDA_ATTEMPT' }
@@ -1621,7 +1621,7 @@ function validWildValuesForFractionDefense(penalty: number, maxWild: number): nu
 
 function getHandSlotOperation(slot: EquationHandSlot | null): Operation | null {
   if (!slot) return null;
-  return slot.card.type === 'joker' ? slot.jokerAs : slot.card.operation ?? null;
+  return slot.card.type === 'salinda' ? slot.salindaAs : slot.card.operation ?? null;
 }
 
 function countEquationHandPlaced(state: GameState): number {
@@ -1641,7 +1641,7 @@ function deriveEquationHandSlotsFromCommits(
     if (!card) continue;
     slots[commit.position] = {
       card,
-      jokerAs: card.type === 'joker' ? (commit.jokerAs ?? null) : null,
+      salindaAs: card.type === 'salinda' ? (commit.salindaAs ?? null) : null,
     };
   }
   return slots;
@@ -1763,7 +1763,7 @@ function generateDeck(
     for (let i = 0; i < (op === '÷' ? 3 : 4); i++)
       cards.push({ id: makeId(), type: 'operation', operation: op });
   for (let i = 0; i < 4; i++)
-    cards.push({ id: makeId(), type: 'joker' });
+    cards.push({ id: makeId(), type: 'salinda' });
   const wilds = wildDeckCount(maxNumber, includeFractions);
   for (let i = 0; i < wilds; i++)
     cards.push({ id: makeId(), type: 'wild' });
@@ -2000,7 +2000,7 @@ const initialState: GameState = {
   dice: null, diceRollSeq: 0, selectedCards: [], stagedCards: [], validTargets: [], equationResult: null,
   equationOpsUsed: [], activeOperation: null, challengeSource: null, activeFraction: null, pendingFractionTarget: null,
   fractionPenalty: 0, fractionAttackResolved: false, hasPlayedCards: false, hasDrawnCard: false, lastCardValue: null,
-  consecutiveIdenticalPlays: 0, identicalAlert: null, jokerModalOpen: false, equationHandSlots: [null, null], equationHandPick: null,
+  consecutiveIdenticalPlays: 0, identicalAlert: null, salindaModalOpen: false, equationHandSlots: [null, null], equationHandPick: null,
   courageMeterPercent: 0, courageMeterStep: 0, courageDiscardSuccessStreak: 0, courageRewardPulseId: 0, courageCoins: 0,
   turnCoinsEarned: 0,
   lastCourageRewardReason: null, lastCourageCoinsAwarded: false, rolledTripleThisTurn: false,
@@ -3099,7 +3099,7 @@ function gameReducer(
                           action.card.type === 'fraction' ? action.card.fraction! :
                           action.card.type === 'operation' ? String(action.card.operation ?? '?') :
                           action.card.type === 'wild' ? (effectiveVal != null ? tf('labels.wildWithValue', { value: String(effectiveVal) }) : tf('labels.wild')) :
-                          tf('labels.joker');
+                          tf('labels.salinda');
       let ns: GameState = {
         ...st, players: np, discardPile: [...st.discardPile, cardToDiscard],
         selectedCards: [], hasPlayedCards: true,
@@ -3158,13 +3158,13 @@ function gameReducer(
       if (st.equationHandSlots[1]?.card.id === action.card.id) {
         return { ...st, equationHandSlots: [st.equationHandSlots[0], null], equationHandPick: null, message: '' };
       }
-      return { ...st, equationHandPick: { card: action.card, jokerAs: null }, message: '' };
+      return { ...st, equationHandPick: { card: action.card, salindaAs: null }, message: '' };
     }
-    case 'SELECT_EQ_JOKER': {
+    case 'SELECT_EQ_SALINDA': {
       // שלב המשוואה נשלט ע"י override במצב רשת — ב-localState הוא נשאר 'setup'; הצרכנים מגנים ב-UI.
       // Tutorial bypass: see comment in SELECT_EQ_OP above.
-      const bypassJokerGate = st.isTutorial;
-      if (!bypassJokerGate && action.chosenOperation != null && !st.enabledOperators.includes(action.chosenOperation)) {
+      const bypassSalindaGate = st.isTutorial;
+      if (!bypassSalindaGate && action.chosenOperation != null && !st.enabledOperators.includes(action.chosenOperation)) {
         return { ...st, message: tf('equation.operatorNotInStage') };
       }
       const placed = countEquationHandPlaced(st);
@@ -3179,8 +3179,8 @@ function gameReducer(
       }
       return {
         ...st,
-        equationHandPick: { card: action.card, jokerAs: action.chosenOperation },
-        jokerModalOpen: false,
+        equationHandPick: { card: action.card, salindaAs: action.chosenOperation },
+        salindaModalOpen: false,
         selectedCards: [],
         message: '',
       };
@@ -3188,8 +3188,8 @@ function gameReducer(
     case 'PLACE_EQ_OP': {
       const pick = st.equationHandPick;
       if (!pick || action.position < 0 || action.position > 1) return st;
-      if (pick.card.type === 'joker' && pick.jokerAs == null) return st;
-      const opToPlace = pick.card.type === 'joker' ? pick.jokerAs : pick.card.operation;
+      if (pick.card.type === 'salinda' && pick.salindaAs == null) return st;
+      const opToPlace = pick.card.type === 'salinda' ? pick.salindaAs : pick.card.operation;
       // Tutorial bypass: see comment in SELECT_EQ_OP above.
       const bypassPlaceGate = st.isTutorial;
       if (!bypassPlaceGate && opToPlace != null && !st.enabledOperators.includes(opToPlace)) {
@@ -3198,7 +3198,7 @@ function gameReducer(
       const slots: [EquationHandSlot | null, EquationHandSlot | null] = [...st.equationHandSlots];
       if (slots[0]?.card.id === pick.card.id) slots[0] = null;
       if (slots[1]?.card.id === pick.card.id) slots[1] = null;
-      slots[action.position as 0 | 1] = { card: pick.card, jokerAs: pick.jokerAs };
+      slots[action.position as 0 | 1] = { card: pick.card, salindaAs: pick.salindaAs };
       return { ...st, equationHandSlots: slots, equationHandPick: null, message: '' };
     }
     case 'REMOVE_EQ_HAND_SLOT': {
@@ -3350,13 +3350,13 @@ function gameReducer(
       };
       return endTurnWithMeterCheck(s, tf);
     }
-    case 'OPEN_JOKER_MODAL': return { ...st, jokerModalOpen: true, selectedCards: [action.card] };
-    case 'CLOSE_JOKER_MODAL': return { ...st, jokerModalOpen: false, selectedCards: [] };
+    case 'OPEN_SALINDA_MODAL': return { ...st, salindaModalOpen: true, selectedCards: [action.card] };
+    case 'CLOSE_SALINDA_MODAL': return { ...st, salindaModalOpen: false, selectedCards: [] };
     case 'ADD_SLINDA_TO_HAND': {
       const cpIdx = st.currentPlayerIndex;
       const cp = st.players[cpIdx];
       if ((cp?.hand.length ?? 0) >= OVERFLOW_SWAP_THRESHOLD) return st;
-      const newCard: Card = { id: makeId(), type: 'joker' };
+      const newCard: Card = { id: makeId(), type: 'salinda' };
       const updatedPlayers = st.players.map((p, i) =>
         i === cpIdx ? { ...p, hand: [...p.hand, newCard] } : p,
       );
@@ -3380,7 +3380,7 @@ function gameReducer(
       if (!cp) return st;
       const replacedCard = cp.hand.find((card) => card.id === action.cardId);
       if (!replacedCard) return st;
-      const newCard: Card = { id: makeId(), type: 'joker' };
+      const newCard: Card = { id: makeId(), type: 'salinda' };
       const updatedHand = cp.hand.map((card) => (card.id === action.cardId ? newCard : card));
       return {
         ...st,
@@ -3423,8 +3423,8 @@ function gameReducer(
     case 'RESOLVE_OVERFLOW_SWAP': {
       return resolveOverflowSwapAndBeginTurn(st, tf, action.handCardId, action.pileChoice ?? 'top');
     }
-    case 'PLAY_JOKER': {
-      return { ...st, jokerModalOpen: false, selectedCards: [], message: tf('joker.onlyInEquation') };
+    case 'PLAY_SALINDA': {
+      return { ...st, salindaModalOpen: false, selectedCards: [], message: tf('salinda.onlyInEquation') };
     }
     case 'DRAW_CARD': {
       if (st.hasPlayedCards || st.hasDrawnCard) return st;
@@ -3806,7 +3806,7 @@ function gameReducer(
         if (card.type === 'fraction') return String(card.fraction ?? '?');
         if (card.type === 'operation') return String(card.operation ?? '?');
         if (card.type === 'wild') return tf('labels.wild');
-        if (card.type === 'joker') return tf('labels.joker');
+        if (card.type === 'salinda') return tf('labels.salinda');
         return '—';
       }
       function getBotCardType(
@@ -4081,7 +4081,7 @@ function gameReducer(
         equationResult: null,
         equationHandSlots: [null, null],
         equationHandPick: null,
-        jokerModalOpen: false,
+        salindaModalOpen: false,
         message: '',
         lastMoveMessage: null,
         lastDiscardCount: 0,
@@ -4118,7 +4118,7 @@ function gameReducer(
       };
     }
     case 'RESET_ONLINE_EQ_UI':
-      return { ...st, equationHandSlots: [null, null], equationHandPick: null, jokerModalOpen: false, selectedCards: [] };
+      return { ...st, equationHandSlots: [null, null], equationHandPick: null, salindaModalOpen: false, selectedCards: [] };
     default: return st;
   }
 }
@@ -4365,8 +4365,8 @@ function GameProvider({ children }: { children: ReactNode }) {
         ...override.state,
         equationHandSlots: useServerEquationHand ? override.state.equationHandSlots : localState.equationHandSlots,
         equationHandPick: useServerEquationHand ? null : localState.equationHandPick,
-        jokerModalOpen: localState.jokerModalOpen,
-        selectedCards: localState.jokerModalOpen ? localState.selectedCards : override.state.selectedCards,
+        salindaModalOpen: localState.salindaModalOpen,
+        selectedCards: localState.salindaModalOpen ? localState.selectedCards : override.state.selectedCards,
         notifications: localState.notifications,
         guidanceEnabled: override.state.guidanceEnabled ?? localState.guidanceEnabled,
         soundsEnabled: localState.soundsEnabled,
@@ -4382,7 +4382,7 @@ function GameProvider({ children }: { children: ReactNode }) {
     useServerEquationHand,
     localState.equationHandSlots,
     localState.equationHandPick,
-    localState.jokerModalOpen,
+    localState.salindaModalOpen,
     localState.selectedCards,
     localState.notifications,
     localState.guidanceEnabled,
@@ -4462,8 +4462,8 @@ function GameProvider({ children }: { children: ReactNode }) {
       action.type === 'SET_SOUNDS_ENABLED' ||
       action.type === 'DISMISS_INTRO_HINT';
     const eqUiActions = new Set<GameAction['type']>([
-      'SELECT_EQ_OP', 'SELECT_EQ_JOKER', 'PLACE_EQ_OP', 'REMOVE_EQ_HAND_SLOT', 'CLEAR_EQ_HAND', 'CLEAR_EQ_HAND_PICK',
-      'OPEN_JOKER_MODAL', 'CLOSE_JOKER_MODAL', 'RESET_ONLINE_EQ_UI',
+      'SELECT_EQ_OP', 'SELECT_EQ_SALINDA', 'PLACE_EQ_OP', 'REMOVE_EQ_HAND_SLOT', 'CLEAR_EQ_HAND', 'CLEAR_EQ_HAND_PICK',
+      'OPEN_SALINDA_MODAL', 'CLOSE_SALINDA_MODAL', 'RESET_ONLINE_EQ_UI',
     ]);
     const myIdx = ov?.state?.myPlayerIndex;
     const canActOnline =
@@ -4641,7 +4641,7 @@ function getTipOfTheTurn(st: GameState, tf: (key: string, params?: MsgParams) =>
   }
   if (st.phase === 'building') {
     const cpHand = st.players[st.currentPlayerIndex]?.hand ?? [];
-    if (cpHand.some(c => c.type === 'operation' || c.type === 'joker')) {
+    if (cpHand.some(c => c.type === 'operation' || c.type === 'salinda')) {
       return tf('gameTip.opInEquation');
     }
     return tf('gameTip.buildEquation');
@@ -4684,7 +4684,7 @@ function getDeckCounts(
   const maxNumber = numberRange === 'easy' ? 12 : 25;
   const fracCount = fractionCardCountFromKinds(fractions, fractionKinds);
   const opCount = enabledOperators.reduce((sum, op) => sum + (op === '÷' ? 3 : 4), 0);
-  return { numCount, fracCount, opCount, jokerCount: 4, wildCount: wildDeckCount(maxNumber, fractions) };
+  return { numCount, fracCount, opCount, salindaCount: 4, wildCount: wildDeckCount(maxNumber, fractions) };
 }
 
 function CardsCatalogContent({
@@ -4706,7 +4706,7 @@ function CardsCatalogContent({
   const items: { title: string; body: string; count: number }[] = [
     { title: t('catalog.numberTitle', { range: rangeLabel }), body: t('catalog.numberBody', { range: rangeLabel }), count: counts.numCount },
     { title: t('catalog.opTitle'), body: t('catalog.opBody'), count: counts.opCount },
-    { title: t('catalog.jokerTitle'), body: t('catalog.jokerBody'), count: counts.jokerCount },
+    { title: t('catalog.salindaTitle'), body: t('catalog.salindaBody'), count: counts.salindaCount },
     { title: t('catalog.wildTitle'), body: t('catalog.wildBody'), count: counts.wildCount },
   ];
   if (fractions) {
@@ -4757,7 +4757,7 @@ function RulesContent({ state, pregame }: { state: GameState | null; pregame?: R
     { text: t('rulesLine.numCard') },
     { text: t('rulesLine.fracCard') },
     { text: t('rulesLine.opCard') },
-    { text: t('rulesLine.jokerCard') },
+    { text: t('rulesLine.salindaCard') },
     { text: t('rulesLine.wildCard') },
   ];
   const cardTypesToShow = showFractions ? cardTypeLines : cardTypeLines.filter((_, i) => i !== 1);
@@ -5534,13 +5534,13 @@ function OperationCardComp({ card, selected, onPress, small, testID }: { card: C
   );
 }
 
-function JokerCard({ card: _c, selected, onPress, small, testID }: { card: Card; selected?: boolean; onPress?: () => void; small?: boolean; testID?: string }) {
+function SalindaCard({ card: _c, selected, onPress, small, testID }: { card: Card; selected?: boolean; onPress?: () => void; small?: boolean; testID?: string }) {
   const w = small ? 100 : 110;
   const h = small ? 140 : 158;
   const bw = 3;
-  // Joker corner symbols: flat look (no 3D depth).
+  // Salinda corner symbols: flat look (no 3D depth).
   const maxOff = 1;
-  // Make joker symbols/image noticeably larger in fan (small cards).
+  // Make salinda symbols/image noticeably larger in fan (small cards).
   const cornerFs = small ? 20 : 24;
   const svgSize = small ? 56 : 66;
   const innerW = w - 2 * bw;
@@ -5589,7 +5589,7 @@ function JokerCard({ card: _c, selected, onPress, small, testID }: { card: Card;
                 backgroundColor: 'rgba(255,255,255,0.4)',
                 zIndex: 1,
               }} />
-              {/* Joker image — מידות ו־zIndex מפורשים (לא flex:1 בתוך overflow) */}
+              {/* Salinda image — מידות ו־zIndex מפורשים (לא flex:1 בתוך overflow) */}
               <View
                 pointerEvents="none"
                 style={{
@@ -5606,7 +5606,7 @@ function JokerCard({ card: _c, selected, onPress, small, testID }: { card: Card;
                 {/* התמונה עצמה מכילה סמלי פעולות בפינות; ממקמים חלון ריבועי על מרכז הליצן (source y=200-770, x=117-687) כך שהדמות כולה — מקצות הכובע עד הרגליים — נראית ללא חיתוך */}
                 <View style={{ width: svgSize, height: svgSize, borderRadius: 6, overflow: 'hidden' }}>
                   <Image
-                    source={require('./assets/joker.jpg')}
+                    source={require('./assets/salinda.jpg')}
                     style={{
                       position: 'absolute',
                       width: svgSize * 1.404,
@@ -5691,12 +5691,12 @@ function GameCard({ card, selected, active, onPress, small, testID }: { card: Ca
     case 'number': return <NumberCard card={card} selected={selected} active={active} onPress={onPress} small={small} testID={testID} />;
     case 'fraction': return <FractionCard card={card} selected={selected} onPress={onPress} small={small} testID={testID} />;
     case 'operation': return <OperationCardComp card={card} selected={selected} onPress={onPress} small={small} testID={testID} />;
-    case 'joker': return <JokerCard card={card} selected={selected} onPress={onPress} small={small} testID={testID} />;
+    case 'salinda': return <SalindaCard card={card} selected={selected} onPress={onPress} small={small} testID={testID} />;
     case 'wild': return <WildCard card={card} selected={selected} onPress={onPress} small={small} testID={testID} />;
   }
 }
 
-const slindaPreviewCard: Card = { id: 'slinda-preview', type: 'joker' };
+const slindaPreviewCard: Card = { id: 'slinda-preview', type: 'salinda' };
 const wildPreviewCard: Card = { id: 'wild-preview', type: 'wild' };
 
 function SpecialMiniCardButton({
@@ -6850,7 +6850,7 @@ const ccS = StyleSheet.create({
 });
 
 // ???????????????????????????????????????????????????????????????
-//  CELEBRATION (Joker rainbow)
+//  CELEBRATION (Salinda rainbow)
 // ???????????????????????????????????????????????????????????????
 
 const RAINBOW = ['#EF4444','#F97316','#EAB308','#22C55E','#3B82F6','#8B5CF6'];
@@ -6860,7 +6860,7 @@ function CelebrationFlash({ onDone }: { onDone: () => void }) {
   const colorIdx = useRef(new Animated.Value(0)).current;
   useEffect(() => { Animated.sequence([Animated.timing(colorIdx,{toValue:RAINBOW.length-1,duration:800,useNativeDriver:false}),Animated.timing(opacity,{toValue:0,duration:300,useNativeDriver:false})]).start(()=>onDone()); }, []);
   const bg = colorIdx.interpolate({inputRange:RAINBOW.map((_,i)=>i),outputRange:RAINBOW});
-  return <Animated.View style={[StyleSheet.absoluteFill,{backgroundColor:bg as any,opacity:opacity as any}]} pointerEvents="none"><View style={{flex:1,justifyContent:'center',alignItems:'center'}}><Text style={{fontSize:60,fontWeight:'900',color:'#FFF'}}>{t('joker.banner')}</Text></View></Animated.View>;
+  return <Animated.View style={[StyleSheet.absoluteFill,{backgroundColor:bg as any,opacity:opacity as any}]} pointerEvents="none"><View style={{flex:1,justifyContent:'center',alignItems:'center'}}><Text style={{fontSize:60,fontWeight:'900',color:'#FFF'}}>{t('salinda.banner')}</Text></View></Animated.View>;
 }
 
 // ???????????????????????????????????????????????????????????????
@@ -7076,31 +7076,31 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // Tutorial-only: 4 inward-pointing arrows converge on each empty op slot
   // so the learner sees EXACTLY where to drop the picked card. Used in two
   // situations:
-  //   • L5.2 (joker): after the learner picks a sign inside the joker
-  //     modal and the joker card is waiting for placement.
+  //   • L5.2 (salinda): after the learner picks a sign inside the salinda
+  //     modal and the salinda card is waiting for placement.
   //   • L5.1 (place-op): as soon as the learner picks any operation card
   //     from the fan, the target empty slot lights up with arrows so
   //     they don't have to guess where the card goes.
-  const jokerArrowsPulse = useRef(new Animated.Value(0)).current;
-  const showJokerArrows =
+  const salindaArrowsPulse = useRef(new Animated.Value(0)).current;
+  const showSalindaArrows =
     !!state.isTutorial && (
-      (state.equationHandPick?.card?.type === 'joker' && state.equationHandPick?.jokerAs != null) ||
+      (state.equationHandPick?.card?.type === 'salinda' && state.equationHandPick?.salindaAs != null) ||
       (tutorialBus.getL5aTargetResult() !== null && state.equationHandPick?.card?.type === 'operation')
     );
   useEffect(() => {
-    if (!showJokerArrows) {
-      jokerArrowsPulse.setValue(0);
+    if (!showSalindaArrows) {
+      salindaArrowsPulse.setValue(0);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(jokerArrowsPulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(jokerArrowsPulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(salindaArrowsPulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(salindaArrowsPulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [showJokerArrows, jokerArrowsPulse]);
+  }, [showSalindaArrows, salindaArrowsPulse]);
 
   // Drop-in animation: one Animated.Value per dice (0=hidden, 1=visible)
   const dropAnims = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
@@ -7660,10 +7660,10 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // Validation — חייב להתאים ל־hConfirm: אחרת «בחר קלפים» מוצג אבל לחיצה לא עושה כלום
   const filledCount = [dice1, dice2, dice3].filter(d => d !== null).length;
   const eqOpReady = state.equationHandPick === null;
-  const jokerCommitReady =
-    (!state.equationHandSlots[0] || state.equationHandSlots[0].card.type !== 'joker' || state.equationHandSlots[0].jokerAs != null) &&
-    (!state.equationHandSlots[1] || state.equationHandSlots[1].card.type !== 'joker' || state.equationHandSlots[1].jokerAs != null) &&
-    (!state.equationHandPick || state.equationHandPick.card.type !== 'joker' || state.equationHandPick.jokerAs != null);
+  const salindaCommitReady =
+    (!state.equationHandSlots[0] || state.equationHandSlots[0].card.type !== 'salinda' || state.equationHandSlots[0].salindaAs != null) &&
+    (!state.equationHandSlots[1] || state.equationHandSlots[1].card.type !== 'salinda' || state.equationHandSlots[1].salindaAs != null) &&
+    (!state.equationHandPick || state.equationHandPick.card.type !== 'salinda' || state.equationHandPick.salindaAs != null);
   const l4GuidedValidSums =
     state.isTutorial && tutorialBus.getL4GuidedEqValidationMode()
       ? (tutorialBus.getL4Config()?.validSums ?? [])
@@ -7694,7 +7694,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     realGameMissing === null &&
     matchesValidTarget &&
     eqOpReady &&
-    jokerCommitReady;
+    salindaCommitReady;
 
   const l4GuidedOpCount = [effectiveOp1, effectiveOp2].filter((op) => op !== null).length;
   const l4GuidedMissing: L4EquationProgressMissing =
@@ -7755,7 +7755,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
         tutorialBus.emitUserEvent({ kind: 'eqReadyToConfirm' });
       }
     } else if (tutorialBus.getL5GuidedMode()) {
-      // Lesson 5: sandbox for dice + operation signs (+ joker placement) —
+      // Lesson 5: sandbox for dice + operation signs (+ salinda placement) —
       // never auto-confirm into solved / card-pick flow.
       tutorialAutoConfirmedRef.current = false;
     } else if (tutorialBus.getL7GuidedMode() && !tutorialBus.getParensRightValue()) {
@@ -7822,15 +7822,15 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     } else {
       display = `${d1v} ${effectiveOp1} ${d2v} = ${finalResult}`;
     }
-    const equationCommits: { cardId: string; position: 0 | 1; jokerAs: Operation | null }[] = [];
+    const equationCommits: { cardId: string; position: 0 | 1; salindaAs: Operation | null }[] = [];
     for (const pos of [0, 1] as const) {
       const slot = state.equationHandSlots[pos];
       if (!slot) continue;
-      if (slot.card.type === 'joker' && slot.jokerAs == null) return;
+      if (slot.card.type === 'salinda' && slot.salindaAs == null) return;
       equationCommits.push({
         cardId: slot.card.id,
         position: pos,
-        jokerAs: slot.card.type === 'joker' ? slot.jokerAs : null,
+        salindaAs: slot.card.type === 'salinda' ? slot.salindaAs : null,
       });
     }
     dispatch({
@@ -7943,7 +7943,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   const show3rd = isParensTutorial ? true : (!parensRight
     ? subResult !== null
     : d1v !== null && effectiveOp1 !== null && d2v !== null);
-  // Lesson 5 (place-op + joker) renders the FULL 3-dice equation with both
+  // Lesson 5 (place-op + salinda) renders the FULL 3-dice equation with both
   // operator slots and the sub-result box visible. The old L5a "simplified
   // shell" was retired when cycle-signs was replaced by a card-placement
   // flow — the learner now sees a complete `(d1 + d2) + d3 = result` from
@@ -8033,7 +8033,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       tutorialBus.getL5aBlockFanTaps() &&
       tutorialBus.getTutorialPreserveHandOrder() &&
       posIdx === 1;
-    const isJoker = slotBinding?.card.type === 'joker';
+    const isSalinda = slotBinding?.card.type === 'salinda';
     const handOp = getHandSlotOperation(slotBinding);
     const displayOp = isHandPlaced && handOp ? handOp : currentOp;
     const blocksCycleWithoutPick =
@@ -8053,7 +8053,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       // L6 (possible-results): block operator taps on the pre-filled reference equation.
       // L7 (parens) and L9 (identical copy) are exempt — learner sets operators themselves.
       if (isReferenceEquationLocked) return;
-      // L5.2 (joker-place): keep op2 blocked. In L5.1 we allow op2 as an
+      // L5.2 (salinda-place): keep op2 blocked. In L5.1 we allow op2 as an
       // optional extra placement, but it should not glow or complete the step.
       if (isSecondaryTutorialLocked) return;
       if (isHandPlaced && !isWaitingPlacement) {
@@ -8062,9 +8062,9 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       }
       if (isWaitingPlacement) {
         const pick = state.equationHandPick;
-        const pendingJokerOp =
-          pick?.card.type === 'joker'
-            ? normalizeOperationToken(pick.jokerAs)
+        const pendingSalindaOp =
+          pick?.card.type === 'salinda'
+            ? normalizeOperationToken(pick.salindaAs)
             : null;
         const placedOperatorOp =
           pick?.card.type === 'operation'
@@ -8072,11 +8072,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
             : null;
         dispatch({ type: 'PLACE_EQ_OP', position: posIdx });
         if (state.isTutorial && tutorialBus.getL5GuidedMode()) {
-          if (pendingJokerOp) {
-            tutorialBus.emitUserEvent({ kind: 'l5JokerPlaced', op: pendingJokerOp });
-            tutorialBus.emitUserEvent({ kind: 'l5JokerFlowCompleted', op: pendingJokerOp });
+          if (pendingSalindaOp) {
+            tutorialBus.emitUserEvent({ kind: 'l5SalindaPlaced', op: pendingSalindaOp });
+            tutorialBus.emitUserEvent({ kind: 'l5SalindaFlowCompleted', op: pendingSalindaOp });
           } else if (placedOperatorOp) {
-            // Non-joker: regular operator card dropped from hand. Used by the
+            // Non-salinda: regular operator card dropped from hand. Used by the
             // L5.2 pick-place exercises to decide correct-vs-wrong pick.
             tutorialBus.emitUserEvent({
               kind: 'l5OperatorPlaced',
@@ -8092,16 +8092,16 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 
     // Mini card visual when hand card is placed in this slot
     if (isHandPlaced && handOp) {
-      const cardCl = isJoker ? null : getOperatorColors(handOp);
-      const cardBorder = isJoker ? '#A78BFA' : cardCl!.face;
-      const cardBg = isJoker ? '#7C3AED' : cardCl!.face;
+      const cardCl = isSalinda ? null : getOperatorColors(handOp);
+      const cardBorder = isSalinda ? '#A78BFA' : cardCl!.face;
+      const cardBg = isSalinda ? '#7C3AED' : cardCl!.face;
       const symDisplay = getOperatorDisplay(handOp);
       const useVectorGlyph = Platform.OS === 'android' && normalizeOperatorVisualToken(handOp) !== null;
 
-      // Joker: show joker card underneath with operation card tilted on top
-      if (isJoker) {
+      // Salinda: show salinda card underneath with operation card tilted on top
+      if (isSalinda) {
         if (Platform.OS === 'android') {
-          const jokerAccent = getOperatorColors(handOp).face;
+          const salindaAccent = getOperatorColors(handOp).face;
           return (
             <TouchableOpacity
               testID={`equation-op-slot-${which}`}
@@ -8128,7 +8128,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   }),
                 }}
               >
-                {renderCompactOperatorGlyph(handOp, jokerAccent, 18)}
+                {renderCompactOperatorGlyph(handOp, salindaAccent, 18)}
                 <View
                   style={{
                     position: 'absolute',
@@ -8305,12 +8305,12 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
             }}
           />
         ) : null}
-        {/* L5b joker-placement hint: 4 inward-pointing arrows inside the op
+        {/* L5b salinda-placement hint: 4 inward-pointing arrows inside the op
             slot, one from each side, blinking together. Shown after the
-            learner picks a sign in the joker modal and before they tap the
+            learner picks a sign in the salinda modal and before they tap the
             slot to place it. Also adds an amber halo to the slot to draw
             the eye, since the hand card's dashed border is subtle. */}
-        {showJokerArrows && !isHandPlaced && !suppressSecondaryTutorialGlow ? (
+        {showSalindaArrows && !isHandPlaced && !suppressSecondaryTutorialGlow ? (
           <>
             <Animated.View
               pointerEvents="none"
@@ -8320,8 +8320,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 borderRadius: 14,
                 borderWidth: 3,
                 borderColor: '#FBBF24',
-                opacity: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
-                transform: [{ scale: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }],
+                opacity: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+                transform: [{ scale: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }],
                 ...Platform.select({
                   ios: { shadowColor: '#FBBF24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 10 },
                   android: { elevation: 10 },
@@ -8334,8 +8334,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
               style={{
                 position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center',
                 fontSize: 14, fontWeight: '900', color: '#FBBF24',
-                opacity: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
-                transform: [{ translateY: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [-2, 2] }) }],
+                opacity: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
+                transform: [{ translateY: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [-2, 2] }) }],
               }}
             >?</Animated.Text>
             <Animated.Text
@@ -8344,8 +8344,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
               style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center',
                 fontSize: 14, fontWeight: '900', color: '#FBBF24',
-                opacity: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
-                transform: [{ translateY: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [2, -2] }) }],
+                opacity: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
+                transform: [{ translateY: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [2, -2] }) }],
               }}
             >?</Animated.Text>
             <Animated.Text
@@ -8355,8 +8355,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 position: 'absolute', left: 0, top: 0, bottom: 0,
                 width: 14, textAlign: 'center', textAlignVertical: 'center',
                 fontSize: 14, fontWeight: '900', color: '#FBBF24', lineHeight: 44,
-                opacity: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
-                transform: [{ translateX: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [-2, 2] }) }],
+                opacity: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
+                transform: [{ translateX: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [-2, 2] }) }],
               }}
             >?</Animated.Text>
             <Animated.Text
@@ -8366,8 +8366,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 position: 'absolute', right: 0, top: 0, bottom: 0,
                 width: 14, textAlign: 'center', textAlignVertical: 'center',
                 fontSize: 14, fontWeight: '900', color: '#FBBF24', lineHeight: 44,
-                opacity: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
-                transform: [{ translateX: jokerArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [2, -2] }) }],
+                opacity: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }),
+                transform: [{ translateX: salindaArrowsPulse.interpolate({ inputRange: [0, 1], outputRange: [2, -2] }) }],
               }}
             >?</Animated.Text>
           </>
@@ -8997,11 +8997,11 @@ function ActionBar() {
     state.phase !== 'game-over';
   const canUseActiveTurnUi = !isOnlineWaiting && !isLocalBotTurn;
   const pr=state.phase==='pre-roll', bl=state.phase==='building', so=state.phase==='solved', hp=state.hasPlayedCards;
-  const isTutorialJokerPicker = state.isTutorial && tutorialBus.getL5GuidedMode();
-  const jokerModalOverlayStyle = isTutorialJokerPicker
+  const isTutorialSalindaPicker = state.isTutorial && tutorialBus.getL5GuidedMode();
+  const salindaModalOverlayStyle = isTutorialSalindaPicker
     ? { justifyContent:'flex-end' as const, paddingBottom: Math.max(insets.bottom + 56, 72) }
     : undefined;
-  const jokerModalBoxStyle = isTutorialJokerPicker
+  const salindaModalBoxStyle = isTutorialSalindaPicker
     ? {
         paddingHorizontal: 24,
         paddingVertical: 26,
@@ -9014,11 +9014,11 @@ function ActionBar() {
           : { elevation: 16 }),
       }
     : undefined;
-  const jokerModalTitle = isTutorialJokerPicker ? t('tutorial.l5.jokerPickTitle') : t('game.pickJokerOp');
-  const jokerButtonWidth = isTutorialJokerPicker ? 66 : 100;
-  const jokerButtonHeight = isTutorialJokerPicker ? 66 : 64;
-  const jokerButtonFontSize = isTutorialJokerPicker ? 30 : 30;
-  const jokerButtonGap = isTutorialJokerPicker ? 12 : 12;
+  const salindaModalTitle = isTutorialSalindaPicker ? t('tutorial.l5.salindaPickTitle') : t('game.pickSalindaOp');
+  const salindaButtonWidth = isTutorialSalindaPicker ? 66 : 100;
+  const salindaButtonHeight = isTutorialSalindaPicker ? 66 : 64;
+  const salindaButtonFontSize = isTutorialSalindaPicker ? 30 : 30;
+  const salindaButtonGap = isTutorialSalindaPicker ? 12 : 12;
   return (
     <View style={{width:'100%',gap:10}}>
       {canUseActiveTurnUi && (pr||bl||so)&&hp && !state.isTutorial && (
@@ -9027,14 +9027,14 @@ function ActionBar() {
         </View>
       )}
       <AppModal
-        visible={state.jokerModalOpen}
-        onClose={()=>dispatch({type:'CLOSE_JOKER_MODAL'})}
-        title={jokerModalTitle}
-        overlayStyle={jokerModalOverlayStyle}
-        boxStyle={jokerModalBoxStyle}
+        visible={state.salindaModalOpen}
+        onClose={()=>dispatch({type:'CLOSE_SALINDA_MODAL'})}
+        title={salindaModalTitle}
+        overlayStyle={salindaModalOverlayStyle}
+        boxStyle={salindaModalBoxStyle}
       >
-        <View style={{flexDirection:'row',flexWrap:'wrap',gap:jokerButtonGap,justifyContent:'center'}}>
-          {(['+','-','x','÷'] as Operation[]).map(op => <SalindaButton key={op} text={op} color="blue" width={jokerButtonWidth} height={jokerButtonHeight} fontSize={jokerButtonFontSize} onPress={()=>{const j=state.selectedCards[0];if(!j)return;if(state.phase==='building'){if(state.isTutorial&&tutorialBus.getL5GuidedMode()){tutorialBus.emitUserEvent({kind:'l5JokerPickedInModal',op});tutorialBus.emitUserEvent({kind:'opSelected',op,via:'joker'});}dispatch({type:'SELECT_EQ_JOKER',card:j,chosenOperation:op});}else{dispatch({type:'PLAY_JOKER',card:j,chosenOperation:op});}}} />)}
+        <View style={{flexDirection:'row',flexWrap:'wrap',gap:salindaButtonGap,justifyContent:'center'}}>
+          {(['+','-','x','÷'] as Operation[]).map(op => <SalindaButton key={op} text={op} color="blue" width={salindaButtonWidth} height={salindaButtonHeight} fontSize={salindaButtonFontSize} onPress={()=>{const j=state.selectedCards[0];if(!j)return;if(state.phase==='building'){if(state.isTutorial&&tutorialBus.getL5GuidedMode()){tutorialBus.emitUserEvent({kind:'l5SalindaPickedInModal',op});tutorialBus.emitUserEvent({kind:'opSelected',op,via:'salinda'});}dispatch({type:'SELECT_EQ_SALINDA',card:j,chosenOperation:op});}else{dispatch({type:'PLAY_SALINDA',card:j,chosenOperation:op});}}} />)}
         </View>
       </AppModal>
     </View>
@@ -10218,7 +10218,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
                     ? String(card.value ?? '')
                     : card.type === 'operation'
                       ? getOperatorDisplay(card.operation)
-                      : card.type === 'joker'
+                      : card.type === 'salinda'
                         ? STAR_GLYPH
                         : card.type === 'wild'
                           ? (card.resolvedValue != null ? String(card.resolvedValue) : '?')
@@ -10372,8 +10372,8 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
     () =>
       currentHand.some(
         (card) =>
-          card.type === 'joker' &&
-          (card.id.startsWith('tut-l5b-joker-') || card.id.startsWith('tut-l5b-bot-joker-')),
+          card.type === 'salinda' &&
+          (card.id.startsWith('tut-l5b-salinda-') || card.id.startsWith('tut-l5b-bot-salinda-')),
       ),
     [currentHand],
   );
@@ -10488,8 +10488,8 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       return;
     }
     if (bl) {
-      const l5bJokerOnlyMode = state.isTutorial && tutorialBus.getL5bJokerOnlyMode();
-      if (l5bJokerOnlyMode && card.type !== 'joker') return;
+      const l5bSalindaOnlyMode = state.isTutorial && tutorialBus.getL5bSalindaOnlyMode();
+      if (l5bSalindaOnlyMode && card.type !== 'salinda') return;
       if (card.type === 'operation') {
         if (state.equationHandSlots[0]?.card.id === card.id) {
           // already placed in equation — no-op
@@ -10525,11 +10525,11 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         }
         dispatch({ type: 'PLAY_FRACTION', card });
       }
-      else if (card.type === 'joker') {
+      else if (card.type === 'salinda') {
         if (state.isTutorial && tutorialBus.getL5GuidedMode()) {
-          tutorialBus.emitUserEvent({ kind: 'l5JokerModalOpened' });
+          tutorialBus.emitUserEvent({ kind: 'l5SalindaModalOpened' });
         }
-        dispatch({ type: 'OPEN_JOKER_MODAL', card });
+        dispatch({ type: 'OPEN_SALINDA_MODAL', card });
       }
       else if (card.type === 'number' || card.type === 'wild') {
         // Tutorial: number/wild cards are display-only during building phase — no message
@@ -10561,7 +10561,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         tutorialBus.emitUserEvent({ kind: 'l4Step3CardAccepted', cardId: card.id });
         return;
       }
-      // Solved phase: number + operation + wild ? stage/unstage, fraction, joker
+      // Solved phase: number + operation + wild ? stage/unstage, fraction, salinda
       if(card.type==='number' || card.type==='operation' || card.type==='wild') {
         // During bot-demo in tutorial, block user staging so mid-demo taps don't corrupt state
         if (state.isTutorial && tutorialBus.getBotDemoActive() && card.type !== 'operation') return;
@@ -10586,7 +10586,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
         }
         dispatch({ type: 'PLAY_FRACTION', card });
       }
-      else if(card.type==='joker') dispatch({ type: 'SET_MESSAGE', message: t('joker.onlyInEquation') });
+      else if(card.type==='salinda') dispatch({ type: 'SET_MESSAGE', message: t('salinda.onlyInEquation') });
     }
   };
 
@@ -10686,7 +10686,7 @@ function PlayerHand({ onCenterCard, onFractionTapForOnb }: { onCenterCard?: (car
       (tutorialBus.getL5GuidedMode() && tutorialBus.getTutorialPreserveHandOrder()) ||
       isTutorialL5bRiggedHand
     )
-      ? (sorted.find((card) => card.type === 'joker')?.id ?? null)
+      ? (sorted.find((card) => card.type === 'salinda')?.id ?? null)
       : null);
   const tutorialFocusedCardId = tutorialCenteredCardId;
 
@@ -13143,8 +13143,8 @@ const hsS = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
   },
-  // Joker area — flex:1 fills space between top and bottom menu
-  jokerArea: {
+  // Salinda area — flex:1 fills space between top and bottom menu
+  salindaArea: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
   },
   // Settings container
@@ -15267,7 +15267,7 @@ function TurnTransition() {
         return (card.fraction ? fracTips[card.fraction] : null) ?? `קלף שבר (${card.fraction}). גם קלף התקפה — הנח על הערימה כדי לאתגר את השחקן הבא. אם אין הגנה, שולפים קלף אחד.`;
       }
       case 'operation': return `קלף פעולה (${card.operation}) — שלב אותו בתוך התרגיל כדי להיפטר מהקלף.`;
-      case 'joker': return `ג'וקר — תחליף לסימן (+, ?, ×, ÷). שלבו אותו בתרגיל והיפטרו מקלף. לא מגן מפני אתגר שבר.`;
+      case 'salinda': return `קלף סלינדה — אופרטור פראי שמחליף סימן (+, −, ×, ÷). שלבו אותו בתרגיל והיפטרו מקלף. לא מגן מפני אתגר שבר.`;
       case 'wild': return `קלף פרא — נספר ככל מספר 0–25. הנח בתרגיל או זהה לערימה כדי להיפטר ממנו.`;
       default: return '';
     }
@@ -15674,7 +15674,7 @@ function TurnTransition() {
                     </View>
                   );
                 }
-                if (card.type === 'joker') {
+                if (card.type === 'salinda') {
                   return (
                     <View key={card.id} style={{ width: MINI_W, height: MINI_H, borderRadius: MINI_R, backgroundColor: '#F59E0B', borderWidth: 2, borderColor: '#FDE68A', alignItems: 'center', justifyContent: 'center' }}>
                       <Text style={{ color: '#FFFBEB', fontSize: 16, fontWeight: '900' }}>S</Text>
@@ -15690,7 +15690,7 @@ function TurnTransition() {
         {/* Card tooltip — צבעוני (מסגרת זהב).
             בקלף פרא: רק "0–25" בסגול, שאר הטקסט צהוב.
             בקלף שבר: "יעד X הופך ל-Y" בצבע לפי המכנה. */}
-        {tooltipCard && tooltipCard.type !== 'joker' && (
+        {tooltipCard && tooltipCard.type !== 'salinda' && (
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setTooltipCard(null)}
@@ -16252,10 +16252,10 @@ const BUILDING_EQUATION_HINT_KEY = 'salinda_building_equation_hint_shown';
 /** הודעת "אין לך קלף זהה" — מוצגת פעם אחת בלבד לאורך השימוש (עם איפוס onboarding) */
 const NO_IDENTICAL_HINT_SEEN_KEY = 'salinda_no_identical_hint_seen';
 
-const GUIDANCE_KEYS = ['guidance_op_challenge', 'guidance_identical', 'guidance_joker', 'guidance_triple', 'guidance_wild_results'] as const;
+const GUIDANCE_KEYS = ['guidance_op_challenge', 'guidance_identical', 'guidance_salinda', 'guidance_triple', 'guidance_wild_results'] as const;
 type GuidanceKey = typeof GUIDANCE_KEYS[number];
 
-const CARD_HINT_JOKER_SEEN_KEY = 'salinda_card_hint_joker_seen';
+const CARD_HINT_SALINDA_SEEN_KEY = 'salinda_card_hint_salinda_seen';
 const CARD_HINT_OP_SEEN_KEY = 'salinda_card_hint_op_seen';
 
 /** מחיקת כל מפתחות ההדרכה והטיפים החד־פעמיים (מסך פתיחה / איפוס ידני) */
@@ -16274,7 +16274,7 @@ async function clearAllSalindaOnboardingKeys(): Promise<void> {
     BUILDING_EQUATION_HINT_KEY,
     WELCOME_PLAYER_SCREEN_KEY,
     'salinda_guidance_notifications',
-    CARD_HINT_JOKER_SEEN_KEY,
+    CARD_HINT_SALINDA_SEEN_KEY,
     CARD_HINT_OP_SEEN_KEY,
     // NOTE: PLAYER_SAVED_NAME_KEY is deliberately excluded — player's name
     // is personal data, not guidance state. Resetting guidance shouldn't
@@ -16561,7 +16561,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     state.stagedCards.forEach((card) => dispatch({ type: 'UNSTAGE_CARD', card }));
   }, [dispatch, l6ResultsMiniCardsOnly, state.stagedCards]);
   const [centerCard, setCenterCard] = useState<Card | null>(null);
-  const [cardHintJokerSeen, setCardHintJokerSeen] = useState(false);
+  const [cardHintSalindaSeen, setCardHintSalindaSeen] = useState(false);
   const [cardHintOpSeen, setCardHintOpSeen] = useState(false);
   const [cardHintLoaded, setCardHintLoaded] = useState(false);
   const lastEquationBuildRollSeqRef = useRef<number | null>(null);
@@ -16581,8 +16581,8 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   }, [state.diceRollSeq, state.dice]);
   // "No identical card" is shown via NotificationZone; no local visibility state needed.
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem(CARD_HINT_JOKER_SEEN_KEY), AsyncStorage.getItem(CARD_HINT_OP_SEEN_KEY)]).then(([j, o]) => {
-      setCardHintJokerSeen(j === 'true');
+    Promise.all([AsyncStorage.getItem(CARD_HINT_SALINDA_SEEN_KEY), AsyncStorage.getItem(CARD_HINT_OP_SEEN_KEY)]).then(([j, o]) => {
+      setCardHintSalindaSeen(j === 'true');
       setCardHintOpSeen(o === 'true');
       setCardHintLoaded(true);
     });
@@ -16635,17 +16635,17 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     }, 180);
     return () => clearInterval(id);
   }, [isOnlineGame, isOnlineWaiting, gameTurnDeadlineAt, state.phase, state.hasPlayedCards, state.dice, state.pendingFractionTarget, dispatch]);
-  const dismissCardHintJoker = useCallback(() => {
-    setCardHintJokerSeen(true);
-    AsyncStorage.setItem(CARD_HINT_JOKER_SEEN_KEY, 'true');
+  const dismissCardHintSalinda = useCallback(() => {
+    setCardHintSalindaSeen(true);
+    AsyncStorage.setItem(CARD_HINT_SALINDA_SEEN_KEY, 'true');
   }, []);
   const dismissCardHintOp = useCallback(() => {
     setCardHintOpSeen(true);
     AsyncStorage.setItem(CARD_HINT_OP_SEEN_KEY, 'true');
   }, []);
 
-  const prevJ = useRef(state.jokerModalOpen);
-  useEffect(() => { if(prevJ.current&&!state.jokerModalOpen&&state.hasPlayedCards) setShowCel(true); prevJ.current=state.jokerModalOpen; }, [state.jokerModalOpen,state.hasPlayedCards]);
+  const prevJ = useRef(state.salindaModalOpen);
+  useEffect(() => { if(prevJ.current&&!state.salindaModalOpen&&state.hasPlayedCards) setShowCel(true); prevJ.current=state.salindaModalOpen; }, [state.salindaModalOpen,state.hasPlayedCards]);
 
   // Background roaming dice
   const bgDiceRef = useRef<RoamingDiceRef>(null);

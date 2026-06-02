@@ -274,7 +274,7 @@ export default function StartScreen({
             <Text style={[styles.sectionTitle, { textAlign: ta }]}>{t('start.cardTypesTitle')}</Text>
             <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('rulesLine.fracCard')}</Text>
             <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('rulesLine.opCard')}</Text>
-            <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('rulesLine.jokerCard')}</Text>
+            <Text style={[styles.ruleItem, { textAlign: ta }]}>{t('rulesLine.salindaCard')}</Text>
           </View>
         </View>
       )}

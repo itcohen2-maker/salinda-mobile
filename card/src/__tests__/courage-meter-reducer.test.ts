@@ -60,8 +60,8 @@ function solvedConfirmState(overrides: Partial<GameState> = {}): GameState {
     lastEquationDisplay: '1+2+2',
     equationHandSlots: [null, null],
     equationCommits: [
-      { cardId: opA.id, position: 0, jokerAs: null },
-      { cardId: opB.id, position: 1, jokerAs: null },
+      { cardId: opA.id, position: 0, salindaAs: null },
+      { cardId: opB.id, position: 1, salindaAs: null },
     ],
   };
   const next = { ...baseState, ...overrides };
@@ -240,8 +240,8 @@ describe('courage meter reducer rules', () => {
       lastEquationDisplay: '1+2+2',
       equationHandSlots: [null, null],
       equationCommits: [
-        { cardId: opA.id, position: 0, jokerAs: null },
-        { cardId: opB.id, position: 1, jokerAs: null },
+        { cardId: opA.id, position: 0, salindaAs: null },
+        { cardId: opB.id, position: 1, salindaAs: null },
       ],
       hasPlayedCards: false,
     };

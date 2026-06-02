@@ -170,7 +170,7 @@ export function validateIdenticalPlay(card: Card, topDiscard: Card | undefined):
     case 'number': return card.value === topDiscard.value;
     case 'fraction': return card.fraction === topDiscard.fraction;
     case 'operation': return card.operation === topDiscard.operation;
-    case 'joker': return topDiscard.type === 'joker';
+    case 'salinda': return topDiscard.type === 'salinda';
     default: return false;
   }
 }

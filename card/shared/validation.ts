@@ -118,8 +118,8 @@ export type EquationCommitValidationKey =
   | 'equation.invalidOpPosition'
   | 'equation.commitCardNotInHand'
   | 'equation.invalidCommitCard'
-  | 'equation.chooseJokerOp'
-  | 'equation.regularOpNoJoker'
+  | 'equation.chooseSalindaOp'
+  | 'equation.regularOpNoSalinda'
   | 'equation.commitOpMismatch';
 
 type EquationCommitCardLike = Pick<Card, 'id' | 'type' | 'operation'>;
@@ -280,14 +280,14 @@ export function validateEquationCommitsForDisplay(
     const card = hand.find((candidate) => candidate.id === commit.cardId);
     if (!card) return { errorKey: 'equation.commitCardNotInHand' };
 
-    if (card.type === 'joker') {
-      if (commit.jokerAs == null) return { errorKey: 'equation.chooseJokerOp' };
-      if (commit.jokerAs !== expectedOp) return { errorKey: 'equation.commitOpMismatch' };
+    if (card.type === 'salinda') {
+      if (commit.salindaAs == null) return { errorKey: 'equation.chooseSalindaOp' };
+      if (commit.salindaAs !== expectedOp) return { errorKey: 'equation.commitOpMismatch' };
       continue;
     }
 
     if (card.type !== 'operation') return { errorKey: 'equation.invalidCommitCard' };
-    if (commit.jokerAs != null) return { errorKey: 'equation.regularOpNoJoker' };
+    if (commit.salindaAs != null) return { errorKey: 'equation.regularOpNoSalinda' };
     if (card.operation !== expectedOp) return { errorKey: 'equation.commitOpMismatch' };
   }
 
@@ -319,16 +319,16 @@ export function enumerateEquationCommitOptions(
 
       if (card.type === 'operation' && card.operation === expectedOp) {
         used.add(card.id);
-        current.push({ cardId: card.id, position: position as 0 | 1, jokerAs: null });
+        current.push({ cardId: card.id, position: position as 0 | 1, salindaAs: null });
         visit(position + 1);
         current.pop();
         used.delete(card.id);
         continue;
       }
 
-      if (card.type === 'joker') {
+      if (card.type === 'salinda') {
         used.add(card.id);
-        current.push({ cardId: card.id, position: position as 0 | 1, jokerAs: expectedOp });
+        current.push({ cardId: card.id, position: position as 0 | 1, salindaAs: expectedOp });
         visit(position + 1);
         current.pop();
         used.delete(card.id);

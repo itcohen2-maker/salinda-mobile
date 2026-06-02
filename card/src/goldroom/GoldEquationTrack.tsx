@@ -106,7 +106,7 @@ export default function GoldEquationTrack({
 
       {showConfirm ? (
         <View style={styles.confirmWrap}>
-          <GoldButton label={copy.checkMark} onPress={onConfirm} disabled={!ready} height={50} fontSize={18} accessibilityLabel={copy.checkEquation} />
+          <GoldButton label={copy.checkMark} onPress={onConfirm} disabled={!ready} height={50} fontSize={22} accessibilityLabel={copy.checkEquation} />
         </View>
       ) : null}
     </View>

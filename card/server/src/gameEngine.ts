@@ -63,7 +63,7 @@ function identicalCardLabel(
   if (card.type === 'fraction') return String(card.fraction ?? '');
   if (card.type === 'operation') return String(card.operation ?? '');
   if (card.type === 'wild') return effectiveVal != null ? `Wild(${effectiveVal})` : 'Wild';
-  return 'Joker';
+  return 'Salinda';
 }
 
 /** זמן המתנה לפעולת שחקן במשחק מקוון (אני מוכן) */
@@ -873,14 +873,14 @@ function validateEquationCommitsPayload(
     seenCard.add(payload.cardId);
     const card = findCard(st, payload.cardId);
     if (!card) return locErr('equation.commitCardNotInHand');
-    if (card.type !== 'operation' && card.type !== 'joker') return locErr('equation.invalidCommitCard');
+    if (card.type !== 'operation' && card.type !== 'salinda') return locErr('equation.invalidCommitCard');
     if (payload.position !== 0 && payload.position !== 1) return locErr('equation.invalidOpPosition');
-    if (card.type === 'joker') {
-      if (payload.jokerAs == null) return locErr('equation.chooseJokerOp');
-    } else if (payload.jokerAs != null) {
-      return locErr('equation.regularOpNoJoker');
+    if (card.type === 'salinda') {
+      if (payload.salindaAs == null) return locErr('equation.chooseSalindaOp');
+    } else if (payload.salindaAs != null) {
+      return locErr('equation.regularOpNoSalinda');
     }
-    out.push({ cardId: payload.cardId, position: payload.position, jokerAs: payload.jokerAs });
+    out.push({ cardId: payload.cardId, position: payload.position, salindaAs: payload.salindaAs });
   }
   const displayValidation = validateEquationCommitsForDisplay(
     st.players[st.currentPlayerIndex]?.hand ?? [],
@@ -1160,10 +1160,10 @@ export function playOperation(st: ServerGameState, cardId: string): ServerGameSt
   return locErr('operation.onlyInEquation');
 }
 
-export function playJoker(st: ServerGameState, cardId: string, chosenOperation: Operation): ServerGameState | { error: LocalizedMessage } {
+export function playSalinda(st: ServerGameState, cardId: string, chosenOperation: Operation): ServerGameState | { error: LocalizedMessage } {
   void cardId;
   void chosenOperation;
-  return locErr('joker.onlyInEquation');
+  return locErr('salinda.onlyInEquation');
 }
 
 export function drawCard(st: ServerGameState): ServerGameState | { error: LocalizedMessage } {

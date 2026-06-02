@@ -48,15 +48,15 @@ describe('identical reducer rules', () => {
     expect(next.identicalAlert?.cardDisplay).toBe('+');
   });
 
-  it('allows a joker on joker identical play', () => {
-    const topDiscard: Card = { id: 'top-joker', type: 'joker' };
-    const handCard: Card = { id: 'hand-joker', type: 'joker' };
+  it('allows a salinda on salinda identical play', () => {
+    const topDiscard: Card = { id: 'top-salinda', type: 'salinda' };
+    const handCard: Card = { id: 'hand-salinda', type: 'salinda' };
     const st = preRollState(topDiscard, handCard);
 
     const next = gameReducer(st, { type: 'PLAY_IDENTICAL', card: handCard } as GameAction, tf);
 
     expect(next.discardPile[next.discardPile.length - 1]).toEqual(handCard);
     expect(next.players[0].hand.some((card) => card.id === handCard.id)).toBe(false);
-    expect(next.identicalAlert?.cardDisplay).toBe('labels.joker');
+    expect(next.identicalAlert?.cardDisplay).toBe('labels.salinda');
   });
 });

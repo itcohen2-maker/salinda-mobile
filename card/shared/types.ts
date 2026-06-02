@@ -43,7 +43,7 @@ export type {
 
 // ── Card Types ──
 
-export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
+export type CardType = 'number' | 'fraction' | 'operation' | 'salinda' | 'wild';
 export type Operation = '+' | '-' | 'x' | '÷';
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
 export type OverflowSwapPileChoice = 'top' | 'underTop' | 'random';
@@ -163,7 +163,7 @@ export interface EquationCommitPayload {
   cardId: string;
   position: 0 | 1;
   /** כשהקלף סלינדה — איזו פעולה נבחרה; אחרת null */
-  jokerAs: Operation | null;
+  salindaAs: Operation | null;
 }
 
 // ── Game Phase ──
@@ -407,7 +407,7 @@ export interface ClientToServerEvents {
   defend_fraction_solve: (data: { cardId: string; wildResolve?: number }) => void;
   defend_fraction_penalty: () => void;
   play_operation: (data: { cardId: string }) => void;
-  play_joker: (data: { cardId: string; chosenOperation: Operation }) => void;
+  play_salinda: (data: { cardId: string; chosenOperation: Operation }) => void;
   draw_card: () => void;
   trigger_last_card_alert: () => void;
   end_turn: () => void;

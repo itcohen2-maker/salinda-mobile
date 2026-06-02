@@ -249,7 +249,7 @@ describe('decideBotAction', () => {
       kind: 'confirmEquation';
       target: number;
       equationDisplay: string;
-      equationCommits: { cardId: string; position: number; jokerAs: null | string }[];
+      equationCommits: { cardId: string; position: number; salindaAs: null | string }[];
       equationOps: string[];
       stagedCardIds: ReadonlyArray<string>;
     };
@@ -268,7 +268,7 @@ describe('decideBotAction', () => {
     expect(action.equationCommits).toHaveLength(1);
     expect(action.equationCommits[0].cardId).toBe(opCard.id);
     expect(action.equationCommits[0].position).toBe(0);
-    expect(action.equationCommits[0].jokerAs).toBeNull();
+    expect(action.equationCommits[0].salindaAs).toBeNull();
 
     // equationOps: ['+'] derived from the operation card
     expect(action.equationOps).toEqual(['+']);
@@ -357,7 +357,7 @@ describe('decideBotAction', () => {
 
     const action = result as {
       kind: 'confirmEquation';
-      equationCommits: { cardId: string; position: number; jokerAs: null | string }[];
+      equationCommits: { cardId: string; position: number; salindaAs: null | string }[];
       equationOps: string[];
       stagedCardIds: ReadonlyArray<string>;
     };

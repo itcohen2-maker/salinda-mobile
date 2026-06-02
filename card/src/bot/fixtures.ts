@@ -18,7 +18,7 @@ import type { BotDifficulty } from './types';
 // TypeScript structural typing ensures these satisfy the real GameState shape
 // as long as all required fields are present.
 
-export type CardType = 'number' | 'fraction' | 'operation' | 'joker' | 'wild';
+export type CardType = 'number' | 'fraction' | 'operation' | 'salinda' | 'wild';
 export type Operation = '+' | '-' | 'x' | '÷';
 export type Fraction = '1/2' | '1/3' | '1/4' | '1/5';
 export type OverflowSwapPileChoice = 'top' | 'underTop';
@@ -72,7 +72,7 @@ export interface GameState {
   lastCardValue: number | null;
   consecutiveIdenticalPlays: number;
   identicalAlert: null | { playerName: string; cardDisplay: string; consecutive: number };
-  jokerModalOpen: boolean;
+  salindaModalOpen: boolean;
   equationHandSlots: [null | unknown, null | unknown];
   equationHandPick: null | unknown;
   lastMoveMessage: string | null;
@@ -158,7 +158,7 @@ const baseline: GameState = {
   lastCardValue: null,
   consecutiveIdenticalPlays: 0,
   identicalAlert: null,
-  jokerModalOpen: false,
+  salindaModalOpen: false,
   equationHandSlots: [null, null],
   equationHandPick: null,
   lastMoveMessage: null,
@@ -230,7 +230,7 @@ let _cardSeq = 0;
 /**
  * Build a Card fixture. Generates a unique id automatically.
  * Pass value for number cards, fraction for fraction cards,
- * operation for operation cards. Wild and joker cards need no extra fields.
+ * operation for operation cards. Wild and salinda cards need no extra fields.
  */
 export function makeCard(
   type: CardType,

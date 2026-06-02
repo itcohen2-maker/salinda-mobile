@@ -1,32 +1,28 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { GoldButton } from '../../components/GoldButton';
-import HandFan from '../../components/HandFan';
-import type { Card } from '../../components/CardDesign';
+import { GameCard, type Card } from '../../components/CardDesign';
 import { DiceEquationRound } from './DiceEquationRound';
 
+const INTRO_TEXT = 'הכירו את קלפי הסימן + / -. הציבו אותם בתרגיל וכך תיפטרו מהם';
 const INTRO_BUTTON_WIDTH = 180;
-const INTRO_BUTTON_HEIGHT = 30;
+const INTRO_BUTTON_HEIGHT = 50;
 const INTRO_BUTTON_RADIUS = 12;
 const INTRO_BUTTON_RAISE = 5;
-const INTRO_BUTTON_FONT_SIZE = 13;
+const INTRO_BUTTON_FONT_SIZE = 22;
 
 const INTRO_HAND: Card[] = [
-  { id: 'sign-intro-num-5', type: 'number', value: 5 },
   { id: 'sign-intro-plus', type: 'operation', operation: '+' },
   { id: 'sign-intro-minus', type: 'operation', operation: '-' },
-  { id: 'sign-intro-num-3', type: 'number', value: 3 },
-  { id: 'sign-intro-num-9', type: 'number', value: 9 },
 ];
 
 function SignCardsIntro({ onStart }: { onStart: () => void }) {
-  const { width: winW } = useWindowDimensions();
-  const fanW = Math.min(winW, 480);
   const pulse = useRef(new Animated.Value(0)).current;
-  const selectedIds = useMemo(() => new Set(['sign-intro-plus', 'sign-intro-minus']), []);
+  const open = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    Animated.spring(open, { toValue: 1, friction: 7, tension: 110, useNativeDriver: true }).start();
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 760, useNativeDriver: true }),
@@ -34,19 +30,28 @@ function SignCardsIntro({ onStart }: { onStart: () => void }) {
       ]),
     );
     loop.start();
-    return () => loop.stop();
-  }, [pulse]);
+    return () => {
+      loop.stop();
+      open.stopAnimation();
+    };
+  }, [open, pulse]);
 
-  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.28, 0.9] });
-  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] });
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.72] });
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] });
   const fanScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] });
+  const plusX = open.interpolate({ inputRange: [0, 1], outputRange: [0, -58] });
+  const minusX = open.interpolate({ inputRange: [0, 1], outputRange: [0, 58] });
+  const plusRotate = open.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-10deg'] });
+  const minusRotate = open.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '10deg'] });
+  const cardLift = open.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
 
   return (
     <View style={styles.root}>
       <View style={styles.dimBoard} pointerEvents="none" />
+
       <View style={styles.copyWrap}>
-        <Text style={styles.introText}>
-          הכירו את משני המשחק! קלפי הסימן (+ / -) הם חומרי גלם מטורפים. הם מאפשרים לכם לשנות את חוקי המשוואה על הלוח, להנדס תרגילים יצירתיים ולהיפטר מקלפים מהמניפה שלכם!
+        <Text allowFontScaling={false} style={styles.introText}>
+          {INTRO_TEXT}
         </Text>
       </View>
 
@@ -55,14 +60,25 @@ function SignCardsIntro({ onStart }: { onStart: () => void }) {
       </View>
 
       <View style={styles.fanWrap}>
-        <Animated.View style={{ transform: [{ scale: fanScale }] }}>
-          <HandFan
-            cards={INTRO_HAND}
-            width={fanW}
-            selectedIds={selectedIds}
-            centerCardId="sign-intro-minus"
-            canTap={() => false}
-          />
+        <Animated.View pointerEvents="none" style={[styles.signFan, { transform: [{ scale: fanScale }] }]}>
+          <Animated.View
+            style={[
+              styles.signCard,
+              styles.signCardLeft,
+              { transform: [{ translateX: plusX }, { translateY: cardLift }, { rotate: plusRotate }] },
+            ]}
+          >
+            <GameCard card={INTRO_HAND[0]} selected small onPress={undefined} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.signCard,
+              styles.signCardRight,
+              { transform: [{ translateX: minusX }, { translateY: cardLift }, { rotate: minusRotate }] },
+            ]}
+          >
+            <GameCard card={INTRO_HAND[1]} selected small onPress={undefined} />
+          </Animated.View>
         </Animated.View>
       </View>
 
@@ -84,7 +100,7 @@ function SignCardsIntro({ onStart }: { onStart: () => void }) {
 }
 
 export default function SpecialCardsIntro({ onDone }: { onDone?: () => void }) {
-  const [readyToPractice, setReadyToPractice] = React.useState(false);
+  const [readyToPractice, setReadyToPractice] = useState(false);
 
   if (readyToPractice) {
     return <DiceEquationRound mode="operators" onComplete={onDone} />;
@@ -101,22 +117,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '58%',
-    backgroundColor: 'rgba(0,0,0,0.36)',
+    backgroundColor: 'rgba(0,0,0,0.38)',
   },
   copyWrap: {
     position: 'absolute',
-    top: 22,
-    left: 18,
-    right: 18,
+    top: 34,
+    left: 22,
+    right: 22,
     zIndex: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    backgroundColor: 'rgba(20,12,4,0.78)',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(20,12,4,0.68)',
     borderWidth: 1,
-    borderColor: 'rgba(244,205,90,0.38)',
+    borderColor: 'rgba(244,205,90,0.32)',
   },
-  introText: { color: '#F8E08E', fontSize: 17, fontWeight: '800', lineHeight: 25, textAlign: 'right' },
+  introText: {
+    color: '#F8E08E',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 25,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
   spotlightWrap: {
     position: 'absolute',
     left: 0,
@@ -127,17 +152,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   halo: {
-    width: 330,
-    height: 170,
-    borderRadius: 85,
+    width: 260,
+    height: 150,
+    borderRadius: 75,
     backgroundColor: '#2E7D43',
     shadowColor: '#F8E08E',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.95,
-    shadowRadius: 26,
-    elevation: 18,
+    shadowOpacity: 0.85,
+    shadowRadius: 22,
+    elevation: 16,
   },
-  fanWrap: { position: 'absolute', left: 0, right: 0, bottom: 46, alignItems: 'center', zIndex: 3 },
+  fanWrap: { position: 'absolute', left: 0, right: 0, bottom: 56, alignItems: 'center', zIndex: 3 },
+  signFan: {
+    width: 250,
+    height: 178,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signCard: {
+    position: 'absolute',
+    width: 100,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signCardLeft: { zIndex: 2 },
+  signCardRight: { zIndex: 3 },
   buttonWrap: {
     position: 'absolute',
     bottom: 16,

@@ -348,7 +348,7 @@ function playerViewToGameState(view: PlayerView): any {
   for (const ec of commits) {
     const c = normalizedMyHand.find((x) => x.id === ec.cardId);
     if (c && (ec.position === 0 || ec.position === 1)) {
-      equationHandSlots[ec.position] = { card: c, jokerAs: normalizeOperationToken(ec.jokerAs) };
+      equationHandSlots[ec.position] = { card: c, salindaAs: normalizeOperationToken(ec.salindaAs) };
     }
   }
   const normalizedEnabledOperators = (gs.enabledOperators ?? [])
@@ -409,7 +409,7 @@ function playerViewToGameState(view: PlayerView): any {
     meterAnimationPending: false,
     pendingTurnState: null,
     identicalAlert: view.identicalCelebration ?? null,
-    jokerModalOpen: false,
+    salindaModalOpen: false,
     equationHandSlots,
     equationHandPick: null,
     lastMoveMessage: suppressLastMoveSummary ? null : view.lastMoveMessage,
@@ -499,8 +499,8 @@ function actionToSocketEvent(action: any): { event: string; data?: any } | null 
     case 'DEFEND_FRACTION_PENALTY': return { event: 'defend_fraction_penalty' };
     case 'PLAY_OPERATION': return { event: 'play_operation', data: { cardId: action.card?.id } };
     case 'FORWARD_CHALLENGE': return null;
-    case 'PLAY_JOKER':
-      return { event: 'play_joker', data: { cardId: action.card?.id, chosenOperation: action.chosenOperation } };
+    case 'PLAY_SALINDA':
+      return { event: 'play_salinda', data: { cardId: action.card?.id, chosenOperation: action.chosenOperation } };
     case 'DRAW_CARD': return { event: 'draw_card' };
     case 'TRIGGER_LAST_CARD_ALERT': return null;
     case 'END_TURN': return { event: 'end_turn' };

@@ -103,10 +103,10 @@ describe('lesson registry smoke', () => {
     expect(step.outcome({ kind: 'cardTapped', cardId: 'tut-l4-card-5-123' })).toBe(false);
     expect(step.outcome({ kind: 'eqUserPickedDice', idx: 1 })).toBe(false);
   });
-  it('lesson 5 has place-op, joker-place, then the important tip', () => {
+  it('lesson 5 has place-op, salinda-place, then the important tip', () => {
     expect(LESSONS[4].steps.map((s) => s.id)).toEqual([
       'place-op',
-      'joker-place',
+      'salinda-place',
       'important-tip',
     ]);
   });
@@ -118,16 +118,16 @@ describe('lesson registry smoke', () => {
     expect(step.outcome({ kind: 'l5OperatorPlaced', op: 'x', position: 0 })).toBe(false);
     expect(step.outcome({ kind: 'l5OperatorPlaced', op: 'ֳ·', position: 0 })).toBe(false);
     expect(step.outcome({ kind: 'opSelected', op: '+', via: 'cycle' })).toBe(false);
-    expect(step.outcome({ kind: 'l5JokerModalOpened' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaModalOpened' })).toBe(false);
   });
-  it('lesson 5 step 2 (joker-place) requires completed full joker flow with correct sign (+)', () => {
+  it('lesson 5 step 2 (salinda-place) requires completed full salinda flow with correct sign (+)', () => {
     const step = LESSONS[4].steps[1];
-    expect(step.outcome({ kind: 'l5JokerFlowCompleted', op: '+' })).toBe(true);
-    expect(step.outcome({ kind: 'l5JokerFlowCompleted', op: '-' })).toBe(false);
-    expect(step.outcome({ kind: 'l5JokerFlowCompleted', op: 'x' })).toBe(false);
-    expect(step.outcome({ kind: 'l5JokerFlowCompleted', op: 'ֳ·' })).toBe(false);
-    expect(step.outcome({ kind: 'l5JokerPlaced', op: '+' })).toBe(false);
-    expect(step.outcome({ kind: 'l5JokerPickedInModal', op: '+' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaFlowCompleted', op: '+' })).toBe(true);
+    expect(step.outcome({ kind: 'l5SalindaFlowCompleted', op: '-' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaFlowCompleted', op: 'x' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaFlowCompleted', op: 'ֳ·' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaPlaced', op: '+' })).toBe(false);
+    expect(step.outcome({ kind: 'l5SalindaPickedInModal', op: '+' })).toBe(false);
   });
   it('lesson 5 step 3 (important-tip) waits for l3TipAck', () => {
     const step = LESSONS[4].steps[2];

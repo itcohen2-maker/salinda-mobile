@@ -45,12 +45,12 @@ describe('equation hand / dice seq reducer', () => {
     expect(next.equationHandSlots).toEqual(st.equationHandSlots);
   });
 
-  it('SELECT_EQ_JOKER rejects disallowed chosen operation', () => {
+  it('SELECT_EQ_SALINDA rejects disallowed chosen operation', () => {
     const st = buildingState();
-    const joker = { id: 'jk1', type: 'joker' as const };
+    const salinda = { id: 'jk1', type: 'salinda' as const };
     const next = gameReducer(
       st,
-      { type: 'SELECT_EQ_JOKER', card: joker, chosenOperation: 'x' } as GameAction,
+      { type: 'SELECT_EQ_SALINDA', card: salinda, chosenOperation: 'x' } as GameAction,
       tf,
     );
     expect(next.message).toBe('equation.operatorNotInStage');
@@ -60,7 +60,7 @@ describe('equation hand / dice seq reducer', () => {
   it('PLACE_EQ_OP rejects pick with disallowed effective op', () => {
     const mulCard = { id: 'op-mul', type: 'operation' as const, operation: 'x' as const };
     const st = buildingState({
-      equationHandPick: { card: mulCard, jokerAs: null },
+      equationHandPick: { card: mulCard, salindaAs: null },
     });
     const next = gameReducer(st, { type: 'PLACE_EQ_OP', position: 0 } as GameAction, tf);
     expect(next.equationHandSlots).toEqual([null, null]);

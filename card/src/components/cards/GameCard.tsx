@@ -3,7 +3,7 @@ import { Card as CardType } from '../../types/game'
 import NumberCard from './NumberCard'
 import FractionCard from './FractionCard'
 import OperationCard from './OperationCard'
-import JokerCard from './JokerCard'
+import SalindaCard from './SalindaCard'
 
 interface Props {
   card: CardType
@@ -20,7 +20,7 @@ export default function GameCard({ card, selected, onPress, small }: Props) {
       return <FractionCard card={card} selected={selected} onPress={onPress} small={small} />
     case 'operation':
       return <OperationCard card={card} selected={selected} onPress={onPress} small={small} />
-    case 'joker':
-      return <JokerCard card={card} selected={selected} onPress={onPress} small={small} />
+    case 'salinda':
+      return <SalindaCard card={card} selected={selected} onPress={onPress} small={small} />
   }
 }

@@ -19,14 +19,14 @@ export default function ActionBar() {
   const hasPlayed = state.hasPlayedCards
   const hasActiveOp = isSelectPhase && !!state.activeOperation && !hasPlayed
 
-  const handleJokerChoice = (op: Operation) => {
-    const jokerCard = state.selectedCards[0]
-    if (jokerCard) dispatch({ type: 'PLAY_JOKER', card: jokerCard, chosenOperation: op })
+  const handleSalindaChoice = (op: Operation) => {
+    const salindaCard = state.selectedCards[0]
+    if (salindaCard) dispatch({ type: 'PLAY_SALINDA', card: salindaCard, chosenOperation: op })
   }
   const buttonRowStyle = responsive.isSingleColumn ? styles.rowStacked : null
   const actionButtonStyle = responsive.isSingleColumn ? styles.fullWidthButton : null
-  const jokerGridStyle = responsive.isSingleColumn ? styles.jokerGridStacked : null
-  const jokerButtonStyle = responsive.isSingleColumn ? styles.jokerBtnSingleColumn : styles.jokerBtn
+  const salindaGridStyle = responsive.isSingleColumn ? styles.salindaGridStacked : null
+  const salindaButtonStyle = responsive.isSingleColumn ? styles.salindaBtnSingleColumn : styles.salindaBtn
 
   return (
     <View style={styles.container}>
@@ -91,21 +91,21 @@ export default function ActionBar() {
         </View>
       )}
 
-      {/* Joker modal — opens when player taps a joker card in their hand */}
+      {/* Salinda modal — opens when player taps a salinda card in their hand */}
       <Modal
-        visible={state.jokerModalOpen}
-        onClose={() => dispatch({ type: 'CLOSE_JOKER_MODAL' })}
-        title={t('game.pickJokerOp')}
+        visible={state.salindaModalOpen}
+        onClose={() => dispatch({ type: 'CLOSE_SALINDA_MODAL' })}
+        title={t('game.pickSalindaOp')}
       >
-        <View testID="action-bar-joker-grid" style={[styles.jokerGrid, jokerGridStyle]}>
+        <View testID="action-bar-salinda-grid" style={[styles.salindaGrid, salindaGridStyle]}>
           {(['+', '-', 'x', '÷'] as Operation[]).map((op) => (
             <Button
-              testID={`action-bar-joker-${op}`}
+              testID={`action-bar-salinda-${op}`}
               key={op}
               variant="primary"
               size="lg"
-              onPress={() => handleJokerChoice(op)}
-              style={jokerButtonStyle}
+              onPress={() => handleSalindaChoice(op)}
+              style={salindaButtonStyle}
             >
               {op}
             </Button>
@@ -136,17 +136,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageText: { color: '#FDE68A', fontSize: 13, textAlign: 'center' },
-  jokerGrid: {
+  salindaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     justifyContent: 'center',
   },
-  jokerGridStacked: {
+  salindaGridStacked: {
     flexDirection: 'column',
     alignItems: 'stretch',
   },
-  jokerBtn: { width: '45%', minWidth: 100 },
-  jokerBtnSingleColumn: { width: '100%' },
+  salindaBtn: { width: '45%', minWidth: 100 },
+  salindaBtnSingleColumn: { width: '100%' },
   fullWidthButton: { width: '100%' },
 })
