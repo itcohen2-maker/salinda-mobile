@@ -20,6 +20,7 @@ Sentry.init({
 });
 
 import { LAST_PUSH } from './src/buildInfo';
+import { APP_VERSION } from './src/appVersion';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
@@ -13005,7 +13006,7 @@ function StartScreen({
           activeOpacity={0.5}
           delayLongPress={2000}
         >
-          <Text style={{ color: 'rgba(255,255,255,0.15)', fontSize: 9, textAlign: 'center', marginTop: 6 }}>v1.0.0</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.15)', fontSize: 9, textAlign: 'center', marginTop: 6 }}>v{APP_VERSION}</Text>
         </TouchableOpacity>
       </View>
       <RNModal
@@ -20889,7 +20890,7 @@ export function PlayModeChoiceScreen({
 
             {isFeedbackAdmin && (
               <View style={{ alignItems: 'center', marginBottom: 12, gap: 10 }}>
-                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v1.0.0 · עדכון {LAST_PUSH}</Text>
+                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v{APP_VERSION} · עדכון {LAST_PUSH}</Text>
               </View>
             )}
             {/* The room renders only when opened; its trigger is open to everyone.
@@ -22947,7 +22948,7 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
 
           {/* Version */}
           <View style={{ position: 'absolute', bottom: 32 }}>
-            <Text style={{ color: 'rgba(245,158,11,0.55)', fontSize: 10, textAlign: 'center' }}>v1.0.0</Text>
+            <Text style={{ color: 'rgba(245,158,11,0.55)', fontSize: 10, textAlign: 'center' }}>v{APP_VERSION}</Text>
           </View>
         </View>
       </View>

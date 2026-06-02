@@ -13,6 +13,7 @@ import {
 
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../i18n/LocaleContext';
+import { APP_VERSION } from '../appVersion';
 
 interface Props {
   onSuccess: () => void;
@@ -151,7 +152,7 @@ export function AuthScreen({ onSuccess, onBack, intent = 'account' }: Props) {
         {/* TEST BANNER - REMOVE LATER */}
         <View style={styles.testBanner}>
           <Text style={styles.testBannerName}>✦ איציק ✦</Text>
-          <Text style={styles.testBannerVersion}>v1.0.0</Text>
+          <Text style={styles.testBannerVersion}>v{APP_VERSION}</Text>
         </View>
 
         {showAccountMenu ? (
