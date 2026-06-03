@@ -7,6 +7,7 @@ import {
   consumeSocialAuthReturnTo,
   createSessionFromUrl,
   isSocialAuthCallbackUrl,
+  SOCIAL_AUTH_CALLBACK_PATH,
   performSocialSignIn,
   type SocialAuthProvider,
   type SocialSignInOptions,
@@ -136,6 +137,15 @@ export function isRegisteredAuthUser(user: User | null): boolean {
   return identityProviders.some((item) => item !== 'anonymous');
 }
 
+function isSafeExpoOAuthReturnUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'exp:' && parsed.pathname.includes(SOCIAL_AUTH_CALLBACK_PATH);
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureMinimumProfileCoins(_userId: string, currentCoins: number): Promise<number> {
   const normalizedCoins = Number(currentCoins);
   if (!Number.isFinite(normalizedCoins)) return 0;
@@ -254,6 +264,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSocialAuthCallbackUrl(callbackUrl)) return;
 
     try {
+      const parsed = new URL(callbackUrl);
+      const expoReturnTo = parsed.searchParams.get('expo_return_to');
+      if (expoReturnTo && isSafeExpoOAuthReturnUrl(expoReturnTo)) {
+        parsed.searchParams.delete('expo_return_to');
+        const returnUrl = new URL(expoReturnTo);
+        parsed.searchParams.forEach((value, key) => {
+          returnUrl.searchParams.set(key, value);
+        });
+        if (parsed.hash) returnUrl.hash = parsed.hash;
+        window.location.replace(returnUrl.toString());
+        return;
+      }
+
       await createSessionFromUrl(callbackUrl);
     } catch (error) {
       console.warn('[auth] OAuth callback failed:', error);

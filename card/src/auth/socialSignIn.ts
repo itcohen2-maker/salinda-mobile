@@ -11,12 +11,31 @@ export interface SocialSignInOptions {
   forceAccountPicker?: boolean;
 }
 
-export const SOCIAL_AUTH_SCHEME = process.env.EXPO_PUBLIC_AUTH_SCHEME ?? 'salinda';
 export const SOCIAL_AUTH_CALLBACK_PATH = 'auth/callback';
-export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
 export const SOCIAL_AUTH_RETURN_TO_STORAGE_KEY = 'salinda_social_auth_return_to';
+export const SOCIAL_AUTH_WEB_APP_URL = process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'https://salinda-mobile.vercel.app';
+
+export function getSocialAuthScheme(): string {
+  return process.env.EXPO_PUBLIC_AUTH_SCHEME ?? 'salinda';
+}
+
+export const SOCIAL_AUTH_SCHEME = getSocialAuthScheme();
+export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
 
 WebBrowser.maybeCompleteAuthSession();
+
+function buildWebCallbackRedirectUri(expoReturnTo?: string): string {
+  const callbackUrl = `${SOCIAL_AUTH_WEB_APP_URL.replace(/\/+$/, '')}/${SOCIAL_AUTH_CALLBACK_PATH}`;
+  if (!expoReturnTo) return callbackUrl;
+
+  const url = new URL(callbackUrl);
+  url.searchParams.set('expo_return_to', expoReturnTo);
+  return url.toString();
+}
+
+function isRawIpHost(hostname: string): boolean {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+}
 
 /**
  * Returns the OAuth redirect URI for the current runtime.
@@ -55,11 +74,36 @@ export function buildSocialAuthRedirectUri(): string {
     // A localhost/adb-reverse dev server resolves to exp://127.0.0.1:<port>/... —
     // rewrite the loopback IP to the `localhost` hostname so GoTrue accepts it and
     // returns into the app instead of falling back to the website Site URL.
-    return uri.replace('://127.0.0.1', '://localhost');
+    const localhostUri = uri.replace('://127.0.0.1', '://localhost');
+    try {
+      const parsed = new URL(localhostUri);
+      if (isRawIpHost(parsed.hostname)) {
+        const bridgeUri = buildWebCallbackRedirectUri(localhostUri);
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`[auth] Expo Go redirect uses raw IP; bridging through web callback: ${bridgeUri}`);
+        }
+        return bridgeUri;
+      }
+    } catch {
+      // If parsing fails, keep the Expo-generated URI and let the auth flow surface the error.
+    }
+    return localhostUri;
   }
 
   // Standalone / dev-client build: use the native custom scheme that is allow-listed in Supabase.
-  return SOCIAL_AUTH_NATIVE_REDIRECT_URI;
+  return `${getSocialAuthScheme()}://${SOCIAL_AUTH_CALLBACK_PATH}`;
+}
+
+function logSocialAuthRedirect(redirectTo: string): void {
+  if (process.env.NODE_ENV === 'production') return;
+
+  const runtime = Platform.OS === 'web'
+    ? 'web'
+    : Constants.executionEnvironment === 'storeClient'
+      ? 'expo-go'
+      : 'native';
+
+  console.info(`[auth] OAuth redirect (${runtime}): ${redirectTo}`);
 }
 
 function hasSocialAuthParams(url: string): boolean {
@@ -174,6 +218,7 @@ export async function performSocialSignIn(
 ): Promise<{ error: string | null }> {
   try {
     const redirectTo = buildSocialAuthRedirectUri();
+    logSocialAuthRedirect(redirectTo);
     const queryParams = provider === 'google' && options.forceAccountPicker
       ? { prompt: 'select_account' }
       : undefined;
