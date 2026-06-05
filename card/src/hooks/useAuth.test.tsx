@@ -22,6 +22,7 @@ jest.mock('../auth/socialSignIn', () => ({
   createSessionFromUrl: jest.fn(),
   isSocialAuthCallbackUrl: jest.fn(),
   performSocialSignIn: jest.fn(),
+  SOCIAL_AUTH_CALLBACK_PATH: 'auth/callback',
 }));
 
 const profilesById: Record<string, PlayerProfile> = {
@@ -262,6 +263,44 @@ describe('useAuth', () => {
       Object.defineProperty(globalThis.window, 'history', {
         configurable: true,
         value: originalHistory,
+      });
+      platformRef.OS = originalPlatform;
+    }
+  });
+
+  it('bridges web OAuth callbacks back to Expo Go when expo_return_to is present', async () => {
+    platformRef.OS = 'web';
+    (isSocialAuthCallbackUrl as jest.Mock).mockReturnValue(true);
+
+    const originalLocation = globalThis.window.location;
+    const replace = jest.fn();
+    Object.defineProperty(globalThis.window, 'location', {
+      configurable: true,
+      value: {
+        href: 'https://salinda-mobile.vercel.app/auth/callback?expo_return_to=exp%3A%2F%2F10.100.102.56%3A8082%2F--%2Fauth%2Fcallback&code=oauth-code',
+        origin: 'https://salinda-mobile.vercel.app',
+        pathname: '/auth/callback',
+        search: '?expo_return_to=exp%3A%2F%2F10.100.102.56%3A8082%2F--%2Fauth%2Fcallback&code=oauth-code',
+        hash: '',
+        replace,
+      },
+    });
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
+
+    try {
+      renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalledWith('exp://10.100.102.56:8082/--/auth/callback?code=oauth-code');
+      });
+      expect(createSessionFromUrl).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(globalThis.window, 'location', {
+        configurable: true,
+        value: originalLocation,
       });
       platformRef.OS = originalPlatform;
     }

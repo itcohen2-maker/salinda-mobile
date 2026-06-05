@@ -95,6 +95,7 @@ import {
   getTutorialRewardOutcome,
   type TutorialRewardOutcome,
 } from './tutorialRewards';
+import { FeraIntroScreen } from './FeraIntroScreen';
 import { getScreenSafeTop } from '../theme/screenInsets';
 
 const LESSON_SHAPES = LESSONS.map((l) => ({ id: l.id, stepCount: l.steps.length }));
@@ -102,7 +103,6 @@ const LESSON_SHAPES = LESSONS.map((l) => ({ id: l.id, stepCount: l.steps.length 
 const CELEBRATE_MS = 900;
 const LESSON_DONE_MS = 1400;
 const HIDDEN_TUTORIAL_LAYERS = new Set([15, 16, 17, 18, 63, 67]);
-const TUTORIAL_WILD_STAR = '★';
 const TUTORIAL_HAPPY_BUBBLE_TEST_ID = 'tutorial-happy-bubble';
 
 const L6_DICE_POOL = [
@@ -154,60 +154,6 @@ function buildL6PossibleResultsSetup(): L6PossibleResultsSetup {
     playerHand,
     botHand,
   };
-}
-
-function TutorialWildMiniCard() {
-  const w = 66;
-  const h = 92;
-  return (
-    <View
-      style={{
-        width: w,
-        height: h,
-        borderRadius: 12,
-        ...Platform.select({
-          ios: { shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 12 },
-          android: { elevation: 8 },
-        }),
-      }}
-    >
-      <LinearGradient
-        colors={['#7C3AED', '#5B21B6', '#4C1D95', '#6D28D9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ width: w, height: h, borderRadius: 12, padding: 3 }}
-      >
-        <View style={{ flex: 1, borderRadius: 9, overflow: 'hidden' }}>
-          <LinearGradient
-            colors={['#EDE9FE', '#DDD6FE', '#C4B5FD']}
-            locations={[0, 0.5, 1]}
-            start={{ x: 0.3, y: 0 }}
-            end={{ x: 0.7, y: 1 }}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          />
-          <View
-            style={{
-              position: 'absolute',
-              top: -(h * 0.12),
-              left: w * 0.1,
-              width: w * 0.8,
-              height: h * 0.4,
-              borderRadius: w,
-              backgroundColor: 'rgba(255,255,255,0.5)',
-            }}
-          />
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 24, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>
-              {TUTORIAL_WILD_STAR}
-            </Text>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>
-              0–25
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
-    </View>
-  );
 }
 
 function getHiddenLayerAdvanceAction(phase: MimicState['phase']): MimicAction | null {
@@ -1243,21 +1189,21 @@ function rollL4Dice(): {
   return { d1, d2, d3, pickA, pickB, target, hand: sortedHand, validSums };
 }
 
-function buildPreparedPairExercise(target: number): {
+export function buildPreparedPairExercise(target: number): {
   dice: { die1: number; die2: number; die3: number };
   equationDisplay: string;
   pair: [number, number];
   hand: number[];
 } {
   const exerciseByTarget: Record<number, { dice: { die1: number; die2: number; die3: number }; equationDisplay: string; pair: [number, number] }> = {
-    9: { dice: { die1: 4, die2: 5, die3: 6 }, equationDisplay: '4 + 5 = 9', pair: [8, 1] },
-    10: { dice: { die1: 4, die2: 6, die3: 5 }, equationDisplay: '4 + 6 = 10', pair: [9, 1] },
-    11: { dice: { die1: 5, die2: 6, die3: 4 }, equationDisplay: '5 + 6 = 11', pair: [10, 1] },
-    12: { dice: { die1: 6, die2: 6, die3: 5 }, equationDisplay: '6 + 6 = 12', pair: [11, 1] },
+    9: { dice: { die1: 2, die2: 3, die3: 4 }, equationDisplay: '2 + 3 + 4 = 9', pair: [8, 1] },
+    10: { dice: { die1: 2, die2: 3, die3: 5 }, equationDisplay: '2 + 3 + 5 = 10', pair: [9, 1] },
+    11: { dice: { die1: 2, die2: 4, die3: 5 }, equationDisplay: '2 + 4 + 5 = 11', pair: [10, 1] },
+    12: { dice: { die1: 3, die2: 4, die3: 5 }, equationDisplay: '3 + 4 + 5 = 12', pair: [11, 1] },
     15: { dice: { die1: 5, die2: 5, die3: 5 }, equationDisplay: '5 + 5 + 5 = 15', pair: [9, 6] },
     18: { dice: { die1: 6, die2: 6, die3: 6 }, equationDisplay: '6 + 6 + 6 = 18', pair: [10, 8] },
-    20: { dice: { die1: 5, die2: 4, die3: 6 }, equationDisplay: '5 × 4 = 20', pair: [11, 9] },
-    25: { dice: { die1: 5, die2: 5, die3: 6 }, equationDisplay: '5 × 5 = 25', pair: [13, 12] },
+    20: { dice: { die1: 5, die2: 4, die3: 1 }, equationDisplay: '5 × 4 × 1 = 20', pair: [11, 9] },
+    25: { dice: { die1: 5, die2: 5, die3: 1 }, equationDisplay: '5 × 5 × 1 = 25', pair: [13, 12] },
   };
   const exercise = exerciseByTarget[target] ?? exerciseByTarget[9];
   const dice = exercise.dice;
@@ -1328,6 +1274,12 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   );
   const advancedStartedFromWelcomeRef = useRef(false);
   const tutorialProgress = React.useMemo(() => getTutorialProgressSnapshot(engine), [engine]);
+  useEffect(() => {
+    tutorialBus.setActiveLessonId(LESSONS[engine.lessonIndex]?.id ?? null);
+    return () => {
+      tutorialBus.setActiveLessonId(null);
+    };
+  }, [engine.lessonIndex]);
   // Tutorial-owned dice state ג€” used only for lesson 3 so the lesson is
   // self-contained and doesn't depend on the underlying game phase.
   const [tutorialDice, setTutorialDice] = useState<{ d1: number; d2: number; d3: number } | null>(null);
@@ -2497,10 +2449,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
       engine.lessonIndex < MIMIC_PARENS_LESSON_INDEX;
     const on =
       isFrac &&
-      engine.phase !== 'post-signs-choice' &&
-      engine.phase !== 'core-complete' &&
-      engine.phase !== 'all-done' &&
-      engine.phase !== 'idle';
+      (engine.phase === 'bot-demo' || engine.phase === 'await-mimic');
     tutorialBus.setFracGuidedMode(on);
     return () => tutorialBus.setFracGuidedMode(false);
   }, [engine.lessonIndex, engine.phase]);
@@ -5103,6 +5052,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
     : engine.phase === 'celebrate' || engine.phase === 'lesson-done' || engine.phase === 'all-done' ? 'celebrate'
     : engine.phase === 'await-mimic' ? 'turn'
     : 'demo';
+  const isL1FanBrowseBubble =
+    engine.lessonIndex === 0 &&
+    engine.phase === 'await-mimic' &&
+    currentStep?.hintKey === 'tutorial.l1.hintScroll';
 
   // Fan strip lives at the bottom of the screen. Use handStripHeight (140 on iOS)
   // which includes the 24px strip-above-fan area, not just the card viewport (116).
@@ -6439,105 +6392,17 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
        engine.stepIndex === 2 &&
        engine.phase === 'intro' &&
        !l6WildMockupApproved ? (
-        <>
-          <View
-            pointerEvents="auto"
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(5,10,22,0.90)',
-              zIndex: 9250,
-            }}
-          />
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              alignItems: 'center', justifyContent: 'center',
-              paddingHorizontal: 24, zIndex: 9260,
-            }}
-          >
-            <View
-              style={{
-                maxWidth: 360, width: '100%',
-                borderRadius: 24,
-                backgroundColor: 'rgba(15,23,42,0.97)',
-                borderWidth: 2.5, borderColor: '#A78BFA',
-                paddingVertical: 24, paddingHorizontal: 20,
-                gap: 14, alignItems: 'center',
-                ...Platform.select({
-                  ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 18 },
-                  android: { elevation: 14 },
-                }),
-              }}
-            >
-              <Text
-                style={{
-                  color: '#FFDF00',
-                  fontSize: 25,
-                  lineHeight: 31,
-                  fontWeight: '900',
-                  textAlign: 'center',
-                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
-                  includeFontPadding: false,
-                }}
-              >
-                {t('wildCard.title')}
-              </Text>
-              <TutorialWildMiniCard />
-              <Text
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: 16,
-                  fontWeight: '400',
-                  textAlign: 'center',
-                  textAlignVertical: 'center',
-                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
-                  lineHeight: 24,
-                  includeFontPadding: false,
-                }}
-              >
-                {t('wildCard.body')}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => {
-              setL6WildMockupApproved(true);
-              dispatchEngine({ type: 'DISMISS_INTRO' });
-            }}
-            style={{ position: 'absolute', bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, left: 0, right: 0, alignItems: 'center', zIndex: 9270 }}
-          >
-            <View style={{
-              backgroundColor: '#6D28D9',
-              borderRadius: 20,
-              minHeight: 58,
-              paddingVertical: 15, paddingHorizontal: 42,
-              borderWidth: 2, borderColor: '#A78BFA',
-              alignItems: 'center',
-              justifyContent: 'center',
-              ...Platform.select({
-                ios: { shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14 },
-                android: { elevation: 12 },
-              }),
-            }}>
-              <Text
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: 17,
-                  lineHeight: 22,
-                  fontWeight: '900',
-                  textAlign: 'center',
-                  textAlignVertical: 'center',
-                  writingDirection: locale === 'he' ? 'rtl' : 'ltr',
-                  includeFontPadding: false,
-                }}
-              >
-                {t('wildCard.button')}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </>
+        <FeraIntroScreen
+          title={t('wildCard.title')}
+          subtitle={t('wildCard.body')}
+          ctaLabel={t('wildCard.button')}
+          locale={locale}
+          bottomOffset={TUTORIAL_ACTION_BUTTON_BOTTOM}
+          onContinue={() => {
+            setL6WildMockupApproved(true);
+            dispatchEngine({ type: 'DISMISS_INTRO' });
+          }}
+        />
       ) : null}
 
       {/* Parens lesson: "Did you know?" style mockup + explicit confirm. */}
@@ -7240,7 +7105,9 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
             testID={TUTORIAL_HAPPY_BUBBLE_TEST_ID}
             pointerEvents={isParensLesson && engine.phase === 'celebrate' ? 'box-none' : 'none'}
             style={
-              isL9Stage0Bubble
+              isL1FanBrowseBubble
+                ? { position: 'absolute', top: 104, left: 64, right: 16, alignItems: 'center', zIndex: 9200 }
+              : isL9Stage0Bubble
                 ? { position: 'absolute', top: 130, alignItems: 'center', zIndex: 9200, ...tutorialTopBubbleInsets }
                 : isL9Stage1Bubble
                   ? { position: 'absolute', top: 55, alignItems: 'center', zIndex: 9200, ...tutorialTopBubbleInsets }
@@ -7266,11 +7133,12 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
             <HappyBubble
               text={bubbleText}
               title={bubbleTitle}
-              tone={bubbleTone}
+              tone={isL1FanBrowseBubble ? 'goldRoomDark' : bubbleTone}
               arrowSize='small'
-              withTail={!isL3DiceIntro && !isL6Step1Bubble && !isL6OpenChipHintBubble && !isL6AfterResultsOpenBubble}
-              size={isCompact ? 'compact' : 'normal'}
-              maxWidth={isL6ReadExerciseBubble ? tutorialCompactBubbleMaxWidth : isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
+              withTail={!isL1FanBrowseBubble && !isL3DiceIntro && !isL6Step1Bubble && !isL6OpenChipHintBubble && !isL6AfterResultsOpenBubble}
+              size={isL1FanBrowseBubble ? 'normal' : isCompact ? 'compact' : 'normal'}
+              maxWidth={isL1FanBrowseBubble ? 448 : isL6ReadExerciseBubble ? tutorialCompactBubbleMaxWidth : isCompact ? tutorialCompactBubbleMaxWidth : tutorialNormalBubbleMaxWidth}
+              minWidth={isL1FanBrowseBubble ? '100%' : undefined}
               tailTop={false}
               titleStyleOverride={bubbleTitleStyleOverride}
               textStyleOverride={bubbleTextStyleOverride}
@@ -7519,10 +7387,10 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
                 android: { elevation: 14 },
               }),
             }}>
-              <Text style={{ color: '#78350F', fontSize: 28, lineHeight: 34, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' }}>
+              <Text style={{ color: '#050505', fontSize: 28, lineHeight: 34, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' }}>
                 {`${example.pile} ÷ ${example.denom} = ${result}`}
               </Text>
-              <Text style={{ color: '#92400E', fontSize: 15, lineHeight: 20, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
+              <Text style={{ color: '#050505', fontSize: 15, lineHeight: 20, fontWeight: '900', textAlign: 'center', writingDirection: locale === 'he' ? 'rtl' : 'ltr' }}>
                 {fractionText}
               </Text>
             </View>
@@ -7572,15 +7440,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
                     android: { elevation: 10 },
                   }),
                 }}>
-                  <Text style={{ fontSize: 28, color: '#78350F', fontWeight: '900' }}>{'→'}</Text>
+                  <Text style={{ fontSize: 28, color: '#050505', fontWeight: '900' }}>{'→'}</Text>
                 </View>
               </Animated.View>
 
               {/* Label bubble below pile, arrow up ג€” bigger and centered */}
               <View pointerEvents="none" style={{ position: 'absolute', top: 202, left: 8, right: 8, alignItems: 'flex-end', zIndex: 9310 }}>
                 <View style={{ marginRight: 90, width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 13, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#F59E0B' }} />
-                <View style={{ width: '100%', backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 2.5, borderRadius: 18, paddingHorizontal: 20, paddingVertical: 16, ...Platform.select({ ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 8 } }) }}>
-                  <Text style={{ color: '#78350F', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                <View style={{ width: '100%', backgroundColor: '#F0C04A', borderColor: '#F0B12A', borderWidth: 2.5, borderRadius: 18, paddingHorizontal: 20, paddingVertical: 16, ...Platform.select({ ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 10 }, android: { elevation: 8 } }) }}>
+                  <Text style={{ color: '#050505', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
                     {locale === 'he' ? 'זאת ערימת הקלפים' : 'This is the card deck'}
                   </Text>
                 </View>
@@ -7602,24 +7470,24 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
             <>
               <View pointerEvents="none" style={{ position: 'absolute', top: 200, left: 18, right: 18, zIndex: 9210 }}>
                 <View style={{
-                  backgroundColor: '#0F1E3A',
-                  borderColor: '#3B82F6',
+                  backgroundColor: '#F0C04A',
+                  borderColor: '#F0B12A',
                   borderWidth: 2,
                   borderRadius: 24,
                   paddingHorizontal: 24,
                   paddingVertical: 26,
                   alignItems: 'center',
                   gap: 10,
-                  ...Platform.select({ ios: { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 }, android: { elevation: 18 } }),
+                  ...Platform.select({ ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 18 }, android: { elevation: 18 } }),
                 }}>
-                  <Text style={{ color: '#93C5FD', fontSize: 15, fontWeight: '800', textAlign: 'center', letterSpacing: 0.5 }}>
+                  <Text style={{ color: '#050505', fontSize: 15, fontWeight: '800', textAlign: 'center', letterSpacing: 0.5 }}>
                     {locale === 'he' ? 'איך מאתגרים את השחקן הבא?' : 'How to challenge the next player?'}
                   </Text>
-                  <Text style={{ color: '#FCD34D', fontSize: 30, fontWeight: '900', textAlign: 'center' }}>
+                  <Text style={{ color: '#050505', fontSize: 30, fontWeight: '900', textAlign: 'center' }}>
                     {locale === 'he' ? 'עם קלף שבר!' : 'With a Fraction card!'}
                   </Text>
-                  <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(59,130,246,0.3)' }} />
-                  <Text style={{ color: '#CBD5E1', fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 21 }}>
+                  <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(5,5,5,0.25)' }} />
+                  <Text style={{ color: '#050505', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 21 }}>
                     {locale === 'he'
                       ? 'שחקן יכול לאתגר כשהמספר\nבערימה מתחלק בשבר שלו'
                       : 'A player can challenge when the\npile number is divisible by their fraction'}
@@ -7653,24 +7521,24 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
             paddingHorizontal: 24, zIndex: 9260,
           }}>
             <View style={{
-              backgroundColor: '#1e1b4b',
+              backgroundColor: '#F0C04A',
               borderWidth: 2,
-              borderColor: '#6366F1',
+              borderColor: '#F0B12A',
               borderRadius: 24,
               paddingHorizontal: 24,
               paddingVertical: 26,
               alignItems: 'center',
               gap: 10,
               ...Platform.select({
-                ios: { shadowColor: '#6366F1', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+                ios: { shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 18 },
                 android: { elevation: 18 },
               }),
             }}>
-              <Text style={{ color: '#FCD34D', fontSize: 26, fontWeight: '900', textAlign: 'center' }}>
+              <Text style={{ color: '#050505', fontSize: 26, fontWeight: '900', textAlign: 'center' }}>
                 {locale === 'he' ? 'הגנה' : 'Defense'}
               </Text>
-              <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(99,102,241,0.3)' }} />
-              <Text style={{ color: '#E2E8F0', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 23 }}>
+              <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(5,5,5,0.25)' }} />
+              <Text style={{ color: '#050505', fontSize: 15, fontWeight: '800', textAlign: 'center', lineHeight: 23 }}>
                 {locale === 'he' ? 'הנח קלף שבר כדי להעביר את האתגר\nאו הנח קלף שמתחלק בשבר' : 'Play a fraction card to pass the challenge\nor play a card divisible by the fraction'}
               </Text>
             </View>

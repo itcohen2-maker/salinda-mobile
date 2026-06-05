@@ -6,6 +6,39 @@
 // test that imports from ../../index (etc.) inherits the mocks automatically.
 // Do NOT duplicate these mocks in individual test files.
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const interpolate = (value: number, input: number[], output: number[]) => {
+    if (input.length === 0 || output.length === 0) return value;
+    if (value <= input[0]) return output[0];
+    for (let i = 1; i < input.length; i += 1) {
+      if (value <= input[i]) {
+        const span = input[i] - input[i - 1] || 1;
+        const pct = (value - input[i - 1]) / span;
+        return output[i - 1] + pct * (output[i] - output[i - 1]);
+      }
+    }
+    return output[output.length - 1];
+  };
+  return {
+    __esModule: true,
+    default: {
+      View: React.forwardRef((props: any, ref: any) => React.createElement(View, { ...props, ref })),
+    },
+    interpolate,
+    runOnJS: (fn: (...args: any[]) => any) => fn,
+    useAnimatedStyle: (fn: () => any) => fn(),
+    useSharedValue: (value: any) => ({ value }),
+    withSequence: (...values: any[]) => values[values.length - 1],
+    withSpring: (value: any) => value,
+    withTiming: (value: any, _config?: any, callback?: (finished: boolean) => void) => {
+      if (callback) callback(true);
+      return value;
+    },
+  };
+});
+
 jest.mock('expo-av', () => ({
   Audio: {
     Sound: {

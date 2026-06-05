@@ -9,26 +9,39 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-export type HappyBubbleTone = 'demo' | 'turn' | 'celebrate' | 'welcome' | 'buttonRed' | 'buttonOrange';
+export type HappyBubbleTone = 'demo' | 'turn' | 'celebrate' | 'welcome' | 'buttonRed' | 'buttonOrange' | 'goldRoomDark';
 
-// Polished gold ("D"): a smooth metallic sheen, light at the top fading to a
-// deep gold at the bottom, with NO wood grain. Every tone shares one premium
-// gold look — a single, world-class style across all bubbles. Gold tones are
-// sampled from the physical gold plank that inspired the redesign.
+// Shared tutorial instruction surface. Keep every tone on the same rich
+// gold language so Tutorial and Gold Room banners feel like one system.
 const GOLD_POLISHED = {
-  gradient: ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const,
-  bg: '#D9A23A', // solid representative gold — used for the speech tail's fill
+  gradient: ['#FFF2B8', '#E9B84C', '#9B641E'] as const,
+  bg: '#E0A43D', // solid representative gold — used for the speech tail's fill
   border: '#8A5A1C',
-  text: '#5E3A10',
+  text: '#1B1205',
 };
 
-const TONE_STYLES: Record<HappyBubbleTone, typeof GOLD_POLISHED> = {
+const GOLD_ROOM_DARK = {
+  gradient: GOLD_POLISHED.gradient,
+  bg: GOLD_POLISHED.bg,
+  border: GOLD_POLISHED.border,
+  text: GOLD_POLISHED.text,
+};
+
+type HappyBubblePalette = {
+  gradient: readonly [string, string, ...string[]];
+  bg: string;
+  border: string;
+  text: string;
+};
+
+const TONE_STYLES: Record<HappyBubbleTone, HappyBubblePalette> = {
   demo: GOLD_POLISHED,
   turn: GOLD_POLISHED,
   celebrate: GOLD_POLISHED,
   welcome: GOLD_POLISHED,
   buttonRed: GOLD_POLISHED,
   buttonOrange: GOLD_POLISHED,
+  goldRoomDark: GOLD_ROOM_DARK,
 };
 
 type Props = {
@@ -47,6 +60,8 @@ type Props = {
   tailTop?: boolean;
   /** Override max width — defaults to 88% of parent */
   maxWidth?: number | string;
+  /** Optional minimum width for framed, mockup-style bubbles. */
+  minWidth?: number | string;
   /** `compact` shrinks padding, font, and border for a less intrusive bubble. */
   size?: 'normal' | 'compact';
   /** Optional style override for the body text only. */
@@ -62,6 +77,7 @@ export function HappyBubble({
   arrowSize = 'small',
   tailTop = false,
   maxWidth = '88%',
+  minWidth,
   size = 'normal',
   textStyleOverride,
 }: Props): React.ReactElement {
@@ -75,6 +91,8 @@ export function HappyBubble({
 
   const palette = TONE_STYLES[tone];
   const noPointerEvents = Platform.OS === 'web' ? ({ pointerEvents: 'none' } as any) : null;
+  const isMockupGold = tone === 'goldRoomDark';
+  const bubbleRadius = isMockupGold ? 18 : compact ? 18 : 28;
 
   return (
     <View pointerEvents="none" style={[{ alignItems: 'center' }, noPointerEvents]}>
@@ -84,15 +102,16 @@ export function HappyBubble({
       <Animated.View
         pointerEvents="none"
         style={{
-          borderRadius: compact ? 18 : 28,
+          borderRadius: bubbleRadius,
           maxWidth: maxWidth as number,
+          minWidth: minWidth as number | undefined,
           transform: [{ scale }],
           // Outer drop shadow lives here (overflow stays visible so it renders).
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 5 },
-          shadowOpacity: 0.35,
-          shadowRadius: 11,
-          elevation: 8,
+          shadowOffset: { width: 0, height: isMockupGold ? 12 : 8 },
+          shadowOpacity: isMockupGold ? 0.42 : 0.36,
+          shadowRadius: isMockupGold ? 18 : 14,
+          elevation: isMockupGold ? 18 : 12,
         }}
       >
         <LinearGradient
@@ -103,10 +122,10 @@ export function HappyBubble({
           style={[
             {
               borderColor: palette.border,
-              borderWidth: compact ? 2 : 3,
-              paddingHorizontal: compact ? 14 : 22,
-              paddingVertical: compact ? 8 : 14,
-              borderRadius: compact ? 18 : 28,
+              borderWidth: isMockupGold ? 3 : compact ? 2 : 3,
+              paddingHorizontal: isMockupGold ? 22 : compact ? 14 : 22,
+              paddingVertical: isMockupGold ? 16 : compact ? 8 : 14,
+              borderRadius: bubbleRadius,
               overflow: 'hidden',
               alignItems: 'center',
             },
@@ -141,6 +160,7 @@ export function HappyBubble({
                 },
                 noPointerEvents,
                 titleStyleOverride,
+                { color: palette.text },
               ]}
             >
               {title}
@@ -151,13 +171,17 @@ export function HappyBubble({
             style={[
               {
                 color: palette.text,
-                fontSize: compact ? 14 : 18,
-                lineHeight: compact ? 18 : undefined,
-                fontWeight: '800',
+                fontSize: isMockupGold ? 18 : compact ? 14 : 18,
+                lineHeight: isMockupGold ? 27 : compact ? 18 : undefined,
+                fontWeight: isMockupGold ? '900' : '800',
                 textAlign: 'center',
+                textShadowColor: isMockupGold ? 'rgba(255,248,220,0.45)' : undefined,
+                textShadowOffset: isMockupGold ? { width: 0, height: 1 } : undefined,
+                textShadowRadius: isMockupGold ? 1 : undefined,
               },
               noPointerEvents,
               textStyleOverride,
+              { color: palette.text },
             ]}
           >
             {text}

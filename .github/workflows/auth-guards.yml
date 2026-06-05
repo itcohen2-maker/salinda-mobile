@@ -1,0 +1,36 @@
+name: Auth Guards
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: card
+
+jobs:
+  auth-and-admin-ui:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: card/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run OAuth and admin UI guards
+        run: >
+          npm test --
+          src/auth/socialSignIn.test.ts
+          src/hooks/useAuth.test.tsx
+          src/__tests__/play-mode-choice-screen.test.tsx
+          src/screens/AnalyticsScreen.test.tsx

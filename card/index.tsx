@@ -20,7 +20,7 @@ Sentry.init({
 });
 
 import { LAST_PUSH } from './src/buildInfo';
-import { APP_VERSION } from './src/appVersion';
+import { APP_VERSION, WEBSITE_LAST_UPDATED } from './src/appVersion';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
@@ -6922,7 +6922,7 @@ function timerProgressColor(progress: number): string {
 }
 
 
-export type EquationResultVisualState = 'placeholder' | 'ready' | 'error' | 'tutorial-target';
+export type EquationResultVisualState = 'placeholder' | 'ready' | 'error' | 'range-error' | 'tutorial-target';
 
 const EQUATION_VISUAL_TOKENS = {
   numberText: '#17324D',
@@ -6956,14 +6956,17 @@ export function getEquationResultVisualState({
   finalResult,
   hasError,
   tutorialTarget,
+  maxResult,
   ok: _ok,
 }: {
   finalResult: number | null;
   hasError: boolean;
   tutorialTarget: number | null;
+  maxResult?: number | null;
   ok?: boolean;
 }): EquationResultVisualState {
   if (hasError) return 'error';
+  if (finalResult !== null && maxResult != null && finalResult > maxResult) return 'range-error';
   if (finalResult !== null) return 'ready';
   if (tutorialTarget !== null) return 'tutorial-target';
   return 'placeholder';
@@ -6987,6 +6990,205 @@ export {
 export { GameProvider, useGame };
 export type { GameState, GameAction, Card, Player, Operation, Fraction, CardType, GamePhase, DiceResult, EquationOption };
 // EquationCommitPayload is exported above, near the GameAction union definition.
+
+type DicePlacementAnimationMode = 'fade' | 'jump';
+type DicePlacementSource = 'user' | 'tutorial';
+type WindowRect = { x: number; y: number; width: number; height: number };
+type LocalRect = { x: number; y: number; width: number; height: number };
+type DicePlacementTransition = {
+  key: string;
+  dieIndex: number;
+  value: number;
+  slot: 1 | 2 | 3;
+  mode: DicePlacementAnimationMode;
+  sourceRect: LocalRect | null;
+  targetRect: LocalRect | null;
+};
+
+function getEquationDicePlacementAnimationMode(state: GameState): DicePlacementAnimationMode {
+  return state.isTutorial && tutorialBus.getActiveLessonId() === 'equation-basics' ? 'jump' : 'fade';
+}
+
+function measureNodeInWindow(node: View | null): Promise<WindowRect | null> {
+  return new Promise((resolve) => {
+    if (!node || typeof node.measureInWindow !== 'function') {
+      resolve(null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      if (width <= 0 || height <= 0) {
+        resolve(null);
+        return;
+      }
+      resolve({ x, y, width, height });
+    });
+  });
+}
+
+function toLocalRect(rect: WindowRect | null, container: WindowRect | null): LocalRect | null {
+  if (!rect || !container) return null;
+  return {
+    x: rect.x - container.x,
+    y: rect.y - container.y,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function AnimatedEquationDiceSlot({
+  slotValue,
+  value,
+  placeholder,
+}: {
+  slotValue: number | null;
+  value: ReactNode;
+  placeholder: ReactNode;
+}) {
+  const pop = useRef(new Animated.Value(slotValue !== null ? 1 : 0)).current;
+  const previousValueRef = useRef<number | null>(slotValue);
+
+  useEffect(() => {
+    if (slotValue === null) {
+      previousValueRef.current = null;
+      pop.setValue(0);
+      return;
+    }
+    if (previousValueRef.current === slotValue) return;
+    previousValueRef.current = slotValue;
+    pop.setValue(0);
+    Animated.spring(pop, {
+      toValue: 1,
+      friction: 7,
+      tension: 120,
+      useNativeDriver: true,
+    }).start();
+  }, [pop, slotValue]);
+
+  if (slotValue === null) return <>{placeholder}</>;
+  return (
+    <Animated.View
+      style={{
+        opacity: pop.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+        transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
+      }}
+    >
+      {value}
+    </Animated.View>
+  );
+}
+
+function AnimatedDicePoolItem({
+  children,
+  isUsed,
+  transitionKey,
+}: {
+  children: ReactNode;
+  isUsed: boolean;
+  transitionKey: string | null;
+}) {
+  const exit = useRef(new Animated.Value(isUsed ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (transitionKey) {
+      exit.setValue(1);
+      Animated.parallel([
+        Animated.timing(exit, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
+    exit.setValue(isUsed ? 0 : 1);
+  }, [exit, isUsed, transitionKey]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: exit,
+        transform: [{ scale: exit.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+function DiceJumpOverlay({
+  transition,
+  onDone,
+}: {
+  transition: DicePlacementTransition;
+  onDone: (key: string) => void;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const landingScale = useRef(new Animated.Value(1)).current;
+  const source = transition.sourceRect;
+  const target = transition.targetRect;
+
+  useEffect(() => {
+    if (!source || !target) return;
+    progress.setValue(0);
+    landingScale.setValue(1);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.inOut(Easing.quad),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        Animated.sequence([
+          Animated.timing(landingScale, { toValue: 1.08, duration: 80, useNativeDriver: true }),
+          Animated.spring(landingScale, { toValue: 1, damping: 10, stiffness: 220, useNativeDriver: true }),
+        ]).start();
+        onDone(transition.key);
+      }
+    });
+  }, [landingScale, onDone, progress, source, target, transition.key]);
+
+  if (!source || !target) return null;
+
+  const sourceCenterX = source.x + source.width / 2;
+  const sourceCenterY = source.y + source.height / 2;
+  const targetCenterX = target.x + target.width / 2;
+  const targetCenterY = target.y + target.height / 2;
+  const dx = targetCenterX - sourceCenterX;
+  const dy = targetCenterY - sourceCenterY;
+  const arcY = Math.min(-42, dy * 0.5 - 68);
+  const finalScale = Math.max(0.68, Math.min(1, target.width / Math.max(1, source.width)));
+  const travelScale = progress.interpolate({ inputRange: [0, 0.74, 1], outputRange: [1, 0.96, finalScale] });
+  const opacity = progress.interpolate({ inputRange: [0, 0.08, 0.88, 1], outputRange: [1, 1, 1, 0] });
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, dx] });
+  const translateY = progress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, arcY, dy] });
+  const scale = Animated.multiply(travelScale, landingScale);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        eqS.jumpDie,
+        {
+          left: source.x,
+          top: source.y,
+          width: source.width,
+          height: source.height,
+        },
+        {
+          opacity,
+          transform: [{ translateX }, { translateY }, { scale }],
+        },
+      ]}
+    >
+      <View style={eqS.diceBtnTextWrap}>
+        <Text style={eqS.diceBtnOutlineT}>{transition.value}</Text>
+        <Text style={eqS.diceBtnT}>{transition.value}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data: { onConfirm: () => void } | null) => void; onResultChange?: (data: { result: number | null; ok: boolean; hasError: boolean } | null) => void; onBuildStarted?: () => void; timerProgress?: number | null; interactive?: boolean; parensRight?: boolean; onParensRightChange?: (v: boolean) => void }>(function EquationBuilder({ onConfirmChange, onResultChange, onBuildStarted, timerProgress = null, interactive = true, parensRight: parensRightProp, onParensRightChange }, ref) {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
@@ -7023,6 +7225,13 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   const [dice1, setDice1] = useState<number | null>(null);
   const [dice2, setDice2] = useState<number | null>(null);
   const [dice3, setDice3] = useState<number | null>(null);
+  const equationWrapRef = useRef<View | null>(null);
+  const dicePoolRefs = useRef<Record<number, View | null>>({});
+  const diceSlotRefs = useRef<Record<1 | 2 | 3, View | null>>({ 1: null, 2: null, 3: null });
+  const [diceTransitions, setDiceTransitions] = useState<DicePlacementTransition[]>([]);
+  const [transitioningDiceIds, setTransitioningDiceIds] = useState<Set<number>>(new Set());
+  const transitioningDiceIdsRef = useRef<Set<number>>(new Set());
+  const transitionSeqRef = useRef(0);
   const buildStartedNotifiedRef = useRef(false);
   // Operators: null = empty, tap-to-cycle through allowed ops for current stage
   const [op1, setOp1] = useState<string | null>(null);
@@ -7122,6 +7331,9 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     setDice1(null); setDice2(null); setDice3(null);
     setOp1(null); setOp2(null);
     setParensRight(false);
+    setDiceTransitions([]);
+    transitioningDiceIdsRef.current = new Set();
+    setTransitioningDiceIds(new Set());
     resultFade.setValue(0);
     if (diceKey) {
       // Reset all animations
@@ -7185,25 +7397,67 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 
   // Which dice indices are placed
   const usedDice = new Set([dice1, dice2, dice3].filter(d => d !== null) as number[]);
+  const dice1Ref = useRef<number | null>(dice1);
+  const dice2Ref = useRef<number | null>(dice2);
+  const dice3Ref = useRef<number | null>(dice3);
+  const diceValuesRef = useRef(diceValues);
+  const tutorialEquationDisplayOverrideRef = useRef<string | null>(null);
+  const subResultRef = useRef<number | null>(null);
+  useEffect(() => { dice1Ref.current = dice1; }, [dice1]);
+  useEffect(() => { dice2Ref.current = dice2; }, [dice2]);
+  useEffect(() => { dice3Ref.current = dice3; }, [dice3]);
+  useEffect(() => { diceValuesRef.current = diceValues; }, [diceValues]);
   const canUndoSolvedTutorialEquation =
     state.isTutorial &&
     tutorialBus.getL4Step3Mode() &&
     state.phase === 'solved' &&
     !state.hasPlayedCards;
 
-  // Tap dice: place in next empty slot, or remove if already placed
-  const hDice = (dIdx: number) => {
+  const finishDiceTransition = useCallback((key: string) => {
+    setDiceTransitions((prev) => prev.filter((transition) => transition.key !== key));
+  }, []);
+
+  const clearTransitioningDie = useCallback((dIdx: number) => {
+    const next = new Set(transitioningDiceIdsRef.current);
+    next.delete(dIdx);
+    transitioningDiceIdsRef.current = next;
+    setTransitioningDiceIds(next);
+  }, []);
+
+  const setSlotDice = useCallback((slot: 1 | 2 | 3, dIdx: number | null) => {
+    if (slot === 1) {
+      setDice1(dIdx);
+      dice1Ref.current = dIdx;
+    } else if (slot === 2) {
+      setDice2(dIdx);
+      dice2Ref.current = dIdx;
+    } else {
+      setDice3(dIdx);
+      dice3Ref.current = dIdx;
+    }
+  }, []);
+
+  const placeDieInstant = useCallback((dIdx: number, slot: 1 | 2 | 3) => {
+    setSlotDice(slot, dIdx);
+  }, [setSlotDice]);
+
+  const placeDieWithTransition = useCallback((dIdx: number, source: DicePlacementSource = 'user') => {
     if (!interactive) return;
-    if (usedDice.has(dIdx)) {
+    const d1 = dice1Ref.current;
+    const d2 = dice2Ref.current;
+    const d3 = dice3Ref.current;
+    const currentUsedDice = new Set([d1, d2, d3].filter((d) => d !== null) as number[]);
+    if (currentUsedDice.has(dIdx)) {
       if (isSolved && !canUndoSolvedTutorialEquation) return;
       if (canUndoSolvedTutorialEquation) {
         dispatch({ type: 'REVERT_TO_BUILDING' });
       }
-      if (dice1 === dIdx) setDice1(null);
-      else if (dice2 === dIdx) setDice2(null);
-      else if (dice3 === dIdx) setDice3(null);
+      if (d1 === dIdx) setSlotDice(1, null);
+      else if (d2 === dIdx) setSlotDice(2, null);
+      else if (d3 === dIdx) setSlotDice(3, null);
       return;
     }
+    if (transitioningDiceIdsRef.current.has(dIdx)) return;
     if (isSolved) return;
     // L4 step 3: block adding a 3rd die before the 2-die equation is valid.
     // Without this guard, tapping all 3 dice before setting op1 leaves
@@ -7212,17 +7466,78 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     if (
       state.isTutorial &&
       tutorialBus.getL4Step3Mode() &&
-      dice1 !== null && dice2 !== null &&
-      subResult === null
+      d1 !== null && d2 !== null &&
+      subResultRef.current === null
     ) return;
-    const isFirstBuildPick = dice1 === null && dice2 === null && dice3 === null;
+    const isFirstBuildPick = d1 === null && d2 === null && d3 === null;
     if (isFirstBuildPick && !buildStartedNotifiedRef.current) {
       buildStartedNotifiedRef.current = true;
       onBuildStarted?.();
     }
-    if (dice1 === null) setDice1(dIdx);
-    else if (dice2 === null) setDice2(dIdx);
-    else if (dice3 === null) setDice3(dIdx);
+    const targetSlot: 1 | 2 | 3 | null = d1 === null ? 1 : d2 === null ? 2 : d3 === null ? 3 : null;
+    if (targetSlot === null) return;
+
+    const nextTransitioning = new Set(transitioningDiceIdsRef.current);
+    nextTransitioning.add(dIdx);
+    transitioningDiceIdsRef.current = nextTransitioning;
+    setTransitioningDiceIds(nextTransitioning);
+
+    const mode = getEquationDicePlacementAnimationMode(state);
+    const transitionKey = `${state.diceRollSeq}-${dIdx}-${targetSlot}-${transitionSeqRef.current++}`;
+    const transition: DicePlacementTransition = {
+      key: transitionKey,
+      dieIndex: dIdx,
+      value: diceValuesRef.current[dIdx],
+      slot: targetSlot,
+      mode,
+      sourceRect: null,
+      targetRect: null,
+    };
+    setDiceTransitions((prev) => [...prev.filter((item) => item.dieIndex !== dIdx), transition]);
+
+    void Promise.all([
+      measureNodeInWindow(dicePoolRefs.current[dIdx] ?? null),
+      measureNodeInWindow(diceSlotRefs.current[targetSlot] ?? null),
+      measureNodeInWindow(equationWrapRef.current),
+    ]).then(([sourceRect, targetRect, containerRect]) => {
+      const sourceLocal = toLocalRect(sourceRect, containerRect);
+      const targetLocal = toLocalRect(targetRect, containerRect);
+      setDiceTransitions((prev) => prev.map((item) => item.key === transitionKey
+        ? { ...item, sourceRect: sourceLocal, targetRect: targetLocal }
+        : item
+      ));
+      if (mode !== 'jump' || !sourceLocal || !targetLocal) {
+        const delay = mode === 'jump' ? 360 : 320;
+        timersRef.current.push(setTimeout(() => finishDiceTransition(transitionKey), delay));
+      }
+    });
+
+    placeDieInstant(dIdx, targetSlot);
+    if (source === 'user' && state.soundsEnabled !== false) {
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.54 });
+    }
+    timersRef.current.push(setTimeout(() => clearTransitioningDie(dIdx), 620));
+  }, [
+    canUndoSolvedTutorialEquation,
+    clearTransitioningDie,
+    dispatch,
+    finishDiceTransition,
+    interactive,
+    isSolved,
+    onBuildStarted,
+    placeDieInstant,
+    setSlotDice,
+    state,
+  ]);
+
+  const placeDieWithTransitionRef = useRef(placeDieWithTransition);
+  useEffect(() => {
+    placeDieWithTransitionRef.current = placeDieWithTransition;
+  }, [placeDieWithTransition]);
+
+  // Tap dice: place in next empty slot with a visual transition, or remove if already placed.
+  const hDice = (dIdx: number) => {
+    placeDieWithTransition(dIdx, 'user');
   };
 
   // Tutorial-driven equation building: subscribe to bus commands so the
@@ -7234,15 +7549,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // which raced with back-to-back `eqPickDice` emissions during the L5a
   // pre-fill and occasionally dropped one, leaving dice1 null and the op1
   // cycle button disabled (= "stuck").
-  const dice1Ref = useRef<number | null>(dice1);
-  const dice2Ref = useRef<number | null>(dice2);
-  const dice3Ref = useRef<number | null>(dice3);
-  const diceValuesRef = useRef(diceValues);
-  const tutorialEquationDisplayOverrideRef = useRef<string | null>(null);
-  useEffect(() => { dice1Ref.current = dice1; }, [dice1]);
-  useEffect(() => { dice2Ref.current = dice2; }, [dice2]);
-  useEffect(() => { dice3Ref.current = dice3; }, [dice3]);
-  useEffect(() => { diceValuesRef.current = diceValues; }, [diceValues]);
   const finalResultRef = useRef<number | null>(null);
   useEffect(() => {
     if (!state.isTutorial) return;
@@ -7259,9 +7565,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
           else if (d3 === dIdx) { setDice3(null); dice3Ref.current = null; }
           return;
         }
-        if (d1 === null) { setDice1(dIdx); dice1Ref.current = dIdx; }
-        else if (d2 === null) { setDice2(dIdx); dice2Ref.current = dIdx; }
-        else if (d3 === null) { setDice3(dIdx); dice3Ref.current = dIdx; }
+        placeDieWithTransitionRef.current(dIdx, 'tutorial');
       } else if (cmd.kind === 'eqSetOp') {
         if (cmd.which === 1) setOp1(cmd.op);
         else setOp2(cmd.op);
@@ -7569,6 +7873,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   } else if (!parensRight && d1v !== null && d2v !== null && effectiveOp1 !== null) {
     subResult = applyOperation(d1v, effectiveOp1, d2v);
   }
+  subResultRef.current = subResult;
 
   let finalResult: number | null = null;
   if (d1v !== null && d2v !== null && effectiveOp1 !== null) {
@@ -7675,6 +7980,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       state.validTargets.some(t => t.result === finalResult) ||
       l4GuidedValidSums.includes(finalResult)
     );
+  const maxEquationResult = state.mathRangeMax ?? 25;
+  const resultAboveMax = finalResult !== null && finalResult > maxEquationResult;
   // Explicit "missing" state for the live game. A third die without a second
   // sign, or a second sign cycled in without a third die, must never count as
   // ready — even when a valid 2-dice result happens to exist. A second sign
@@ -7693,6 +8000,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     Number.isInteger(finalResult) &&
     filledCount >= 2 &&
     realGameMissing === null &&
+    !resultAboveMax &&
     matchesValidTarget &&
     eqOpReady &&
     salindaCommitReady;
@@ -7961,6 +8269,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     finalResult,
     hasError,
     tutorialTarget: l5aTarget,
+    maxResult: maxEquationResult,
     ok,
   });
   const neutralResultTextColor = EQUATION_VISUAL_TOKENS.resultText;
@@ -7978,7 +8287,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   } : null;
   const resultTextColor = resultVisualState === 'ready' || resultVisualState === 'tutorial-target'
     ? readyResultTextColor
-    : resultVisualState === 'error'
+    : resultVisualState === 'error' || resultVisualState === 'range-error'
       ? '#FFFFFF'
       : neutralResultTextColor;
   const needsOp1Pulse =
@@ -7991,6 +8300,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
   // ?? Render helpers ??
   const renderDiceSlot = (slotValue: number | null, slotNum: 1 | 2 | 3) => (
     <TouchableOpacity
+      ref={(node) => { diceSlotRefs.current[slotNum] = node; }}
       testID={`equation-dice-slot-${slotNum}`}
       style={[
         eqS.slot,
@@ -8008,9 +8318,11 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
       activeOpacity={0.7}
       disabled={isSolved || isFractionTutorialLocked}
       touchSoundDisabled>
-      {slotValue !== null
-        ? <Text style={eqS.slotVal}>{diceValues[slotValue]}</Text>
-        : <Text style={eqS.slotPlaceholder}>?</Text>}
+      <AnimatedEquationDiceSlot
+        slotValue={slotValue}
+        value={<Text style={eqS.slotVal}>{slotValue !== null ? diceValues[slotValue] : ''}</Text>}
+        placeholder={<Text style={eqS.slotPlaceholder}>?</Text>}
+      />
     </TouchableOpacity>
   );
 
@@ -8435,7 +8747,18 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
     <View style={[
       eqS.wrap,
       { transform: [{ translateX: EQUATION_BUILDER_FINE_OFFSET_X }, { translateY: EQUATION_BUILDER_FINE_OFFSET_Y }] },
-    ]} testID="equation-area">
+    ]} ref={equationWrapRef} testID="equation-area">
+      <View pointerEvents="none" style={eqS.jumpOverlayLayer}>
+        {diceTransitions
+          .filter((transition) => transition.mode === 'jump')
+          .map((transition) => (
+            <DiceJumpOverlay
+              key={transition.key}
+              transition={transition}
+              onDone={finishDiceTransition}
+            />
+          ))}
+      </View>
       {/* Dice pool. In tutorial solved states that lead into card-picking,
           keep only the dice that actually participated in the confirmed
           equation so unused dice do not compete with the next action.
@@ -8448,6 +8771,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
             const dropAnim = dropAnims[dIdx];
             const flipAnim = flipAnims[dIdx];
             const isFace = showingFace[dIdx];
+            const activeTransition = diceTransitions.find((transition) => transition.dieIndex === dIdx);
+            const transitionKey = activeTransition?.key ?? null;
             // Flip: scaleX goes 1?0?1 during flip
             const flipScaleX = flipAnim.interpolate({
               inputRange: [0, 0.5, 1],
@@ -8462,6 +8787,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   { scaleX: flipScaleX },
                 ],
               }}>
+                <View ref={(node) => { dicePoolRefs.current[dIdx] = node; }} collapsable={false}>
+                <AnimatedDicePoolItem isUsed={isUsed} transitionKey={transitionKey}>
                 <TouchableOpacity onPress={() => {
                   if (isFractionTutorialLocked) return;
                   // Lesson 5a: in step 5.2 block unplaced-die taps (dice are
@@ -8473,9 +8800,6 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   // the learner must place all 3 dice themselves while the strip stays open.
                   if (state.isTutorial && state.showPossibleResults && !tutorialBus.getL7GuidedMode() && !(tutorialBus.getL9ParensFilter() && !tutorialBus.getL5aBlockFanTaps())) return;
                   hDice(dIdx);
-                  if (state.soundsEnabled !== false) {
-                    void playSfx('combo', { cooldownMs: 0, volumeOverride: 0.42 });
-                  }
                   if (state.isTutorial) {
                     tutorialBus.emitUserEvent({ kind: 'eqUserPickedDice', idx: dIdx });
                   }
@@ -8486,7 +8810,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   style={[
                     eqS.diceBtn,
                     isFace && eqS.diceBtnFace,
-                    isUsed && eqS.diceBtnUsed,
+                    isUsed && !transitioningDiceIds.has(dIdx) && eqS.diceBtnUsed,
                     // Tutorial hint: unused dice glow when the equation is
                     // partially filled, nudging the learner to tap one.
                     state.isTutorial && !isUsed && !isFace && visibleDiceSet.size > 0 && !l4bDicePulseOn && {
@@ -8524,6 +8848,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                     );
                   })()}
                 </TouchableOpacity>
+                </AnimatedDicePoolItem>
+                </View>
               </Animated.View>
             );
           })}
@@ -8658,7 +8984,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
             ) : null}
             {(() => {
               const resultDisplayValue =
-                resultVisualState === 'ready'
+                resultVisualState === 'ready' || resultVisualState === 'range-error'
                   ? String(finalResult)
                   : resultVisualState === 'tutorial-target'
                     ? String(l5aTarget)
@@ -8697,6 +9023,15 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                 />
               );
             })()}
+            {resultVisualState === 'range-error' ? (
+              <Text
+                allowFontScaling={false}
+                testID="equation-result-range-warning"
+                style={eqS.resultRangeWarning}
+              >
+                {`התוצאה מעל ${maxEquationResult}!`}
+              </Text>
+            ) : null}
           </View>
         </View>
       </View>
@@ -8715,6 +9050,8 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
 });
 const eqS = StyleSheet.create({
   wrap: { backgroundColor: 'transparent', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center', alignSelf: 'center' as any, width: '100%', maxWidth: '100%', gap: 10, borderWidth: 0, borderColor: 'transparent', overflow: 'visible' as const },
+  jumpOverlayLayer: { ...StyleSheet.absoluteFillObject, zIndex: 50, elevation: 50, overflow: 'visible' as const },
+  jumpDie: { position: 'absolute', alignItems: 'center', justifyContent: 'center', zIndex: 51, elevation: 51 },
   title: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '700', textAlign: 'center' },
   diceRow: { flexDirection: 'row', gap: 12, justifyContent: 'center', ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }) },
   diceBtn: { width: 56, height: 56, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', borderWidth: 0, borderColor: 'transparent', overflow: 'hidden' },
@@ -8839,6 +9176,7 @@ const eqS = StyleSheet.create({
   resultPlaceholder: { fontSize: 26, fontWeight: '800', color: EQUATION_VISUAL_TOKENS.resultTextMuted },
   resultError: { fontSize: 20, fontWeight: '900', color: '#EA4335' },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 8, ...Platform.select({ native: { direction: 'ltr' as const }, default: {} }) },
+  resultRangeWarning: { position: 'absolute', top: 56, alignSelf: 'center', minWidth: 104, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, overflow: 'hidden' as const, backgroundColor: 'rgba(127,29,29,0.92)', color: '#FEE2E2', fontSize: 12, fontWeight: '900', textAlign: 'center' as const, writingDirection: 'rtl' as const },
   hint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
 });
 
@@ -8877,6 +9215,19 @@ function getEquationResultCubeTheme(visualState: EquationResultVisualState) {
         valueStyle: {
           color: '#FFFFFF',
           fontSize: 20,
+          fontWeight: '900' as const,
+        },
+      };
+    case 'range-error':
+      return {
+        boxStyle: {
+          borderColor: '#991B1B',
+          backgroundColor: '#EF4444',
+          borderWidth: 3,
+        },
+        valueStyle: {
+          color: '#FFFFFF',
+          fontSize: 30,
           fontWeight: '900' as const,
         },
       };
@@ -9335,7 +9686,6 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     });
   }, [botCandidateCardId, botTeachingActive, botScanOffset]);
 
-  const dragStartVal = useRef(0);
   const velocityRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const maxIdxRef = useRef(0);
@@ -9470,6 +9820,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
   // dx already accumulated before PanResponder claims the gesture (threshold artifacts).
   // Subtracting this from gs.dx in applyFanDrag prevents the jump at gesture start.
   const grantDxRef = useRef(0);
+  const lastFanDragDxRef = useRef(0);
 
   const getResponderTouches = useCallback((evt: any) => {
     const touches = evt?.nativeEvent?.touches;
@@ -9487,6 +9838,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     return getResponderTouchCount(evt) > 0 ? FAN_TOUCH_DRAG_START_DX : FAN_MOUSE_DRAG_START_DX;
   }, [getResponderTouchCount]);
 
+  const clampFanScrollValue = useCallback((value: number) => (
+    Math.max(0, Math.min(maxIdxRef.current, value))
+  ), []);
+
   const beginFanGesture = useCallback(() => {
     if (interactionLockedRef.current) return;
     if (rafRef.current) {
@@ -9494,9 +9849,12 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       rafRef.current = null;
     }
     scrollX.stopAnimation();
-    dragStartVal.current = scrollRef.current;
+    const clampedStart = clampFanScrollValue(scrollRef.current);
+    scrollRef.current = clampedStart;
+    scrollX.setValue(clampedStart);
     velocityRef.current = 0;
     grantDxRef.current = 0;
+    lastFanDragDxRef.current = 0;
     isPinching.current = false;
     pinchLoggedRef.current = false;
     userScrollGestureRef.current = true;
@@ -9504,17 +9862,17 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       clearTimeout(userScrollGestureClearTimerRef.current);
       userScrollGestureClearTimerRef.current = null;
     }
-  }, [scrollX]);
+  }, [clampFanScrollValue, scrollX]);
 
   const applyFanDrag = useCallback((deltaX: number) => {
-    const cardsDragged = (deltaX - grantDxRef.current) / (fanCardW * 0.8);
-    let next = dragStartVal.current + cardsDragged;
-    const mx = maxIdxRef.current;
-    if (next < 0) next = next * 0.3;
-    else if (next > mx) next = mx + (next - mx) * 0.3;
+    const effectiveDeltaX = deltaX - grantDxRef.current;
+    const stepDeltaX = effectiveDeltaX - lastFanDragDxRef.current;
+    lastFanDragDxRef.current = effectiveDeltaX;
+    const cardsDragged = stepDeltaX / (fanCardW * 0.8);
+    const next = clampFanScrollValue(scrollRef.current + cardsDragged);
     scrollRef.current = next;
     scrollX.setValue(next);
-  }, [fanCardW, scrollX]);
+  }, [clampFanScrollValue, fanCardW, scrollX]);
 
   const releaseUserGestureFlagSoon = useCallback(() => {
     if (userScrollGestureClearTimerRef.current) clearTimeout(userScrollGestureClearTimerRef.current);
@@ -9526,7 +9884,8 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
 
   snapRef.current = () => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    const target = Math.round(Math.max(0, Math.min(maxIdxRef.current, scrollRef.current)));
+    const target = Math.round(clampFanScrollValue(scrollRef.current));
+    scrollRef.current = target;
     Animated.spring(scrollX, { toValue: target, useNativeDriver: true, friction: 7, tension: 50 }).start();
   };
 
@@ -9535,10 +9894,10 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     const tick = () => {
       velocityRef.current *= FAN_DECEL;
       if (Math.abs(velocityRef.current) < 0.005) { snapRef.current(); return; }
-      let next = scrollRef.current + velocityRef.current;
-      const mx = maxIdxRef.current;
-      if (next < 0) { next *= 0.4; velocityRef.current *= 0.6; }
-      else if (next > mx) { next = mx + (next - mx) * 0.4; velocityRef.current *= 0.6; }
+      const rawNext = scrollRef.current + velocityRef.current;
+      const next = clampFanScrollValue(rawNext);
+      if (next !== rawNext) velocityRef.current = 0;
+      scrollRef.current = next;
       scrollX.setValue(next);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -9557,13 +9916,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
     startClientX: number;
     lastClientX: number;
   }) => {
-    const totalDx = dragState.lastClientX - dragState.startClientX;
-    const cardsDragged = totalDx / (fanCardW * 0.8);
-    let finalValue = dragStartVal.current + cardsDragged;
-    const mx = maxIdxRef.current;
-    if (finalValue < 0) finalValue = finalValue * 0.3;
-    else if (finalValue > mx) finalValue = mx + (finalValue - mx) * 0.3;
-    const target = Math.round(Math.max(0, Math.min(mx, finalValue)));
+    const target = Math.round(clampFanScrollValue(scrollRef.current));
     scrollRef.current = target;
     Animated.spring(scrollX, {
       toValue: target,
@@ -9572,7 +9925,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
       tension: 50,
     }).start();
     releaseUserGestureFlagSoon();
-  }, [fanCardW, releaseUserGestureFlagSoon, scrollX]);
+  }, [clampFanScrollValue, releaseUserGestureFlagSoon, scrollX]);
 
   const triggerWebFanTapAt = useCallback((clientX: number, clientY: number) => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return false;
@@ -9721,10 +10074,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         clearTimeout(userScrollGestureClearTimerRef.current);
         userScrollGestureClearTimerRef.current = null;
       }
-      let next = scrollRef.current + dominantDelta / 100;
-      const mx = maxIdxRef.current;
-      if (next < 0) next = next * 0.3;
-      else if (next > mx) next = mx + (next - mx) * 0.3;
+      const next = clampFanScrollValue(scrollRef.current + dominantDelta / 100);
       scrollRef.current = next;
       scrollX.setValue(next);
       if (wheelSnapTimerRef.current) clearTimeout(wheelSnapTimerRef.current);
@@ -9747,6 +10097,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         if (Math.abs(totalDx) <= startDx) return;
         dragState.dragging = true;
         beginFanGesture();
+        lastFanDragDxRef.current = totalDx;
       }
 
       dragState.lastClientX = evt.clientX;
@@ -9843,7 +10194,7 @@ function SimpleHand({ cards, stagedCardIds, equationHandPlacedIds, equationHandP
         wheelSnapTimerRef.current = null;
       }
     };
-  }, [applyFanDrag, beginFanGesture, releaseUserGestureFlagSoon, snapDraggedMouseGesture, triggerWebFanTapAt]);
+  }, [applyFanDrag, beginFanGesture, clampFanScrollValue, releaseUserGestureFlagSoon, snapDraggedMouseGesture, triggerWebFanTapAt]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -11166,6 +11517,7 @@ function FloatingMathBackground() {
 }
 
 type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth' | 'analytics';
+type TutorialReturnMode = 'choose' | 'game-entry';
 
 type WebBackdropTone = 'black' | 'white';
 
@@ -12943,11 +13295,19 @@ function StartScreen({
           >
             <View style={[hsS.advancedEntryHeader, { flexDirection: rtlRow }]}>
               <View style={hsS.advancedEntryHeaderText}>
-                <Text style={[hsS.advancedEntryTitle, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+                <Text
+                  style={[hsS.advancedEntryTitle, { writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
                   {t('start.advancedSetup.entryTitle')}
                 </Text>
-                <Text style={[hsS.advancedEntryTeaser, { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-                  {t('start.advancedSetup.entryRowTeaser')}
+                <Text
+                  style={[hsS.advancedEntryTeaser, { writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  {t('start.advancedSetup.entrySubtitle')}
                 </Text>
               </View>
               <View style={hsS.advancedEntryCtaWrap}>
@@ -13475,12 +13835,14 @@ const hsS = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     marginBottom: 4,
+    textAlign: 'center',
   },
   advancedEntryTeaser: {
     color: '#cbd5e1',
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
+    textAlign: 'center',
   },
   advancedEntryPreviewRow: {
     flexDirection: 'row',
@@ -14498,7 +14860,7 @@ function TurnTransition() {
   const { t, isRTL } = useLocale();
   const ta = isRTL ? 'right' : 'left';
   const { state, dispatch } = useGame();
-  const { activeTableSkin, tableThemeId } = useActiveTheme();
+  const { table, background, activeTableSkin, tableThemeId } = useActiveTheme();
   const viewport = useWebViewportSize();
   const responsive = useResponsiveLayout();
   const mobileWebViewport = Platform.OS === 'web' && isWebMobileViewport(viewport.width, viewport.height);
@@ -14521,6 +14883,9 @@ function TurnTransition() {
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
   const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, responsive.height - Math.max(HAND_BOTTOM_OFFSET - 100, 60));
+  const tableTop = webGameLayout?.tableTop ?? nativeGameLayout?.tableTop ?? EQUATION_TABLE_TOP;
+  const tableHeight = webGameLayout?.tableHeight ?? nativeGameLayout?.tableHeight ?? 240;
+  const tableWidth = webGameLayout?.tableWidth ?? Math.max(320, turnScreenWidth - 24);
   const handTop = turnScreenHeight - (handBottomOffset + handStripHeight);
   const compactAndroidReadyButton = Platform.OS === 'android';
   const compactIosReadyButton = Platform.OS === 'ios';
@@ -14563,6 +14928,41 @@ function TurnTransition() {
     (turnTransitionBackdrop.gradientColors && turnTransitionBackdrop.gradientColors.length >= 2
       ? turnTransitionBackdrop.gradientColors
       : ['#0a1628', '#10213a']) as [string, string, ...string[]];
+  const turnDefaultTableSurface = resolveGameTableSurface(null, pokerTableImg, {
+    fallbackPresentation: tableThemeId === 'classic' ? 'framed' : 'fill',
+    platform: Platform.OS,
+  });
+  const turnTableSurface = activeTableSkin
+    ? resolveGameTableSurface(activeTableSkin, pokerTableImg, { platform: Platform.OS })
+    : tableThemeId === 'classic'
+      ? turnDefaultTableSurface
+      : null;
+  const turnFramedTableSurface = turnTableSurface?.presentation === 'framed' ? turnTableSurface : null;
+  const turnTableBaseGradient = !activeTableSkin && tableThemeId !== 'classic' ? table.gradient : null;
+  const turnTableShellStyle = {
+    alignSelf: 'center' as const,
+    width: tableWidth,
+    height: tableHeight,
+    overflow: 'visible' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  };
+  const turnTableStageStyle = {
+    alignSelf: 'center' as const,
+    width: tableWidth,
+    height: tableHeight,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    overflow: 'hidden' as const,
+    borderRadius: tableHeight / 2,
+  };
+  const turnTableStageImageStyle = {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    width: tableWidth,
+    height: tableHeight,
+  };
   const soundOn = state.soundsEnabled !== false;
   const mp = useMultiplayerOptional();
   const { profile, consumeSlinda, consumeWild } = useAuth();
@@ -15307,7 +15707,7 @@ function TurnTransition() {
         backgroundColor:
           turnTransitionBackdrop.kind === 'solid'
             ? turnTransitionBackdrop.backgroundColor
-            : turnTransitionGradientColors[0],
+            : (background.gradient?.[0] ?? turnTransitionGradientColors[0]),
       }}
     >
     <View style={{ flex: 1, width: '100%', minHeight: 0, overflow: 'visible' }} collapsable={false}>
@@ -15315,14 +15715,70 @@ function TurnTransition() {
           בטוטוריאל אנחנו מחליפים לכהה אטום כדי שלא יציץ כחול שקוף סביב המניפה. */}
       {turnTransitionBackdrop.kind === 'solid' ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: turnTransitionBackdrop.backgroundColor }]} />
+      ) : background.image ? (
+        <ImageBackground source={background.image} resizeMode="cover" style={StyleSheet.absoluteFill}>
+          <LinearGradient
+            colors={[...background.gradient]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={[StyleSheet.absoluteFill, { opacity: 0.62 }]}
+          />
+        </ImageBackground>
       ) : (
         <LinearGradient
-          colors={turnTransitionGradientColors}
+          colors={[...background.gradient] as [string, string, ...string[]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
       )}
+      {!state.isTutorial ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: tableTop,
+            left: 0,
+            right: 0,
+            zIndex: 1,
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'stretch',
+            transform: [{ translateX: EQUATION_TABLE_SHIFT_X }],
+          }}
+        >
+          <View style={turnTableShellStyle}>
+            {turnFramedTableSurface ? (
+              <Image
+                source={turnFramedTableSurface.source as any}
+                resizeMode={turnFramedTableSurface.resizeMode}
+                style={turnTableStageImageStyle}
+              />
+            ) : (
+              <View style={turnTableStageStyle}>
+                {turnTableSurface ? (
+                  <Image
+                    source={turnTableSurface.source as any}
+                    resizeMode={turnTableSurface.resizeMode}
+                    style={turnTableStageImageStyle}
+                  />
+                ) : turnTableBaseGradient ? (
+                  <LinearGradient
+                    colors={turnTableBaseGradient}
+                    style={turnTableStageImageStyle}
+                  />
+                ) : (
+                  <Image
+                    source={turnDefaultTableSurface.source as any}
+                    resizeMode={turnDefaultTableSurface.resizeMode}
+                    style={turnTableStageImageStyle}
+                  />
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      ) : null}
       {lockUiForBotTurn ? (
         <View
           pointerEvents="auto"
@@ -16330,9 +16786,11 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   });
   const gameTableSurface = activeTableSkin
     ? resolveGameTableSurface(activeTableSkin, pokerTableImg, { platform: Platform.OS })
-    : defaultGameTableSurface;
+    : tableThemeId === 'classic'
+      ? defaultGameTableSurface
+      : null;
   const gameFramedTableSurface = gameTableSurface?.presentation === 'framed' ? gameTableSurface : null;
-  const gameTableBaseGradient = tableThemeId !== 'classic' ? table.gradient : null;
+  const gameTableBaseGradient = !activeTableSkin && tableThemeId !== 'classic' ? table.gradient : null;
   const tableShellStyle = {
     alignSelf: 'center' as const,
     width: tableWidth,
@@ -20889,8 +21347,25 @@ export function PlayModeChoiceScreen({
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
 
             {isFeedbackAdmin && (
-              <View style={{ alignItems: 'center', marginBottom: 12, gap: 10 }}>
-                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700' }}>v{APP_VERSION} · עדכון {LAST_PUSH}</Text>
+              <View
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row-reverse',
+                  flexWrap: 'wrap',
+                  marginBottom: 12,
+                  gap: 6,
+                }}
+              >
+                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
+                  v{APP_VERSION}
+                </Text>
+                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
+                  עדכון {LAST_PUSH}
+                </Text>
+                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
+                  עדכון אתר: {WEBSITE_LAST_UPDATED}
+                </Text>
               </View>
             )}
             {/* The room renders only when opened; its trigger is open to everyone.
@@ -21369,6 +21844,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const [authReturnMode, setAuthReturnMode] = useState<'online' | null>(null);
   // FTU routing: new users (salinda_tutorial_done not set) are sent to tutorial automatically
   const [selectedLocalGameMode, setSelectedLocalGameMode] = useState<LocalGameMode>('vs-bot');
+  const [tutorialReturnMode, setTutorialReturnMode] = useState<TutorialReturnMode>('choose');
   const [mockupReturnMode, setMockupReturnMode] = useState<'choose' | 'online'>('choose');
   const [showShop, setShowShop] = useState(false);
   const [classroomLaunchConfig, setClassroomLaunchConfig] = useState<ClassroomLaunchConfig | null>(null);
@@ -21585,6 +22061,11 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     setPlayMode('mockup-room');
   }, [playMode]);
 
+  const openTutorial = useCallback((returnMode: TutorialReturnMode = 'choose') => {
+    setTutorialReturnMode(returnMode);
+    setPlayMode('tutorial');
+  }, []);
+
   const handleStartLocalBotGame = useCallback(
     (difficulty: 'easy' | 'full', settings: HostGameSettings) => {
       mp?.leaveRoom();
@@ -21623,6 +22104,29 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   const openGameEntry = useCallback(() => {
     setPlayMode('game-entry');
     AsyncStorage.setItem(WELCOME_PLAYER_SCREEN_KEY, 'true').catch(() => {});
+  }, []);
+
+  const openChooseLobby = useCallback(() => {
+    setPlayMode('choose');
+  }, []);
+
+  const openFriendsChoice = useCallback(() => {
+    setPlayMode('friends-choice');
+  }, []);
+
+  const openSoloGameTile = useCallback(() => {
+    setSelectedLocalGameMode('solo');
+    setPlayMode('local');
+  }, []);
+
+  const openVsBotGameTile = useCallback(() => {
+    setSelectedLocalGameMode('vs-bot');
+    setPlayMode('local');
+  }, []);
+
+  const openPassAndPlayTile = useCallback(() => {
+    setSelectedLocalGameMode('pass-and-play');
+    setPlayMode('local');
   }, []);
 
   const openAdminCoinGifts = useCallback((username?: string) => {
@@ -21689,12 +22193,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       if (Platform.OS === 'web' && parseJoinParamsFromUrl().roomCode) return;
       if (v === null) {
         // First-time user — route directly to tutorial
-        setPlayMode('tutorial');
+        openTutorial('choose');
       }
       // v === 'true' → returning user, keep default 'choose'
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [openTutorial]);
 
   const launchClassroomPractice = useCallback((config: ClassroomLaunchConfig) => {
     classroomPracticeStartedAtRef.current = Date.now();
@@ -21889,8 +22393,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       setPlayMode('game-entry');
       return;
     }
-    setPlayMode('choose');
-  }, [dispatch, recordCompletedSessionForFeedback, tutorialMeter.percent]);
+    setPlayMode(tutorialReturnMode);
+  }, [dispatch, recordCompletedSessionForFeedback, tutorialMeter.percent, tutorialReturnMode]);
   const tutorialBack = useCallback(() => {
     tutorialBus.emitRequestBack();
   }, []);
@@ -22018,25 +22522,25 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       return;
     }
     if (playMode === 'game-entry') {
-      setPlayMode('choose');
+      openChooseLobby();
       return;
     }
     if (playMode === 'classroom') {
       if (mp?.classroomState) mp.leaveClassSession();
-      setPlayMode('choose');
+      openChooseLobby();
       return;
     }
     if (playMode === 'feedback-inbox') {
-      setPlayMode('choose');
+      openChooseLobby();
       return;
     }
     if (playMode === 'analytics') {
-      setPlayMode('choose');
+      openChooseLobby();
       return;
     }
     if (playMode === 'admin-coins') {
       setAdminCoinGiftUsername(null);
-      setPlayMode('choose');
+      openChooseLobby();
       return;
     }
     if (playMode === 'auth') {
@@ -22051,12 +22555,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     }
     if (playMode === 'local') {
       dispatch({ type: 'RESET_GAME' });
-      setPlayMode('game-entry');
+      openGameEntry();
       return;
     }
     if (playMode === 'online') {
       mp?.leaveRoom?.();
-      setPlayMode('game-entry');
+      openGameEntry();
       return;
     }
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.history.length > 1) {
@@ -22067,6 +22571,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     closeAuthScreen,
     dispatch,
     mp,
+    openChooseLobby,
+    openGameEntry,
     playMode,
     setClassroomLaunchConfig,
     showSalindaPanel,
@@ -22088,7 +22594,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         <PlayModeChoiceScreen
           onPlay={openGameEntry}
           onOpenAuth={openAccountAuth}
-          onHowToPlay={() => setPlayMode('tutorial')}
+          onHowToPlay={() => openTutorial('choose')}
           onShop={() => setShowShop(true)}
           onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
           onOpenAdminCoinGifts={() => openAdminCoinGifts()}
@@ -22101,26 +22607,17 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   } else if (playMode === 'game-entry') {
     screen = (
       <GameEntryChoiceScreen
-        onBack={() => setPlayMode('choose')}
-        onSolo={() => {
-          setSelectedLocalGameMode('solo');
-          setPlayMode('local');
-        }}
-        onVsBot={() => {
-          setSelectedLocalGameMode('vs-bot');
-          setPlayMode('local');
-        }}
-        onWithFriends={() => setPlayMode('friends-choice')}
+        onBack={openChooseLobby}
+        onSolo={openSoloGameTile}
+        onVsBot={openVsBotGameTile}
+        onWithFriends={openFriendsChoice}
       />
     );
   } else if (playMode === 'friends-choice') {
     screen = (
       <FriendsChoiceScreen
-        onBack={() => setPlayMode('game-entry')}
-        onSameDevice={() => {
-          setSelectedLocalGameMode('pass-and-play');
-          setPlayMode('local');
-        }}
+        onBack={openGameEntry}
+        onSameDevice={openPassAndPlayTile}
         onOnline={openOnline}
       />
     );
@@ -22137,7 +22634,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       <ClassroomModeScreen
         onBack={() => {
           if (mp?.classroomState) mp.leaveClassSession();
-          setPlayMode('choose');
+          openChooseLobby();
         }}
         preferredName={preferredName}
         onPreferredNameChange={setPreferredName}
@@ -22147,13 +22644,13 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   } else if (playMode === 'feedback-inbox') {
     screen = (
       <FeedbackInboxScreen
-        onBack={() => setPlayMode('choose')}
+        onBack={openChooseLobby}
         onOpenAdminCoinGifts={openAdminCoinGifts}
       />
     );
   } else if (playMode === 'analytics') {
     screen = (
-      <AnalyticsScreen onBack={() => setPlayMode('choose')} />
+      <AnalyticsScreen onBack={openChooseLobby} />
     );
   } else if (playMode === 'admin-coins') {
     screen = (
@@ -22161,7 +22658,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         initialUsername={adminCoinGiftUsername ?? undefined}
         onBack={() => {
           setAdminCoinGiftUsername(null);
-          setPlayMode('choose');
+          openChooseLobby();
         }}
       />
     );
@@ -22169,8 +22666,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     if (state.phase === 'setup') {
       screen = (
         <StartScreen
-          onBackToChoice={() => setPlayMode('game-entry')}
-          onHowToPlay={() => setPlayMode('tutorial')}
+          onBackToChoice={openGameEntry}
+          onHowToPlay={() => openTutorial('game-entry')}
           onShop={() => setShowShop(true)}
           preferredName={preferredName}
           forcedGameMode={selectedLocalGameMode}
@@ -22200,8 +22697,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
         default:
           screen = (
             <StartScreen
-              onBackToChoice={() => setPlayMode('game-entry')}
-              onHowToPlay={() => setPlayMode('tutorial')}
+              onBackToChoice={openGameEntry}
+              onHowToPlay={() => openTutorial('game-entry')}
               onShop={() => setShowShop(true)}
               preferredName={preferredName}
               forcedGameMode={selectedLocalGameMode}
@@ -22292,7 +22789,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     }
   } else {
     // playMode === 'online' — משחק ברשת (צפייה + מסך שחקן, מעבר אוטומטי בתורי)
-    if (!mp?.inRoom) screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />;
+    if (!mp?.inRoom) screen = <OnlineTablesEntryScreen onBackToChoice={openGameEntry} defaultPlayerName={preferredName} />;
     else if (!mp.serverState) screen = (
       <LobbyScreen
         onOpenCelebrationMockup={openCelebrationMockupRoom}
@@ -22301,7 +22798,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     );
     else {
       switch (state.phase) {
-        case 'setup': screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />; break;
+        case 'setup': screen = <OnlineTablesEntryScreen onBackToChoice={openGameEntry} defaultPlayerName={preferredName} />; break;
         case 'turn-transition': screen = <TurnTransition />; break;
         case 'pre-roll':
         case 'roll-dice':
@@ -22313,12 +22810,12 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           screen = shouldShowPreVictoryCoinAwardScreen
             ? <PreVictoryCoinAwardScreen />
             : <GameOver
-                onPlayVsBot={() => { mp?.leaveRoom?.(); setSelectedLocalGameMode('vs-bot'); setPlayMode('local'); }}
+                onPlayVsBot={() => { mp?.leaveRoom?.(); openVsBotGameTile(); }}
                 onBackToLobby={() => { mp?.leaveRoom?.(); setPlayMode('online'); }}
               />;
           break;
         default:
-          screen = <OnlineTablesEntryScreen onBackToChoice={() => setPlayMode('game-entry')} defaultPlayerName={preferredName} />;
+          screen = <OnlineTablesEntryScreen onBackToChoice={openGameEntry} defaultPlayerName={preferredName} />;
       }
     }
   }

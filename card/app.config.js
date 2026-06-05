@@ -2,7 +2,8 @@ const appJson = require('./app.json');
 const config = appJson.expo;
 
 const APP_ENV = process.env.APP_ENV ?? 'production';
-const isDev = APP_ENV === 'development';
+const AUTH_SCHEME = process.env.EXPO_PUBLIC_AUTH_SCHEME;
+const isDev = APP_ENV === 'development' || AUTH_SCHEME === 'salinda-dev';
 
 // Build-time stamp for the in-app "last update" label. Evaluated whenever the
 // Expo config is resolved (Metro start / EAS build), so it auto-refreshes on

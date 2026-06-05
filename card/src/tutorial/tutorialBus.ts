@@ -315,6 +315,7 @@ function notifyL5Ui(): void {
  *  EquationBuilder's auto-confirm or by the real confirm button. Outcomes
  *  check this to validate the card the learner picks. */
 let lastEquationResult: number | null = null;
+let activeLessonId: string | null = null;
 
 const layouts: Partial<Record<LayoutKey, LayoutRect | null>> = {};
 
@@ -427,6 +428,13 @@ export const tutorialBus = {
   },
   getLastEquationResult(): number | null {
     return lastEquationResult;
+  },
+
+  setActiveLessonId(id: string | null): void {
+    activeLessonId = id;
+  },
+  getActiveLessonId(): string | null {
+    return activeLessonId;
   },
 
   setL4bDicePulse(on: boolean): void {
@@ -734,6 +742,7 @@ export const tutorialBus = {
     l11StrictMultiPlayMode = false;
     l5UiListeners.clear();
     lastEquationResult = null;
+    activeLessonId = null;
     layouts.confirmEqBtn = null;
     layouts.playCardsBtn = null;
     layouts.resultsChip = null;

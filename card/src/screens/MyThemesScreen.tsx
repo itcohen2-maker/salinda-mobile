@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { THEMES, THEME_IDS, type ThemeId } from '../theme/themes';
-import { TABLE_SKINS, TABLE_SKIN_IDS, type TableSkinId } from '../theme/tableSkins';
+import { TABLE_SKINS, TABLE_SKIN_IDS, resolveTableSkinId, type TableSkinId } from '../theme/tableSkins';
 import { activateTableSkin } from '../theme/activateTableSkin';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../i18n/LocaleContext';
@@ -32,7 +32,9 @@ export function MyThemesScreen({ visible, onClose }: Props) {
   const { width } = useWindowDimensions();
 
   const ownedThemes = (profile?.themes_owned ?? ['classic']) as ThemeId[];
-  const ownedTableSkins = (profile?.table_skins_owned ?? []) as TableSkinId[];
+  const ownedTableSkins = (profile?.table_skins_owned ?? [])
+    .map(resolveTableSkinId)
+    .filter((skinId): skinId is TableSkinId => skinId != null);
   const coinCountText = `${Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0))}`;
   const compactCoinCount = coinCountText.length >= 5 || width < 360;
   const coinCountFontSize = compactCoinCount ? 14 : 16;
@@ -40,7 +42,7 @@ export function MyThemesScreen({ visible, onClose }: Props) {
   const activeTable = (THEMES[rawTable as ThemeId] ? rawTable : 'classic') as ThemeId;
   const rawBg = profile?.active_card_back ?? 'classic';
   const activeBackground = (THEMES[rawBg as ThemeId] ? rawBg : 'classic') as ThemeId;
-  const activeTableSkin = (profile?.active_table_skin ?? null) as TableSkinId | null;
+  const activeTableSkin = resolveTableSkinId(profile?.active_table_skin);
 
   async function handleSetSkin(kind: 'card_back' | 'table_theme', themeId: ThemeId) {
     const key = `${kind}:${themeId}`;

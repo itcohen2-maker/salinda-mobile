@@ -41,3 +41,14 @@ export const TABLE_SKINS: Record<TableSkinId, TableSkin> = {
 
 export const TABLE_SKIN_IDS: TableSkinId[] = ['poker_red', 'poker_gold', 'poker_blue'];
 export const DEFAULT_TABLE_SKIN_ID: TableSkinId = 'poker_red';
+
+const LEGACY_TABLE_SKIN_ALIASES: Record<string, TableSkinId> = {
+  classic_green: 'poker_red',
+  green: 'poker_red',
+};
+
+export function resolveTableSkinId(value: string | null | undefined): TableSkinId | null {
+  if (!value) return null;
+  if (TABLE_SKIN_IDS.includes(value as TableSkinId)) return value as TableSkinId;
+  return LEGACY_TABLE_SKIN_ALIASES[value] ?? null;
+}

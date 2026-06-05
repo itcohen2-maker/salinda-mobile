@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SlindaCoin } from '../../components/SlindaCoin';
 import { ThemePreview } from '../components/ThemePreview';
 import { THEMES, THEME_IDS, type ThemeId } from '../theme/themes';
-import { TABLE_SKINS, TABLE_SKIN_IDS, type TableSkinId } from '../theme/tableSkins';
+import { TABLE_SKINS, TABLE_SKIN_IDS, resolveTableSkinId, type TableSkinId } from '../theme/tableSkins';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../i18n/LocaleContext';
 import { useActiveTheme } from '../theme/ThemeContext';
@@ -29,10 +29,6 @@ type Props = {
 
 function isThemeId(value: string | null | undefined): value is ThemeId {
   return !!value && THEME_IDS.includes(value as ThemeId);
-}
-
-function isTableSkinId(value: string | null | undefined): value is TableSkinId {
-  return !!value && TABLE_SKIN_IDS.includes(value as TableSkinId);
 }
 
 export function ShopScreen({ visible, onClose }: Props) {
@@ -62,7 +58,10 @@ export function ShopScreen({ visible, onClose }: Props) {
   const rawOwnedThemes = profile?.themes_owned ?? ['classic'];
   const ownedThemes = THEME_IDS.filter((themeId) => themeId === 'classic' || rawOwnedThemes.includes(themeId));
   const rawOwnedTableSkins = profile?.table_skins_owned ?? [];
-  const ownedTableSkins = TABLE_SKIN_IDS.filter((skinId) => rawOwnedTableSkins.includes(skinId));
+  const normalizedOwnedTableSkins = rawOwnedTableSkins
+    .map(resolveTableSkinId)
+    .filter((skinId): skinId is TableSkinId => skinId != null);
+  const ownedTableSkins = TABLE_SKIN_IDS.filter((skinId) => normalizedOwnedTableSkins.includes(skinId));
   const coins = profile?.total_coins ?? 0;
   const coinCountText = `${Math.max(0, Math.floor(Number(coins) || 0))}`;
   const hasLongCoinCount = coinCountText.length >= 5;
@@ -78,7 +77,7 @@ export function ShopScreen({ visible, onClose }: Props) {
     : 26;
   const activeBackgroundThemeId = isThemeId(profile?.active_card_back) ? profile.active_card_back : 'classic';
   const activeTableThemeId = isThemeId(profile?.active_table_theme) ? profile.active_table_theme : 'classic';
-  const activeTableSkinId = isTableSkinId(profile?.active_table_skin) ? profile.active_table_skin : null;
+  const activeTableSkinId = resolveTableSkinId(profile?.active_table_skin);
 
   const previewData = previewTheme ? THEMES[previewTheme] : null;
   const previewTableSkinData =
@@ -138,7 +137,14 @@ export function ShopScreen({ visible, onClose }: Props) {
     clearFeedback();
     try {
       const result = await purchaseTableSkin(skinId);
-      if (result === 'ok') showSuccess(t('shop.tableSkinPurchaseSuccess'));
+      if (result === 'ok') {
+        const activationResult = await activateTableSkin(setActiveSkin, skinId);
+        showSuccess(
+          activationResult === 'ok'
+            ? t('shop.activationSuccess')
+            : t('shop.tableSkinPurchaseSuccess'),
+        );
+      }
       else if (result === 'insufficient_coins') showError(t('shop.insufficientCoins'));
       else if (result !== 'already_owned') showError(t('shop.purchaseError'));
     } finally {

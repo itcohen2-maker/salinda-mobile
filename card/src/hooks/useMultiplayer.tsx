@@ -170,14 +170,14 @@ function getServerUrl(): string {
   const fromWeb = readServerFromWebQuery();
   if (fromWeb) return normalizeServerUrl(fromWeb);
 
-  const localWeb = inferLocalWebSocketUrl();
-  if (localWeb) return normalizeServerUrl(localWeb);
-
   const fromEnv =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SERVER_URL
       ? String(process.env.EXPO_PUBLIC_SERVER_URL).trim()
       : '';
   if (fromEnv) return normalizeServerUrl(fromEnv);
+
+  const localWeb = inferLocalWebSocketUrl();
+  if (localWeb) return normalizeServerUrl(localWeb);
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
     const inferred = inferDevMachineSocketUrl();
     if (inferred) return inferred;

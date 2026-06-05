@@ -28,8 +28,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import AnimatedDice from '../../AnimatedDice';
 import { useTrainingProgress } from './useTrainingProgress';
-import { DiceEquationRound } from './DiceEquationRound';
-import SpecialCardsIntro from './SpecialCardsIntro';
+import { DiceEquationRound, DiscardHelperShowcase } from './DiceEquationRound';
+import { VictorySecretFlow } from './VictorySecretFlow';
 import HandFan from '../../components/HandFan';
 import { GameCard, type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
@@ -72,6 +72,8 @@ interface Step {
 interface Task {
   id: string;
   badge: string;
+  // Optional image badge (e.g. the Salinda jester) shown instead of the text/emoji badge.
+  badgeImage?: number;
   title: string;
   desc: string;
   steps?: Step[]; // undefined → "coming soon" (locked card)
@@ -86,7 +88,7 @@ interface Task {
 
 // The foundational tasks the learner must finish before the coin reward
 // unlocks. Fractions are not required.
-const REWARD_REQUIREMENTS = ['basics', 'equation-practice', 'operations'] as const;
+const REWARD_REQUIREMENTS = ['basics', 'operations', 'discard-helper', 'victory-secret'] as const;
 
 // ---- Task: "היסודות" (the basics) ----
 // A FAST, visual-only mockup that maps the screen's real estate — no abstract
@@ -139,11 +141,11 @@ function buildBasicsSteps(copy: GoldRoomCopy): Step[] {
 // ---- The Hub's task catalog ----
 function buildTasks(copy: GoldRoomCopy): Task[] {
   return [
-    { id: 'basics', badge: '🪙', title: copy.basicsTitle, desc: copy.basicsDesc, steps: buildBasicsSteps(copy) },
-    { id: 'equation-practice', badge: '🎲', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true },
-    { id: 'operations', badge: '⚡', title: copy.specialsTitle, desc: copy.specialsSteps.join(' · '), interactive: true },
-    { id: 'fractions', badge: '½', title: copy.fractionsTitle, desc: copy.fractionsDesc },
-    { id: 'salindas', badge: 'S', title: copy.salindasTitle, desc: copy.salindasDesc, interactive: true },
+    { id: 'basics', badge: '🎲', title: copy.basicsPracticeTitle, desc: copy.basicsPracticeDesc, steps: buildBasicsSteps(copy) },
+    { id: 'operations', badge: '⚡', badgeImage: SALINDA_JESTER_IMG, title: copy.specialsTitle, desc: copy.specialsSteps.join(' · '), interactive: true },
+    { id: 'discard-helper', badge: '🟢', title: copy.discardHelperTileTitle, desc: copy.discardHelperTileDesc, interactive: true },
+    { id: 'victory-secret', badge: '🏆', title: copy.improveTitle, desc: copy.improveDesc, interactive: true },
+    { id: 'fractions', badge: '½', title: copy.fractionsTitle, desc: copy.fractionsDesc, interactive: true },
     { id: 'coin-collection', badge: '🪙', title: copy.coinsTitle, desc: copy.coinsDesc, reward: true },
   ];
 }
@@ -151,6 +153,11 @@ function buildTasks(copy: GoldRoomCopy): Task[] {
 // Gold tones sampled from the physical gold plank — "polished D" language.
 const GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
 const DIM = 'rgba(8,5,2,0.8)';
+
+const rtlText = {
+  writingDirection: 'rtl' as const,
+  textAlign: 'right' as const,
+};
 
 function CloseButton({ onPress }: { onPress: () => void }) {
   const copy = useGoldRoomCopy();
@@ -166,6 +173,9 @@ function CloseButton({ onPress }: { onPress: () => void }) {
 // The live game's branded card back — so the deck/fan mock reads as the
 // real game (same art, 5:7 cards).
 const CARD_BACK_IMG = require('../../assets/card-back-salinda-preview.png');
+// The Salinda jester — the figure that lives on the Salinda card; used as the
+// image badge for the "Specials" tile (Salinda is the headline special).
+const SALINDA_JESTER_IMG = require('../../assets/salinda.jpg');
 const CARD_RATIO = 5 / 7; // width / height, matches the physical card
 
 // Layered offsets (from the live DrawPile) so the deck reads as a real,
@@ -530,8 +540,12 @@ function GoldTaskCard({ task, done, eligible, onPress }: { task: Task; done: boo
             <Text style={styles.tileCheckText}>✓</Text>
           </View>
         ) : null}
-        <Text style={styles.tileBadge}>{task.badge}</Text>
-        <Text style={styles.tileTitle} numberOfLines={1}>
+        {task.badgeImage ? (
+          <Image source={task.badgeImage} style={styles.tileBadgeImg} resizeMode="contain" />
+        ) : (
+          <Text style={[styles.tileBadge, task.id === 'basics' && styles.tileBadgeBasics]}>{task.badge}</Text>
+        )}
+        <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.82}>
           {task.title}
         </Text>
         <Text style={[styles.tileState, done && styles.tileStateDone]}>{state}</Text>
@@ -554,8 +568,9 @@ function TrainingHub({
   onClose: () => void;
 }) {
   const copy = useGoldRoomCopy();
-  const doneCount = tasks.filter((tk) => tk.steps && isComplete(tk.id)).length;
-  const totalUnlocked = tasks.filter((tk) => tk.steps).length;
+  const unlockedTasks = tasks.filter((tk) => !tk.reward && (tk.steps || tk.interactive));
+  const doneCount = unlockedTasks.filter((tk) => isComplete(tk.id)).length;
+  const totalUnlocked = unlockedTasks.length;
   // The reward unlocks only once ALL required foundational tasks are complete.
   const rewardEligible = REWARD_REQUIREMENTS.every((id) => isComplete(id));
   return (
@@ -585,15 +600,22 @@ function TrainingHub({
           ))}
         </View>
       </ScrollView>
+    </View>
+  );
+}
 
-      {/* Admin/dev layer tracker — quick status line, dev builds only. */}
-      {__DEV__ ? (
-        <View pointerEvents="none" style={styles.tracker}>
-          <Text style={styles.trackerText}>
-            UI: Hub · Progress {doneCount}/{totalUnlocked} · Sync: AsyncReady ✓
-          </Text>
+function DiscardHelperIntro({ onStart }: { onStart: () => void }) {
+  const copy = useGoldRoomCopy();
+  return (
+    <View style={styles.introOverlay}>
+      <View style={styles.introCard}>
+        <Text style={styles.introBadge}>🟢</Text>
+        <Text style={styles.introTitle}>{copy.discardHelperTileTitle}</Text>
+        <Text style={styles.introBody}>{copy.discardHelperIntroBody}</Text>
+        <View style={styles.introCta}>
+          <GoldButton label={copy.specialsLetsPractice} onPress={onStart} accessibilityLabel={copy.specialsLetsPractice} fullWidth height={54} fontSize={18} />
         </View>
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -621,6 +643,7 @@ function TrainingTask({
   const isLast = index === steps.length - 1;
   const nextDisabled = (!!step.requiresFanInteraction && !fanInteracted) || (!!step.requiresAnimationComplete && !animationComplete);
   const isDiceStep = step.mock === 'dice';
+  const isHandMockupStep = step.mock === 'fan' || step.mock === 'winFan';
 
   useEffect(() => {
     setFanInteracted(false);
@@ -694,8 +717,14 @@ function TrainingTask({
         style={[styles.cardLayer, anchorStyle, { opacity: cardReveal }]}
         pointerEvents={isDiceStep && !animationComplete ? 'none' : 'box-none'}
       >
-        <View style={styles.cardWidth}>
-          <LinearGradient colors={GOLD} locations={[0, 0.3, 0.6, 1]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.plank}>
+        <View style={[styles.cardWidth, isHandMockupStep && styles.handMockupCardWidth]}>
+          <LinearGradient
+            colors={GOLD}
+            locations={[0, 0.3, 0.6, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[styles.plank, isHandMockupStep && styles.handMockupPlank]}
+          >
             <LinearGradient
               pointerEvents="none"
               colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
@@ -703,9 +732,15 @@ function TrainingTask({
               end={{ x: 0, y: 1 }}
               style={styles.sheen}
             />
-            {step.tag ? <Text style={styles.stepTag}>{step.tag}</Text> : null}
-            {step.title ? <Text style={styles.title}>{step.title}</Text> : null}
-            <Text style={[styles.body, step.mock === 'dice' && styles.bodyCenter]}>{step.body}</Text>
+            {isHandMockupStep ? <View pointerEvents="none" style={styles.handMockupInnerGlow} /> : null}
+            {step.tag ? <Text style={[styles.stepTag, isHandMockupStep && styles.handMockupStepTag]}>{step.tag}</Text> : null}
+            {step.title ? <Text style={[styles.title, isHandMockupStep && styles.handMockupTitle]}>{step.title}</Text> : null}
+            <Text
+              style={[styles.body, step.mock === 'dice' && styles.bodyCenter, isHandMockupStep && styles.handMockupBody]}
+              numberOfLines={step.mock === 'fan' ? 2 : undefined}
+            >
+              {step.body}
+            </Text>
           </LinearGradient>
 
           <View style={styles.dots}>
@@ -714,7 +749,7 @@ function TrainingTask({
             ))}
           </View>
 
-          <View style={styles.controls}>
+          <View style={[styles.controls, isHandMockupStep && styles.handMockupControls]}>
             <GoldButton label={copy.back} onPress={handleBack} accessibilityLabel={index > 0 ? copy.backPlain : copy.backToRoom} tone="stone" fontSize={16} />
             <Animated.View style={[styles.nextWrap, { transform: [{ scale: nextPulse }] }]}>
               <GoldButton label={isLast ? copy.gotIt : copy.continue} onPress={handleNext} disabled={nextDisabled} fullWidth fontSize={22} />
@@ -729,6 +764,7 @@ function TrainingTask({
 export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRoomScreenProps) {
   const copy = useGoldRoomCopy();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [discardHelperIntroDone, setDiscardHelperIntroDone] = useState(false);
   const { isComplete, markComplete } = useTrainingProgress();
   // Optional so the room can render outside an <AuthProvider> (e.g. previews);
   // in the live app awardCoins is always available.
@@ -767,12 +803,17 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
     };
   }, [visible]);
 
-  const close = useCallback(() => {
+  const exitToHub = useCallback(() => {
     setActiveTaskId(null);
+    setDiscardHelperIntroDone(false);
     setRewardShown(false);
     setCollectError(false);
+  }, []);
+
+  const close = useCallback(() => {
+    exitToHub();
     onClose();
-  }, [onClose]);
+  }, [exitToHub, onClose]);
 
   // Collect the one-time reward. Server-side award_coins is itself single-grant
   // per (player, source), so the coins are safe even if local state is cleared;
@@ -792,22 +833,17 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
     }
   }, [auth, collecting, isComplete, markComplete]);
 
-  // Selecting a task. "basics" launches the REAL live-practice tutorial
-  // (measured highlights over the real board) when wired; everything else
-  // falls back to the in-room step flow.
   const handleSelect = useCallback(
     (id: string) => {
-      if (id === 'basics' && onStartLiveTutorial) {
-        close();
-        onStartLiveTutorial();
-        return;
-      }
+      if (id === 'discard-helper') setDiscardHelperIntroDone(false);
       setActiveTaskId(id);
     },
-    [close, onStartLiveTutorial],
+    [],
   );
 
-  const activeTask = tasks.find((tk) => tk.id === activeTaskId);
+  const activeTask = activeTaskId === 'basics-practice'
+    ? { id: 'basics-practice', badge: '🎲', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true }
+    : tasks.find((tk) => tk.id === activeTaskId);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -819,31 +855,47 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
           {activeTask && activeTask.interactive ? (
             <View style={styles.root}>
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
-              <View style={styles.topbar}>
-                <GoldButton label={copy.backShort} onPress={() => setActiveTaskId(null)} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
-                <CloseButton onPress={close} />
+              <View style={[styles.topbar, activeTask.id === 'victory-secret' && styles.topbarExitOnly]}>
+                {activeTask.id !== 'victory-secret' ? (
+                  <GoldButton label={copy.backShort} onPress={() => setActiveTaskId(null)} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+                ) : null}
+                <CloseButton onPress={exitToHub} />
               </View>
-              <View style={styles.interactiveBody}>
+              <View style={[styles.interactiveBody, activeTask.id === 'victory-secret' && styles.interactiveBodyVictorySecret]}>
                 {activeTask.id === 'operations' ? (
                   <DiceEquationRound
                     mode="operators"
                     onExit={() => setActiveTaskId(null)}
                     onComplete={() => {
                       markComplete(activeTask.id);
-                      setActiveTaskId(null);
                     }}
                   />
-                ) : activeTask.id === 'salindas' ? (
-                  <SpecialCardsIntro
-                    onDone={() => {
-                      markComplete(activeTask.id);
-                      setActiveTaskId(null);
-                    }}
+                ) : activeTask.id === 'fractions' ? (
+                  <DiceEquationRound
+                    mode="fractions"
+                    onExit={() => setActiveTaskId(null)}
+                    onComplete={() => markComplete('fractions')}
+                  />
+                ) : activeTask.id === 'discard-helper' && !discardHelperIntroDone ? (
+                  <DiscardHelperShowcase onComplete={() => setDiscardHelperIntroDone(true)} />
+                ) : activeTask.id === 'discard-helper' ? (
+                  <DiceEquationRound
+                    mode="improve"
+                    onExit={() => setActiveTaskId(null)}
+                    onComplete={() => markComplete('discard-helper')}
+                  />
+                ) : activeTask.id === 'victory-secret' ? (
+                  <VictorySecretFlow
+                    onExit={() => setActiveTaskId(null)}
+                    onComplete={() => markComplete('victory-secret')}
                   />
                 ) : (
                   <DiceEquationRound
                     onExit={() => setActiveTaskId(null)}
-                    onComplete={() => markComplete('equation-practice')}
+                    onComplete={() => {
+                      markComplete('basics');
+                      setActiveTaskId(null);
+                    }}
                   />
                 )}
               </View>
@@ -854,13 +906,17 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
               steps={activeTask.steps}
               onExit={() => setActiveTaskId(null)}
               onComplete={() => {
-                markComplete(activeTask.id);
                 // The Basics tour (Welcome → Deck → Hand) flows STRAIGHT into
                 // the dynamic dice practice (the rolling phase) — no intervening
                 // equation-track step; every other task returns to the Hub.
-                setActiveTaskId(activeTask.id === 'basics' ? 'equation-practice' : null);
+                if (activeTask.id === 'basics') {
+                  setActiveTaskId('basics-practice');
+                } else {
+                  markComplete(activeTask.id);
+                  setActiveTaskId(null);
+                }
               }}
-              onClose={close}
+              onClose={exitToHub}
             />
           ) : (
             <TrainingHub
@@ -922,6 +978,7 @@ const styles = StyleSheet.create({
   },
   root: { flex: 1 },
   interactiveBody: { flex: 1, paddingTop: 96 },
+  interactiveBodyVictorySecret: { paddingTop: 52 },
   topbar: {
     position: 'absolute',
     top: 0,
@@ -934,24 +991,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 5,
   },
+  topbarExitOnly: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
   closeBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,243,201,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#3A2A10', fontSize: 20, fontWeight: '900', lineHeight: 22 },
 
   // Hub
-  hubHeader: { color: '#F4CD5A', fontSize: 22, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  hubHeader: { ...rtlText, color: '#F4CD5A', fontSize: 22, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   hubScroll: { paddingTop: 104, paddingHorizontal: 22, paddingBottom: 40 },
-  hubSub: { color: '#C9B07A', fontSize: 14, fontWeight: '700', textAlign: 'right', marginBottom: 16 },
+  hubSub: { ...rtlText, color: '#C9B07A', fontSize: 14, fontWeight: '700', marginBottom: 16 },
 
   // 2-column grid of gold tiles
   grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between' },
-  tile: { width: '48%', marginBottom: 14 },
+  tile: { width: '48%', height: 148, marginBottom: 14 },
   tileFace: {
-    minHeight: 132,
+    height: '100%',
     borderRadius: 18,
     borderWidth: 2,
     borderColor: '#8A5A1C',
     overflow: 'hidden',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 16,
@@ -961,9 +1022,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  tileBadge: { fontSize: 36 },
-  tileTitle: { color: '#2B1D08', fontSize: 16, fontWeight: '900', textAlign: 'center', marginTop: 8 },
-  tileState: { color: '#5E3A10', fontSize: 12.5, fontWeight: '800', textAlign: 'center', marginTop: 6 },
+  tileBadge: { fontSize: 36, lineHeight: 40, textAlign: 'center' },
+  tileBadgeBasics: { fontSize: 28, lineHeight: 32 },
+  tileBadgeImg: { width: 50, height: 56, borderRadius: 8, alignSelf: 'center' },
+  tileTitle: { ...rtlText, color: '#2B1D08', fontSize: 16, lineHeight: 19, fontWeight: '900', marginTop: 8, textAlign: 'center' },
+  tileState: { ...rtlText, color: '#5E3A10', fontSize: 12.5, fontWeight: '800', marginTop: 6 },
   tileStateDone: { color: '#1F6A2E' },
   tileCheck: {
     position: 'absolute',
@@ -978,16 +1041,13 @@ const styles = StyleSheet.create({
   },
   tileCheckText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', lineHeight: 16 },
 
-  // dev layer tracker
-  tracker: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: 'rgba(244,205,90,0.16)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(244,205,90,0.3)' },
-  trackerText: { color: '#F4CD5A', fontSize: 11, fontWeight: '700', textAlign: 'center' },
-
   // Task card layer
   cardLayer: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 22, alignItems: 'center' },
   cardCenter: { top: 0, bottom: 0, justifyContent: 'center' },
   cardTop: { top: 96 },
   cardBottom: { bottom: 28 },
   cardWidth: { width: '100%', maxWidth: 420 },
+  handMockupCardWidth: { maxWidth: 448 },
 
   plank: {
     borderRadius: 22,
@@ -1003,14 +1063,59 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   sheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
-  stepTag: { color: '#5E3A10', fontSize: 13, fontWeight: '800', letterSpacing: 1, opacity: 0.7, textAlign: 'right' },
-  title: { color: '#2B1D08', fontSize: 25, fontWeight: '900', marginTop: 6, marginBottom: 12, textAlign: 'right' },
-  body: { color: '#3D2A0E', fontSize: 16, lineHeight: 24, fontWeight: '600', textAlign: 'right' },
-  bodyCenter: { textAlign: 'center' },
+  stepTag: { ...rtlText, color: '#5E3A10', fontSize: 13, fontWeight: '800', letterSpacing: 1, opacity: 0.7 },
+  title: { ...rtlText, color: '#2B1D08', fontSize: 25, fontWeight: '900', marginTop: 6, marginBottom: 12 },
+  body: { ...rtlText, color: '#3D2A0E', fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  bodyCenter: {},
+  handMockupPlank: {
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#FFF2B8',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    minHeight: 112,
+    justifyContent: 'center',
+    overflow: 'visible',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.38,
+    shadowRadius: 14,
+  },
+  handMockupInnerGlow: {
+    position: 'absolute',
+    left: 1,
+    right: 1,
+    top: 1,
+    bottom: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  handMockupStepTag: {
+    color: '#5E3A10',
+    opacity: 1,
+  },
+  handMockupTitle: {
+    color: '#1F1607',
+    marginTop: 0,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  handMockupBody: {
+    color: '#1F1607',
+    fontSize: 17,
+    lineHeight: 25,
+    fontWeight: '900',
+    textAlign: 'center',
+    textShadowColor: 'rgba(255,255,255,0.32)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+  },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 18, marginBottom: 16 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,243,201,0.35)' },
   dotActive: { width: 22, backgroundColor: '#F4CD5A' },
   controls: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  handMockupControls: { paddingHorizontal: 10 },
   nextWrap: { flex: 1 },
 
   // The demo hand (המניפה step) — raised fully into view near the bottom edge,
@@ -1060,7 +1165,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17,12,4,0.96)',
     paddingHorizontal: 26,
     paddingVertical: 28,
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -1068,8 +1173,35 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 14,
   },
-  rewardBadge: { fontSize: 48 },
-  rewardTitle: { color: '#F4CD5A', fontSize: 26, fontWeight: '900', textAlign: 'center' },
-  rewardSub: { color: '#D8C49A', fontSize: 16, fontWeight: '600', textAlign: 'center', lineHeight: 24, marginBottom: 6 },
+  rewardBadge: { fontSize: 48, textAlign: 'center' },
+  rewardTitle: { ...rtlText, color: '#F4CD5A', fontSize: 26, fontWeight: '900' },
+  rewardSub: { ...rtlText, color: '#D8C49A', fontSize: 16, fontWeight: '600', lineHeight: 24, marginBottom: 6 },
   rewardBtnWrap: { alignSelf: 'stretch', marginTop: 8, gap: 10 },
+  introOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  introCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#2E7D43',
+    backgroundColor: 'rgba(17,12,4,0.96)',
+    paddingHorizontal: 26,
+    paddingVertical: 30,
+    alignItems: 'stretch',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+  introBadge: { fontSize: 48, textAlign: 'center' },
+  introTitle: { ...rtlText, color: '#7BE08A', fontSize: 26, fontWeight: '900' },
+  introBody: { ...rtlText, color: '#D8C49A', fontSize: 16, fontWeight: '700', lineHeight: 24 },
+  introCta: { alignSelf: 'stretch', marginTop: 10 },
 });

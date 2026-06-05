@@ -27,6 +27,14 @@ describe('tutorialBus lesson-specific modes', () => {
     expect(tutorialBus.getFracGuidedMode()).toBe(false);
   });
 
+  it('tracks active lesson id and resets in _reset', () => {
+    expect(tutorialBus.getActiveLessonId()).toBe(null);
+    tutorialBus.setActiveLessonId('equation-basics');
+    expect(tutorialBus.getActiveLessonId()).toBe('equation-basics');
+    tutorialBus._reset();
+    expect(tutorialBus.getActiveLessonId()).toBe(null);
+  });
+
   it('tracks lesson-5 hide-fan flag', () => {
     expect(tutorialBus.getL5HideFan()).toBe(false);
     tutorialBus.setL5HideFan(true);

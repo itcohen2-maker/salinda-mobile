@@ -441,8 +441,8 @@ const opColors: Record<string, { face: string; dark: string; light: string }> = 
 // Android: Fredoka_700Bold doesn't ship the Unicode math glyphs (Ã— âˆ’ Ã·).
 // iOS + web render them fine; Android falls back to ASCII to stay visible.
 const opDisplay: Record<string, string> = Platform.OS === 'android'
-  ? { 'x': 'Ã—', '-': '-', '/': 'Ã·', '+': '+', 'Ã—': 'Ã—', 'âˆ’': '-' }
-  : { 'x': 'Ã—', '-': 'âˆ’', '/': 'Ã·', '+': '+' };
+  ? { 'x': '×', '-': '-', '/': '÷', '+': '+', '×': '×', '−': '-' }
+  : { 'x': '×', '-': '−', '/': '÷', '+': '+' };
 
 const stableOpDisplay: Record<string, string> = {
   x: '\u00D7',
@@ -643,12 +643,12 @@ export function WildCard({
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                 {resolved ? (
                   <>
-                    <Text style={{ fontSize: small ? 12 : 14, fontWeight: '700', color: '#6D28D9' }}>â˜…</Text>
+                    <Text style={{ fontSize: small ? 12 : 14, fontWeight: '700', color: '#6D28D9' }}>★</Text>
                     <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>{card.resolvedValue}</Text>
                   </>
                 ) : (
                   <>
-                    <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>â˜…</Text>
+                    <Text style={{ fontSize: fs, fontWeight: '900', color: '#5B21B6', textAlign: 'center' }}>★</Text>
                     <Text style={{ fontSize: small ? 10 : 11, fontWeight: '700', color: '#6D28D9', marginTop: 2 }}>0-25</Text>
                   </>
                 )}

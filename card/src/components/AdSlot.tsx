@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, View, Text } from 'react-native';
+import { Platform, View } from 'react-native';
 
 type AdSlotProps = {
   slot: 'skyscraper' | 'leaderboard';
@@ -26,8 +26,6 @@ export function AdSlot({ slot, visible = true }: AdSlotProps) {
         justifyContent: 'center',
         flexShrink: 0,
       }}
-    >
-      <Text style={{ color: '#1e3a5f', fontSize: 10, letterSpacing: 1 }}>AD</Text>
-    </View>
+    />
   );
 }

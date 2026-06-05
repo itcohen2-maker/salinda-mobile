@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 import { THEMES, DEFAULT_THEME_ID, type ThemeId, type TableTheme, type BackgroundTheme } from './themes';
-import { TABLE_SKINS, type TableSkinId, type TableSkin } from './tableSkins';
+import { TABLE_SKINS, resolveTableSkinId, type TableSkin } from './tableSkins';
 import { useAuth } from '../hooks/useAuth';
 
 export type { TableSkin };
@@ -18,9 +18,10 @@ function resolveTheme(tableId: string, backgroundId: string, tableSkinId?: strin
   const resolvedBackgroundThemeId = (THEMES[backgroundId as ThemeId]?.id ?? DEFAULT_THEME_ID) as ThemeId;
   const table = THEMES[resolvedTableThemeId]?.table ?? THEMES[DEFAULT_THEME_ID].table;
   const background = THEMES[resolvedBackgroundThemeId]?.background ?? THEMES[DEFAULT_THEME_ID].background;
+  const resolvedTableSkinId = resolveTableSkinId(tableSkinId);
   const activeTableSkin =
-    tableSkinId && TABLE_SKINS[tableSkinId as TableSkinId]
-      ? TABLE_SKINS[tableSkinId as TableSkinId]
+    resolvedTableSkinId && TABLE_SKINS[resolvedTableSkinId]
+      ? TABLE_SKINS[resolvedTableSkinId]
       : null;
   return {
     tableThemeId: resolvedTableThemeId,

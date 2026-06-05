@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { PlayModeChoiceScreen } from '../../index';
 import { useFeedbackAdmin } from '../feedback/useFeedbackAdmin';
@@ -34,6 +34,8 @@ jest.mock('../../components/WalkingDice', () => ({
 
 jest.mock('../i18n/LocaleContext', () => ({
   LocaleProvider: ({ children }: { children: React.ReactNode }) => children,
+  deviceDefaultLocale: () => 'en',
+  useLocaleOptional: () => ({ locale: 'en', isRTL: false }),
   useLocale: () => ({
     locale: 'en',
     isRTL: false,
@@ -136,6 +138,17 @@ describe('PlayModeChoiceScreen auth button', () => {
     expect(screen.getByTestId('home-feedback-toggle')).toBeTruthy();
     expect(screen.getByTestId('home-feedback-inbox')).toBeTruthy();
     expect(screen.getByTestId('home-admin-coins')).toBeTruthy();
+  });
+
+  it('opens analytics when an admin presses the analytics button', () => {
+    const onOpenAnalytics = jest.fn();
+    mockUseAuth.mockReturnValue({ isAnonymous: false, profile: { total_coins: 15 } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true });
+
+    render(<PlayModeChoiceScreen {...baseProps} onOpenAnalytics={onOpenAnalytics} />);
+
+    fireEvent.press(screen.getByTestId('home-analytics'));
+    expect(onOpenAnalytics).toHaveBeenCalledTimes(1);
   });
 
   it('keeps tutorial and shop available after swapping their menu positions', () => {

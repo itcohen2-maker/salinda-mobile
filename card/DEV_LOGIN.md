@@ -8,12 +8,12 @@
 
 ## מריצים פקודה אחת בכל פעם (לפי המכשיר)
 
-שני השרתים רצים על פורט 8081, אז **לא** מריצים את שניהם יחד.
+אפשר להריץ כל מכשיר בנפרד, או להריץ את שניהם יחד עם `./dev-both.ps1`.
 
 | בודק על | פקודה | איך נכנסים |
 |---------|-------|-----------|
-| **אנדרואיד** | `npm start` | פותחים את אפליקציית **Salinda (dev)** — מתחברת לבד ב-LAN. **בלי tunnel.** |
-| **אייפון** | `npm run start:go-tunnel` | פותחים **Expo Go** → סורקים QR / נכנסים דרך הכתובת |
+| **אנדרואיד** | `npm start` או `npm run start:android-dev` | פותחים את אפליקציית **Salinda (dev)** — מתחברת ל-8081. **בלי tunnel.** |
+| **אייפון** | `npm run start:go-tunnel` או `npm run start:ios-go` | פותחים **Expo Go** → סורקים QR / נכנסים דרך הכתובת של 8082 |
 
 אחרי שהמשחק נטען → מתחברים עם Google → חוזרים לאפליקציה. ✅
 
@@ -43,14 +43,32 @@
 > הכתובת `exp://...exp.direct` **משתנה בכל הפעלה**. הכי נוח: להתחבר לחשבון Expo ב-Expo Go, ואז הפרויקט מופיע לבד.
 >
 > אם רואים `failed to start tunnel / remote gone away` — זו תקלת ngrok זמנית. מנסים שוב, או מאוחר יותר. (שיפור אמינות: חשבון ngrok חינמי + authtoken.)
+>
+> אם בודקים ב-LAN במקום tunnel, הקוד לא שולח ל-Supabase את כתובת ה-IP הגולמית. הוא משתמש ב-`https://salinda-mobile.vercel.app/auth/callback?expo_return_to=...`, שנמצא ברשימת ה-Redirect URLs, ואז האתר מחזיר את הקוד ל-Expo Go והאפליקציה מחליפה אותו לסשן.
 
 ---
 
-## הגדרות שכבר קיימות (לא לגעת)
+## הגדרות Supabase שחייבות להישאר קבועות
+
+ב-Supabase Dashboard → Authentication → URL Configuration:
+
+- **Site URL**: `https://salinda-mobile.vercel.app`
+- **Redirect URLs**:
+  - `salinda-dev://auth/callback`
+  - `salinda-dev://**`
+  - `salinda://auth/callback`
+  - `salinda://**`
+  - `exp://**`
+  - `https://salinda-mobile.vercel.app/auth/callback`
+  - `https://salinda-mobile.vercel.app/auth/callback?**`
+
+לא מוסיפים כתובת tunnel יומית ל-Supabase. הכתובת של Expo Go משתנה בכל הפעלה, ו-`exp://**` מכסה אותה.
+
+## הגדרות מקומיות שכבר קיימות
 
 - **`.env`** (מקומי, gitignored): `EXPO_PUBLIC_AUTH_SCHEME=salinda-dev` — נחוץ כי `eas.json` env חל רק בזמן build, לא ב-`expo start`. בלעדיו ה-dev-client מקבל redirect `salinda://` במקום `salinda-dev://`.
-- **Supabase Redirect URLs** כוללים: `salinda-dev://auth/callback`, `salinda-dev://**`, `exp://**`, `salinda://**`.
-- **סקריפטים** ב-`package.json`: `start` (dev-client), `start:go` (Expo Go LAN), `start:go-tunnel` (Expo Go tunnel).
+- **סקריפטים** ב-`package.json`: `start` / `start:android-dev` (dev-client על 8081), `start:go-tunnel` / `start:ios-go` (Expo Go tunnel על 8082).
+- בזמן התחברות Google בפיתוח תופיע שורת לוג כמו `[auth] OAuth redirect (...)`. אם שוב נופלים לאתר, משווים את הכתובת בלוג לרשימת Redirect URLs למעלה.
 
 ---
 

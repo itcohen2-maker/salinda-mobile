@@ -1,0 +1,389 @@
+diff --git a/card/DEV_LOGIN.md b/card/DEV_LOGIN.md
+index 2e59048..e955ff1 100644
+--- a/card/DEV_LOGIN.md
++++ b/card/DEV_LOGIN.md
+@@ -8,12 +8,12 @@
+ 
+ ## מריצים פקודה אחת בכל פעם (לפי המכשיר)
+ 
+-שני השרתים רצים על פורט 8081, אז **לא** מריצים את שניהם יחד.
++אפשר להריץ כל מכשיר בנפרד, או להריץ את שניהם יחד עם `./dev-both.ps1`.
+ 
+ | בודק על | פקודה | איך נכנסים |
+ |---------|-------|-----------|
+-| **אנדרואיד** | `npm start` | פותחים את אפליקציית **Salinda (dev)** — מתחברת לבד ב-LAN. **בלי tunnel.** |
+-| **אייפון** | `npm run start:go-tunnel` | פותחים **Expo Go** → סורקים QR / נכנסים דרך הכתובת |
++| **אנדרואיד** | `npm start` או `npm run start:android-dev` | פותחים את אפליקציית **Salinda (dev)** — מתחברת ל-8081. **בלי tunnel.** |
++| **אייפון** | `npm run start:go-tunnel` או `npm run start:ios-go` | פותחים **Expo Go** → סורקים QR / נכנסים דרך הכתובת של 8082 |
+ 
+ אחרי שהמשחק נטען → מתחברים עם Google → חוזרים לאפליקציה. ✅
+ 
+@@ -43,14 +43,32 @@
+ > הכתובת `exp://...exp.direct` **משתנה בכל הפעלה**. הכי נוח: להתחבר לחשבון Expo ב-Expo Go, ואז הפרויקט מופיע לבד.
+ >
+ > אם רואים `failed to start tunnel / remote gone away` — זו תקלת ngrok זמנית. מנסים שוב, או מאוחר יותר. (שיפור אמינות: חשבון ngrok חינמי + authtoken.)
++>
++> אם בודקים ב-LAN במקום tunnel, הקוד לא שולח ל-Supabase את כתובת ה-IP הגולמית. הוא משתמש ב-`https://salinda-mobile.vercel.app/auth/callback?expo_return_to=...`, שנמצא ברשימת ה-Redirect URLs, ואז האתר מחזיר את הקוד ל-Expo Go והאפליקציה מחליפה אותו לסשן.
+ 
+ ---
+ 
+-## הגדרות שכבר קיימות (לא לגעת)
++## הגדרות Supabase שחייבות להישאר קבועות
++
++ב-Supabase Dashboard → Authentication → URL Configuration:
++
++- **Site URL**: `https://salinda-mobile.vercel.app`
++- **Redirect URLs**:
++  - `salinda-dev://auth/callback`
++  - `salinda-dev://**`
++  - `salinda://auth/callback`
++  - `salinda://**`
++  - `exp://**`
++  - `https://salinda-mobile.vercel.app/auth/callback`
++  - `https://salinda-mobile.vercel.app/auth/callback?**`
++
++לא מוסיפים כתובת tunnel יומית ל-Supabase. הכתובת של Expo Go משתנה בכל הפעלה, ו-`exp://**` מכסה אותה.
++
++## הגדרות מקומיות שכבר קיימות
+ 
+ - **`.env`** (מקומי, gitignored): `EXPO_PUBLIC_AUTH_SCHEME=salinda-dev` — נחוץ כי `eas.json` env חל רק בזמן build, לא ב-`expo start`. בלעדיו ה-dev-client מקבל redirect `salinda://` במקום `salinda-dev://`.
+-- **Supabase Redirect URLs** כוללים: `salinda-dev://auth/callback`, `salinda-dev://**`, `exp://**`, `salinda://**`.
+-- **סקריפטים** ב-`package.json`: `start` (dev-client), `start:go` (Expo Go LAN), `start:go-tunnel` (Expo Go tunnel).
++- **סקריפטים** ב-`package.json`: `start` / `start:android-dev` (dev-client על 8081), `start:go-tunnel` / `start:ios-go` (Expo Go tunnel על 8082).
++- בזמן התחברות Google בפיתוח תופיע שורת לוג כמו `[auth] OAuth redirect (...)`. אם שוב נופלים לאתר, משווים את הכתובת בלוג לרשימת Redirect URLs למעלה.
+ 
+ ---
+ 
+diff --git a/card/app.config.js b/card/app.config.js
+index 2b3579c..cc3d719 100644
+--- a/card/app.config.js
++++ b/card/app.config.js
+@@ -2,7 +2,8 @@ const appJson = require('./app.json');
+ const config = appJson.expo;
+ 
+ const APP_ENV = process.env.APP_ENV ?? 'production';
+-const isDev = APP_ENV === 'development';
++const AUTH_SCHEME = process.env.EXPO_PUBLIC_AUTH_SCHEME;
++const isDev = APP_ENV === 'development' || AUTH_SCHEME === 'salinda-dev';
+ 
+ // Build-time stamp for the in-app "last update" label. Evaluated whenever the
+ // Expo config is resolved (Metro start / EAS build), so it auto-refreshes on
+diff --git a/card/package.json b/card/package.json
+index 7ea94d0..c862a00 100644
+--- a/card/package.json
++++ b/card/package.json
+@@ -3,9 +3,11 @@
+   "version": "1.0.0",
+   "main": "index.tsx",
+   "scripts": {
+-    "start": "expo start --dev-client",
+-    "start:go": "expo start --go",
+-    "start:go-tunnel": "expo start --go --tunnel",
++    "start": "set EXPO_PUBLIC_AUTH_SCHEME=salinda-dev&& expo start --dev-client --port 8081",
++    "start:android-dev": "set EXPO_PUBLIC_AUTH_SCHEME=salinda-dev&& expo start --dev-client --port 8081",
++    "start:go": "expo start --go --port 8081",
++    "start:go-tunnel": "expo start --go --tunnel --port 8082",
++    "start:ios-go": "expo start --go --tunnel --port 8082",
+     "start:expo-go": "set EXPO_NO_DEPENDENCY_VALIDATION=1 && expo start --go --port 8081",
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+diff --git a/card/src/auth/socialSignIn.test.ts b/card/src/auth/socialSignIn.test.ts
+index c42ce17..75b516a 100644
+--- a/card/src/auth/socialSignIn.test.ts
++++ b/card/src/auth/socialSignIn.test.ts
+@@ -1,9 +1,11 @@
+ import { Platform } from 'react-native';
+ import * as QueryParams from 'expo-auth-session/build/QueryParams';
++import Constants from 'expo-constants';
++import { makeRedirectUri } from 'expo-auth-session';
+ import * as WebBrowser from 'expo-web-browser';
+ 
+ import { supabase } from '../lib/supabase';
+-import { isSocialAuthCallbackUrl, performSocialSignIn } from './socialSignIn';
++import { buildSocialAuthRedirectUri, isSocialAuthCallbackUrl, performSocialSignIn } from './socialSignIn';
+ 
+ jest.mock('../lib/supabase', () => ({
+   supabase: {
+@@ -20,6 +22,13 @@ jest.mock('expo-auth-session', () => ({
+     scheme ? `${scheme}://${path}` : `https://app.local/${path ?? ''}`),
+ }));
+ 
++jest.mock('expo-constants', () => ({
++  __esModule: true,
++  default: {
++    executionEnvironment: 'bare',
++  },
++}));
++
+ jest.mock('expo-auth-session/build/QueryParams', () => ({
+   getQueryParams: jest.fn(),
+ }));
+@@ -31,14 +40,31 @@ jest.mock('expo-web-browser', () => ({
+ 
+ const mockSupabaseAuth = supabase.auth as jest.Mocked<typeof supabase.auth>;
+ const mockGetQueryParams = QueryParams.getQueryParams as jest.MockedFunction<typeof QueryParams.getQueryParams>;
++const mockMakeRedirectUri = makeRedirectUri as jest.MockedFunction<typeof makeRedirectUri>;
+ const mockOpenAuthSessionAsync = WebBrowser.openAuthSessionAsync as jest.MockedFunction<typeof WebBrowser.openAuthSessionAsync>;
++const constantsRef = Constants as typeof Constants & { executionEnvironment: string };
+ const platformRef = Platform as typeof Platform & { OS: string };
+ const originalPlatform = platformRef.OS;
++const originalAuthScheme = process.env.EXPO_PUBLIC_AUTH_SCHEME;
++
++function restoreOriginalAuthScheme(): void {
++  if (originalAuthScheme === undefined) {
++    delete process.env.EXPO_PUBLIC_AUTH_SCHEME;
++  } else {
++    process.env.EXPO_PUBLIC_AUTH_SCHEME = originalAuthScheme;
++  }
++}
+ 
+ describe('performSocialSignIn', () => {
+   beforeEach(() => {
+     platformRef.OS = originalPlatform;
++    constantsRef.executionEnvironment = 'bare';
++    restoreOriginalAuthScheme();
+     jest.clearAllMocks();
++    mockMakeRedirectUri.mockImplementation(({ scheme, path }: { scheme?: string; path?: string }) =>
++      scheme ? `${scheme}://${path}` : `https://app.local/${path ?? ''}`);
++    jest.spyOn(console, 'info').mockImplementation(() => {});
++    jest.spyOn(console, 'warn').mockImplementation(() => {});
+     mockSupabaseAuth.signInWithOAuth.mockResolvedValue({
+       data: { provider: 'google', url: 'https://auth.example/start' },
+       error: null,
+@@ -55,6 +81,47 @@ describe('performSocialSignIn', () => {
+ 
+   afterAll(() => {
+     platformRef.OS = originalPlatform;
++    restoreOriginalAuthScheme();
++  });
++
++  afterEach(() => {
++    jest.restoreAllMocks();
++  });
++
++  it.each(['android', 'ios'] as const)(
++    'uses salinda-dev native redirect for %s dev-client when the auth scheme env is set',
++    (platform) => {
++      platformRef.OS = platform;
++      constantsRef.executionEnvironment = 'bare';
++      process.env.EXPO_PUBLIC_AUTH_SCHEME = 'salinda-dev';
++
++      expect(buildSocialAuthRedirectUri()).toBe('salinda-dev://auth/callback');
++    },
++  );
++
++  it('uses Expo Go redirect URI and rewrites loopback IP to localhost', () => {
++    platformRef.OS = 'ios';
++    constantsRef.executionEnvironment = 'storeClient';
++    mockMakeRedirectUri.mockReturnValue('exp://127.0.0.1:8082/--/auth/callback');
++
++    expect(buildSocialAuthRedirectUri()).toBe('exp://localhost:8082/--/auth/callback');
++  });
++
++  it('uses the allow-listed web callback when Expo Go is running on a raw LAN IP', () => {
++    platformRef.OS = 'ios';
++    constantsRef.executionEnvironment = 'storeClient';
++    mockMakeRedirectUri.mockReturnValue('exp://10.100.102.56:8082/--/auth/callback');
++
++    expect(buildSocialAuthRedirectUri()).toBe(
++      'https://salinda-mobile.vercel.app/auth/callback?expo_return_to=exp%3A%2F%2F10.100.102.56%3A8082%2F--%2Fauth%2Fcallback',
++    );
++  });
++
++  it('uses the web origin callback on web', () => {
++    platformRef.OS = 'web';
++    mockMakeRedirectUri.mockReturnValue('https://app.local/auth/callback');
++
++    expect(buildSocialAuthRedirectUri()).toBe('https://app.local/auth/callback');
+   });
+ 
+   it('starts Google OAuth with the expected redirect URI', async () => {
+diff --git a/card/src/auth/socialSignIn.ts b/card/src/auth/socialSignIn.ts
+index 5a9a72b..6c5b2e8 100644
+--- a/card/src/auth/socialSignIn.ts
++++ b/card/src/auth/socialSignIn.ts
+@@ -11,13 +11,32 @@ export interface SocialSignInOptions {
+   forceAccountPicker?: boolean;
+ }
+ 
+-export const SOCIAL_AUTH_SCHEME = process.env.EXPO_PUBLIC_AUTH_SCHEME ?? 'salinda';
+ export const SOCIAL_AUTH_CALLBACK_PATH = 'auth/callback';
+-export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
+ export const SOCIAL_AUTH_RETURN_TO_STORAGE_KEY = 'salinda_social_auth_return_to';
++export const SOCIAL_AUTH_WEB_APP_URL = process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'https://salinda-mobile.vercel.app';
++
++export function getSocialAuthScheme(): string {
++  return process.env.EXPO_PUBLIC_AUTH_SCHEME ?? 'salinda';
++}
++
++export const SOCIAL_AUTH_SCHEME = getSocialAuthScheme();
++export const SOCIAL_AUTH_NATIVE_REDIRECT_URI = `${SOCIAL_AUTH_SCHEME}://${SOCIAL_AUTH_CALLBACK_PATH}`;
+ 
+ WebBrowser.maybeCompleteAuthSession();
+ 
++function buildWebCallbackRedirectUri(expoReturnTo?: string): string {
++  const callbackUrl = `${SOCIAL_AUTH_WEB_APP_URL.replace(/\/+$/, '')}/${SOCIAL_AUTH_CALLBACK_PATH}`;
++  if (!expoReturnTo) return callbackUrl;
++
++  const url = new URL(callbackUrl);
++  url.searchParams.set('expo_return_to', expoReturnTo);
++  return url.toString();
++}
++
++function isRawIpHost(hostname: string): boolean {
++  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
++}
++
+ /**
+  * Returns the OAuth redirect URI for the current runtime.
+  *
+@@ -55,11 +74,36 @@ export function buildSocialAuthRedirectUri(): string {
+     // A localhost/adb-reverse dev server resolves to exp://127.0.0.1:<port>/... —
+     // rewrite the loopback IP to the `localhost` hostname so GoTrue accepts it and
+     // returns into the app instead of falling back to the website Site URL.
+-    return uri.replace('://127.0.0.1', '://localhost');
++    const localhostUri = uri.replace('://127.0.0.1', '://localhost');
++    try {
++      const parsed = new URL(localhostUri);
++      if (isRawIpHost(parsed.hostname)) {
++        const bridgeUri = buildWebCallbackRedirectUri(localhostUri);
++        if (process.env.NODE_ENV !== 'production') {
++          console.warn(`[auth] Expo Go redirect uses raw IP; bridging through web callback: ${bridgeUri}`);
++        }
++        return bridgeUri;
++      }
++    } catch {
++      // If parsing fails, keep the Expo-generated URI and let the auth flow surface the error.
++    }
++    return localhostUri;
+   }
+ 
+   // Standalone / dev-client build: use the native custom scheme that is allow-listed in Supabase.
+-  return SOCIAL_AUTH_NATIVE_REDIRECT_URI;
++  return `${getSocialAuthScheme()}://${SOCIAL_AUTH_CALLBACK_PATH}`;
++}
++
++function logSocialAuthRedirect(redirectTo: string): void {
++  if (process.env.NODE_ENV === 'production') return;
++
++  const runtime = Platform.OS === 'web'
++    ? 'web'
++    : Constants.executionEnvironment === 'storeClient'
++      ? 'expo-go'
++      : 'native';
++
++  console.info(`[auth] OAuth redirect (${runtime}): ${redirectTo}`);
+ }
+ 
+ function hasSocialAuthParams(url: string): boolean {
+@@ -174,6 +218,7 @@ export async function performSocialSignIn(
+ ): Promise<{ error: string | null }> {
+   try {
+     const redirectTo = buildSocialAuthRedirectUri();
++    logSocialAuthRedirect(redirectTo);
+     const queryParams = provider === 'google' && options.forceAccountPicker
+       ? { prompt: 'select_account' }
+       : undefined;
+diff --git a/card/src/hooks/useAuth.test.tsx b/card/src/hooks/useAuth.test.tsx
+index d53b138..16aac0d 100644
+--- a/card/src/hooks/useAuth.test.tsx
++++ b/card/src/hooks/useAuth.test.tsx
+@@ -22,6 +22,7 @@ jest.mock('../auth/socialSignIn', () => ({
+   createSessionFromUrl: jest.fn(),
+   isSocialAuthCallbackUrl: jest.fn(),
+   performSocialSignIn: jest.fn(),
++  SOCIAL_AUTH_CALLBACK_PATH: 'auth/callback',
+ }));
+ 
+ const profilesById: Record<string, PlayerProfile> = {
+@@ -266,4 +267,42 @@ describe('useAuth', () => {
+       platformRef.OS = originalPlatform;
+     }
+   });
++
++  it('bridges web OAuth callbacks back to Expo Go when expo_return_to is present', async () => {
++    platformRef.OS = 'web';
++    (isSocialAuthCallbackUrl as jest.Mock).mockReturnValue(true);
++
++    const originalLocation = globalThis.window.location;
++    const replace = jest.fn();
++    Object.defineProperty(globalThis.window, 'location', {
++      configurable: true,
++      value: {
++        href: 'https://salinda-mobile.vercel.app/auth/callback?expo_return_to=exp%3A%2F%2F10.100.102.56%3A8082%2F--%2Fauth%2Fcallback&code=oauth-code',
++        origin: 'https://salinda-mobile.vercel.app',
++        pathname: '/auth/callback',
++        search: '?expo_return_to=exp%3A%2F%2F10.100.102.56%3A8082%2F--%2Fauth%2Fcallback&code=oauth-code',
++        hash: '',
++        replace,
++      },
++    });
++
++    const wrapper = ({ children }: { children: React.ReactNode }) => (
++      <AuthProvider>{children}</AuthProvider>
++    );
++
++    try {
++      renderHook(() => useAuth(), { wrapper });
++
++      await waitFor(() => {
++        expect(replace).toHaveBeenCalledWith('exp://10.100.102.56:8082/--/auth/callback?code=oauth-code');
++      });
++      expect(createSessionFromUrl).not.toHaveBeenCalled();
++    } finally {
++      Object.defineProperty(globalThis.window, 'location', {
++        configurable: true,
++        value: originalLocation,
++      });
++      platformRef.OS = originalPlatform;
++    }
++  });
+ });
+diff --git a/card/src/hooks/useAuth.tsx b/card/src/hooks/useAuth.tsx
+index 2978d83..ea0d2f1 100644
+--- a/card/src/hooks/useAuth.tsx
++++ b/card/src/hooks/useAuth.tsx
+@@ -7,6 +7,7 @@ import {
+   consumeSocialAuthReturnTo,
+   createSessionFromUrl,
+   isSocialAuthCallbackUrl,
++  SOCIAL_AUTH_CALLBACK_PATH,
+   performSocialSignIn,
+   type SocialAuthProvider,
+   type SocialSignInOptions,
+@@ -136,6 +137,15 @@ export function isRegisteredAuthUser(user: User | null): boolean {
+   return identityProviders.some((item) => item !== 'anonymous');
+ }
+ 
++function isSafeExpoOAuthReturnUrl(value: string): boolean {
++  try {
++    const parsed = new URL(value);
++    return parsed.protocol === 'exp:' && parsed.pathname.includes(SOCIAL_AUTH_CALLBACK_PATH);
++  } catch {
++    return false;
++  }
++}
++
+ export async function ensureMinimumProfileCoins(_userId: string, currentCoins: number): Promise<number> {
+   const normalizedCoins = Number(currentCoins);
+   if (!Number.isFinite(normalizedCoins)) return 0;
+@@ -254,6 +264,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
+     if (!isSocialAuthCallbackUrl(callbackUrl)) return;
+ 
+     try {
++      const parsed = new URL(callbackUrl);
++      const expoReturnTo = parsed.searchParams.get('expo_return_to');
++      if (expoReturnTo && isSafeExpoOAuthReturnUrl(expoReturnTo)) {
++        parsed.searchParams.delete('expo_return_to');
++        const returnUrl = new URL(expoReturnTo);
++        parsed.searchParams.forEach((value, key) => {
++          returnUrl.searchParams.set(key, value);
++        });
++        if (parsed.hash) returnUrl.hash = parsed.hash;
++        window.location.replace(returnUrl.toString());
++        return;
++      }
++
+       await createSessionFromUrl(callbackUrl);
+     } catch (error) {
+       console.warn('[auth] OAuth callback failed:', error);
