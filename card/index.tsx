@@ -20,7 +20,7 @@ Sentry.init({
 });
 
 import { LAST_PUSH } from './src/buildInfo';
-import { APP_VERSION, WEBSITE_LAST_UPDATED } from './src/appVersion';
+import { APP_VERSION } from './src/appVersion';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, useContext, useReducer, forwardRef, useImperativeHandle } from 'react';
 import type { ReactNode } from 'react';
 import type { BotDifficulty } from './src/bot/types';
@@ -21361,10 +21361,7 @@ export function PlayModeChoiceScreen({
                   v{APP_VERSION}
                 </Text>
                 <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
-                  עדכון {LAST_PUSH}
-                </Text>
-                <Text style={{ color: '#FCD34D', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
-                  עדכון אתר: {WEBSITE_LAST_UPDATED}
+                  עדכון אתר: {LAST_PUSH}
                 </Text>
               </View>
             )}

@@ -1079,6 +1079,7 @@ type SpecialsFlowPhase =
   | 'salindaShowcase'
   | 'salindaPractice'
   | 'feraIntro'
+  | 'feraShowcase'
   | 'feraPractice';
 
 type SpecialsFlyTarget = 'op' | 'left' | 'right';
@@ -1095,6 +1096,9 @@ interface SpecialsFlowState {
   salindaBubblesOpen: boolean;
   salindaSelectorOpen: boolean;
   feraDemoDone: boolean;
+  feraShowcaseStarted: boolean;
+  feraShowcaseCardUsed: boolean;
+  feraPracticeCardUsed: boolean;
   showEndModal: boolean;
 }
 
@@ -1114,13 +1118,18 @@ const SPECIALS_SALINDA_SHOWCASE_TEXT =
 const SPECIALS_SALINDA_PRACTICE_TEXT =
   'עכשיו תורכם! 😎 הביטו בקלף הסלינדה שבמניפה ובואו נבנה לו תרגיל שיתאים לו. לחצו על קלף סלינדה, ובחרו בסימן החיסור (-)!';
 const SPECIALS_FERA_INTRO_TEXT =
-  'הגעתם לנשק הסודי של המשחק: קלף הפרא! הקלף הזה הוא לוח חלק – הוא יכול להפוך לכל מספר או סימן שאתם צריכים כדי להשלים את התרגיל ולנצח.';
+  'הכירו את הנשק הסודי של המשחק: קלף הפרא! הקלף הזה הוא לוח חלק – הוא יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח.';
 const SPECIALS_FERA_READY_TEXT =
-  'ראיתם את זה? קלף הפרא הפך בדיוק למספר שחסר לנו! לחצו שוב על חץ ההמשך כדי לנסות בעצמכם.';
+  'ראיתם את זה? קלף הפרא הפך בדיוק למספר 2 שהיה חסר לנו במשוואה! לחצו על חץ ההמשך כדי לנסות בעצמכם.';
 const SPECIALS_FERA_PRACTICE_TEXT =
-  'השלב שלכם! לחצו על קלף הפרא במניפה והפכו אותו למספר 4 כדי להשלים את המשוואה המנצחת!';
+  'התור שלכם! לחצו על קלף הפרא שבמניפה והפכו אותו למספר 4 כדי להשלים את המשוואה המנצחת!';
 
 const SPECIALS_SIGN_OPS: Operation[] = ['+', '-', 'x', '÷'];
+const SPECIALS_SIGN_CARDS: Card[] = SPECIALS_SIGN_OPS.map((op) => ({
+  id: `specials-sign-${op}`,
+  type: 'operation',
+  operation: op,
+}));
 const SPECIALS_TOAST_TEXT = 'תנסה שוב';
 const SPECIALS_SALINDA_ID = 'specials-practice-salinda';
 const SPECIALS_FERA_ID = 'specials-practice-fera';
@@ -1173,23 +1182,26 @@ function getSpecialsInstruction(state: SpecialsFlowState): string {
   if (state.phase === 'symbolsPractice') return SPECIALS_SYMBOLS_PRACTICE_TEXT;
   if (state.phase === 'salindaShowcase') return SPECIALS_SALINDA_SHOWCASE_TEXT;
   if (state.phase === 'salindaPractice') return SPECIALS_SALINDA_PRACTICE_TEXT;
-  if (state.phase === 'feraIntro') return state.feraDemoDone ? SPECIALS_FERA_READY_TEXT : SPECIALS_FERA_INTRO_TEXT;
+  if (state.phase === 'feraIntro') return SPECIALS_FERA_INTRO_TEXT;
+  if (state.phase === 'feraShowcase') return state.feraDemoDone ? SPECIALS_FERA_READY_TEXT : SPECIALS_FERA_INTRO_TEXT;
   return SPECIALS_FERA_PRACTICE_TEXT;
 }
 
-function getSpecialsEquation(state: SpecialsFlowState) {
+function getSpecialsEquation(state: SpecialsFlowState): { left: number | null; op: Operation | null; right: number | null; result: number } | null {
   switch (state.phase) {
     case 'symbolsShowcase':
-      return { left: 4, op: state.op, right: 2, result: 6, leftMissing: false, rightMissing: false };
+      return { left: 4, op: state.op, right: 2, result: 6 };
     case 'symbolsPractice':
-      return { left: 4, op: state.op, right: 2, result: 2, leftMissing: false, rightMissing: false };
+      return { left: 4, op: state.op, right: 2, result: 2 };
     case 'salindaShowcase':
     case 'salindaPractice':
-      return { left: 5, op: state.op, right: 2, result: 3, leftMissing: false, rightMissing: false };
+      return { left: 5, op: state.op, right: 2, result: 3 };
     case 'feraIntro':
-      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: 10, leftMissing: true, rightMissing: true };
+      return null;
+    case 'feraShowcase':
+      return { left: 4, op: '+' as Operation, right: state.rightValue, result: 6 };
     case 'feraPractice':
-      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: 10, leftMissing: false, rightMissing: true };
+      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: 10 };
   }
 }
 
@@ -1230,7 +1242,13 @@ function SpecialsEquation({
     <View style={styles.specialsEquationRow}>
       <BouncyEquationNumber value={left} bounceKey={bounceKey} />
       <View style={[styles.specialsEquationSlot, !op && styles.specialsEquationSlotEmpty]}>
-        {op ? <OperatorGlyph op={op} color="#171006" size={32} /> : <Text allowFontScaling={false} style={styles.specialsQuestionText}>?</Text>}
+        {op ? (
+          <View pointerEvents="none" style={styles.specialsEquationCardInSlot}>
+            <GameCard card={{ id: `specials-equation-op-${op}`, type: 'operation', operation: op }} small onPress={undefined} />
+          </View>
+        ) : (
+          <Text allowFontScaling={false} style={styles.specialsQuestionText}>?</Text>
+        )}
       </View>
       <BouncyEquationNumber value={right} bounceKey={bounceKey} />
       <Text allowFontScaling={false} style={styles.specialsEquals}>=</Text>
@@ -1241,26 +1259,49 @@ function SpecialsEquation({
   );
 }
 
+function SpecialsFeraIntroCard() {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.06, duration: 820, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 820, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <View style={styles.specialsFeraIntroStage}>
+      <Animated.View style={[styles.specialsFeraIntroHalo, { transform: [{ scale: pulse }] }]} />
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <GameCard card={{ id: SPECIALS_FERA_ID, type: 'wild' }} selected />
+      </Animated.View>
+    </View>
+  );
+}
+
 function SpecialsSignDock({ disabled, activeOp, onPick }: { disabled: boolean; activeOp?: Operation | null; onPick: (op: Operation) => void }) {
   return (
     <View style={styles.specialsSignDock}>
-      {SPECIALS_SIGN_OPS.map((op) => (
+      {SPECIALS_SIGN_CARDS.map((card) => (
         <Pressable
-          key={op}
+          key={card.id}
           disabled={disabled}
           accessibilityRole="button"
-          accessibilityLabel={`בחר סימן ${opDisplay(op)}`}
-          onPress={() => onPick(op)}
+          accessibilityLabel={`בחר קלף סימן ${opDisplay(card.operation ?? '+')}`}
+          onPress={() => onPick(card.operation ?? '+')}
           style={({ pressed }) => [
-            styles.specialsSignButton,
-            activeOp === op && styles.specialsSignButtonActive,
-            pressed && !disabled && styles.specialsSignButtonPressed,
+            styles.specialsSignCardButton,
+            activeOp === card.operation && styles.specialsSignCardActive,
+            pressed && !disabled && styles.specialsSignCardPressed,
             disabled && styles.specialsSignButtonDisabled,
           ]}
         >
-          <LinearGradient colors={['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C']} style={styles.specialsSignButtonFace}>
-            <OperatorGlyph op={op} color="#3D2A0E" size={34} />
-          </LinearGradient>
+          <View pointerEvents="none" style={styles.specialsSignCardFace}>
+            <GameCard card={card} selected={activeOp === card.operation} small onPress={undefined} />
+          </View>
         </Pressable>
       ))}
     </View>
@@ -1323,14 +1364,21 @@ function SpecialsFlyingToken({ token, onDone }: { token: SpecialsFlyToken; onDon
 
   const targetX = token.target === 'op' ? 0 : token.target === 'left' ? -98 : 98;
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, targetX] });
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -210] });
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.68] });
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -222] });
+  const scale = progress.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, 1.08, 0.42] });
+  const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', token.kind === 'feraNumber' ? '-6deg' : '8deg'] });
+  const opacity = progress.interpolate({ inputRange: [0, 0.9, 1], outputRange: [1, 1, 0.78] });
+  const flyingCard: Card =
+    token.kind === 'sign'
+      ? { id: `specials-flying-sign-${token.label}`, type: 'operation', operation: token.label as Operation }
+      : token.kind === 'salindaSign'
+      ? { id: `specials-flying-salinda-${token.label}`, type: 'salinda', operation: token.label as Operation }
+      : { id: `specials-flying-number-${token.label}`, type: 'number', value: Number(token.label) };
 
   return (
     <View pointerEvents="none" style={styles.specialsFlyingLayer}>
-      <Animated.View style={[styles.specialsFlyingToken, token.kind === 'feraNumber' && styles.specialsFlyingFera, { transform: [{ translateX }, { translateY }, { scale }] }]}>
-        {token.kind === 'salindaSign' ? <Text allowFontScaling={false} style={styles.specialsFlyingSalinda}>S</Text> : null}
-        <Text allowFontScaling={false} style={styles.specialsFlyingTokenText}>{token.label}</Text>
+      <Animated.View style={[styles.specialsFlyingTokenCard, { opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }]}>
+        <GameCard card={flyingCard} selected={token.kind === 'salindaSign'} small onPress={undefined} />
       </Animated.View>
     </View>
   );
@@ -1385,6 +1433,9 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     salindaBubblesOpen: false,
     salindaSelectorOpen: false,
     feraDemoDone: false,
+    feraShowcaseStarted: false,
+    feraShowcaseCardUsed: false,
+    feraPracticeCardUsed: false,
     showEndModal: false,
   });
   const [flyToken, setFlyToken] = useState<SpecialsFlyToken | null>(null);
@@ -1452,6 +1503,10 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       busy: false,
       salindaBubblesOpen: false,
       salindaSelectorOpen: false,
+      feraDemoDone: phase === 'feraShowcase' ? false : current.feraDemoDone,
+      feraShowcaseStarted: false,
+      feraShowcaseCardUsed: false,
+      feraPracticeCardUsed: false,
     }));
     bounceEquation();
   }, [bounceEquation, clearTimers]);
@@ -1509,18 +1564,31 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     });
   }, [beginFly, bounceEquation, moveTo, schedule, showToast, state.busy, state.phase]);
 
-  const runFeraIntro = useCallback(() => {
-    if (state.busy || state.phase !== 'feraIntro' || state.feraDemoDone) return;
+  const runFeraShowcase = useCallback(() => {
+    if (state.busy || state.phase !== 'feraShowcase' || state.feraDemoDone) return;
     setState((current) => ({ ...current, busy: true }));
     void playSfx('transition', { cooldownMs: 0, volumeOverride: 0.45 });
     schedule(() => {
-      beginFly({ kind: 'feraNumber', label: '6', target: 'left' }, () => {
-        setState((current) => ({ ...current, leftValue: 6, op: '+', busy: false, feraDemoDone: true }));
+      beginFly({ kind: 'feraNumber', label: '2', target: 'right' }, () => {
+        setState((current) => ({
+          ...current,
+          rightValue: 2,
+          op: '+',
+          busy: false,
+          feraDemoDone: true,
+          feraShowcaseCardUsed: true,
+        }));
         bounceEquation();
         void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.62 });
       });
     }, 280);
   }, [beginFly, bounceEquation, schedule, state.busy, state.feraDemoDone, state.phase]);
+
+  useEffect(() => {
+    if (state.phase !== 'feraShowcase' || state.feraShowcaseStarted || state.feraDemoDone || state.busy) return;
+    setState((current) => ({ ...current, feraShowcaseStarted: true }));
+    runFeraShowcase();
+  }, [runFeraShowcase, state.busy, state.feraDemoDone, state.feraShowcaseStarted, state.phase]);
 
   const handleFeraTap = useCallback((card: Card) => {
     if (state.busy || state.phase !== 'feraPractice') return;
@@ -1530,7 +1598,13 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     }
     setState((current) => ({ ...current, busy: true }));
     beginFly({ kind: 'feraNumber', label: '4', target: 'right' }, () => {
-      setState((current) => ({ ...current, rightValue: 4, busy: false, showEndModal: true }));
+      setState((current) => ({
+        ...current,
+        rightValue: 4,
+        busy: false,
+        feraPracticeCardUsed: true,
+        showEndModal: true,
+      }));
       bounceEquation();
       void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 0.9 });
     });
@@ -1548,10 +1622,13 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       return;
     }
     if (state.phase === 'feraIntro') {
-      if (!state.feraDemoDone) runFeraIntro();
-      else moveTo('feraPractice');
+      moveTo('feraShowcase');
+      return;
     }
-  }, [moveTo, runFeraIntro, runSalindaShowcase, state.busy, state.feraDemoDone, state.phase, state.salindaDemoDone, state.symbolsDemoDone]);
+    if (state.phase === 'feraShowcase' && state.feraDemoDone) {
+      moveTo('feraPractice');
+    }
+  }, [moveTo, runSalindaShowcase, state.busy, state.feraDemoDone, state.phase, state.salindaDemoDone, state.symbolsDemoDone]);
 
   const finishSpecials = useCallback(() => {
     onComplete?.();
@@ -1560,26 +1637,39 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
 
   const equation = getSpecialsEquation(state);
   const instruction = getSpecialsInstruction(state);
-  const showSignDock = state.phase === 'symbolsShowcase' || state.phase === 'symbolsPractice';
+  const showSignDock = state.phase === 'symbolsShowcase';
   const showNext =
     (state.phase === 'symbolsShowcase' && state.symbolsDemoDone) ||
     state.phase === 'salindaShowcase' ||
-    state.phase === 'feraIntro';
+    state.phase === 'feraIntro' ||
+    (state.phase === 'feraShowcase' && state.feraDemoDone);
   const hand =
-    state.phase === 'salindaShowcase'
+    state.phase === 'symbolsPractice'
+      ? SPECIALS_SIGN_CARDS
+      : state.phase === 'salindaShowcase'
       ? SPECIALS_SALINDA_SHOWCASE_HAND
       : state.phase === 'salindaPractice'
       ? SPECIALS_SALINDA_PRACTICE_HAND
-      : state.phase === 'feraIntro'
-      ? SPECIALS_FERA_INTRO_HAND
+      : state.phase === 'feraShowcase'
+      ? state.feraShowcaseCardUsed
+        ? SPECIALS_FERA_INTRO_HAND.filter((card) => card.id !== SPECIALS_FERA_ID)
+        : SPECIALS_FERA_INTRO_HAND
       : state.phase === 'feraPractice'
-      ? SPECIALS_FERA_PRACTICE_HAND
+      ? state.feraPracticeCardUsed
+        ? SPECIALS_FERA_PRACTICE_HAND.filter((card) => card.id !== SPECIALS_FERA_ID)
+        : SPECIALS_FERA_PRACTICE_HAND
       : [];
   const selectedIds = useMemo(() => {
+    if (state.phase === 'symbolsPractice' && state.op) {
+      const selectedSignCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === state.op);
+      return selectedSignCard ? new Set([selectedSignCard.id]) : new Set<string>();
+    }
     if (state.phase === 'salindaShowcase' || state.phase === 'salindaPractice') return new Set([SPECIALS_SALINDA_ID]);
-    if (state.phase === 'feraIntro' || state.phase === 'feraPractice') return new Set([SPECIALS_FERA_ID]);
+    if (state.phase === 'feraIntro' || state.phase === 'feraShowcase' || state.phase === 'feraPractice') return new Set([SPECIALS_FERA_ID]);
     return new Set<string>();
-  }, [state.phase]);
+  }, [state.op, state.phase]);
+  const showFeraIntroCenter = state.phase === 'feraIntro';
+  const showBottomHand = state.phase !== 'feraIntro';
 
   return (
     <View style={styles.root}>
@@ -1589,19 +1679,23 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
           <View style={styles.tableOverlay} pointerEvents="box-none">
             <View style={styles.specialsBoardContent}>
-              <SpecialsEquation
-                left={equation.left}
-                op={equation.op}
-                right={equation.right}
-                result={equation.result}
-                bounceKey={bounceKey}
-              />
+              {showFeraIntroCenter ? (
+                <SpecialsFeraIntroCard />
+              ) : equation ? (
+                <SpecialsEquation
+                  left={equation.left}
+                  op={equation.op}
+                  right={equation.right}
+                  result={equation.result}
+                  bounceKey={bounceKey}
+                />
+              ) : null}
             </View>
           </View>
         </View>
       </View>
 
-      <View style={styles.specialsBottomArea}>
+      {showBottomHand ? <View style={styles.specialsBottomArea}>
         {showSignDock ? (
           <SpecialsSignDock disabled={state.busy || state.phase !== 'symbolsPractice'} activeOp={state.op} onPick={handleSymbolPick} />
         ) : (
@@ -1613,25 +1707,39 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
               cards={hand}
               width={fanW}
               selectedIds={selectedIds}
-              onTapCard={state.phase === 'salindaPractice' ? handleSalindaCardTap : state.phase === 'feraPractice' ? handleFeraTap : undefined}
+              onTapCard={
+                state.phase === 'symbolsPractice'
+                  ? (card) => {
+                      if (card.type === 'operation' && card.operation) handleSymbolPick(card.operation);
+                    }
+                  : state.phase === 'salindaPractice'
+                  ? handleSalindaCardTap
+                  : state.phase === 'feraPractice'
+                  ? handleFeraTap
+                  : undefined
+              }
               canTap={(card) =>
-                state.phase === 'salindaPractice'
+                state.phase === 'symbolsPractice'
+                  ? card.type === 'operation'
+                  : state.phase === 'salindaPractice'
                   ? card.id === SPECIALS_SALINDA_ID || card.type !== 'salinda'
                   : state.phase === 'feraPractice'
                   ? true
                   : false
               }
               centerCardId={
-                state.phase === 'salindaShowcase' || state.phase === 'salindaPractice'
+                state.phase === 'symbolsPractice'
+                  ? SPECIALS_SIGN_CARDS.find((card) => card.operation === '-')?.id ?? null
+                  : state.phase === 'salindaShowcase' || state.phase === 'salindaPractice'
                   ? SPECIALS_SALINDA_ID
-                  : state.phase === 'feraIntro' || state.phase === 'feraPractice'
+                  : state.phase === 'feraShowcase' || state.phase === 'feraPractice'
                   ? SPECIALS_FERA_ID
                   : null
               }
             />
           </View>
         )}
-      </View>
+      </View> : null}
 
       {showNext ? (
         <View style={styles.specialsArrowWrap}>
@@ -2955,6 +3063,26 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
 
   specialsBoardContent: { alignItems: 'center', justifyContent: 'center', width: '100%' },
+  specialsFeraIntroStage: {
+    width: 150,
+    height: 196,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialsFeraIntroHalo: {
+    position: 'absolute',
+    width: 142,
+    height: 188,
+    borderRadius: 22,
+    backgroundColor: 'rgba(196,181,253,0.22)',
+    borderWidth: 2,
+    borderColor: 'rgba(248,224,142,0.62)',
+    shadowColor: '#C4B5FD',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.86,
+    shadowRadius: 18,
+    elevation: 16,
+  },
   specialsEquationRow: {
     direction: 'ltr',
     flexDirection: 'row',
@@ -2979,18 +3107,47 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   specialsEquationSlotEmpty: { borderStyle: 'dashed', backgroundColor: 'rgba(248,224,142,0.2)' },
+  specialsEquationCardInSlot: {
+    width: 40,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ scale: 0.38 }],
+  },
   specialsEquationText: { color: '#171006', fontSize: 28, fontWeight: '900', textAlign: 'center' },
   specialsQuestionText: { color: '#F8E08E', fontSize: 30, fontWeight: '900', textAlign: 'center' },
   specialsEquals: { color: '#F8E08E', fontSize: 26, fontWeight: '900', textAlign: 'center' },
-  specialsBottomArea: { minHeight: 210, justifyContent: 'flex-end', paddingBottom: 20 },
+  specialsBottomArea: { minHeight: 224, justifyContent: 'flex-end', paddingBottom: 18 },
   specialsSignDock: {
     direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
-    paddingBottom: 28,
+    gap: 8,
+    paddingBottom: 18,
   },
+  specialsSignCardButton: {
+    width: 74,
+    height: 106,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  specialsSignCardFace: {
+    width: 100,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ scale: 0.72 }],
+  },
+  specialsSignCardActive: {
+    shadowColor: '#7BE08A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 14,
+    elevation: 14,
+  },
+  specialsSignCardPressed: { transform: [{ scale: 0.94 }] },
   specialsSignButton: {
     width: 66,
     height: 66,
@@ -3041,8 +3198,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 112,
+    paddingBottom: 70,
     zIndex: 70,
+  },
+  specialsFlyingTokenCard: {
+    width: 100,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   specialsFlyingToken: {
     width: 76,
