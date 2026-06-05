@@ -518,8 +518,8 @@ function InstructionBanner({ text }: { text: string }) {
 // ── A matched card flying out of the hand toward the deck — the "discard" beat
 // the player earns on a correct equation. The success chime plays LOUD and clear
 // here — this is the player's first win, the dopamine moment.
-function playEquationTapSfx(volumeOverride = 0.5) {
-  void playSfx('tap', { cooldownMs: 0, volumeOverride });
+function playEquationTapSfx(volumeOverride = 0.54) {
+  void playSfx('place', { cooldownMs: 0, volumeOverride });
 }
 
 function FlyingCard({ card, onDone, doneDelayMs = 220, durationMs = 720 }: { card: Card; onDone: () => void; doneDelayMs?: number; durationMs?: number }) {
@@ -2560,6 +2560,7 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
     () => (mode === 'improve' && discardPreview?.targetId ? new Set([discardPreview.targetId]) : selectedIds),
     [discardPreview?.targetId, mode, selectedIds],
   );
+  const fanCenterCardId = mode === 'improve' ? discardPreview?.targetId ?? null : cfg.targetId;
   const selectedCard = useMemo(() => hand.find((c) => c.id === selectedId) ?? null, [hand, selectedId]);
 
   const firstVal = placedFirst ? cfg.dice[cfg.firstIdx] : null;
@@ -2908,7 +2909,7 @@ export function DiceEquationRound({ onExit, onComplete, mode = 'practice' }: Dic
           selectedIds={discardPreviewSelectedIds}
           onTapCard={mode === 'improve' ? undefined : tapCard}
           canTap={mode === 'improve' ? () => false : () => cardPhase}
-          centerCardId={mode === 'improve' ? discardPreview?.targetId ?? null : selectedId}
+          centerCardId={fanCenterCardId}
         />
       </Animated.View>
 

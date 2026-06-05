@@ -216,7 +216,7 @@ function MockDeck({ boxH }: { boxH: number }) {
 }
 
 function MockDice({ boxW, boxH, onAnimationComplete }: { boxW: number; boxH: number; onAnimationComplete?: () => void }) {
-  // AnimatedDice settles the outer dice with fixed +/-68px spread, so keep the
+  // AnimatedDice spaces the landed dice from their rendered size, so keep the
   // die size conservative enough for the whole three-die row to stay in-frame.
   const die = Math.min(boxH * 0.46, boxW / 8, 42);
   const shake = useRef(new Animated.Value(0)).current;
@@ -405,7 +405,13 @@ function DemoHandFan({
   return (
     <View style={styles.demoFanWrap} pointerEvents="box-none" onTouchStart={markInteracted}>
       <Animated.View style={{ transform: [{ scale: pulse }] }}>
-        <HandFan cards={visibleCards} width={W} selectedIds={winnerIds} onTapCard={markInteracted} />
+        <HandFan
+          cards={visibleCards}
+          width={W}
+          selectedIds={winnerIds}
+          onTapCard={markInteracted}
+          metricsPlatform="ios"
+        />
       </Animated.View>
       <View pointerEvents="none" style={styles.flyingCardLayer}>
         {flyingCards.map(({ card, order, progress }) => {
@@ -1120,7 +1126,7 @@ const styles = StyleSheet.create({
 
   // The demo hand (המניפה step) — raised fully into view near the bottom edge,
   // centered, swipeable. box-none so swipes reach the fan but the dim shows.
-  demoFanWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
+  demoFanWrap: { position: 'absolute', left: 0, right: 0, bottom: Platform.OS === 'web' ? 118 : 40, alignItems: 'center' },
   flyingCardLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 },
   flyingCard: { position: 'absolute', bottom: 42, width: 100, height: 140, zIndex: 20 },
   mockDiceStage: { alignItems: 'center', justifyContent: 'center' },

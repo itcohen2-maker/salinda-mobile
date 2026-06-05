@@ -36,10 +36,22 @@ export interface HandFanProps {
   /** Play the UI "tap" sound when a card is selected. Default true — this
    *  is the premium card-selection feedback. */
   playTapSound?: boolean;
+  /** Override the platform metrics when a training mockup must match another
+   *  platform's exact fan geometry. */
+  metricsPlatform?: string;
 }
 
-export default function HandFan({ cards, onTapCard, canTap, selectedIds, width, centerCardId = null, playTapSound = true }: HandFanProps) {
-  const metrics = useMemo(() => getNativeHandFanMetrics(Platform.OS), []);
+export default function HandFan({
+  cards,
+  onTapCard,
+  canTap,
+  selectedIds,
+  width,
+  centerCardId = null,
+  playTapSound = true,
+  metricsPlatform,
+}: HandFanProps) {
+  const metrics = useMemo(() => getNativeHandFanMetrics(metricsPlatform ?? Platform.OS), [metricsPlatform]);
   const cardW = metrics.cardWidth;
   const cardH = metrics.cardHeight;
   const renderScale = metrics.renderScale;

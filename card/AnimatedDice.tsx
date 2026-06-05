@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // CONFIG
 // ═══════════════════════════════════════
 const DICE_SIZE = 58;
-const FINAL_X = [-68, 0, 68];
+const MIN_FINAL_SPREAD = 68;
 
 // Gold palette matching the HTML 3D dice
 const C = {
@@ -194,6 +194,9 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
   const [rolling, setRolling] = useState(false);
   const [showSum, setShowSum] = useState(false);
   const [sumCountVal, setSumCountVal] = useState(0);
+  const finalSpread = Math.max(size + 14, MIN_FINAL_SPREAD);
+  const diceStageWidth = finalSpread * 2 + size + 36;
+  const diceStageHeight = Math.max(size + 44, 116);
   const rollingRef = useRef(false);
   const fixedFinalRef = useRef(fixedFinalValues);
   fixedFinalRef.current = fixedFinalValues;
@@ -318,7 +321,7 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
     const tossAnims = [0,1,2].map(i => {
       const jumpHeight = -(30 + i * 6);
       return Animated.parallel([
-        Animated.timing(posX[i], { toValue: FINAL_X[i], duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(posX[i], { toValue: (i - 1) * finalSpread, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         Animated.sequence([
           Animated.timing(posY[i], { toValue: jumpHeight, duration: 270, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
           Animated.timing(posY[i], { toValue: 7, duration: 130, easing: Easing.in(Easing.quad), useNativeDriver: true }),
@@ -383,7 +386,7 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
     setRolling(false);
     startIdle();
     onRollComplete?.(finalVals);
-  }, [disabled, hideSumBadge, onRollComplete, onRollStart]);
+  }, [disabled, finalSpread, hideSumBadge, onRollComplete, onRollStart]);
 
   const rollDiceRef = useRef(rollDice);
   rollDiceRef.current = rollDice;
@@ -416,6 +419,8 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
 
       {/* Dice area with camera shake */}
       <Animated.View style={[styles.diceArea, {
+        width: diceStageWidth,
+        minHeight: diceStageHeight,
         transform: [{ translateX: stageShake }],
       }]}>
         {[0, 1, 2].map(i => {
@@ -427,6 +432,9 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
 
           return (
             <Animated.View key={i} style={[styles.dieWrap, {
+              left: (diceStageWidth - size) / 2,
+              top: (diceStageHeight - size - 12) / 2,
+              zIndex: i + 1,
               transform: [
                 { translateX: posX[i] },
                 { translateY: yVal as any },
@@ -497,13 +505,12 @@ const styles = StyleSheet.create({
     color: C.sumText,
   },
   diceArea: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 160,
-    gap: 12,
+    overflow: 'visible',
   },
   dieWrap: {
+    position: 'absolute',
     alignItems: 'center',
   },
   halo: {
