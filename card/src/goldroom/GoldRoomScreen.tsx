@@ -743,7 +743,7 @@ function TrainingTask({
             {step.title ? <Text style={[styles.title, isHandMockupStep && styles.handMockupTitle]}>{step.title}</Text> : null}
             <Text
               style={[styles.body, step.mock === 'dice' && styles.bodyCenter, isHandMockupStep && styles.handMockupBody]}
-              numberOfLines={step.mock === 'fan' ? 2 : undefined}
+              numberOfLines={undefined}
             >
               {step.body}
             </Text>
@@ -1077,9 +1077,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     borderColor: '#FFF2B8',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    minHeight: 112,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    minHeight: 152,
     justifyContent: 'center',
     overflow: 'visible',
     shadowColor: '#000',
@@ -1109,8 +1109,8 @@ const styles = StyleSheet.create({
   },
   handMockupBody: {
     color: '#1F1607',
-    fontSize: 17,
-    lineHeight: 25,
+    fontSize: 16,
+    lineHeight: 24,
     fontWeight: '900',
     textAlign: 'center',
     textShadowColor: 'rgba(255,255,255,0.32)',

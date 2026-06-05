@@ -151,6 +151,28 @@ describe('PlayModeChoiceScreen auth button', () => {
     expect(onOpenAnalytics).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps admin controls reachable on tight mobile layouts', () => {
+    mockUseResponsiveLayout.mockReturnValue({
+      width: 375,
+      height: 633,
+      fontScale: 1,
+      isTight: true,
+      isCompact: true,
+      isSingleColumn: true,
+      isTablet: false,
+    });
+    mockUseAuth.mockReturnValue({ isAnonymous: false, profile: { total_coins: 15 } });
+    mockUseFeedbackAdmin.mockReturnValue({ isFeedbackAdmin: true });
+
+    render(<PlayModeChoiceScreen {...baseProps} />);
+
+    const scrollContentStyle = StyleSheet.flatten(screen.getByTestId('play-mode-choice-scroll').props.contentContainerStyle);
+
+    expect(scrollContentStyle.flexGrow).toBe(1);
+    expect(scrollContentStyle.paddingBottom).toBeGreaterThanOrEqual(28);
+    expect(screen.getByTestId('home-admin-coins')).toBeTruthy();
+  });
+
   it('keeps tutorial and shop available after swapping their menu positions', () => {
     mockUseAuth.mockReturnValue({ isAnonymous: true, profile: { total_coins: 15 } });
 
@@ -160,7 +182,7 @@ describe('PlayModeChoiceScreen auth button', () => {
     expect(screen.getByTestId('lobby-shop')).toBeTruthy();
   });
 
-  it('keeps shop and sign-in separated on tight mobile layouts', () => {
+  it('keeps shop and sign-in aligned with the main menu size on tight mobile layouts', () => {
     mockUseResponsiveLayout.mockReturnValue({
       width: 375,
       height: 633,
@@ -174,12 +196,13 @@ describe('PlayModeChoiceScreen auth button', () => {
 
     render(<PlayModeChoiceScreen {...baseProps} />);
 
-    const shopStyle = StyleSheet.flatten(screen.getByTestId('lobby-shop').props.style);
     const authSpacerStyle = StyleSheet.flatten(screen.getByTestId('home-auth-spacer').props.style);
+    const shopStyle = StyleSheet.flatten(screen.getByTestId('lobby-shop').props.style);
 
     expect(screen.getByTestId('lobby-shop')).toBeTruthy();
     expect(screen.getByTestId('home-auth-button')).toBeTruthy();
-    expect(shopStyle.marginBottom).toBeGreaterThanOrEqual(18);
+    expect(shopStyle.width).toBe(256);
+    expect(shopStyle.height).toBe(64);
     expect(authSpacerStyle.marginBottom).toBeGreaterThanOrEqual(14);
   });
 });

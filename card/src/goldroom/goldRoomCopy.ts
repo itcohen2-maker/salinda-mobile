@@ -99,7 +99,7 @@ export const GOLD_ROOM_COPY = {
     wildIntro: 'תרגול קלף הפרא: לחצו על קלף הפרא במניפה כדי להשלים את התוצאה החסרה במשוואה.',
     wildReady: "הקלף הפך ל-8 והשלים את התרגיל. לחצו על כפתור 'שגר' כדי לנצח!",
     // ── Fraction cards training — attack (part A) + defense (part B) ──
-    fractionAttackIntro: 'הכירו את קלפי השבר! זרקו את קלף השבר {{fraction}} על ה-{{number}} שבערימה כדי להיפטר ממנו ולהתקיף את השחקן הבא!',
+    fractionAttackIntro: 'הכירו את קלפי השבר! הקישו על קלף השבר {{fraction}} על ה-{{number}} שבערימה כדי להיפטר ממנו ולהתקיף את השחקן הבא!',
     fractionDefenseIntro: 'אותגרתם! פתרון ראשון: הציבו קלף מספר שמתחלק ב-{{denom}} (כמו {{number}}) כדי לפתור את האתגר ולסיים את המתקפה.',
     fractionDefenseMathReady: "כל הכבוד! פתרתם את האתגר מתמטית. לחצו 'שגר' כדי לסיים!",
     fractionDefenseRollReady: "אסטרטגיה מעולה! גלגלתם את האתגר לשחקן הבא. לחצו 'שגר' כדי לסיים!",

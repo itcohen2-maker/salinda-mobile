@@ -339,8 +339,8 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
   }, [enabledOperators]);
   const [showPossibleResults, setShowPossibleResults] = useState(true);
   const [showSolveExercise, setShowSolveExercise] = useState(true);
-  const [timerSetting, setTimerSetting] = useState<HostGameSettings['timerSetting']>('off');
-  const [timerCustomSeconds, setTimerCustomSeconds] = useState(60);
+  const [timerSetting, setTimerSetting] = useState<HostGameSettings['timerSetting']>('90');
+  const [timerCustomSeconds, setTimerCustomSeconds] = useState(90);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [botDisplayName, setBotDisplayName] = useState('');
   const [starting, setStarting] = useState(false);
@@ -427,7 +427,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
       difficultyStage: difficulty === 'easy' ? 'A' : 'H',
       abVariant: difficulty === 'easy' ? 'control_0_12_plus' : 'variant_0_15_plus',
       timerSetting,
-      timerCustomSeconds: timerSetting === 'custom' ? timerCustomSeconds : 60,
+      timerCustomSeconds: timerSetting === 'custom' ? timerCustomSeconds : timerSetting === '60' ? 60 : 90,
       botDifficulty,
       ...(trimmed.length > 0 ? { botDisplayName: trimmed } : {}),
     };
@@ -444,7 +444,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
   };
 
   const hostSettingsSummary = useMemo(() => {
-    const ts = timerSetting === 'custom' ? timerCustomSeconds : 60;
+    const ts = timerSetting === 'custom' ? timerCustomSeconds : timerSetting === '60' ? 60 : 90;
     const diffLabel = difficulty === 'easy' ? t('lobby.diffEasyRange') : t('lobby.diffFullRange');
     const lines = [
       t('lobby.summary.difficulty', { value: diffLabel }),

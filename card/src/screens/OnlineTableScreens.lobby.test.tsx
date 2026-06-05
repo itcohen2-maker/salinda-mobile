@@ -309,7 +309,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(playersInRoomLabel.writingDirection).toBe('rtl');
   });
 
-  it('shows only the seats summary card before saving with default settings', () => {
+  it('shows seats and default timer summary cards before saving with default settings', () => {
     renderLobbyScreen();
 
     expect(screen.getByTestId('lobby-summary-section')).toBeTruthy();
@@ -320,7 +320,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(screen.queryByTestId('lobby-summary-card-fractions-partial')).toBeNull();
     expect(screen.queryByTestId('lobby-summary-card-possible-results')).toBeNull();
     expect(screen.queryByTestId('lobby-summary-card-solve-exercise')).toBeNull();
-    expect(screen.queryByTestId('lobby-summary-card-timer')).toBeNull();
+    expect(within(screen.getByTestId('lobby-summary-card-timer')).getByText('1½ min')).toBeTruthy();
   });
 
   it('shows a red no-fractions card before saving when fractions are disabled', () => {

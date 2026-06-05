@@ -1412,7 +1412,7 @@ function SpecialsEndModal({ onFinish }: { onFinish: () => void }) {
           עכשיו אתם מבינים את הסוד האמיתי: המשחק הוא לא רק לפתור תרגיל נכון. המשחק הוא לחפש במניפה שלכם בדיוק את הקלף שיציל אתכם... או שיהרוס ליריב את התוכניות ולהיפטר מכל הקלפים!
         </Text>
         <View style={styles.successCta}>
-          <GoldButton label="סיום וחזרה לחדר הזהב" onPress={onFinish} accessibilityLabel="סיום וחזרה לחדר הזהב" fullWidth height={58} fontSize={19} />
+          <GoldButton label="הבנתי" onPress={onFinish} accessibilityLabel="הבנתי" fullWidth height={58} fontSize={22} />
         </View>
       </View>
     </View>

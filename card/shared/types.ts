@@ -5,6 +5,7 @@
 
 import type { AppLocale, GameStatusMessage, LastMovePayload, LocalizedMessage } from './i18n';
 import type { ClassroomBandConfig, ClassroomDashboardKpis, ClassroomGroupMetrics, ClassroomGroupReport, ClassroomGroupSnapshot, ClassroomIntervention, ClassroomLaunchConfig, ClassroomParticipantInfo, ClassroomRoleAssignment, ClassroomSessionReport, ClassroomSocketState, ClassroomStudentView, ClassroomTeacherView, ClassroomAdvanceRoundPayload, ClassroomGroupStatusUpdatePayload, ClassroomRecordGroupResultPayload, ClassroomSendInterventionPayload, ClassroomLiveSettings, ConceptFocus, CreateClassSessionPayload, DifficultyBand, GradeBand, JoinClassSessionPayload, SessionMode, UserRole, ClassroomGroupStatus, ClassroomInterventionKind, ClassroomMemberRole, ClassroomSessionLifecycle, ClassroomTaskTemplate } from './classroomTypes';
+import type { QuickChatPhraseId } from './quickChatPhrases';
 
 // Re-export for consumers that share only types
 export type { AppLocale, LocalizedMessage, LastMovePayload, GameStatusMessage };
@@ -384,6 +385,7 @@ export interface ClientToServerEvents {
     locale?: AppLocale;
   }) => void;
   start_table_countdown: () => void;
+  quick_chat_phrase: (data: { phraseId: QuickChatPhraseId }) => void;
   leave_room: () => void;
   start_game: (data: { difficulty: 'easy' | 'full'; gameSettings?: Partial<HostGameSettings> }) => void;
   start_bot_game: (
@@ -447,6 +449,7 @@ export interface ServerToClientEvents {
   tables_updated: (data: { tables: LobbyTableSummary[] }) => void;
   table_countdown_started: (data: { roomCode: string; countdownEndsAt: number }) => void;
   table_status_changed: (data: { roomCode: string; status: LobbyTableStatus; countdownEndsAt: number | null }) => void;
+  quick_chat_phrase: (data: { playerId: string; phraseId: QuickChatPhraseId }) => void;
   game_started: (data: PlayerView) => void;
   state_update: (data: PlayerView) => void;
   toast: (data: { message: string }) => void;

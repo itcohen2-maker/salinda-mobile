@@ -53,6 +53,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -745,7 +746,7 @@ const MINUS_GLYPH = '-';
 const STAR_GLYPH = '★';
 const STAGED_GLYPH = '✓';
 const GUIDE_ARROW_GLYPH = '➜';
-const BACK_ARROW_GLYPH = '↩';
+const BACK_ARROW_GLYPH = '🏠';
 const DOWN_ARROW_GLYPH = '↓';
 const SPARKLE_PRIMARY_GLYPH = '✦';
 const SPARKLE_SECONDARY_GLYPH = '✧';
@@ -2011,7 +2012,7 @@ const initialState: GameState = {
   showPossibleResults: true, showSolveExercise: true,
   difficultyStage: 'H', stageTransitions: 7, mathRangeMax: 25, enabledOperators: ['x', '÷'], allowNegativeTargets: true, abVariant: 'control_0_12_plus',
   equationAttempts: 0, equationSuccesses: 0, turnStartedAt: null, totalEquationResponseMs: 0,
-  timerSetting: 'off', timerCustomSeconds: 60, winner: null, message: '',
+  timerSetting: '90', timerCustomSeconds: 90, winner: null, message: '',
   roundsPlayed: 0,
   notifications: [],
   moveHistory: [],
@@ -4206,7 +4207,7 @@ function GameProvider({ children }: { children: ReactNode }) {
       payload: {
         id: notifId,
         title: t('local.openingDrawTitle'),
-        body: t('local.openingDrawBody', { name: firstName }),
+        body: `${t('local.openingDrawBody', { name: firstName })}\n${t('local.openingDrawTimerReminder')}`,
         message: '',
         emoji: '\uD83C\uDFB2',
         style: 'celebration' as any,
@@ -5805,19 +5806,20 @@ function WildMiniCardButton({ onPress, disabled = false, testID }: { onPress: ()
   );
 }
 
-const PICK_CARDS_ACTION_BTN_W = 80;
-const PICK_CARDS_ACTION_BTN_H = 84;
+const PICK_CARDS_ACTION_BTN_W = 154;
+const PICK_CARDS_ACTION_BTN_H = 38;
 const PICK_CARDS_PROMPT_BTN_W = 176;
 const PICK_CARDS_PROMPT_BTN_H = 48;
 const PICK_CARDS_INLINE_BACK_BTN_W = 108;
 const PICK_CARDS_INLINE_BACK_BTN_H = 40;
+const PICK_CARDS_BOTTOM_BACK_GAP = 8;
 
 function PickCardsActionButton({
   color,
   onPress,
   width = PICK_CARDS_ACTION_BTN_W,
   height = PICK_CARDS_ACTION_BTN_H,
-  fontSize = 16,
+  fontSize = 14,
   testID,
 }: {
   color: 'blue' | 'orange';
@@ -16742,6 +16744,7 @@ async function clearAllSalindaOnboardingKeys(): Promise<void> {
 
 function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { state, dispatch } = useGame();
+  const shouldKeepAwake = state.phase !== 'setup' && state.phase !== 'game-over';
   const overflowSwapActive =
     (state.phase === 'turn-transition' ||
       state.phase === 'pre-roll' ||
@@ -16822,6 +16825,18 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const androidStableDirection = isAndroid && isRTL ? ('ltr' as const) : undefined;
   const soundOn = state.soundsEnabled !== false;
   const [storedPlayerProfiles, setStoredPlayerProfiles] = useState<StoredPlayerProfilesState>(EMPTY_STORED_PLAYER_PROFILES);
+
+  useEffect(() => {
+    if (!shouldKeepAwake) {
+      deactivateKeepAwake();
+      return;
+    }
+
+    void activateKeepAwakeAsync().catch(() => undefined);
+    return () => {
+      deactivateKeepAwake();
+    };
+  }, [shouldKeepAwake]);
 
   useEffect(() => {
     if (!isAndroid) return;
@@ -19696,7 +19711,14 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
           pointerEvents="box-none"
         >
           <View
-            style={{ position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 10 }}
+            style={{
+              position: 'absolute',
+              bottom: Math.max(10, safe.insets.bottom + 8) + 38 + PICK_CARDS_BOTTOM_BACK_GAP,
+              left: 0,
+              right: 0,
+              alignItems: 'center',
+              gap: 10,
+            }}
             pointerEvents="box-none"
           >
             <PickCardsActionButton
@@ -21030,6 +21052,8 @@ function MenuCapsuleButton({
   testID,
   textColor,
   fontSize,
+  width = MENU_CAPSULE_WIDTH,
+  height = MENU_CAPSULE_HEIGHT,
   style,
 }: {
   text: string;
@@ -21038,14 +21062,16 @@ function MenuCapsuleButton({
   testID?: string;
   textColor?: string;
   fontSize?: number;
+  width?: number;
+  height?: number;
   style?: any;
 }) {
   return (
     <SalindaButton
       text={text}
       color={color}
-      width={MENU_CAPSULE_WIDTH}
-      height={MENU_CAPSULE_HEIGHT}
+      width={width}
+      height={height}
       fontSize={fontSize ?? MENU_CAPSULE_FONT_SIZE}
       testID={testID}
       textColor={textColor}
@@ -21233,6 +21259,49 @@ const brandHeaderStyles = StyleSheet.create({
   },
 });
 
+function HomeMenuSparkles({ tone = 'cool' }: { tone?: 'cool' | 'warm' | 'gold' }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  const sparkleColor =
+    tone === 'gold'
+      ? 'rgba(255,248,190,0.82)'
+      : tone === 'warm'
+        ? 'rgba(255,230,190,0.78)'
+        : 'rgba(226,240,255,0.78)';
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.95] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.16] });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        opacity,
+        transform: [{ scale }],
+        zIndex: 8,
+        elevation: 8,
+      }}
+    >
+      <Text style={{ position: 'absolute', top: 8, left: 24, color: sparkleColor, fontSize: 12 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+      <Text style={{ position: 'absolute', top: 16, right: 30, color: sparkleColor, fontSize: 8 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+      <Text style={{ position: 'absolute', bottom: 14, left: 62, color: sparkleColor, fontSize: 7 }}>{SPARKLE_SECONDARY_GLYPH}</Text>
+      <Text style={{ position: 'absolute', bottom: 10, right: 70, color: sparkleColor, fontSize: 9 }}>{SPARKLE_PRIMARY_GLYPH}</Text>
+    </Animated.View>
+  );
+}
+
 export function PlayModeChoiceScreen({
   onPlay,
   onOpenAuth,
@@ -21279,21 +21348,23 @@ export function PlayModeChoiceScreen({
   const sectionGap = compactMainMenu ? 14 : 24;
   const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 16 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
-  const primaryStackGap = 28;
+  const buttonStackGap = compactMainMenu ? 12 : 14;
   const menuHorizontalPadding = compactMainMenu ? 20 : 24;
   const heroButtonWidth = compactMainMenu ? 256 : 280;
   const heroButtonHeight = compactMainMenu ? 64 : 72;
   const heroButtonFontSize = compactMainMenu ? 22 : 24;
-  const secondaryRowGap = compactMainMenu ? 8 : 10;
-  const preferredNameInputWidth = compactMainMenu ? 132 : 140;
-  const preferredNameInputFontSize = compactMainMenu ? 13 : 14;
-  const languageButtonWidth = compactMainMenu ? 104 : 112;
-  const languageButtonHeight = compactMainMenu ? 34 : 36;
-  const languageButtonFontSize = compactMainMenu ? 11 : 12;
-  const guideButtonWidth = compactMainMenu ? 236 : MENU_CAPSULE_WIDTH;
-  const guideButtonHeight = compactMainMenu ? 48 : MENU_CAPSULE_HEIGHT;
-  const guideButtonFontSize = compactMainMenu ? 14 : MENU_CAPSULE_FONT_SIZE;
-  const shopAuthGap = compactMainMenu ? 18 : 14;
+  const menuButtonWidth = heroButtonWidth;
+  const menuButtonHeight = heroButtonHeight;
+  const menuButtonOuterHeight = menuButtonHeight + 8;
+  const menuButtonFontSize = compactMainMenu ? 20 : 22;
+  const preferredNameInputFontSize = compactMainMenu ? 19 : 21;
+  const menuItemFrameStyle = {
+    width: menuButtonWidth,
+    height: menuButtonOuterHeight,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    position: 'relative',
+  } as const;
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
   const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
@@ -21332,16 +21403,19 @@ export function PlayModeChoiceScreen({
   return (
     <View style={{ flex: 1, width: '100%', backgroundColor: 'transparent' }}>
       <AmbientBackground playMode="choose" forceVisible />
-      <View
-        style={{
-          flex: 1,
+      <ScrollView
+        testID="play-mode-choice-scroll"
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{
+          flexGrow: 1,
           width: '100%',
           alignItems: 'center',
           paddingHorizontal: menuHorizontalPadding,
           paddingTop: menuTopPadding,
           paddingBottom: menuBottomPadding,
-          overflow: 'hidden',
         }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
           <View style={{ width: '100%', maxWidth: 360, alignItems: 'center' }}>
@@ -21375,18 +21449,20 @@ export function PlayModeChoiceScreen({
               // onStartLiveTutorial — the polished-gold in-room flow is THE tutorial.
             />
 
-            {/* ── 1. HERO BUTTON ── */}
-            <View style={{ alignSelf: 'center', marginBottom: sectionGap, position: 'relative' }}>
+            <View style={{ width: menuButtonWidth, alignItems: 'center', gap: buttonStackGap }}>
+            {/* ── Main menu stack ── */}
+            <View style={[menuItemFrameStyle, { position: 'relative' }]}>
               <SalindaButton
                 text={heroLabel}
                 color="green"
-                width={heroButtonWidth}
-                height={heroButtonHeight}
+                width={menuButtonWidth}
+                height={menuButtonHeight}
                 fontSize={heroButtonFontSize}
                 accessibilityLabel={heroLabel}
                 testID={heroTestID}
                 onPress={heroAction}
               />
+              <HomeMenuSparkles tone="cool" />
               {!tutorialDone ? (
                 <View
                   pointerEvents="none"
@@ -21412,41 +21488,46 @@ export function PlayModeChoiceScreen({
               ) : null}
             </View>
 
-            {/* ── 2. SECONDARY ROW: name input + language toggle + guide ── */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                gap: secondaryRowGap,
-                marginBottom: sectionGap,
-                flexWrap: 'wrap',
-              }}
-            >
-              {/* Name input — compact */}
+            <View testID="lobby-language-toggle" style={[menuItemFrameStyle, { writingDirection: 'ltr' } as any]}>
+              <SalindaButton
+                text="Language"
+                color="orange"
+                width={menuButtonWidth}
+                height={menuButtonHeight}
+                fontSize={menuButtonFontSize}
+                testID="lobby-language-switch"
+                onPress={() => void setLocale(nextLocale)}
+              />
+              <HomeMenuSparkles tone="warm" />
+            </View>
+              {/* Name input */}
+            <View style={menuItemFrameStyle}>
               <LinearGradient
-                colors={['#FFF4B8', '#E7BF3A', '#BA7E10']}
+                colors={['#FFF4B8', '#F5D45A', '#B88416']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{
-                  borderRadius: 18,
-                  padding: 2,
-                  shadowColor: '#4A3200',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.28,
-                  shadowRadius: 6,
-                  elevation: 5,
+                  width: menuButtonWidth,
+                  height: menuButtonHeight,
+                  borderRadius: menuButtonHeight / 2,
+                  padding: 3,
+                  shadowColor: '#060e2a',
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 8,
+                  elevation: 8,
                 }}
               >
                 <LinearGradient
-                  colors={['#0B153C', '#142763', '#1B3F8C']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  colors={['#060E2A', '#0E1A42', '#12245C', '#1A2E6B']}
+                  start={{ x: 0.15, y: 0 }}
+                  end={{ x: 0.9, y: 1 }}
                   style={{
-                    borderRadius: 16,
+                    borderRadius: menuButtonHeight / 2,
                     overflow: 'hidden',
                     position: 'relative',
+                    flex: 1,
+                    justifyContent: 'center',
                   }}
                 >
                   <View pointerEvents="none" style={{ position: 'absolute', inset: 0 }}>
@@ -21455,16 +21536,16 @@ export function PlayModeChoiceScreen({
                   </View>
                   <TextInput
                     style={{
-                      width: preferredNameInputWidth,
+                      flex: 1,
                       backgroundColor: 'transparent',
                       borderWidth: 1,
-                      borderColor: 'rgba(226,232,255,0.14)',
-                      borderRadius: 14,
-                      paddingHorizontal: 10,
-                      paddingVertical: compactMainMenu ? 7 : 8,
-                      color: '#EAF1FF',
+                      borderColor: 'rgba(208,224,255,0.22)',
+                      borderRadius: menuButtonHeight / 2,
+                      paddingHorizontal: 18,
+                      paddingVertical: 0,
+                      color: '#D0E0FF',
                       fontSize: preferredNameInputFontSize,
-                      fontWeight: '800',
+                      fontWeight: '900',
                       textAlign: 'center',
                     }}
                     value={preferredName}
@@ -21475,53 +21556,51 @@ export function PlayModeChoiceScreen({
                   />
                 </LinearGradient>
               </LinearGradient>
-
-              {/* Language toggle — compact */}
-              <View testID="lobby-language-toggle" style={{ writingDirection: 'ltr' } as any}>
-                <SalindaButton
-                  text={t('lang.switch')}
-                  color="orange"
-                  width={languageButtonWidth}
-                  height={languageButtonHeight}
-                  fontSize={languageButtonFontSize}
-                  testID="lobby-language-switch"
-                  onPress={() => void setLocale(nextLocale)}
-                />
-              </View>
-
-              <SalindaButton
-                text={t('lobby.guideButton')}
-                color="orange"
-                width={guideButtonWidth}
-                height={guideButtonHeight}
-                fontSize={guideButtonFontSize}
-                testID="lobby-tutorial"
-                onPress={onHowToPlay}
-              />
+              <HomeMenuSparkles tone="cool" />
             </View>
 
-            {/* ── 3. ACTION BUTTONS: shop / auth ── */}
+              {/* Gold Room tutorial entry */}
+            <View style={menuItemFrameStyle}>
+              <GoldButton
+                label={locale === 'he' ? 'איך משחקים' : 'How to play'}
+                onPress={() => setGoldRoomOpen(true)}
+                accessibilityLabel={locale === 'he' ? 'איך משחקים' : 'How to play'}
+                fullWidth
+                height={menuButtonHeight}
+                radius={menuButtonHeight / 2}
+                raise={8}
+                fontSize={menuButtonFontSize}
+                testID="lobby-tutorial"
+              />
+              <HomeMenuSparkles tone="gold" />
+            </View>
+
+            <View style={menuItemFrameStyle}>
             <MenuCoinButton
               coins={totalCoins}
-              width={220}
-              height={42}
-              labelFontSize={15}
-              coinSize={24}
-              iconWrapSize={30}
+              width={menuButtonWidth}
+              height={menuButtonHeight}
+              labelFontSize={menuButtonFontSize}
+              coinSize={compactMainMenu ? 32 : 36}
+              iconWrapSize={compactMainMenu ? 42 : 46}
               testID="lobby-shop"
               onPress={onShop}
-              style={{ marginBottom: shopAuthGap, alignSelf: 'center' }}
+              style={{ alignSelf: 'center' }}
             />
-            <View testID="home-auth-spacer" style={{ marginBottom: sectionGap, alignItems: 'center' }}>
+              <HomeMenuSparkles tone="gold" />
+            </View>
+            <View testID="home-auth-spacer" style={[menuItemFrameStyle, { marginBottom: sectionGap }]}>
               <SalindaButton
                 text={isLoggedIn ? t('auth.switchUserButton') : t('auth.homeButton')}
                 color="blue"
-                width={220}
-                height={42}
-                fontSize={15}
+                width={menuButtonWidth}
+                height={menuButtonHeight}
+                fontSize={menuButtonFontSize}
                 testID="home-auth-button"
                 onPress={onOpenAuth}
               />
+              <HomeMenuSparkles tone="cool" />
+            </View>
             </View>
 
             {/* Feedback card — inline expansion */}
@@ -21547,15 +21626,6 @@ export function PlayModeChoiceScreen({
                 />
               </View>
             ) : null}
-
-            {/* Gold Room — open to EVERYONE (moved out of the admin block). */}
-            <View style={{ width: 220, alignSelf: 'center', marginTop: primaryStackGap }}>
-              <GoldButton
-                label={locale === 'he' ? '🪙 חדר הזהב' : '🪙 The Gold Room'}
-                onPress={() => setGoldRoomOpen(true)}
-                accessibilityLabel={locale === 'he' ? 'פתח את חדר הזהב' : 'Open the Gold Room'}
-              />
-            </View>
 
             {/* ── 4. ADMIN BLOCK ── */}
             {showAdminControls ? (
@@ -21605,7 +21675,7 @@ export function PlayModeChoiceScreen({
 
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -21625,12 +21695,15 @@ function GameEntryChoiceScreen({
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const compactMainMenu = responsive.isTight;
-  const buttonGap = 28;
-  const entryBlockTopGap = compactMainMenu ? 102 : 120;
+  const buttonGap = compactMainMenu ? 12 : 14;
   const entryHeroSize = compactMainMenu ? 58 : 64;
   const safeTop = getScreenSafeTop(insets.top);
   const menuTopPadding = Math.max(safeTop, compactMainMenu ? 18 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
+  const menuButtonWidth = compactMainMenu ? 256 : 280;
+  const menuButtonHeight = compactMainMenu ? 64 : 72;
+  const menuButtonFontSize = compactMainMenu ? 20 : 22;
+  const titleFontSize = compactMainMenu ? 48 : 52;
   const placeTopBackOnRightOnAndroid = false;
   const backButtonLabel = locale === 'he'
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
@@ -21686,16 +21759,41 @@ function GameEntryChoiceScreen({
             active
           />
         </View>
-        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
-          <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
+        <View
+          style={{
+            flex: 1,
+            width: '100%',
+            maxWidth: 320,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 4,
+            elevation: 4,
+            paddingTop: entryHeroSize + 8,
+            paddingBottom: 44,
+          }}
+        >
+          <Text
+            style={{
+              color: '#F8FAFC',
+              fontSize: titleFontSize,
+              lineHeight: titleFontSize + 6,
+              fontWeight: '900',
+              textAlign: 'center',
+              marginBottom: compactMainMenu ? 16 : 18,
+              writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+            }}
+          >
             {t('gameEntry.title')}
           </Text>
-          <View style={{ width: '100%', alignItems: 'center', marginBottom: 16 }}>
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: buttonGap }}>
             <MenuCapsuleButton
               text={t('gameEntry.solo')}
               color="green"
               testID="lobby-play-solo"
               onPress={onSolo}
+              width={menuButtonWidth}
+              height={menuButtonHeight}
+              fontSize={menuButtonFontSize}
             />
           </View>
           <View style={{ width: '100%', alignItems: 'center', marginBottom: buttonGap }}>
@@ -21704,6 +21802,9 @@ function GameEntryChoiceScreen({
               color="green"
               testID="lobby-play-bot"
               onPress={onVsBot}
+              width={menuButtonWidth}
+              height={menuButtonHeight}
+              fontSize={menuButtonFontSize}
             />
           </View>
           <MenuCapsuleButton
@@ -21711,6 +21812,9 @@ function GameEntryChoiceScreen({
             color="green"
             testID="lobby-play-friends"
             onPress={onWithFriends}
+            width={menuButtonWidth}
+            height={menuButtonHeight}
+            fontSize={menuButtonFontSize}
           />
         </View>
         </View>
@@ -21732,12 +21836,15 @@ function FriendsChoiceScreen({
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const compactMainMenu = responsive.isTight;
-  const buttonGap = 28;
-  const entryBlockTopGap = compactMainMenu ? 102 : 120;
+  const buttonGap = compactMainMenu ? 12 : 14;
   const entryHeroSize = compactMainMenu ? 58 : 64;
   const safeTop = getScreenSafeTop(insets.top);
   const menuTopPadding = Math.max(safeTop, compactMainMenu ? 18 : 30);
   const menuBottomPadding = Math.max(insets.bottom + 24, compactMainMenu ? 28 : 40);
+  const menuButtonWidth = compactMainMenu ? 256 : 280;
+  const menuButtonHeight = compactMainMenu ? 64 : 72;
+  const menuButtonFontSize = compactMainMenu ? 20 : 22;
+  const titleFontSize = compactMainMenu ? 48 : 52;
   const placeTopBackOnRightOnAndroid = false;
   const backButtonLabel = locale === 'he'
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
@@ -21796,8 +21903,30 @@ function FriendsChoiceScreen({
             active
           />
         </View>
-        <View style={{ width: '100%', maxWidth: 320, alignItems: 'center', marginTop: entryBlockTopGap, zIndex: 4, elevation: 4 }}>
-          <Text style={{ color: '#F8FAFC', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 8 }}>
+        <View
+          style={{
+            width: '100%',
+            minHeight: Math.max(360, responsive.height - menuTopPadding - menuBottomPadding),
+            maxWidth: 320,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 4,
+            elevation: 4,
+            paddingTop: entryHeroSize + 8,
+            paddingBottom: 44,
+          }}
+        >
+          <Text
+            style={{
+              color: '#F8FAFC',
+              fontSize: titleFontSize,
+              lineHeight: titleFontSize + 6,
+              fontWeight: '900',
+              textAlign: 'center',
+              marginBottom: compactMainMenu ? 16 : 18,
+              writingDirection: locale === 'he' ? 'rtl' : 'ltr',
+            }}
+          >
             {t('gameEntry.withFriendsTitle')}
           </Text>
           <MenuCapsuleButton
@@ -21805,6 +21934,9 @@ function FriendsChoiceScreen({
             color="green"
             testID="lobby-play-pass-and-play"
             onPress={onSameDevice}
+            width={menuButtonWidth}
+            height={menuButtonHeight}
+            fontSize={menuButtonFontSize}
             style={{ marginBottom: buttonGap }}
           />
           <MenuCapsuleButton
@@ -21812,6 +21944,9 @@ function FriendsChoiceScreen({
             color="green"
             testID="lobby-join-room"
             onPress={onOnline}
+            width={menuButtonWidth}
+            height={menuButtonHeight}
+            fontSize={menuButtonFontSize}
           />
         </View>
         </View>

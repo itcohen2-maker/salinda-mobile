@@ -33,6 +33,7 @@ import { normalizeOperationToken } from '../../shared/equationOpCycle';
 import { t } from '../../shared/i18n';
 import { useLocale } from '../i18n/LocaleContext';
 import { playSfx } from '../audio/sfx';
+import type { QuickChatPhraseId } from '../../shared/quickChatPhrases';
 
 const DEFAULT_SOCKET_PORT = 3001;
 const DEFAULT_FRACTION_KINDS: Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
@@ -200,6 +201,12 @@ export interface LobbyStatusState {
   botOfferAt: number | null;
 }
 
+export interface QuickChatBubble {
+  id: string;
+  playerId: string;
+  phraseId: QuickChatPhraseId;
+}
+
 export interface MultiplayerContextValue {
   playMode: PlayMode;
   setPlayMode: (m: PlayMode) => void;
@@ -231,6 +238,8 @@ export interface MultiplayerContextValue {
   joinTable: (roomCode: string, playerName: string) => void;
   joinPrivateTable: (roomCode: string, inviteCode: string, playerName: string) => void;
   startTableCountdown: () => void;
+  sendQuickChatPhrase: (phraseId: QuickChatPhraseId) => void;
+  quickChatBubbles: QuickChatBubble[];
   createRoom: (playerName: string) => void;
   joinRoom: (roomCode: string, playerName: string) => void;
   leaveRoom: () => void;
@@ -558,6 +567,7 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<string | null>(null);
   const [reconnectNotice, setReconnectNotice] = useState<string | null>(null);
   const [eliminationNotice, setEliminationNotice] = useState<string | null>(null);
+  const [quickChatBubbles, setQuickChatBubbles] = useState<QuickChatBubble[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
   const lastSocketTokenRef = useRef<string | null>(null);
@@ -568,6 +578,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const serverStateRef = useRef<PlayerView | null>(null);
   const awaitingReconnectSyncRef = useRef(false);
   const startBotGameReqRef = useRef(0);
+  const quickChatSeqRef = useRef(0);
+  const quickChatTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   /** עוקב אחרי מספר השחקנים הקודם כדי לזהות הצטרפות חדשה ולהשמיע צליל + התראה */
   const prevPlayerCountRef = useRef(0);
   const prevHumanPlayerIdsRef = useRef<string[]>([]);
@@ -601,6 +613,9 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     playerIdRef.current = null;
     roomCodeSessionRef.current = null;
     setPlayers([]);
+    setQuickChatBubbles([]);
+    Object.values(quickChatTimersRef.current).forEach(clearTimeout);
+    quickChatTimersRef.current = {};
     setLobbyStatus(null);
     setServerState(null);
     setIsHost(false);
@@ -780,6 +795,19 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     socket.on('lobby_status', (data: LobbyStatusState) => {
       setLobbyStatus(data);
     });
+    socket.on('quick_chat_phrase', ({ playerId: senderPlayerId, phraseId }) => {
+      quickChatSeqRef.current += 1;
+      const bubbleId = `${senderPlayerId}:${Date.now()}:${quickChatSeqRef.current}`;
+      setQuickChatBubbles((current) => [
+        ...current.filter((bubble) => bubble.playerId !== senderPlayerId),
+        { id: bubbleId, playerId: senderPlayerId, phraseId },
+      ]);
+      if (quickChatTimersRef.current[bubbleId]) clearTimeout(quickChatTimersRef.current[bubbleId]);
+      quickChatTimersRef.current[bubbleId] = setTimeout(() => {
+        setQuickChatBubbles((current) => current.filter((bubble) => bubble.id !== bubbleId));
+        delete quickChatTimersRef.current[bubbleId];
+      }, 3000);
+    });
     socket.on('player_left', () => {
       // List will be updated by next player_joined or we could request state
     });
@@ -894,6 +922,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   // Cleanup socket on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
+      Object.values(quickChatTimersRef.current).forEach(clearTimeout);
+      quickChatTimersRef.current = {};
       if (socketRef.current) {
         socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
@@ -954,6 +984,10 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
 
   const startTableCountdown = useCallback(() => {
     socketRef.current?.emit('start_table_countdown');
+  }, []);
+
+  const sendQuickChatPhrase = useCallback((phraseId: QuickChatPhraseId) => {
+    socketRef.current?.emit('quick_chat_phrase' as any, { phraseId });
   }, []);
 
   const joinRoom = useCallback(
@@ -1128,6 +1162,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
     joinTable,
     joinPrivateTable,
     startTableCountdown,
+    sendQuickChatPhrase,
+    quickChatBubbles,
     createRoom,
     joinRoom,
     leaveRoom,

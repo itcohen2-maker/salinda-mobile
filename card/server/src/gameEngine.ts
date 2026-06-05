@@ -32,8 +32,8 @@ const DEFAULT_HOST_GAME_SETTINGS: HostGameSettings = {
   difficultyStage: 'H',
   fractionKinds: ['1/2', '1/3', '1/4', '1/5'],
   abVariant: 'variant_0_15_plus',
-  timerSetting: 'off',
-  timerCustomSeconds: 60,
+  timerSetting: '90',
+  timerCustomSeconds: 90,
   botDifficulty: 'medium',
 };
 import { generateDeck, shuffle, dealCards } from './deck';
@@ -69,7 +69,7 @@ function identicalCardLabel(
 /** זמן המתנה לפעולת שחקן במשחק מקוון (אני מוכן) */
 export const ONLINE_TURN_ACTION_MS = 15_000;
 /** ברירת מחדל בטיחותית כשאין טיימר מוגדר */
-const DEFAULT_TURN_TIMEOUT_SECONDS = 60;
+const DEFAULT_TURN_TIMEOUT_SECONDS = 90;
 /** תקרת שרת להגדרות טיימר מפורשות מהלקוח */
 const MAX_CONFIGURED_TURN_SECONDS = 120;
 const OVERFLOW_SWAP_ACTION_MS = OVERFLOW_SWAP_TIMER_SECONDS * 1000;

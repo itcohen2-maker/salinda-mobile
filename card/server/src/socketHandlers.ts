@@ -101,6 +101,7 @@ import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_
 import { shouldAutoStartWhenRoomIsFull } from './tableAutoStart';
 import { resolveBotConfig, onMatchEnd } from './ddaService';
 import { generateDisguisedProfile } from './botDisguise';
+import { isQuickChatPhraseId } from '../../shared/quickChatPhrases';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -1184,6 +1185,27 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
     startTableCountdown(io, room);
+  });
+
+  socket.on('quick_chat_phrase', ({ phraseId }) => {
+    if (rateLimited()) return;
+    const info = getRoomBySocket(socket.id);
+    const loc = info ? playerLocale(info.room, info.playerId) : 'he';
+    if (!info) {
+      socket.emit('error', { message: t(loc, 'game.noRoom') });
+      return;
+    }
+    const { room, playerId } = info;
+    if (room.state) {
+      socket.emit('error', { message: t(loc, 'room.gameAlreadyStarted') });
+      return;
+    }
+    const player = room.players.find((candidate) => candidate.id === playerId && candidate.isConnected);
+    if (!player || player.isBot || !isQuickChatPhraseId(phraseId)) {
+      socket.emit('error', { message: 'Invalid quick chat phrase' });
+      return;
+    }
+    io.to(room.code).emit('quick_chat_phrase', { playerId, phraseId });
   });
 
   socket.on('create_room', ({ playerName, locale }) => {

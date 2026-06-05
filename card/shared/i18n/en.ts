@@ -529,6 +529,7 @@ export const en: Record<string, string> = {
     '✅ Equation solved! Now pick hand cards that add up to the result and place them on the discard pile.',
   'local.openingDrawTitle': '🎊 Draw!',
   'local.openingDrawBody': '{{name}} was chosen to start — good luck! 🍀',
+  'local.openingDrawTimerReminder': 'Turn time is set to a minute and a half. (You can always change the timer in the menu settings)',
   'local.fractionBlockToast': '⚔️ {{name}} blocked with {{fraction}} — the challenge passes to you!',
   'local.fractionBlockMsg': '{{name}} blocked with a fraction — the challenge continues!',
   'local.fractionAttackToast': '⚔️ {{name}} challenged you with fraction {{fraction}}!',

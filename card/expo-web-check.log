@@ -1,0 +1,45 @@
+env: load .env
+env: export EXPO_PUBLIC_SERVER_URL
+Starting project at C:\Users\User\salinda-mobile\card
+Starting Metro Bundler
+Waiting on http://localhost:8083
+Logs for your project will appear below.
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  1.0% (1/1)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  1.0% ( 12/168)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  1.0% ( 14/170)
+Web .\index.tsx ▓░░░░░░░░░░░░░░░  7.5% ( 50/182)
+Web .\index.tsx ▓░░░░░░░░░░░░░░░  7.9% ( 60/217)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 20.3% (103/235)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 22.3% (143/499)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 22.3% (221/581)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓░░░░░░░░░░░░░ 22.5% (305/643)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓░░░░░░░░░░░ 32.4% (378/664)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 45.2% (461/686)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓░░░░░░░ 59.1% (574/753)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 66.1% (669/823)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.2% (777/902)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 82.0% (892/985)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.1% (1028/1071)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (1094/1095)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1095/1095)
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 70517ms index.tsx (1097 modules)
+Web Bundled 47769ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 87ms index.tsx (1 module)
+ LOG  [web] Logs will appear in the browser console

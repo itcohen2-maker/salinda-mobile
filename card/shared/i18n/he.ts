@@ -531,6 +531,7 @@ export const he: Record<string, string> = {
     '✅ פתרת תרגיל! עכשיו בחר/י קלפים מהיד שסכומם שווה לתוצאת התרגיל והנח/י אותם על הערימה.',
   'local.openingDrawTitle': '🎊 הגרלה!',
   'local.openingDrawBody': '{{name}} נבחר/ה לפתוח — בהצלחה! 🍀',
+  'local.openingDrawTimerReminder': 'זמן התור נקבע לדקה וחצי. (תמיד אפשר לשנות את זמן הטיימר בהגדרות התפריט)',
   'local.fractionBlockToast': '⚔️ {{name}} חסם עם שבר {{fraction}} — האתגר עובר אליך!',
   'local.fractionBlockMsg': '{{name}} חסם עם שבר — האתגר עובר הלאה!',
   'local.fractionAttackToast': '⚔️ {{name}} איתגר אותך בקלף שבר {{fraction}}!',
