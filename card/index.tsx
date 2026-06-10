@@ -22027,10 +22027,32 @@ export function PlayModeChoiceScreen({
               />
               <HomeMenuSparkles tone="cool" />
             </View>
+
+            {/* Registered (non-anonymous) players get an always-available
+                feedback button so they can message us anytime. Admins already
+                have their own feedback button in the admin block below, so this
+                is shown only to non-admin signed-in users (no duplicate). */}
+            {isLoggedIn && !showAdminControls ? (
+              <View style={[menuItemFrameStyle, { marginBottom: sectionGap }]}>
+                <SalindaButton
+                  text={t('lobby.sendFeedback')}
+                  color="blue"
+                  width={menuButtonWidth}
+                  height={menuButtonHeight}
+                  fontSize={menuButtonFontSize}
+                  testID="home-feedback-user"
+                  onPress={() => setFeedbackOpen((prev) => !prev)}
+                />
+                <HomeMenuSparkles tone="cool" />
+              </View>
+            ) : null}
             </View>
 
-            {/* Feedback card — inline expansion */}
-            {showAdminControls && feedbackOpen ? (
+            {/* Feedback card — inline expansion. Available to admins and to any
+                signed-in (non-anonymous) user, so registered players have a
+                direct channel to message us — the basis of the gift/reward loop.
+                Anonymous sessions are excluded (we can't reliably reward them). */}
+            {(showAdminControls || isLoggedIn) && feedbackOpen ? (
               <View style={{ width: '100%', alignItems: 'center', marginBottom: sectionGap }}>
                 <FeedbackMailCard
                   isRTL={locale === 'he'}

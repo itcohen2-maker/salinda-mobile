@@ -299,7 +299,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: sessionData } = await supabase.auth.getSession();
         const s = sessionData?.session ?? null;
-        if (s) {
+        if (s && !isAnonymousAuthUser(s.user)) {
+          // getSession() returns the stored session WITHOUT validating it. A
+          // server-revoked / expired refresh token then loops the sign-in screen
+          // (seen on iOS Safari: "Invalid Refresh Token: Refresh Token Not Found")
+          // until the user manually clears site data. Validate against the server;
+          // if the stored session is dead, clear local auth state so a fresh
+          // sign-in works cleanly instead of getting stuck.
+          const { error: validateError } = await supabase.auth.getUser();
+          if (validateError) {
+            console.warn('[auth] stored session invalid, clearing:', validateError.message);
+            try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
+            const result = await beginAnonymousSession();
+            if (result.error) {
+              console.warn('[auth] signInAnonymously failed:', result.error);
+            }
+          } else {
+            await applySession(s);
+          }
+        } else if (s) {
           await applySession(s);
         } else {
           const result = await beginAnonymousSession();
