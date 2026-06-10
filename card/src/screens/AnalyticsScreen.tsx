@@ -45,6 +45,21 @@ interface AdminAnalytics {
   by_activity: Record<string, number>;
 }
 
+interface InviteAnalyticsRow {
+  email: string;
+  status: 'invited' | 'blocked';
+  first_login_at: string | null;
+  last_seen_at: string | null;
+  online: boolean;
+}
+
+interface InviteAnalytics {
+  total_invited: number;
+  total_blocked: number;
+  online_now: number;
+  invites: InviteAnalyticsRow[];
+}
+
 interface AnalyticsScreenProps {
   onBack: () => void;
 }
@@ -102,6 +117,8 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
   const [stats, setStats] = useState<AdminAnalytics | null>(null);
   const [statsError, setStatsError] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const [invite, setInvite] = useState<InviteAnalytics | null>(null);
 
   const liveOpacity = React.useRef(new Animated.Value(1)).current;
 
@@ -174,6 +191,9 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
       setStats(data as AdminAnalytics);
       setStatsError(false);
       setLastUpdated(new Date());
+
+      const { data: inviteData, error: inviteError } = await supabase.rpc('get_invite_analytics');
+      if (!inviteError && inviteData) setInvite(inviteData as InviteAnalytics);
     } catch {
       setStatsError(true);
     }
@@ -348,6 +368,40 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
             </View>
           ))}
         </View>
+
+        {/* Invited-only gate panel */}
+        <Text style={styles.sectionTitle}>{t('analytics.inviteTitle')}</Text>
+        <View style={styles.summaryRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{invite ? invite.total_invited : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.inviteInvited')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{invite ? invite.online_now : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.inviteOnline')}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statValue}>{invite ? invite.total_blocked : '—'}</Text>
+            <Text style={styles.statLabel}>{t('analytics.inviteBlocked')}</Text>
+          </View>
+        </View>
+        {invite && Array.isArray(invite.invites) && invite.invites.length > 0 ? (
+          <View style={styles.inviteListCard}>
+            {invite.invites.map((row) => (
+              <View key={row.email} style={styles.inviteListRow}>
+                <View style={styles.inviteListInfo}>
+                  <Text style={styles.inviteListEmail} numberOfLines={1}>{row.email}</Text>
+                  <Text style={styles.inviteListMeta}>
+                    {`${row.status === 'invited' ? t('analytics.inviteStatusInvited') : t('analytics.inviteStatusBlocked')} · ${
+                      row.last_seen_at ? formatTimestamp(row.last_seen_at) : t('analytics.inviteNeverSeen')
+                    }`}
+                  </Text>
+                </View>
+                {row.online ? <View style={styles.inviteOnlineDot} /> : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {/* Auto-refresh hint */}
         <Text style={styles.autoRefreshText}>
@@ -569,6 +623,46 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
     marginTop: 8,
+  },
+  inviteListCard: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginTop: 10,
+    backgroundColor: 'rgba(15,23,42,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.22)',
+  },
+  inviteListRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148,163,184,0.12)',
+  },
+  inviteListInfo: {
+    flex: 1,
+  },
+  inviteListEmail: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  inviteListMeta: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  inviteOnlineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4ADE80',
   },
   summaryRow: {
     flexDirection: 'row-reverse',

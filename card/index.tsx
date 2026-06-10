@@ -65,7 +65,7 @@ if (Platform.OS === 'android') {
   TouchableOpacity.defaultProps = { ...(TouchableOpacity.defaultProps ?? {}), soundEffectsEnabled: false };
 }
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as SvgPolygon } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as SvgPolygon, Text as SvgText } from 'react-native-svg';
 import { GoldDieFace } from './AnimatedDice';
 import { InteractiveTutorialScreen, type TutorialProgressPayload } from './src/tutorial/InteractiveTutorialScreen';
 import { isL6WildTutorialSelectionReady } from './src/tutorial/l6WildSelection';
@@ -333,7 +333,7 @@ const salindaShopCardImg = require('./assets/salinda-transparent.png');
 const salindaPuzzleGameLogoImg = require('./assets/branding/salinda-puzzle-game-logo.png');
 const playerScreensGradientColors = ['#071426', '#0d2340', '#123458'] as const;
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MultiplayerProvider, useMultiplayerOptional } from './src/hooks/useMultiplayer';
+import { MultiplayerProvider, useMultiplayerOptional, type QuickChatBubble } from './src/hooks/useMultiplayer';
 import { AuthProvider, isRegisteredAuthUser, useAuth } from './src/hooks/useAuth';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { LobbyScreen, parseJoinParamsFromUrl } from './src/screens/OnlineTableScreens';
@@ -341,6 +341,9 @@ import { OnlineTablesEntryScreen } from './src/screens/OnlineTablesEntryScreen';
 import { CelebrationMockupRoom } from './src/screens/CelebrationMockupRoom';
 import { ClassroomModeScreen } from './src/classroom/ClassroomModeScreen';
 import { AdminCoinGiftsScreen } from './src/screens/AdminCoinGiftsScreen';
+import { RemoteControlScreen } from './src/screens/RemoteControlScreen';
+import { InviteGateScreen } from './src/gate/InviteGateScreen';
+import { useInviteGate } from './src/gate/useInviteGate';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { FeedbackInboxScreen } from './src/screens/FeedbackInboxScreen';
 import { AnalyticsScreen } from './src/screens/AnalyticsScreen';
@@ -350,6 +353,7 @@ import {
   useTrackEvent,
 } from './src/hooks/useSessionTracking';
 import { CARDS_PER_PLAYER, TURN_TIMER_HINT_UNTIL_ROUNDS_PLAYED, wildDeckCount } from './shared/gameConstants';
+import { getQuickChatPhraseText, QUICK_CHAT_PHRASES, type QuickChatPhraseId } from './shared/quickChatPhrases';
 import { displayFontFamily } from './src/theme/fonts';
 import { ThemeProvider, useActiveTheme } from './src/theme/ThemeContext';
 import { resolveGameTableSurface } from './src/theme/gameTableSurface';
@@ -438,6 +442,7 @@ const LAYOUT_AXIS_GRID_STEP = Platform.OS === 'web' ? 40 : 48;
 const SOUND_ON_ICON = '\u{1F50A}';
 const SOUND_OFF_ICON = '\u{1F507}';
 const MUSIC_ICON = '\u{1F3B5}';
+const SCREEN_AWAKE_STORAGE_KEY = 'salinda_screen_awake_enabled';
 const SALINDA_WEB_CURSOR_URL = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><path fill='%23FCD34D' stroke='%2378350F' stroke-width='1.5' stroke-linejoin='round' d='M18 1 L21 15 L35 18 L21 21 L18 35 L15 21 L1 18 L15 15 Z'/><circle cx='18' cy='18' r='5.5' fill='%23FFFBEB' stroke='%2378350F' stroke-width='1.2'/><text x='18' y='22' font-family='Georgia, serif' font-weight='900' font-size='9' fill='%2392400E' text-anchor='middle'>S</text></svg>") 18 18`;
 const SALINDA_WEB_CURSOR_DEFAULT = `${SALINDA_WEB_CURSOR_URL}, auto`;
 const SALINDA_WEB_CURSOR_POINTER = `${SALINDA_WEB_CURSOR_URL}, pointer`;
@@ -1073,6 +1078,8 @@ interface GameState {
   overflowSwapSelectedHandCardId: string | null;
   /** צלילי משחק — false = השתקה (נשמר ב־AsyncStorage) */
   soundsEnabled: boolean;
+  /** Keep the device screen awake during active gameplay. */
+  screenAwakeEnabled: boolean;
   /** טבלת טורניר — למשחק הנוכחי בלבד; מאופסת בתחילת כל START_GAME */
   tournamentTable: TournamentRow[];
   /** מונה שימושים בכפתור "תוצאות אפשריות" לצורך תשלום כל שימוש שלישי */
@@ -1112,6 +1119,7 @@ interface GameState {
   botConfirmDemoShownThisTurn: boolean;
   /** השהיה אחרי אישור משוואה לפני התחלת בחירת קלפים מהיד. */
   botPostEquationPauseTicks: number;
+  botPostEquationHoldUntil: number | null;
   /** Monotonic counter incremented on every BOT_STEP dispatch. Used by bot clock useEffect dep array
    *  to guarantee re-scheduling on no-op ticks. Prevents "frozen bot" bugs. See spec §0.5.2. */
   botTickSeq: number;
@@ -1540,6 +1548,7 @@ type GameAction =
   | { type: 'RESTORE_NOTIFICATIONS'; payload: Notification[] }
   | { type: 'SET_GUIDANCE_ENABLED'; enabled: boolean }
   | { type: 'SET_SOUNDS_ENABLED'; enabled: boolean }
+  | { type: 'SET_SCREEN_AWAKE_ENABLED'; enabled: boolean }
   | { type: 'UPDATE_PLAYER_NAME'; playerIndex: number; name: string; progress?: StoredPlayerProgressSnapshot | null }
   | { type: 'DISMISS_INTRO_HINT' }
   | { type: 'USE_POSSIBLE_RESULTS_INFO' }
@@ -2026,6 +2035,7 @@ const initialState: GameState = {
   overflowSwapSelectedPileChoice: null,
   overflowSwapSelectedHandCardId: null,
   soundsEnabled: true,
+  screenAwakeEnabled: true,
   tournamentTable: [],
   possibleResultsInfoUses: 0,
   possibleResultsInfoCountedThisTurn: false,
@@ -2043,6 +2053,7 @@ const initialState: GameState = {
   botPresentation: { action: null, candidateCardId: null, ticks: 0, notification: null },
   botConfirmDemoShownThisTurn: false,
   botPostEquationPauseTicks: 0,
+  botPostEquationHoldUntil: null,
   botTickSeq: 0,
   isTutorial: false,
   currentTurnPlayedCards: [],
@@ -2478,6 +2489,7 @@ const COURAGE_STEP_TO_PERCENT: Readonly<Record<number, number>> = {
 const EXCELLENCE_METER_FULL_REWARD_COINS = SALINDA_GAMEPLAY_REWARDS.excellence_meter_full;
 const PRE_VICTORY_COIN_AWARD_HOLD_MS = 1500;
 const BOT_TURN_COIN_CELEBRATION_HOLD_MS = 5000;
+const BOT_TO_HUMAN_TURN_TRANSITION_HOLD_MS = 3000;
 
 function clampCourageStep(step: number): number {
   return Math.max(0, Math.min(3, step));
@@ -2629,7 +2641,7 @@ function gameReducer(
           ? st.botConfig
           : action.mode === 'vs-bot'
             ? {
-                difficulty: action.botDifficulty ?? 'medium',
+                difficulty: action.botDifficulty ?? 'easy',
                 playerIds: playersSeed
                   .map((p, i) => ((p as { isBot?: boolean }).isBot ? i : -1))
                   .filter((id) => id >= 0),
@@ -3544,6 +3556,8 @@ function gameReducer(
       return { ...st, notifications: normalizeRestoredNotifications(action.payload) };
     case 'SET_SOUNDS_ENABLED':
       return { ...st, soundsEnabled: action.enabled };
+    case 'SET_SCREEN_AWAKE_ENABLED':
+      return { ...st, screenAwakeEnabled: action.enabled };
     case 'UPDATE_PLAYER_NAME':
       {
         const nextName = action.name.slice(0, 7);
@@ -3708,9 +3722,42 @@ function gameReducer(
         if (presentedAction.kind === 'confirmStaged') {
           afterPresented = { ...afterPresented, botPendingStagedIds: null };
         }
+        // Safety net (defense-in-depth): in the roll phases, if the presented
+        // action changed nothing meaningful, the reducer rejected it via a guard
+        // (e.g. identical/fraction). Returning it would let the bot re-decide the
+        // same rejected action forever → frozen turn. Force a guaranteed-progress
+        // action so the turn always advances. (Teaching-demo beats only run in
+        // building/solved, so they are never affected here.)
+        if (
+          (afterPresented.phase === 'pre-roll' || afterPresented.phase === 'roll-dice') &&
+          botProgressFingerprint(afterPresented) === botProgressFingerprint(stWithTick)
+        ) {
+          const recovered = forceBotProgress(afterPresented);
+          if (recovered) {
+            return {
+              ...recovered,
+              botPresentation: { action: null, candidateCardId: null, ticks: 0, notification: null },
+            };
+          }
+        }
         return {
           ...afterPresented,
           botPresentation: { action: null, candidateCardId: null, ticks: 0, notification: null },
+        };
+      }
+
+      if (
+        pendingIds != null &&
+        stWithTick.phase === 'solved' &&
+        !stWithTick.hasPlayedCards &&
+        stWithTick.botPostEquationHoldUntil != null
+      ) {
+        if (Date.now() < stWithTick.botPostEquationHoldUntil) {
+          return stWithTick;
+        }
+        return {
+          ...stWithTick,
+          botPostEquationHoldUntil: null,
         };
       }
 
@@ -3867,6 +3914,46 @@ function gameReducer(
         }
         return { action: a, candidateCardId, ticks, notification };
       }
+      // Compact "did the turn make real progress?" fingerprint. Excludes
+      // cosmetic fields (botTickSeq, notifications, presentation) so two
+      // BOT_STEPs that changed nothing meaningful produce the same string.
+      // Includes the staging-queue length so advancing a multi-card staging
+      // sequence still counts as progress.
+      function botProgressFingerprint(s: GameState): string {
+        return [
+          s.phase,
+          s.currentPlayerIndex,
+          s.players.map((p) => p.hand.length).join(','),
+          s.discardPile.length,
+          s.stagedCards.length,
+          s.hasPlayedCards ? 1 : 0,
+          s.hasDrawnCard ? 1 : 0,
+          s.consecutiveIdenticalPlays,
+          s.pendingFractionTarget ?? 'null',
+          s.equationResult ?? 'null',
+          (s.botPendingStagedIds ?? []).length,
+        ].join('|');
+      }
+
+      // Last-resort recovery: drive the turn forward with an action the reducer
+      // always accepts. In pre-roll/roll-dice that's ROLL_DICE (which also clears
+      // the identical-play guards); otherwise draw a card and end the turn.
+      function forceBotProgress(s: GameState): GameState | null {
+        if (s.phase === 'pre-roll' || s.phase === 'roll-dice') {
+          const rollTranslated = translateBotAction(s, { kind: 'rollDice' });
+          if (rollTranslated) return gameReducer(s, rollTranslated, tf);
+        }
+        const drawTranslated = translateBotAction(s, { kind: 'drawCard' });
+        if (drawTranslated) {
+          const afterDraw = gameReducer(s, drawTranslated, tf);
+          if (afterDraw.currentPlayerIndex === s.currentPlayerIndex && afterDraw.phase !== 'game-over') {
+            return gameReducer(afterDraw, { type: 'END_TURN' }, tf);
+          }
+          return afterDraw;
+        }
+        return null;
+      }
+
       function applyBotActionAtomically(s: GameState, a: BotAction): GameState {
         // Teaching-only beats are pure narration/highlighting; they do not
         // change game state. Return s unchanged so the surrounding clear of
@@ -3976,7 +4063,12 @@ function gameReducer(
           if (!confirmStagedTranslated) return next;
           return gameReducer(next, confirmStagedTranslated, tf);
         }
-        return { ...next, botPendingStagedIds: ids, botPostEquationPauseTicks: 3 };
+        return {
+          ...next,
+          botPendingStagedIds: ids,
+          botPostEquationPauseTicks: 0,
+          botPostEquationHoldUntil: Date.now() + BOT_TO_HUMAN_TURN_TRANSITION_HOLD_MS,
+        };
       }
 
       const action_ = decideBotAction(stWithTick, stWithTick.botConfig.difficulty, {
@@ -3995,7 +4087,7 @@ function gameReducer(
     }
     case 'RESET_GAME':
       AsyncStorage.removeItem('salinda_guidance_notifications');
-      return { ...initialState, hasSeenIntroHint: st.hasSeenIntroHint, hasSeenSolvedHint: st.hasSeenSolvedHint, soundsEnabled: st.soundsEnabled, guidanceEnabled: st.guidanceEnabled };
+      return { ...initialState, hasSeenIntroHint: st.hasSeenIntroHint, hasSeenSolvedHint: st.hasSeenSolvedHint, soundsEnabled: st.soundsEnabled, screenAwakeEnabled: st.screenAwakeEnabled, guidanceEnabled: st.guidanceEnabled };
     case 'TUTORIAL_SET_HANDS': {
       const newPlayers = st.players.map((p, i) =>
         i < action.hands.length ? { ...p, hand: action.hands[i] } : p,
@@ -4172,6 +4264,13 @@ function GameProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         localDispatch({ type: 'SET_SOUNDS_ENABLED', enabled: true });
       });
+    AsyncStorage.getItem(SCREEN_AWAKE_STORAGE_KEY)
+      .then((v) => {
+        localDispatch({ type: 'SET_SCREEN_AWAKE_ENABLED', enabled: v !== 'false' });
+      })
+      .catch(() => {
+        localDispatch({ type: 'SET_SCREEN_AWAKE_ENABLED', enabled: true });
+      });
   }, []);
 
   const effectivePhase = override ? override.state.phase : localState.phase;
@@ -4201,7 +4300,7 @@ function GameProvider({ children }: { children: ReactNode }) {
     openingDrawPushedRef.current = oid;
     const firstName = drawSource.players[drawSource.idx]?.name ?? t('labels.player');
     const notifId = `opening-draw-${oid}`;
-    const dismissMs = 8000;
+    const dismissMs = 16000;
     localDispatch({
       type: 'PUSH_NOTIFICATION',
       payload: {
@@ -4209,7 +4308,7 @@ function GameProvider({ children }: { children: ReactNode }) {
         title: t('local.openingDrawTitle'),
         body: `${t('local.openingDrawBody', { name: firstName })}\n${t('local.openingDrawTimerReminder')}`,
         message: '',
-        emoji: '\uD83C\uDFB2',
+        emoji: '',
         style: 'celebration' as any,
         autoDismissMs: dismissMs,
       },
@@ -4304,6 +4403,7 @@ function GameProvider({ children }: { children: ReactNode }) {
       localState.equationResult ?? 'null',
       localState.pendingFractionTarget ?? 'null',
       localState.botDicePausePending ? '1' : '0',
+      localState.botPostEquationHoldUntil ?? 'null',
       localState.botTickSeq,
       (localState.botPendingStagedIds ?? []).join(','),
     ].join('|');
@@ -4347,6 +4447,7 @@ function GameProvider({ children }: { children: ReactNode }) {
     localState.equationResult,
     localState.pendingFractionTarget,
     localState.botDicePausePending,
+    localState.botPostEquationHoldUntil,
     localState.botConfig,
     localState.botTickSeq,
     localState.botPendingStagedIds,
@@ -4372,6 +4473,7 @@ function GameProvider({ children }: { children: ReactNode }) {
         notifications: localState.notifications,
         guidanceEnabled: override.state.guidanceEnabled ?? localState.guidanceEnabled,
         soundsEnabled: localState.soundsEnabled,
+        screenAwakeEnabled: localState.screenAwakeEnabled,
         identicalAlert:
           localState.suppressIdenticalOverlayOnline && override.state.identicalAlert
             ? null
@@ -4389,6 +4491,7 @@ function GameProvider({ children }: { children: ReactNode }) {
     localState.notifications,
     localState.guidanceEnabled,
     localState.soundsEnabled,
+    localState.screenAwakeEnabled,
     localState.suppressIdenticalOverlayOnline,
     localState, // covers the !override branch
   ]);
@@ -4462,6 +4565,7 @@ function GameProvider({ children }: { children: ReactNode }) {
       action.type === 'RESTORE_NOTIFICATIONS' ||
       action.type === 'SET_GUIDANCE_ENABLED' ||
       action.type === 'SET_SOUNDS_ENABLED' ||
+      action.type === 'SET_SCREEN_AWAKE_ENABLED' ||
       action.type === 'DISMISS_INTRO_HINT';
     const eqUiActions = new Set<GameAction['type']>([
       'SELECT_EQ_OP', 'SELECT_EQ_SALINDA', 'PLACE_EQ_OP', 'REMOVE_EQ_HAND_SLOT', 'CLEAR_EQ_HAND', 'CLEAR_EQ_HAND_PICK',
@@ -11518,7 +11622,7 @@ function FloatingMathBackground() {
   );
 }
 
-type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth' | 'analytics';
+type ShellPlayMode = 'choose' | 'game-entry' | 'friends-choice' | 'local' | 'online' | 'tutorial' | 'mockup-room' | 'classroom' | 'classroom-game' | 'feedback-inbox' | 'admin-coins' | 'auth' | 'analytics' | 'remote-control';
 type TutorialReturnMode = 'choose' | 'game-entry';
 
 type WebBackdropTone = 'black' | 'white';
@@ -11537,7 +11641,7 @@ const WebPresentationContext = createContext<WebPresentationContextValue | null>
 
 function shouldShowAmbientBackground(playMode: ShellPlayMode, phase: GameState['phase']) {
   if (playMode === 'tutorial') return false;
-  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom' || playMode === 'feedback-inbox' || playMode === 'admin-coins' || playMode === 'analytics') return true;
+  if (playMode === 'online' || playMode === 'mockup-room' || playMode === 'classroom' || playMode === 'feedback-inbox' || playMode === 'admin-coins' || playMode === 'analytics' || playMode === 'remote-control') return true;
   return (playMode === 'local' || playMode === 'classroom-game') && (phase === 'turn-transition' || phase === 'game-over');
 }
 
@@ -11648,7 +11752,7 @@ function StartScreen({
   const [playerCount, setPlayerCount] = useState(2);
   const [numberRange, setNumberRange] = useState<'easy' | 'full'>('full');
   const [gameMode, setGameMode] = useState<LocalGameMode>(forcedGameMode ?? 'vs-bot');
-  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('easy');
   const [botDisplayName, setBotDisplayName] = useState('');
   // Saved human player name — loaded once from AsyncStorage so we don't
   // fall back to "שחקן 1" on every new game. Uses a ref alongside state
@@ -11698,7 +11802,7 @@ function StartScreen({
   const [fractionKinds, setFractionKinds] = useState<Fraction[]>([...ALL_FRACTION_KINDS]);
   const [showPossibleResults, setShowPossibleResults] = useState(true);
   const [showSolveExercise, setShowSolveExercise] = useState(true);
-  const [timer, setTimer] = useState<'60' | '90' | 'off' | 'custom'>('off');
+  const [timer, setTimer] = useState<'60' | '90' | 'off' | 'custom'>('90');
   const [customTimerSeconds, setCustomTimerSeconds] = useState(60);
   const [guidancePromptOpen, setGuidancePromptOpen] = useState(false);
   const [guidanceOn, setGuidanceOn] = useState(false); // הדרכה והסברים — ברירת מחדל: כבוי
@@ -12008,7 +12112,7 @@ function StartScreen({
       fractionKinds: fractions ? fractionKinds : [...ALL_FRACTION_KINDS],
       showPossibleResults,
       showSolveExercise,
-      timerSetting: timer,
+      timerSetting: effectiveGameMode === 'vs-bot' && timer === 'off' ? '90' : timer,
       timerCustomSeconds: timer === 'custom' ? customTimerSeconds : 60,
       difficultyStage,
       enabledOperators,
@@ -14858,6 +14962,165 @@ function IdenticalWildStarHint({ compact: _compact }: { compact?: boolean }) {
   );
 }
 
+function SalindaScreenAwakeIcon({
+  enabled,
+  size,
+}: {
+  enabled: boolean;
+  size: number;
+}) {
+  const phoneFill = enabled ? '#EFF6FF' : '#CBD5E1';
+  const phoneStroke = enabled ? '#60A5FA' : '#64748B';
+  const screenFill = enabled ? '#0F172A' : '#334155';
+  const sunFill = enabled ? '#FBBF24' : '#94A3B8';
+  const textFill = enabled ? '#FEF3C7' : '#E2E8F0';
+  const slashStroke = '#EF4444';
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <SvgRect x="6" y="2.6" width="12" height="18.8" rx="2.6" fill={phoneFill} stroke={phoneStroke} strokeWidth="1.8" />
+      <SvgRect x="7.7" y="5.1" width="8.6" height="12.8" rx="1.2" fill={screenFill} />
+      <SvgCircle cx="12" cy="9" r="2.35" fill={sunFill} />
+      {enabled ? (
+        <>
+          <SvgPath d="M12 5.7V4.7" stroke={sunFill} strokeWidth="1.2" strokeLinecap="round" />
+          <SvgPath d="M9.6 9H8.6" stroke={sunFill} strokeWidth="1.2" strokeLinecap="round" />
+          <SvgPath d="M15.4 9H14.4" stroke={sunFill} strokeWidth="1.2" strokeLinecap="round" />
+        </>
+      ) : (
+        <SvgPath d="M7.3 18.8L16.7 5.1" stroke={slashStroke} strokeWidth="2.2" strokeLinecap="round" />
+      )}
+      <SvgText
+        x="12"
+        y="15.4"
+        fill={textFill}
+        fontSize="4.2"
+        fontWeight="900"
+        textAnchor="middle"
+      >
+        {enabled ? 'ON' : 'OFF'}
+      </SvgText>
+    </Svg>
+  );
+}
+
+function QuickChatTurnBubble({ bubble, compact = false }: { bubble: QuickChatBubble; compact?: boolean }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.86)).current;
+
+  useEffect(() => {
+    opacity.setValue(0);
+    scale.setValue(0.86);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 70, friction: 8, useNativeDriver: true }),
+    ]).start();
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.94, duration: 260, useNativeDriver: true }),
+      ]).start();
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [bubble.id, opacity, scale]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        opacity,
+        transform: [{ scale }],
+        maxWidth: compact ? 250 : 300,
+        borderRadius: 20,
+        paddingVertical: compact ? 8 : 10,
+        paddingHorizontal: compact ? 12 : 14,
+        backgroundColor: 'rgba(245,210,122,0.97)',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.42)',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        ...(Platform.OS === 'android' ? { elevation: 10 } : {}),
+      }}
+    >
+      <Text
+        style={{
+          color: '#1a1207',
+          fontSize: compact ? 13 : 14,
+          lineHeight: compact ? 18 : 20,
+          fontWeight: '900',
+          textAlign: 'center',
+          writingDirection: 'rtl',
+        }}
+      >
+        {getQuickChatPhraseText(bubble.phraseId)}
+      </Text>
+    </Animated.View>
+  );
+}
+
+function QuickChatPhraseSheet({
+  visible,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSelect: (phraseId: QuickChatPhraseId) => void;
+}) {
+  return (
+    <RNModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.56)' }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {}}
+          style={{
+            width: '100%',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            borderWidth: 1,
+            borderColor: 'rgba(245,210,122,0.35)',
+            backgroundColor: 'rgba(20,15,8,0.96)',
+            paddingHorizontal: 16,
+            paddingTop: 18,
+            paddingBottom: 28,
+          }}
+        >
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+            {QUICK_CHAT_PHRASES.map((phrase) => (
+              <TouchableOpacity
+                key={phrase.id}
+                activeOpacity={0.84}
+                onPress={() => onSelect(phrase.id)}
+                style={{
+                  minHeight: 42,
+                  borderRadius: 999,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  backgroundColor: '#f5d27a',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: '#1a1207', fontSize: 14, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' }}>
+                  {phrase.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </RNModal>
+  );
+}
+
 function TurnTransition() {
   const { t, isRTL } = useLocale();
   const ta = isRTL ? 'right' : 'left';
@@ -14872,7 +15135,7 @@ function TurnTransition() {
   const turnScreenHeight = webGameLayout?.frameHeight ?? responsive.height;
   const playfieldFrameHeight = webGameLayout?.frameHeight ?? responsive.height;
   const playfieldContentScale = webGameLayout?.contentScale ?? 1;
-  const turnHeaderLift = Platform.OS === 'web' ? 0 : -65;
+  const turnHeaderLift = 0;
   const swapTurnHeaderSidesOnAndroid = Platform.OS === 'android';
   const turnHeaderRowDirection = 'row';
   const turnHeaderMetaAlign = swapTurnHeaderSidesOnAndroid ? 'flex-start' : 'flex-end';
@@ -14884,11 +15147,15 @@ function TurnTransition() {
   const handBottomOffset = webGameLayout?.handBottom ?? nativeGameLayout?.handBottom ?? HAND_BOTTOM_OFFSET;
   const handInnerHeight = webGameLayout?.fanViewportHeight ?? HAND_INNER_HEIGHT;
   const handStripHeight = webGameLayout?.handStripHeight ?? HAND_STRIP_HEIGHT;
-  const goldActionButtonTop = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, responsive.height - Math.max(HAND_BOTTOM_OFFSET - 100, 60));
-  const tableTop = webGameLayout?.tableTop ?? nativeGameLayout?.tableTop ?? EQUATION_TABLE_TOP;
-  const tableHeight = webGameLayout?.tableHeight ?? nativeGameLayout?.tableHeight ?? 240;
-  const tableWidth = webGameLayout?.tableWidth ?? Math.max(320, turnScreenWidth - 24);
   const handTop = turnScreenHeight - (handBottomOffset + handStripHeight);
+  const goldActionButtonTopBase = webGameLayout?.goldActionButtonTop ?? nativeGameLayout?.goldActionButtonTop ?? Math.max(96, responsive.height - Math.max(HAND_BOTTOM_OFFSET - 100, 60));
+  const nativeActionBelowFanTop = Math.min(
+    turnScreenHeight - 64,
+    Math.max(goldActionButtonTopBase, handTop + handStripHeight + 96),
+  );
+  const goldActionButtonTop = Platform.OS === 'android'
+    ? nativeActionBelowFanTop
+    : goldActionButtonTopBase;
   const compactAndroidReadyButton = Platform.OS === 'android';
   const compactIosReadyButton = Platform.OS === 'ios';
   const readyButtonWidth = compactAndroidReadyButton
@@ -14901,9 +15168,15 @@ function TurnTransition() {
   const readyButtonTimerSize = compactAndroidReadyButton ? 52 : compactIosReadyButton ? 56 : 58;
   const readyButtonGap = compactAndroidReadyButton ? 8 : compactIosReadyButton ? 9 : 10;
   const readyButtonTimerSide = 'left';
+  // כפתור "אני מוכן" — אותו מיקום כמו כפתור הקוביות המוזהב: מתחת למניפה (גם ב-iOS),
+  // +60 מצמיד אותו ממש מתחת לבליטת הקלפים, עם clamp שלא יֵצא מהמסך.
+  const readyButtonBelowFanTop = Math.min(
+    turnScreenHeight - 64,
+    Math.max(goldActionButtonTop, handTop + handStripHeight + 60),
+  );
   const readyButtonTop = Platform.OS === 'web' && !mobileWebViewport
     ? getWebTurnTransitionReadyButtonTop(goldActionButtonTop, handTop, readyButtonHeight)
-    : goldActionButtonTop;
+    : readyButtonBelowFanTop;
   const compactWebHud = Platform.OS === 'web' && !mobileWebViewport;
   const hudButtonWidth = compactWebHud ? clamp(Math.round(turnScreenWidth * 0.05), 64, 70) : 72;
   const hudButtonHeight = compactWebHud ? 30 : 32;
@@ -14930,42 +15203,8 @@ function TurnTransition() {
     (turnTransitionBackdrop.gradientColors && turnTransitionBackdrop.gradientColors.length >= 2
       ? turnTransitionBackdrop.gradientColors
       : ['#0a1628', '#10213a']) as [string, string, ...string[]];
-  const turnDefaultTableSurface = resolveGameTableSurface(null, pokerTableImg, {
-    fallbackPresentation: tableThemeId === 'classic' ? 'framed' : 'fill',
-    platform: Platform.OS,
-  });
-  const turnTableSurface = activeTableSkin
-    ? resolveGameTableSurface(activeTableSkin, pokerTableImg, { platform: Platform.OS })
-    : tableThemeId === 'classic'
-      ? turnDefaultTableSurface
-      : null;
-  const turnFramedTableSurface = turnTableSurface?.presentation === 'framed' ? turnTableSurface : null;
-  const turnTableBaseGradient = !activeTableSkin && tableThemeId !== 'classic' ? table.gradient : null;
-  const turnTableShellStyle = {
-    alignSelf: 'center' as const,
-    width: tableWidth,
-    height: tableHeight,
-    overflow: 'visible' as const,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  };
-  const turnTableStageStyle = {
-    alignSelf: 'center' as const,
-    width: tableWidth,
-    height: tableHeight,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    overflow: 'hidden' as const,
-    borderRadius: tableHeight / 2,
-  };
-  const turnTableStageImageStyle = {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    width: tableWidth,
-    height: tableHeight,
-  };
   const soundOn = state.soundsEnabled !== false;
+  const screenAwakeOn = state.screenAwakeEnabled !== false;
   const mp = useMultiplayerOptional();
   const { profile, consumeSlinda, consumeWild } = useAuth();
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
@@ -14983,6 +15222,7 @@ function TurnTransition() {
     !!mp?.gameOverride && typeof myPlayerIndex === 'number' && (state.currentPlayerIndex !== myPlayerIndex || isEliminatedSpectator);
   const isMyTurnOnline =
     !!mp?.gameOverride && typeof myPlayerIndex === 'number' && state.currentPlayerIndex === myPlayerIndex && !isEliminatedSpectator;
+  const currentServerPlayerId = mp?.serverState?.players?.[state.currentPlayerIndex]?.id ?? null;
   const isLocalBotTurn =
     !mp?.gameOverride &&
     !!(
@@ -14992,9 +15232,27 @@ function TurnTransition() {
       state.phase !== 'game-over'
     );
   const lockUiForBotTurn = isLocalBotTurn && !state.isTutorial;
+  const hideCurrentBotTurnChip = currentPlayerIsBot && !state.isTutorial;
   const showOnlineBotDifficultyBtn = !!mp?.gameOverride && state.hostBotDifficulty != null;
   const currentIdx = state.currentPlayerIndex;
   const lastPlayerIndex = (state.currentPlayerIndex - 1 + state.players.length) % Math.max(state.players.length, 1);
+  const lastPlayerWasBot = state.players[lastPlayerIndex]?.isBot === true;
+  const shouldHoldAfterLocalBotTurn =
+    !mp?.gameOverride &&
+    state.phase === 'turn-transition' &&
+    !state.isTutorial &&
+    lastPlayerWasBot &&
+    !currentPlayerIsBot;
+  const botToHumanTransitionKey = shouldHoldAfterLocalBotTurn
+    ? `${state.roundsPlayed}:${lastPlayerIndex}->${state.currentPlayerIndex}`
+    : null;
+  const [botToHumanHoldUntil, setBotToHumanHoldUntil] = useState<number | null>(null);
+  const [botToHumanHoldNowMs, setBotToHumanHoldNowMs] = useState(() => Date.now());
+  const [botToHumanHoldDoneKey, setBotToHumanHoldDoneKey] = useState<string | null>(null);
+  const holdReadyButtonAfterBotTurn =
+    shouldHoldAfterLocalBotTurn &&
+    botToHumanTransitionKey !== botToHumanHoldDoneKey &&
+    (botToHumanHoldUntil == null || botToHumanHoldNowMs < botToHumanHoldUntil);
   const turnCoinsEarned = getTurnCoinsEarned(state);
   const showTurnCoinCelebration = shouldShowTurnCoinCelebration(state);
   const turnCoinCelebrationTitle =
@@ -15024,6 +15282,8 @@ function TurnTransition() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [onlineBotDiffOpen, setOnlineBotDiffOpen] = useState(false);
   const [cardsCatalogOpen, setCardsCatalogOpen] = useState(false);
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
+  const [quickChatSentTurnKey, setQuickChatSentTurnKey] = useState<string | null>(null);
   /** כפתור "אני מוכן" זמין במסך מעבר תור, חוץ מהתראה חוסמת שדורשת אישור. */
   const beginTurnEnabled = true;
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
@@ -15041,6 +15301,7 @@ function TurnTransition() {
   const [startTurnNowMs, setStartTurnNowMs] = useState(() => Date.now());
   const turnPhaseRef = useRef(state.phase);
   const turnPlayerIdxRef = useRef(state.currentPlayerIndex);
+  const botToHumanHoldKeyRef = useRef<string | null>(null);
   const beginReadyBlinkOpacity = useRef(new Animated.Value(1)).current;
   const beginReadyBlinkLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const overflowSwapActive =
@@ -15156,6 +15417,33 @@ function TurnTransition() {
     turnPlayerIdxRef.current = state.currentPlayerIndex;
   }, [state.phase, state.currentPlayerIndex]);
   useEffect(() => {
+    if (!botToHumanTransitionKey) {
+      botToHumanHoldKeyRef.current = null;
+      setBotToHumanHoldUntil(null);
+      setBotToHumanHoldDoneKey(null);
+      return;
+    }
+    if (botToHumanHoldKeyRef.current !== botToHumanTransitionKey) {
+      botToHumanHoldKeyRef.current = botToHumanTransitionKey;
+      const holdUntil = Date.now() + BOT_TO_HUMAN_TURN_TRANSITION_HOLD_MS;
+      setBotToHumanHoldNowMs(Date.now());
+      setBotToHumanHoldUntil(holdUntil);
+    }
+  }, [botToHumanTransitionKey]);
+  useEffect(() => {
+    if (botToHumanHoldUntil == null) return;
+    const id = setInterval(() => setBotToHumanHoldNowMs(Date.now()), 100);
+    const done = setTimeout(() => {
+      setBotToHumanHoldNowMs(Date.now());
+      setBotToHumanHoldUntil(null);
+      setBotToHumanHoldDoneKey(botToHumanTransitionKey);
+    }, Math.max(0, botToHumanHoldUntil - Date.now()));
+    return () => {
+      clearInterval(id);
+      clearTimeout(done);
+    };
+  }, [botToHumanHoldUntil, botToHumanTransitionKey]);
+  useEffect(() => {
     if (!coinCelebrationOverlayActive) return;
     const id = setTimeout(() => setCoinCelebrationOverlayActive(false), 2500);
     return () => clearTimeout(id);
@@ -15179,7 +15467,8 @@ function TurnTransition() {
     if (localStartTurnDeadlineAt == null) {
       startTurnTimeoutFiredRef.current = false;
       const celebrationDelay = showTurnCoinCelebration ? BOT_TURN_COIN_CELEBRATION_HOLD_MS : 0;
-      setLocalStartTurnDeadlineAt(Date.now() + celebrationDelay + START_TURN_TIMER_SECONDS * 1000);
+      const botTurnSummaryDelay = shouldHoldAfterLocalBotTurn ? BOT_TO_HUMAN_TURN_TRANSITION_HOLD_MS : 0;
+      setLocalStartTurnDeadlineAt(Date.now() + celebrationDelay + botTurnSummaryDelay + START_TURN_TIMER_SECONDS * 1000);
       return;
     }
     const deadline = localStartTurnDeadlineAt;
@@ -15191,7 +15480,7 @@ function TurnTransition() {
       setLocalStartTurnDeadlineAt(null);
     }, 180);
     return () => clearInterval(id);
-  }, [state.phase, state.currentPlayerIndex, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride, overflowSwapActive, activeSpecialKind, localStartTurnDeadlineAt, dispatch]);
+  }, [state.phase, state.currentPlayerIndex, isOnlineSpectator, isLocalBotTurn, mp?.gameOverride, overflowSwapActive, activeSpecialKind, localStartTurnDeadlineAt, shouldHoldAfterLocalBotTurn, dispatch]);
   const rawStartTurnDeadlineAt = overflowSwapActive
     ? null
     : (state.isTutorial ? null : (isLocalBotTurn ? null : (isMyTurnOnline ? (state.turnDeadlineAt ?? null) : localStartTurnDeadlineAt)));
@@ -15233,6 +15522,7 @@ function TurnTransition() {
   const shouldBlinkBeginTurn = !!(
     !isOnlineSpectator &&
     !isLocalBotTurn &&
+    !holdReadyButtonAfterBotTurn &&
     beginTurnEnabled &&
     state.phase === 'turn-transition' &&
     startTurnSecsLeft != null &&
@@ -15369,6 +15659,133 @@ function TurnTransition() {
     warnedAtThreeSeconds,
   ]);
   const specialModalLocked = specialModalOpen || specialBusy;
+  const quickChatTurnKey = currentServerPlayerId
+    ? `${state.roundsPlayed}:${state.currentPlayerIndex}:${currentServerPlayerId}`
+    : null;
+  const activeQuickChatBubble = currentServerPlayerId
+    ? mp?.quickChatBubbles.find((bubble) => bubble.playerId === currentServerPlayerId)
+    : undefined;
+  const quickChatBubbleByTurnPlayerIndex = useMemo(() => {
+    const byIndex = new Map<number, QuickChatBubble>();
+    const serverPlayers = mp?.serverState?.players ?? [];
+    const bubbles = mp?.quickChatBubbles ?? [];
+    for (const bubble of bubbles) {
+      const index = serverPlayers.findIndex((player) => player.id === bubble.playerId);
+      if (index >= 0) byIndex.set(index, bubble);
+    }
+    return byIndex;
+  }, [mp?.serverState?.players, mp?.quickChatBubbles]);
+  const latestIncomingQuickChatBubble = useMemo(() => {
+    const bubbles = mp?.quickChatBubbles ?? [];
+    for (let i = bubbles.length - 1; i >= 0; i -= 1) {
+      const bubble = bubbles[i];
+      if (bubble.playerId !== mp?.playerId) return bubble;
+    }
+    return undefined;
+  }, [mp?.playerId, mp?.quickChatBubbles]);
+  const showTurnQuickChat =
+    !!mp?.gameOverride &&
+    state.phase === 'turn-transition' &&
+    !state.isTutorial &&
+    !currentPlayerIsBot;
+  const canUseTurnQuickChat =
+    showTurnQuickChat &&
+    isMyTurnOnline &&
+    !overflowSwapActive &&
+    !specialModalLocked &&
+    quickChatTurnKey != null &&
+    quickChatSentTurnKey !== quickChatTurnKey;
+  const selectTurnQuickChatPhrase = useCallback((phraseId: QuickChatPhraseId) => {
+    setQuickChatOpen(false);
+    if (!canUseTurnQuickChat) return;
+    if (quickChatTurnKey) setQuickChatSentTurnKey(quickChatTurnKey);
+    mp?.sendQuickChatPhrase(phraseId);
+  }, [canUseTurnQuickChat, mp, quickChatTurnKey]);
+  const screenAwakeLabel = screenAwakeOn
+    ? (isRTL ? 'מסך דולק' : 'Screen on')
+    : (isRTL ? 'מסך רגיל' : 'Can sleep');
+  const screenAwakeToggle = !state.isTutorial ? (
+    <SalindaButton
+      testID="turn-screen-awake-toggle"
+      text={screenAwakeLabel}
+      color={screenAwakeOn ? 'blue' : 'red'}
+      width={compactWebHud ? 126 : 146}
+      height={compactWebHud ? 38 : 42}
+      fontSize={compactWebHud ? 12 : 13}
+      hideText
+      accessibilityLabel={screenAwakeOn ? 'Screen stays awake' : 'Screen can sleep'}
+      style={{ alignSelf: turnHeaderMetaAlign, marginTop: 7, ...turnHeaderChipMarginSide }}
+      overlayContent={
+        <View
+          style={{
+            flexDirection: isRTL ? 'row-reverse' : 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingHorizontal: 8,
+          }}
+        >
+          <SalindaScreenAwakeIcon enabled={screenAwakeOn} size={compactWebHud ? 26 : 28} />
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+            style={{
+              color: '#F8FAFC',
+              fontSize: compactWebHud ? 11 : 12,
+              lineHeight: compactWebHud ? 14 : 15,
+              fontWeight: '900',
+              textAlign: 'center',
+              writingDirection: isRTL ? 'rtl' : 'ltr',
+              textShadowColor: 'rgba(0,0,0,0.45)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 2,
+              maxWidth: compactWebHud ? 76 : 88,
+            }}
+          >
+            {screenAwakeLabel}
+          </Text>
+        </View>
+      }
+      onPress={() => {
+        const next = !screenAwakeOn;
+        dispatch({ type: 'SET_SCREEN_AWAKE_ENABLED', enabled: next });
+        AsyncStorage.setItem(SCREEN_AWAKE_STORAGE_KEY, next ? 'true' : 'false');
+      }}
+    />
+  ) : null;
+  const quickChatToggle = showTurnQuickChat ? (
+    <TouchableOpacity
+      testID="turn-quick-chat-open"
+      activeOpacity={0.84}
+      disabled={!canUseTurnQuickChat}
+      onPress={() => {
+        if (!canUseTurnQuickChat) return;
+        setQuickChatOpen(true);
+      }}
+      accessibilityLabel="Quick chat"
+      style={{
+        alignSelf: turnHeaderMetaAlign,
+        marginTop: 7,
+        minWidth: compactWebHud ? 118 : 136,
+        height: compactWebHud ? 36 : 40,
+        borderRadius: 999,
+        paddingHorizontal: 14,
+        backgroundColor: canUseTurnQuickChat ? '#f5d27a' : 'rgba(245,210,122,0.34)',
+        borderWidth: 1.5,
+        borderColor: canUseTurnQuickChat ? 'rgba(255,255,255,0.38)' : 'rgba(245,210,122,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: canUseTurnQuickChat ? 0.24 : 0.1,
+        shadowRadius: 7,
+        shadowOffset: { width: 0, height: 3 },
+        ...turnHeaderChipMarginSide,
+      }}
+    >
+      <Text style={{ fontSize: compactWebHud ? 15 : 16, lineHeight: compactWebHud ? 18 : 20, opacity: canUseTurnQuickChat ? 1 : 0.48 }}>💬</Text>
+    </TouchableOpacity>
+  ) : null;
   const selectedSpecialCard = selectedSpecialCardId
     ? sorted.find((card) => card.id === selectedSpecialCardId) ?? null
     : null;
@@ -15734,53 +16151,6 @@ function TurnTransition() {
           style={StyleSheet.absoluteFill}
         />
       )}
-      {!state.isTutorial ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: tableTop,
-            left: 0,
-            right: 0,
-            zIndex: 1,
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'stretch',
-            transform: [{ translateX: EQUATION_TABLE_SHIFT_X }],
-          }}
-        >
-          <View style={turnTableShellStyle}>
-            {turnFramedTableSurface ? (
-              <Image
-                source={turnFramedTableSurface.source as any}
-                resizeMode={turnFramedTableSurface.resizeMode}
-                style={turnTableStageImageStyle}
-              />
-            ) : (
-              <View style={turnTableStageStyle}>
-                {turnTableSurface ? (
-                  <Image
-                    source={turnTableSurface.source as any}
-                    resizeMode={turnTableSurface.resizeMode}
-                    style={turnTableStageImageStyle}
-                  />
-                ) : turnTableBaseGradient ? (
-                  <LinearGradient
-                    colors={turnTableBaseGradient}
-                    style={turnTableStageImageStyle}
-                  />
-                ) : (
-                  <Image
-                    source={turnDefaultTableSurface.source as any}
-                    resizeMode={turnDefaultTableSurface.resizeMode}
-                    style={turnTableStageImageStyle}
-                  />
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-      ) : null}
       {lockUiForBotTurn ? (
         <View
           pointerEvents="auto"
@@ -15793,13 +16163,14 @@ function TurnTransition() {
         style={{ flex: 1, paddingTop: HEADER_PAD, paddingBottom: Math.max(safeBottom, 20), overflow: 'visible' }}
       >
       {/* ?? Header — מצב נקי אחרי תור ראשון: רק יציאה/טורניר/מד ושחקנים ?? */}
-      <View pointerEvents="box-none" style={{flexDirection:turnHeaderRowDirection,alignItems:'flex-start',justifyContent:'space-between',paddingHorizontal:12,paddingTop: safe.top || 6,paddingBottom:6}}>
+      <View pointerEvents="box-none" style={{flexDirection:turnHeaderRowDirection,alignItems:'flex-start',justifyContent:'space-between',paddingHorizontal:12,paddingTop: Platform.OS === 'web' ? (safe.top || 6) : getScreenSafeTop(safe.top),paddingBottom:6}}>
         {swapTurnHeaderSidesOnAndroid ? (
           <View pointerEvents="box-none" style={{flexDirection:'column',alignItems:turnHeaderMetaAlign,gap:2,flex:1,minWidth:0,marginTop:turnHeaderLift,...turnHeaderMetaMarginSide}}>
             {/* תגי מידע (שברים/טיימר/פתרון תרגיל) הועברו לטורניר — שורות 446, 458, 461 ב-TournamentInfoModal */}
-            <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'center',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
+            <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'flex-start',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
               {!state.isTutorial && displayPlayers.map((p) => {
                 const isCurrent = cp?.id === p.id;
+                if (hideCurrentBotTurnChip && isCurrent) return null;
                 const isEliminated = (p as any).isEliminated === true;
                 const baseName = p.name || 'שחקן';
                 const showExtendedBlueChip = !isCurrent && !isEliminated;
@@ -15819,6 +16190,7 @@ function TurnTransition() {
                     width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
                     height={turnPlayerChipHeight}
                     fontSize={turnPlayerChipFontSize}
+                    testID={isCurrent ? 'turn-current-player-chip' : undefined}
                     onPress={() => {
                       if (!p.isBot) return;
                       if (!isDefaultPlayerName(p.name)) return;
@@ -15829,15 +16201,25 @@ function TurnTransition() {
                     }}
                   />
                 );
+                const chipPlayerIndex =
+                  typeof p.id === 'number'
+                    ? p.id
+                    : state.players.findIndex((candidate) => candidate.id === p.id);
+                const chipQuickChatBubble =
+                  chipPlayerIndex >= 0 ? quickChatBubbleByTurnPlayerIndex.get(chipPlayerIndex) : undefined;
                 if (isCurrent) {
                   return (
-                    <View key={p.id} style={playerTurnChipActiveRing}>
-                      {btn}
+                    <View key={p.id} style={{ alignItems: 'center', gap: 4 }}>
+                      {chipQuickChatBubble ?? activeQuickChatBubble ? <QuickChatTurnBubble bubble={(chipQuickChatBubble ?? activeQuickChatBubble)!} compact={compactWebHud || turnScreenWidth < 390} /> : null}
+                      <View style={playerTurnChipActiveRing}>
+                        {btn}
+                      </View>
                     </View>
                   );
                 }
                 return (
-                  <View key={p.id}>
+                  <View key={p.id} style={{ alignItems: 'center', gap: 4 }}>
+                    {chipQuickChatBubble ? <QuickChatTurnBubble bubble={chipQuickChatBubble} compact={compactWebHud || turnScreenWidth < 390} /> : null}
                     {btn}
                   </View>
                 );
@@ -15848,6 +16230,8 @@ function TurnTransition() {
                 </TouchableOpacity>
               )}
             </View>
+            {screenAwakeToggle}
+            {quickChatToggle}
             {showSlindaSlot || showWildSlot ? (
               <View style={{ alignSelf: turnHeaderMetaAlign, marginTop: 9, flexDirection: turnHeaderSpecialRowDirection, alignItems: 'center', gap: 8, ...turnHeaderChipMarginSide }}>
                 {showSlindaSlot ? (
@@ -15871,6 +16255,7 @@ function TurnTransition() {
             hideText
             overlayContent={<SalindaExitIcon size={Math.max(24, hudExitButtonFontSize + 11)} />}
             accessibilityLabel={t('tutorial.exit')}
+            testID="turn-exit"
             onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }}
             style={{ marginBottom: -8 }}
           />
@@ -15888,27 +16273,13 @@ function TurnTransition() {
               style={{ marginBottom: -4 }}
             />
           ) : null}
-          <SalindaButton
-            text={soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON}
-            color="blue"
-            width={hudSoundButtonWidth}
-            height={hudButtonHeight}
-            fontSize={hudSoundFontSize}
-            hideText
-            overlayContent={<SalindaAudioIcon variant={soundOn ? 'sound-on' : 'sound-off'} size={Math.max(22, hudSoundFontSize + 6)} />}
-            onPress={() => {
-              const next = !soundOn;
-              dispatch({ type: 'SET_SOUNDS_ENABLED', enabled: next });
-              AsyncStorage.setItem(SOUNDS_ENABLED_STORAGE_KEY, next ? 'true' : 'false');
-            }}
-          />
           {!state.isTutorial && (() => {
             const meterPlayer =
               (cp && !currentPlayerIsBot ? cp : null) ??
               state.players.find(p => !p.isBot) ??
               (state.players.length === 1 ? state.players[0] : null);
             return meterPlayer ? (
-              <View style={{ marginTop: 10, alignItems: 'center', gap: 4, marginLeft: compactWebHud ? -6 : -11 }}>
+              <View style={{ marginTop: -2, alignItems: 'center', gap: 4, marginLeft: compactWebHud ? -6 : -11 }}>
                 <ExcellenceMeter
                   value={meterPlayer.courageMeterPercent ?? 0}
                   pulseKey={meterPlayer.courageRewardPulseId ?? 0}
@@ -15924,9 +16295,10 @@ function TurnTransition() {
         {!swapTurnHeaderSidesOnAndroid ? (
         <View pointerEvents="box-none" style={{flexDirection:'column',alignItems:turnHeaderMetaAlign,gap:2,flex:1,minWidth:0,marginTop:turnHeaderLift,...turnHeaderMetaMarginSide}}>
           {/* תגי מידע (שברים/טיימר/פתרון תרגיל) הועברו לטורניר — שורות 446, 458, 461 ב-TournamentInfoModal */}
-          <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'center',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
+          <View style={{flexDirection:turnHeaderChipRowDirection,alignItems:'flex-start',gap:4,flexWrap:'wrap',justifyContent:turnHeaderChipJustify,alignSelf:turnHeaderMetaAlign,marginTop:2,...turnHeaderChipMarginSide}}>
             {!state.isTutorial && displayPlayers.map((p) => {
               const isCurrent = cp?.id === p.id;
+              if (hideCurrentBotTurnChip && isCurrent) return null;
               const isEliminated = (p as any).isEliminated === true;
               const baseName = p.name || 'שחקן';
               const showExtendedBlueChip = !isCurrent && !isEliminated;
@@ -15946,6 +16318,7 @@ function TurnTransition() {
                   width={showExtendedBlueChip ? turnPlayerChipBlueWidth : turnPlayerChipWidth}
                   height={turnPlayerChipHeight}
                   fontSize={turnPlayerChipFontSize}
+                  testID={isCurrent ? 'turn-current-player-chip' : undefined}
                   onPress={() => {
                     if (!p.isBot) return;
                     if (!isDefaultPlayerName(p.name)) return;
@@ -15956,15 +16329,25 @@ function TurnTransition() {
                   }}
                 />
               );
+              const chipPlayerIndex =
+                typeof p.id === 'number'
+                  ? p.id
+                  : state.players.findIndex((candidate) => candidate.id === p.id);
+              const chipQuickChatBubble =
+                chipPlayerIndex >= 0 ? quickChatBubbleByTurnPlayerIndex.get(chipPlayerIndex) : undefined;
               if (isCurrent) {
                 return (
-                  <View key={p.id} style={playerTurnChipActiveRing}>
-                    {btn}
+                  <View key={p.id} style={{ alignItems: 'center', gap: 4 }}>
+                    {chipQuickChatBubble ?? activeQuickChatBubble ? <QuickChatTurnBubble bubble={(chipQuickChatBubble ?? activeQuickChatBubble)!} compact={compactWebHud || turnScreenWidth < 390} /> : null}
+                    <View style={playerTurnChipActiveRing}>
+                      {btn}
+                    </View>
                   </View>
                 );
               }
               return (
-                <View key={p.id}>
+                <View key={p.id} style={{ alignItems: 'center', gap: 4 }}>
+                  {chipQuickChatBubble ? <QuickChatTurnBubble bubble={chipQuickChatBubble} compact={compactWebHud || turnScreenWidth < 390} /> : null}
                   {btn}
                 </View>
               );
@@ -15975,6 +16358,8 @@ function TurnTransition() {
               </TouchableOpacity>
             )}
           </View>
+          {screenAwakeToggle}
+          {quickChatToggle}
             {showSlindaSlot || showWildSlot ? (
               <View style={{ alignSelf: turnHeaderMetaAlign, marginTop: 9, flexDirection: turnHeaderSpecialRowDirection, alignItems: 'center', gap: 8, ...turnHeaderChipMarginSide }}>
                 {showSlindaSlot ? (
@@ -16338,6 +16723,29 @@ function TurnTransition() {
         ) : null}
       </View>
 
+      <QuickChatPhraseSheet
+        visible={quickChatOpen && canUseTurnQuickChat}
+        onClose={() => setQuickChatOpen(false)}
+        onSelect={selectTurnQuickChatPhrase}
+      />
+
+      {!!mp?.gameOverride && state.phase === 'turn-transition' && latestIncomingQuickChatBubble ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: Math.max((safe.top || 0) + 96, 118),
+            left: 14,
+            right: 14,
+            zIndex: 10004,
+            alignItems: 'center',
+            ...(Platform.OS === 'android' ? { elevation: 28 } : {}),
+          }}
+        >
+          <QuickChatTurnBubble bubble={latestIncomingQuickChatBubble} compact={turnScreenWidth < 390} />
+        </View>
+      ) : null}
+
       {overflowSwapActive && !isOnlineSpectator && !isLocalBotTurn && (
         <View
           pointerEvents="box-none"
@@ -16374,7 +16782,7 @@ function TurnTransition() {
         </View>
       )}
 
-      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && !overflowSwapActive && !holdReadyButtonForNotification && (
+      {!isOnlineSpectator && !isLocalBotTurn && !state.isTutorial && !overflowSwapActive && !holdReadyButtonForNotification && !holdReadyButtonAfterBotTurn && (
         <View
           pointerEvents="box-none"
           style={{
@@ -16744,7 +17152,7 @@ async function clearAllSalindaOnboardingKeys(): Promise<void> {
 
 function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const { state, dispatch } = useGame();
-  const shouldKeepAwake = state.phase !== 'setup' && state.phase !== 'game-over';
+  const shouldKeepAwake = state.screenAwakeEnabled !== false && state.phase !== 'setup' && state.phase !== 'game-over';
   const overflowSwapActive =
     (state.phase === 'turn-transition' ||
       state.phase === 'pre-roll' ||
@@ -18527,6 +18935,10 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const showBelowTablePossibleResults =
     showPossibleResultsPhaseUi &&
     (!swapPossibleResultsPositionsOnAndroid || showPossibleResultsButton);
+  const hideLeftHudMeterForResultsDock =
+    showTopResultsDock ||
+    showBelowTablePossibleResults ||
+    showSolveChipNearPile;
   const wildResultsGuidanceCountRef = useRef(0);
   useEffect(() => {
     wildResultsGuidanceCountRef.current = 0;
@@ -18649,6 +19061,13 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   );
   const nativeActionCompaction = nativeGameLayout?.compactRatio ?? 0;
   const handTop = playfieldFrameHeight - handBottomOffset - handStripHeight;
+  // כפתור הטלת הקוביות תמיד מתחת למניפה (גם ב-iOS, לא רק Android).
+  // handTop + handStripHeight = תחתית רצועת המניפה; +60 מצמיד אותו ממש מתחת לבליטת
+  // הקלפים (כמעט נוגע), עם clamp שלא יֵצא מהמסך.
+  const goldDiceButtonTop = Math.min(
+    playfieldFrameHeight - 66,
+    Math.max(goldActionButtonTop, handTop + handStripHeight + 60),
+  );
   const floatingActionMinTop = tableTop + tableHeight + 12;
   const floatingActionOverlapAllowance = Platform.OS === 'web' && !mobileWebViewport
     ? -18
@@ -18675,7 +19094,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const bottomPad = handBottomOffset + handStripHeight + safe.SAFE_BOTTOM_PAD;
   const topControlsTop = safe.insets.top || 6;
   const botOverlayTopOffset = topControlsTop + 86;
-  const topControlsLift = Platform.OS === 'web' ? 0 : isAndroid ? -28 : -65;
+  const topControlsLift = 0;
   const discardPileTop = isAndroid
     ? Math.max(12, topControlsTop + topControlsLift + 2)
     : (Platform.OS === 'web' && mobileWebViewport)
@@ -18806,7 +19225,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               onPress={()=>{ if (state.isTutorial) tutorialBus.emitRequestExit(); else dispatch({type:'RESET_GAME'}); }}
               style={{ marginBottom: -8 }}
             />
-            {!state.isTutorial && (() => {
+            {!state.isTutorial && !hideLeftHudMeterForResultsDock && (() => {
               const meterPlayer =
                 (cp && !cp.isBot ? cp : null) ??
                 state.players.find(p => !p.isBot) ??
@@ -18830,7 +19249,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             })()}
             {!state.isTutorial && state.timerSetting !== 'off' && (
               <SalindaButton
-                text={`? ${secsLeft ?? 0}`}
+                text={`${secsLeft ?? 0}`}
                 color={secsLeft <= 5 && timerRunning ? 'red' : 'blue'}
                 width={hudButtonWidth}
                 height={hudButtonHeight}
@@ -18954,7 +19373,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
               </Text>
             </Animated.View>
           ) : null}
-          {!swapPossibleResultsPositionsOnAndroid && showPossibleResultsButton ? (
+          {!swapPossibleResultsPositionsOnAndroid && showPossibleResultsButton && !showSolveChipNearPile ? (
             <ResultsSlot
               onToggle={toggleResultsBadges}
               filteredResults={filteredResultsForHand}
@@ -19179,7 +19598,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
             <View style={{ backgroundColor: 'rgba(15,23,42,0.97)', borderRadius: 20, padding: 24, borderWidth: 1.5, borderColor: 'rgba(250,204,21,0.45)', alignItems: 'center', gap: 10 }}>
               <FuseTimer totalTime={TIMER_TOTAL} secsLeft={secsLeft} running={timerRunning} />
               <Text style={{ color: '#FDE68A', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
-                ? {secsLeft ?? 0} {t('ui.seconds')}
+                {secsLeft ?? 0} {t('ui.seconds')}
               </Text>
               {showSmallTurnTimerHint ? (
                 <Text style={{ color: '#FDE68A', fontSize: 12, fontWeight: '600', textAlign: 'center', opacity: 0.85, maxWidth: 280, lineHeight: 17 }}>
@@ -19566,7 +19985,7 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
 
       {/* כפתור זהב במיקום אבסולוטי למסך: Y מדויק לפי רשת (עם clamp לגובה המסך כדי לא להיעלם) */}
       {canRoll && (!state.isTutorial || state.showFractions) && (
-        <View testID="dice-area" style={{ position: 'absolute', top: goldActionButtonTop, left: 0, right: 0, zIndex: 25, alignItems: 'center' }} pointerEvents="box-none">
+        <View testID="dice-area" style={{ position: 'absolute', top: goldDiceButtonTop, left: 0, right: 0, zIndex: 25, alignItems: 'center' }} pointerEvents="box-none">
           <View style={{ position: 'relative', alignItems: 'center', overflow: 'visible' }}>
             {showDicePulse && (
               <Animated.View
@@ -20245,9 +20664,11 @@ function botTeachingDelayRange(state: GameState, difficulty: BotDifficulty): { m
     cardStepApply: 60,
   } as const;
 
+  const BOT_TURN_TRANSITION_HOLD_MS = 3200;
+
   // turn-transition: pause so the player can read the summary screen before bot advances.
   if (state.phase === 'turn-transition' && state.botPresentation?.action == null) {
-    return withExtra({ min: 1500, max: 1500 }, BOT_STAGE_DELAY_BONUS.preview);
+    return withExtra({ min: BOT_TURN_TRANSITION_HOLD_MS, max: BOT_TURN_TRANSITION_HOLD_MS }, BOT_STAGE_DELAY_BONUS.preview);
   }
   // All delays shortened by ?? for a snappier feel.
   if (state.botPresentation?.action != null) {
@@ -20261,8 +20682,17 @@ function botTeachingDelayRange(state: GameState, difficulty: BotDifficulty): { m
     return { min: 150, max: 220 };
   }
   if (state.botPostEquationPauseTicks > 0) {
-    // Pause after equation so the player can read the result (~1s total).
-    return withExtra({ min: 330, max: 380 }, BOT_STAGE_DELAY_BONUS.postEquationTick);
+    // Hold on Salinda's solved equation before staging cards so the result is readable.
+    return { min: 1000, max: 1000 };
+  }
+  if (
+    state.phase === 'solved' &&
+    !state.hasPlayedCards &&
+    state.botPendingStagedIds != null &&
+    state.botPostEquationHoldUntil != null
+  ) {
+    const remainingMs = Math.max(0, state.botPostEquationHoldUntil - Date.now());
+    return { min: remainingMs, max: remainingMs };
   }
   if (state.botDicePausePending) {
     return withExtra({ min: 1000, max: 1000 }, BOT_STAGE_DELAY_BONUS.dicePause);
@@ -20529,8 +20959,16 @@ function NotificationZone() {
   const viewportHeight = Platform.OS === 'web'
     ? viewport.height
     : Dimensions.get('window').height;
+  const viewportWidth = Platform.OS === 'web'
+    ? viewport.width
+    : Dimensions.get('window').width;
+  const openingDrawCompact = isOpeningDrawNotif && viewportWidth < 430;
+  const openingDrawMaxWidth = Math.min(Math.max(0, viewportWidth - 32), openingDrawCompact ? 340 : 380);
+  const openingDrawTitleFontSize = openingDrawCompact ? 28 : 32;
+  const openingDrawBodyFontSize = openingDrawCompact ? 16 : 17;
+  const openingDrawBodyLineHeight = openingDrawCompact ? 22 : 24;
   const notifTop = isOpeningDrawNotif
-    ? Math.round(viewportHeight * 0.36)
+    ? Math.round(viewportHeight * (openingDrawCompact ? 0.32 : 0.34))
     : Math.max(16, (insets.top || 0) + 12);
   const notifViewportReserve = needsAck ? 150 : 108;
   const availableNotifHeight = Math.max(156, viewportHeight - bottomPos - notifTop - 12);
@@ -20567,10 +21005,12 @@ function NotificationZone() {
         <View style={[alertBubbleStyle.box, {
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 12,
+          gap: isOpeningDrawNotif ? 8 : 12,
           width: '100%',
-          maxWidth: isFractionChallengeNotif || isOpeningDrawNotif ? 360 : 320,
+          maxWidth: isOpeningDrawNotif ? openingDrawMaxWidth : isFractionChallengeNotif ? 360 : 320,
           maxHeight: isOpeningDrawNotif ? undefined : availableNotifHeight,
+          paddingVertical: isOpeningDrawNotif ? (openingDrawCompact ? 14 : 16) : alertBubbleStyle.box.paddingVertical,
+          paddingHorizontal: isOpeningDrawNotif ? (openingDrawCompact ? 14 : 18) : alertBubbleStyle.box.paddingHorizontal,
           backgroundColor: isWildResultsPurple
             ? 'rgba(109,40,217,0.94)'
             : isOpeningDrawNotif
@@ -20611,12 +21051,14 @@ function NotificationZone() {
               <View style={{ position: 'absolute', bottom: 10, left: 28, width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' }} />
             </>
           )}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {notif.emoji && !needsAck ? <Text style={{ fontSize: isOpeningDrawNotif ? 42 : 26 }}>{notif.emoji}</Text> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isOpeningDrawNotif ? 10 : 8, flexWrap: 'wrap' }}>
+            {notif.emoji && !needsAck ? <Text style={{ fontSize: isOpeningDrawNotif ? (openingDrawCompact ? 56 : 64) : 26, lineHeight: isOpeningDrawNotif ? (openingDrawCompact ? 60 : 68) : undefined }}>{notif.emoji}</Text> : null}
             <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-              <Text style={[alertBubbleStyle.title, { marginBottom: displayBody ? 4 : 0, fontSize: isOpeningDrawNotif ? 22 : undefined, color: (isResultsNotifGreen || isWildResultsPurple) ? '#F0FDF4' : isOpeningDrawNotif ? '#FEF3C7' : alertBubbleStyle.title.color, textShadowColor: (isResultsNotifGreen || isWildResultsPurple || isOpeningDrawNotif) ? 'rgba(0,0,0,0.35)' : 'transparent', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: (isResultsNotifGreen || isWildResultsPurple || isOpeningDrawNotif) ? 2 : 0 }]}>{displayTitle}</Text>
+              <Text style={[alertBubbleStyle.title, { marginBottom: displayBody ? 4 : 0, fontSize: isOpeningDrawNotif ? openingDrawTitleFontSize : undefined, lineHeight: isOpeningDrawNotif ? openingDrawTitleFontSize + 4 : undefined, color: (isResultsNotifGreen || isWildResultsPurple) ? '#F0FDF4' : isOpeningDrawNotif ? '#FEF3C7' : alertBubbleStyle.title.color, textShadowColor: (isResultsNotifGreen || isWildResultsPurple || isOpeningDrawNotif) ? 'rgba(0,0,0,0.35)' : 'transparent', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: (isResultsNotifGreen || isWildResultsPurple || isOpeningDrawNotif) ? 2 : 0 }]}>{displayTitle}</Text>
 
-              {!!displayBody && (
+              {!!displayBody && isOpeningDrawNotif ? (
+                <Text style={[alertBubbleStyle.body, { alignSelf: 'stretch', fontSize: openingDrawBodyFontSize, lineHeight: openingDrawBodyLineHeight, color: '#FEF9C3', fontWeight: '800', textAlign: 'center', writingDirection: 'rtl' }]}>{displayBody}</Text>
+              ) : !!displayBody && (
                 <ScrollView
                   style={{ maxHeight: notifBodyMaxH, alignSelf: 'stretch' }}
                   contentContainerStyle={{ flexGrow: 1 }}
@@ -20624,7 +21066,7 @@ function NotificationZone() {
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator
                 >
-                  <Text style={[alertBubbleStyle.body, { fontSize: isOpeningDrawNotif ? 18 : undefined, color: (isResultsNotifGreen || isWildResultsPurple) ? '#F0FDF4' : isOpeningDrawNotif ? '#FEF9C3' : alertBubbleStyle.body.color, fontWeight: (isResultsNotifGreen || isWildResultsPurple || isOpeningDrawNotif) ? '700' : alertBubbleStyle.body.fontWeight }]}>{displayBody}</Text>
+                  <Text style={[alertBubbleStyle.body, { color: (isResultsNotifGreen || isWildResultsPurple) ? '#F0FDF4' : alertBubbleStyle.body.color, fontWeight: (isResultsNotifGreen || isWildResultsPurple) ? '700' : alertBubbleStyle.body.fontWeight }]}>{displayBody}</Text>
                 </ScrollView>
               )}
             </View>
@@ -21310,6 +21752,7 @@ export function PlayModeChoiceScreen({
   onOpenFeedbackInbox,
   onOpenAdminCoinGifts,
   onOpenAnalytics,
+  onOpenRemoteControl,
   preferredName,
   onPreferredNameChange,
   onFeedbackSubmit,
@@ -21321,6 +21764,7 @@ export function PlayModeChoiceScreen({
   onOpenFeedbackInbox: () => void;
   onOpenAdminCoinGifts: () => void;
   onOpenAnalytics: () => void;
+  onOpenRemoteControl: () => void;
   preferredName: string;
   onPreferredNameChange: (name: string) => void;
   onFeedbackSubmit: (payload: { kind: FeedbackExperienceKind; rating: number; comment: string }) => Promise<FeedbackSubmitResult>;
@@ -21366,6 +21810,7 @@ export function PlayModeChoiceScreen({
     position: 'relative',
   } as const;
   const adminCoinsLabel = locale === 'he' ? 'מתנת מטבעות' : 'Gift coins';
+  const remoteControlLabel = locale === 'he' ? 'שלט רחוק' : 'Remote control';
   const closeFeedbackLabel = locale === 'he' ? 'סגור' : 'Close';
   const totalCoins = Math.max(0, Math.floor(Number(profile?.total_coins ?? 0) || 0));
   const showAdminControls = isFeedbackAdmin;
@@ -21670,6 +22115,16 @@ export function PlayModeChoiceScreen({
                   onPress={onOpenAdminCoinGifts}
                   style={{ marginTop: 12, alignSelf: 'center' }}
                 />
+                <SalindaButton
+                  text={remoteControlLabel}
+                  color="orange"
+                  width={220}
+                  height={42}
+                  fontSize={14}
+                  testID="home-remote-control"
+                  onPress={onOpenRemoteControl}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
+                />
               </>
             ) : null}
 
@@ -21703,7 +22158,7 @@ function GameEntryChoiceScreen({
   const menuButtonWidth = compactMainMenu ? 256 : 280;
   const menuButtonHeight = compactMainMenu ? 64 : 72;
   const menuButtonFontSize = compactMainMenu ? 20 : 22;
-  const titleFontSize = compactMainMenu ? 48 : 52;
+  const titleFontSize = 24;
   const placeTopBackOnRightOnAndroid = false;
   const backButtonLabel = locale === 'he'
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
@@ -21776,7 +22231,7 @@ function GameEntryChoiceScreen({
             style={{
               color: '#F8FAFC',
               fontSize: titleFontSize,
-              lineHeight: titleFontSize + 6,
+              lineHeight: 30,
               fontWeight: '900',
               textAlign: 'center',
               marginBottom: compactMainMenu ? 16 : 18,
@@ -21844,7 +22299,7 @@ function FriendsChoiceScreen({
   const menuButtonWidth = compactMainMenu ? 256 : 280;
   const menuButtonHeight = compactMainMenu ? 64 : 72;
   const menuButtonFontSize = compactMainMenu ? 20 : 22;
-  const titleFontSize = compactMainMenu ? 48 : 52;
+  const titleFontSize = 24;
   const placeTopBackOnRightOnAndroid = false;
   const backButtonLabel = locale === 'he'
     ? `${t('gameEntry.back')} ${BACK_ARROW_GLYPH}`
@@ -21920,7 +22375,7 @@ function FriendsChoiceScreen({
             style={{
               color: '#F8FAFC',
               fontSize: titleFontSize,
-              lineHeight: titleFontSize + 6,
+              lineHeight: 30,
               fontWeight: '900',
               textAlign: 'center',
               marginBottom: compactMainMenu ? 16 : 18,
@@ -22207,7 +22662,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
       dispatch({
         type: 'START_GAME',
         mode: 'vs-bot',
-        botDifficulty: settings.botDifficulty ?? 'medium',
+        botDifficulty: settings.botDifficulty ?? 'easy',
         players: [
           { name: humanName, isBot: false },
           { name: botName, isBot: true },
@@ -22219,8 +22674,8 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           : [...ALL_FRACTION_KINDS],
         showPossibleResults: settings.showPossibleResults ?? true,
         showSolveExercise: settings.showSolveExercise ?? true,
-        timerSetting: settings.timerSetting ?? 'off',
-        timerCustomSeconds: settings.timerCustomSeconds ?? 60,
+        timerSetting: settings.timerSetting ?? '90',
+        timerCustomSeconds: settings.timerCustomSeconds ?? 90,
         difficultyStage: difficulty === 'easy' ? 'A' : 'H',
         enabledOperators: settings.enabledOperators && settings.enabledOperators.length > 0
           ? [...settings.enabledOperators]
@@ -22731,6 +23186,7 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
           onOpenFeedbackInbox={() => setPlayMode('feedback-inbox')}
           onOpenAdminCoinGifts={() => openAdminCoinGifts()}
           onOpenAnalytics={() => setPlayMode('analytics')}
+          onOpenRemoteControl={() => setPlayMode('remote-control')}
           preferredName={preferredName}
           onPreferredNameChange={setPreferredName}
           onFeedbackSubmit={submitFeedbackFromPrompt}
@@ -22783,6 +23239,10 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
   } else if (playMode === 'analytics') {
     screen = (
       <AnalyticsScreen onBack={openChooseLobby} />
+    );
+  } else if (playMode === 'remote-control') {
+    screen = (
+      <RemoteControlScreen onBack={openChooseLobby} />
     );
   } else if (playMode === 'admin-coins') {
     screen = (
@@ -23276,9 +23736,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
                 pointerEvents="none"
                 style={{
                   position: 'absolute',
-                  top: 42,
+                  top: 38,
                   left: -12,
-                  minHeight: 116,
+                  minHeight: 112,
                   alignItems: 'center',
                   justifyContent: 'flex-start',
                   overflow: 'visible',
@@ -23455,7 +23915,7 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
           style={StyleSheet.absoluteFill}
         />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <StatusBar style="light" />
+          <StatusBar hidden style="light" />
 
           {/* Floating math operators */}
           {operators.map((op, i) => (
@@ -23728,6 +24188,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
   const insets = useSafeAreaInsets();
   const { locale } = useLocale();
   const isRTL = locale === 'he';
+  const inviteGate = useInviteGate();
   const fullscreenApiSupported =
     Platform.OS === 'web' &&
     typeof document !== 'undefined' &&
@@ -23749,6 +24210,41 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
       insetBottom: insets.bottom,
       showSplash,
     });
+  }, []);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const applyNativeFullscreen = () => {
+      RNStatusBar.setHidden(true, 'fade');
+      if (Platform.OS === 'android') {
+        RNStatusBar.setTranslucent(true);
+        RNStatusBar.setBackgroundColor('#00000000', true);
+        void SystemUI.setBackgroundColorAsync('#0a1628').catch(() => {});
+        void NavigationBar.setBehaviorAsync('overlay-swipe').catch(() => {});
+        void NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+      }
+    };
+
+    applyNativeFullscreen();
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') applyNativeFullscreen();
+    });
+    const visibilitySub = Platform.OS === 'android'
+      ? NavigationBar.addVisibilityListener(({ visibility }) => {
+          if (visibility === 'visible') {
+            setTimeout(applyNativeFullscreen, 900);
+          }
+        })
+      : null;
+    const t1 = setTimeout(applyNativeFullscreen, 250);
+    const t2 = setTimeout(applyNativeFullscreen, 1200);
+
+    return () => {
+      appStateSub.remove();
+      visibilitySub?.remove();
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -23895,16 +24391,30 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
     }
     prevGamePhaseRef.current = gameState.phase;
   }, [gameState.phase, gameState.currentPlayerIndex, gameState.botConfig, activePlayMode, trackEvent]);
-
   const gameContent = (
     <>
-      <StatusBar style="light" backgroundColor="#0a1628" />
+      <StatusBar hidden style="light" backgroundColor="#0a1628" />
       <AmbientBackground playMode={activePlayMode} />
       <GameRouter onPlayModeChange={setActivePlayMode} />
       <NotificationZone />
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
     </>
   );
+
+  // ── שער מוזמנים סגור ─────────────────────────────────────────
+  // לפני שמרנדרים משהו מהמשחק: אם המשתמש לא ברשימת המורשים, מציגים רק
+  // מסך שחור אטום. בזמן טעינה — שחור בלי כפתור (הספלאש מכסה ממילא).
+  if (inviteGate.status !== 'allowed') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <StatusBar hidden style="light" backgroundColor="#000000" />
+        {inviteGate.status === 'denied' ? (
+          <InviteGateScreen reason={inviteGate.reason} />
+        ) : null}
+        {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+      </View>
+    );
+  }
 
   // מובייל: אין paddingBottom כאן — הרקע והמניפה עד קצה המסך; ה-safe התחתון מטופל במסכי המשחק (מניפה + כפתורים)
   if (Platform.OS !== 'web') {
@@ -23913,7 +24423,7 @@ function AppShell({ showSplash, setShowSplash }: { showSplash: boolean; setShowS
         style={{
           flex: 1,
           backgroundColor: '#0a1628',
-          paddingTop: insets.top,
+          paddingTop: 0,
           paddingBottom: 0,
           paddingLeft: insets.left,
           paddingRight: insets.right,

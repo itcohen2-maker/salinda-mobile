@@ -30,6 +30,22 @@ jest.mock('../lib/supabase', () => ({
   },
 }));
 
+const sampleInvite = {
+  total_invited: 2,
+  total_blocked: 1,
+  online_now: 1,
+  invites: [],
+};
+
+// The screen calls two RPCs; route each to the right sample so admin and
+// invite analytics don't collide (e.g. both rendering "7").
+function rpcImpl(fnName: unknown) {
+  if (fnName === 'get_invite_analytics') {
+    return Promise.resolve({ data: sampleInvite, error: null });
+  }
+  return Promise.resolve({ data: sampleStats, error: null });
+}
+
 const sampleStats = {
   online_now: 7,
   online_by_platform: { web: 3, android: 2, ios: 2 },
@@ -111,7 +127,7 @@ describe('AnalyticsScreen', () => {
 
   it('renders live panel with online_now value from RPC', async () => {
     mockUseAdminAccess.mockReturnValue({ isAdmin: true, loading: false });
-    mockRpc.mockResolvedValue({ data: sampleStats, error: null });
+    mockRpc.mockImplementation((fn) => rpcImpl(fn));
 
     render(<AnalyticsScreen onBack={jest.fn()} />);
 
@@ -125,7 +141,7 @@ describe('AnalyticsScreen', () => {
   it('calls rpc again after 10 seconds', async () => {
     jest.useFakeTimers();
     mockUseAdminAccess.mockReturnValue({ isAdmin: true, loading: false });
-    mockRpc.mockResolvedValue({ data: sampleStats, error: null });
+    mockRpc.mockImplementation((fn) => rpcImpl(fn));
 
     render(<AnalyticsScreen onBack={jest.fn()} />);
 

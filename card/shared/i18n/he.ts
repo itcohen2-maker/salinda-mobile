@@ -1381,7 +1381,7 @@ export const he: Record<string, string> = {
   'tutorial.l6.desc': 'הכפתור הירוק מראה אילו תוצאות אפשר להכין מהקוביות, ואז בוחרים תוצאה ומתאימים לה קלפים.',
   // 6.1 — פותחים את הכפתור הירוק
   'tutorial.l6a.botIntro': 'הכפתור הירוק מראה מה אפשר לבנות מהקוביות שעל השולחן. לחצו עליו כדי לפתוח את הרשימה.',
-  'tutorial.l6a.hintTapChip': 'לא מוצאים מהלך? לחצו על הכפתור \'איך להיפטר מקלף?\' כדי לקבל כיוון.',
+  'tutorial.l6a.hintTapChip': 'לא מוצאים מהלך? לחצו על הכפתור \'גלגל הצלה\' כדי לקבל כיוון.',
   'tutorial.l6a.celebrate': '💰 זה מה שיצא! כל מיני-קלף מראה לכם דרך מהירה להיפטר מקלף מהיד.',
   'tutorial.l6a.continue': 'הבנתי, נמשיך!',
   'tutorial.l6a.redChipFeedback': 'כך נפטרים מקלף {{value}}',
@@ -1673,6 +1673,13 @@ export const he: Record<string, string> = {
   'analytics.platformAndroid': 'אנדרואיד',
   'analytics.platformIos': 'iOS',
 
+  'analytics.inviteTitle': 'מוזמנים בלבד',
+  'analytics.inviteInvited': 'מוזמנים',
+  'analytics.inviteOnline': 'מחוברים עכשיו',
+  'analytics.inviteBlocked': 'חסומים',
+  'analytics.inviteStatusInvited': 'מוזמן',
+  'analytics.inviteStatusBlocked': 'חסום',
+  'analytics.inviteNeverSeen': 'לא נכנס עדיין',
   'analytics.activityTitle': 'פעילויות',
   'analytics.gamesPlayed': 'משחקים',
   'analytics.tutorialsCompleted': 'מדריכים',

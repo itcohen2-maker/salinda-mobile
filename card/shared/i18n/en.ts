@@ -1374,7 +1374,7 @@ export const en: Record<string, string> = {
   'tutorial.l6.desc': 'The green button shows which targets you can generate from the dice. Pick one and match your cards to it.',
   // 6.1 — open the green chip
   'tutorial.l6a.botIntro': 'The green button compiles everything you can build from the active dice. Tap it to open the targets list.',
-  'tutorial.l6a.hintTapChip': 'Stuck? Tap the \'Drop a card?\' button to scout your options.',
+  'tutorial.l6a.hintTapChip': 'Stuck? Tap the \'Lifeline\' button to scout your options.',
   'tutorial.l6a.celebrate': '💰 There we go! Each mini-card shows you a quick way to discard a card from your hand.',
   'tutorial.l6a.continue': 'Got it, let\'s go!',
   'tutorial.l6a.button': 'Got it, let\'s go!',
@@ -1666,6 +1666,13 @@ export const en: Record<string, string> = {
   'analytics.platformAndroid': 'Android',
   'analytics.platformIos': 'iOS',
 
+  'analytics.inviteTitle': 'Invited only',
+  'analytics.inviteInvited': 'Invited',
+  'analytics.inviteOnline': 'Online now',
+  'analytics.inviteBlocked': 'Blocked',
+  'analytics.inviteStatusInvited': 'Invited',
+  'analytics.inviteStatusBlocked': 'Blocked',
+  'analytics.inviteNeverSeen': 'Never signed in',
   'analytics.activityTitle': 'Activity',
   'analytics.gamesPlayed': 'Games',
   'analytics.tutorialsCompleted': 'Tutorials',
