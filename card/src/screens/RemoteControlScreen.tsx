@@ -3,14 +3,17 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 import { useAdminAccess } from '../admin/useAdminAccess';
+import { SOCIAL_AUTH_WEB_APP_URL } from '../auth/socialSignIn';
 import { useLocale } from '../i18n/LocaleContext';
 import { supabase } from '../lib/supabase';
 
@@ -40,6 +43,7 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
   const [interval, setIntervalValue] = useState(String(DEFAULT_INTERVAL));
   const [intervalBusy, setIntervalBusy] = useState(false);
   const [banner, setBanner] = useState<{ text: string; tone: BannerTone } | null>(null);
+  const [lastInvited, setLastInvited] = useState<string | null>(null);
 
   const copy = useMemo(() => {
     if (locale === 'he') {
@@ -56,6 +60,12 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
         statusBlocked: 'חסום',
         disconnect: 'נתק',
         restore: 'החזר',
+        sendLink: 'שלח קישור 📲',
+        sendLinkShort: '📲 קישור',
+        shareTitle: 'הזמנה לסלינדה',
+        shareMessage: 'הוזמנת לשחק בסלינדה 🎴\nהיכנס/י מהנייד כאן:',
+        shareWith: 'התחבר/י עם חשבון הגוגל',
+        linkCopied: 'ההזמנה הועתקה — אפשר להדביק ולשלוח בוואטסאפ/SMS.',
         neverSeen: 'לא נכנס עדיין',
         lastSeen: 'נראה לאחרונה',
         intervalTitle: 'תדירות בדיקת ניתוק',
@@ -87,6 +97,12 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
       statusBlocked: 'Blocked',
       disconnect: 'Disconnect',
       restore: 'Restore',
+      sendLink: 'Send link 📲',
+      sendLinkShort: '📲 Link',
+      shareTitle: 'Salinda invite',
+      shareMessage: "You're invited to play Salinda 🎴\nOpen it on your phone here:",
+      shareWith: 'Sign in with the Google account',
+      linkCopied: 'Invite copied — paste it into WhatsApp/SMS to send.',
       neverSeen: 'Never signed in',
       lastSeen: 'Last seen',
       intervalTitle: 'Disconnect check interval',
@@ -184,6 +200,34 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     [copy.actionError, copy.forbidden, copy.invalidEmail, loadList],
   );
 
+  // Build + send the invite link. Native → OS share sheet (WhatsApp/SMS);
+  // web → Web Share API if present, else copy the message to the clipboard.
+  const shareInvite = useCallback(async (target: string) => {
+    const url = SOCIAL_AUTH_WEB_APP_URL;
+    const message = `${copy.shareMessage}\n${url}\n${copy.shareWith}: ${target}`;
+    try {
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { share?: (d: object) => Promise<void> }) : undefined;
+        if (nav?.share) {
+          await nav.share({ title: copy.shareTitle, text: message, url });
+          return;
+        }
+        await Clipboard.setStringAsync(message);
+        setBanner({ text: copy.linkCopied, tone: 'success' });
+        return;
+      }
+      await Share.share({ title: copy.shareTitle, message });
+    } catch {
+      // Share canceled or unavailable → fall back to clipboard.
+      try {
+        await Clipboard.setStringAsync(message);
+        setBanner({ text: copy.linkCopied, tone: 'success' });
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [copy]);
+
   const handleInvite = useCallback(async () => {
     const normalized = email.trim().toLowerCase();
     if (!normalized || !normalized.includes('@')) {
@@ -193,7 +237,10 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     setSubmitBusy(true);
     const ok = await setInvite(normalized, 'invited', copy.invited(normalized));
     setSubmitBusy(false);
-    if (ok) setEmail('');
+    if (ok) {
+      setEmail('');
+      setLastInvited(normalized);
+    }
   }, [email, copy, setInvite]);
 
   const handleSaveInterval = useCallback(async () => {
@@ -283,6 +330,17 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
             <Text style={styles.primaryButtonText}>{copy.invite}</Text>
           </TouchableOpacity>
 
+          {lastInvited ? (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => void shareInvite(lastInvited)}
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              testID="remote-share-last"
+            >
+              <Text style={styles.secondaryButtonText}>{`${copy.sendLink}  ·  ${lastInvited}`}</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {banner ? (
             <Text
               style={[
@@ -342,6 +400,14 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
                   }`}
                 </Text>
               </View>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => void shareInvite(row.email)}
+                style={[styles.rowButton, styles.rowButtonShare]}
+                testID={`remote-share-${row.email}`}
+              >
+                <Text style={styles.rowButtonShareText}>{copy.sendLinkShort}</Text>
+              </TouchableOpacity>
               {row.status === 'invited' ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -580,6 +646,16 @@ const styles = StyleSheet.create({
   },
   rowButtonRestoreText: {
     color: '#4ADE80',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  rowButtonShare: {
+    backgroundColor: 'rgba(37,99,235,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.4)',
+  },
+  rowButtonShareText: {
+    color: '#BFDBFE',
     fontSize: 13,
     fontWeight: '800',
   },

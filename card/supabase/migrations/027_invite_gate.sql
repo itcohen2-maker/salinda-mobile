@@ -105,17 +105,29 @@ declare
   v_uid uuid := auth.uid();
   v_email text;
   v_status text;
+  v_is_admin boolean;
 begin
   if v_uid is null then
     return jsonb_build_object('allowed', false, 'status', 'anonymous');
   end if;
 
+  select u.email into v_email from auth.users u where u.id = v_uid;
+  v_is_admin := exists (select 1 from public.admin_users a where a.user_id = v_uid);
+
+  -- Record presence for anyone on the list (admins included, when invited)
+  -- so the Remote Control / analytics panels reflect them as recently seen.
+  if v_email is not null then
+    update public.invited_users
+       set last_seen_at = now(),
+           first_login_at = coalesce(first_login_at, now())
+     where lower(email) = lower(v_email);
+  end if;
+
   -- Admins always pass the gate so they can never lock themselves out.
-  if exists (select 1 from public.admin_users a where a.user_id = v_uid) then
+  if v_is_admin then
     return jsonb_build_object('allowed', true, 'status', 'admin');
   end if;
 
-  select u.email into v_email from auth.users u where u.id = v_uid;
   if v_email is null then
     return jsonb_build_object('allowed', false, 'status', 'no_email');
   end if;
@@ -131,12 +143,6 @@ begin
   if v_status = 'blocked' then
     return jsonb_build_object('allowed', false, 'status', 'blocked');
   end if;
-
-  -- Invited & allowed → record presence.
-  update public.invited_users
-     set last_seen_at = now(),
-         first_login_at = coalesce(first_login_at, now())
-   where lower(email) = lower(v_email);
 
   return jsonb_build_object('allowed', true, 'status', 'invited');
 end;
