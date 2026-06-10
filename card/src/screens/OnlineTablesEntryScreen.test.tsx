@@ -44,6 +44,7 @@ jest.mock('./TablesLobbyScreen', () => {
   return function MockTablesLobbyScreen(props: {
     onCreateTable: () => void;
     onEnterCode?: () => void;
+    onJoinTable: (table: { roomCode: string; visibility: 'public' | 'private_locked' }) => void;
     onPlayerNameChange: (value: string) => void;
     playerName: string;
   }) {
@@ -59,6 +60,12 @@ jest.mock('./TablesLobbyScreen', () => {
         </TouchableOpacity>
         <TouchableOpacity testID="mock-open-code-modal" onPress={props.onEnterCode}>
           <Text>Open code modal</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID="mock-join-open-table"
+          onPress={() => props.onJoinTable({ roomCode: '4821', visibility: 'public' })}
+        >
+          <Text>Join open table</Text>
         </TouchableOpacity>
       </View>
     );
@@ -115,6 +122,16 @@ describe('OnlineTablesEntryScreen', () => {
     fireEvent.press(screen.getByTestId('mock-create-table'));
 
     expect(mockCreateTable).toHaveBeenCalledWith('Noa');
+    expect(screen.getByTestId('creating-table-card')).toBeTruthy();
+  });
+
+  it('shows a connecting mockup while joining an open table', () => {
+    renderScreen();
+
+    fireEvent.changeText(screen.getByTestId('mock-player-name'), 'Noa');
+    fireEvent.press(screen.getByTestId('mock-join-open-table'));
+
+    expect(mockJoinTable).toHaveBeenCalledWith('4821', 'Noa');
     expect(screen.getByTestId('creating-table-card')).toBeTruthy();
   });
 });

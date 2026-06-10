@@ -19,6 +19,26 @@ import type { GameState } from '../../../index';
 // we only need a function with the right signature that doesn't throw.
 const tf = (key: string): string => key;
 
+// Some reducer paths gate bot turn-completion behind a wall-clock hold
+// (e.g. botPostEquationHoldUntil = Date.now() + BOT_TO_HUMAN_TURN_TRANSITION_HOLD_MS).
+// These tests drive BOT_STEP synchronously, so real time never advances and the
+// hold would never elapse. installAdvancingClock makes Date.now() jump forward on
+// every call (> the hold duration) so any such hold expires on the next step.
+// Returns a restore fn — always call it in a finally block.
+function installAdvancingClock(stepMs = 5000): () => void {
+  let now = 1_000_000;
+  const spy = jest.spyOn(Date, 'now').mockImplementation(() => {
+    now += stepMs;
+    return now;
+  });
+  return () => spy.mockRestore();
+}
+
+// Restore any Date.now spy installed by a test so the mock never leaks across tests.
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 // ---------------------------------------------------------------------------
 // Fixture builder helpers
 // ---------------------------------------------------------------------------
@@ -236,6 +256,7 @@ test('M4.5.2c — guidance off keeps pacing but suppresses bot-step text', () =>
 // ---------------------------------------------------------------------------
 
 test('M4.5.3 — building phase: bot completes plan over multiple BOT_STEP dispatches', () => {
+  installAdvancingClock(); // let the post-equation wall-clock hold elapse synchronously
   const card5 = { id: 'p1', type: 'number' as const, value: 5 };
   const card7 = { id: 'p2', type: 'number' as const, value: 7 };
 
@@ -415,6 +436,7 @@ test('M4.5.4 — frozen bot: no valid plan causes drawCard fallback; botTickSeq 
 // ---------------------------------------------------------------------------
 
 test('M4.5.5 — Profile 3: Easy bot discards strictly fewer cards than Hard over 5 turns', () => {
+  installAdvancingClock(); // let the post-equation wall-clock hold elapse synchronously
   // Fixture: two bots start from 'building' phase with an explicit valid target
   // from the current dice. That single target still allows TWO discard subsets:
   //   [5, 7]      → score 2  (minimizer / Easy prefers this)

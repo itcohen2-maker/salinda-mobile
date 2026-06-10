@@ -62,7 +62,7 @@ export function OnlineTablesEntryScreen({
   const [codeJoinOpen, setCodeJoinOpen] = useState(false);
   const [codeJoinRoomCode, setCodeJoinRoomCode] = useState('');
   const [codeJoinInviteCode, setCodeJoinInviteCode] = useState('');
-  const [isCreatingTable, setIsCreatingTable] = useState(false);
+  const [isConnectingTable, setIsConnectingTable] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
 
@@ -79,7 +79,7 @@ export function OnlineTablesEntryScreen({
 
   useEffect(() => {
     if (error) {
-      setIsCreatingTable(false);
+      setIsConnectingTable(false);
       setTimeoutError(null);
       const timer = setTimeout(clearError, 4000);
       return () => clearTimeout(timer);
@@ -93,13 +93,13 @@ export function OnlineTablesEntryScreen({
   }, [timeoutError]);
 
   useEffect(() => {
-    if (!isCreatingTable) return;
+    if (!isConnectingTable) return;
     const timer = setTimeout(() => {
-      setIsCreatingTable(false);
+      setIsConnectingTable(false);
       setTimeoutError(t('lobby.createTableTimeout'));
     }, 15000);
     return () => clearTimeout(timer);
-  }, [isCreatingTable, t]);
+  }, [isConnectingTable, t]);
 
   useEffect(() => {
     const { roomCode, inviteCode, serverUrl, name } = parseJoinParamsFromUrl();
@@ -119,7 +119,7 @@ export function OnlineTablesEntryScreen({
 
   const handleCreateTable = () => {
     if (!playerName.trim()) return;
-    setIsCreatingTable(true);
+    setIsConnectingTable(true);
     createTable(playerName.trim());
   };
 
@@ -131,22 +131,24 @@ export function OnlineTablesEntryScreen({
       setCodeJoinOpen(true);
       return;
     }
+    setIsConnectingTable(true);
     joinTable(table.roomCode, playerName.trim());
   };
 
   const handleQuickMatch = () => {
     if (!playerName.trim()) return;
     const candidate = pickQuickMatchTable(tables);
+    setIsConnectingTable(true);
     if (candidate) {
       joinTable(candidate.roomCode, playerName.trim());
       return;
     }
-    setIsCreatingTable(true);
     createTable(playerName.trim());
   };
 
   const handleSubmitPrivateJoin = () => {
     if (!playerName.trim() || codeJoinRoomCode.length < 4) return;
+    setIsConnectingTable(true);
     if (codeJoinInviteCode.length === 6) {
       joinPrivateTable(codeJoinRoomCode, codeJoinInviteCode, playerName.trim());
       return;
@@ -159,15 +161,15 @@ export function OnlineTablesEntryScreen({
   return (
     <>
       {rulesOpen && <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />}
-      {isCreatingTable && (
-        <Modal visible={isCreatingTable} transparent animationType="fade">
+      {isConnectingTable && (
+        <Modal visible={isConnectingTable} transparent animationType="fade">
           <View style={styles.modalBackdrop}>
             <View testID="creating-table-card" style={styles.waitingCard}>
               <View style={styles.waitingSpinnerWrap}>
                 <ActivityIndicator size="large" color="#FDE68A" />
               </View>
-              <Text style={styles.waitingTitle}>{t('lobby.creatingTableTitle')}</Text>
-              <Text style={styles.waitingBody}>{t('lobby.creatingTableBody')}</Text>
+              <Text style={styles.waitingTitle}>{t('mp.connectingTitle')}</Text>
+              <Text style={styles.waitingBody}>{t('mp.connectingBody')}</Text>
             </View>
           </View>
         </Modal>

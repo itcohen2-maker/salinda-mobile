@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Modal,
   Platform,
   ScrollView,
@@ -35,12 +34,6 @@ import { buildPrivateInviteShareMessage, buildRoomShareMessage, formatRoomCode }
 import { getScreenSafeTop } from '../theme/screenInsets';
 import { WEB_GAME_PLAYFIELD_MAX_WIDTH } from '../theme/webLayout';
 import { SlindaCoin } from '../../components/SlindaCoin';
-import {
-  getQuickChatPhraseText,
-  QUICK_CHAT_PHRASES,
-  type QuickChatPhraseId,
-} from '../../shared/quickChatPhrases';
-import type { LobbyPlayer, QuickChatBubble } from '../hooks/useMultiplayer';
 
 const WEB_INVITE_BASE_STORAGE_KEY = 'salinda_web_invite_base';
 const ALL_FRACTION_KINDS: readonly Fraction[] = ['1/2', '1/3', '1/4', '1/5'];
@@ -374,86 +367,6 @@ function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-function QuickChatBubblePill({ bubble }: { bubble: QuickChatBubble }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.84)).current;
-
-  useEffect(() => {
-    opacity.setValue(0);
-    scale.setValue(0.84);
-    Animated.sequence([
-      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.delay(2400),
-      Animated.timing(opacity, { toValue: 0, duration: 360, useNativeDriver: true }),
-    ]).start();
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.delay(2400),
-      Animated.timing(scale, { toValue: 0.94, duration: 360, useNativeDriver: true }),
-    ]).start();
-  }, [bubble.id, opacity, scale]);
-
-  return (
-    <Animated.View pointerEvents="none" style={[styles.quickChatBubble, { opacity, transform: [{ scale }] }]}>
-      <Text style={styles.quickChatBubbleText}>{getQuickChatPhraseText(bubble.phraseId)}</Text>
-    </Animated.View>
-  );
-}
-
-function QuickChatPlayerRow({
-  player,
-  isHost,
-  bubble,
-  t,
-}: {
-  player: LobbyPlayer;
-  isHost: boolean;
-  bubble?: QuickChatBubble;
-  t: TFn;
-}) {
-  return (
-    <View style={styles.quickChatPlayerSlot}>
-      {bubble ? <QuickChatBubblePill bubble={bubble} /> : null}
-      <View style={styles.playerRow}>
-        <Text testID={player.isHost !== isHost ? 'opponent-name' : 'player-name'} style={styles.playerName}>{player.name}</Text>
-        {player.isHost && <Text style={styles.hostBadge}>{t('lobby.host')}</Text>}
-        {!player.isConnected && <Text style={styles.disconnectedBadge}>{t('lobby.disconnected')}</Text>}
-      </View>
-    </View>
-  );
-}
-
-function QuickChatPhrasePicker({
-  open,
-  onClose,
-  onSelect,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (phraseId: QuickChatPhraseId) => void;
-}) {
-  return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity activeOpacity={1} style={styles.quickChatSheetBackdrop} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={styles.quickChatSheet} onPress={() => {}}>
-          <View style={styles.quickChatPhrasesWrap}>
-            {QUICK_CHAT_PHRASES.map((phrase) => (
-              <TouchableOpacity
-                key={phrase.id}
-                style={styles.quickChatPhraseBtn}
-                activeOpacity={0.84}
-                onPress={() => onSelect(phrase.id)}
-              >
-                <Text style={styles.quickChatPhraseText}>{phrase.text}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
 export function LobbyEntry({
   onBackToChoice,
   defaultPlayerName,
@@ -723,8 +636,6 @@ export function LobbyScreen({
     configureTable,
     startTableCountdown,
     leaveRoom,
-    sendQuickChatPhrase = () => {},
-    quickChatBubbles = [],
     error,
     clearError,
     toast,
@@ -743,7 +654,7 @@ export function LobbyScreen({
   const [showSolveExercise, setShowSolveExercise] = useState(true);
   const [timerSetting, setTimerSetting] = useState<HostGameSettings['timerSetting']>('90');
   const [timerCustomSeconds, setTimerCustomSeconds] = useState(90);
-  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('easy');
   const [botDisplayName, setBotDisplayName] = useState('');
   const [visibility, setVisibility] = useState<LobbyTableVisibility>('public');
   const [maxParticipants, setMaxParticipants] = useState(4);
@@ -751,7 +662,6 @@ export function LobbyScreen({
   const [configSaved, setConfigSaved] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [manualWebInviteBase, setManualWebInviteBase] = useState('');
-  const [quickChatOpen, setQuickChatOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(WEB_INVITE_BASE_STORAGE_KEY)
@@ -941,14 +851,6 @@ export function LobbyScreen({
     if (!currentTable) return [];
     return buildLobbySummaryItems(currentTable, t, true);
   }, [currentTable, t]);
-  const quickChatBubbleByPlayerId = useMemo(() => {
-    const byPlayerId: Record<string, QuickChatBubble> = {};
-    for (const bubble of quickChatBubbles) {
-      byPlayerId[bubble.playerId] = bubble;
-    }
-    return byPlayerId;
-  }, [quickChatBubbles]);
-
   const handleSaveConfiguration = () => {
     configureTable({
       visibility,
@@ -997,11 +899,6 @@ export function LobbyScreen({
     } catch {
       setCopyFeedback(t('lobby.copyFail'));
     }
-  };
-
-  const handleSelectQuickChatPhrase = (phraseId: QuickChatPhraseId) => {
-    setQuickChatOpen(false);
-    sendQuickChatPhrase(phraseId);
   };
 
   return (
@@ -1234,13 +1131,11 @@ export function LobbyScreen({
             {t('lobby.playersInRoom', { count: players.length, max: roomCapacity })}
           </Text>
           {players.map((player) => (
-            <QuickChatPlayerRow
-              key={player.id}
-              player={player}
-              isHost={isHost}
-              bubble={quickChatBubbleByPlayerId[player.id]}
-              t={t}
-            />
+            <View key={player.id} style={styles.playerRow}>
+              <Text testID={player.isHost !== isHost ? 'opponent-name' : 'player-name'} style={styles.playerName}>{player.name}</Text>
+              {player.isHost && <Text style={styles.hostBadge}>{t('lobby.host')}</Text>}
+              {!player.isConnected && <Text style={styles.disconnectedBadge}>{t('lobby.disconnected')}</Text>}
+            </View>
           ))}
 
           {isHost && humanCount >= 2 && (
@@ -1278,20 +1173,6 @@ export function LobbyScreen({
             </View>
           )}
 
-          <TouchableOpacity
-            testID="quick-chat-open"
-            style={styles.quickChatFab}
-            activeOpacity={0.84}
-            onPress={() => setQuickChatOpen(true)}
-            accessibilityLabel="Quick chat"
-          >
-            <Text style={styles.quickChatFabIcon}>💬</Text>
-          </TouchableOpacity>
-          <QuickChatPhrasePicker
-            open={quickChatOpen}
-            onClose={() => setQuickChatOpen(false)}
-            onSelect={handleSelectQuickChatPhrase}
-          />
           </>
         )}
 
@@ -1407,20 +1288,10 @@ const styles = StyleSheet.create({
   inviteBtnText: { color: '#1a1207', fontWeight: '700', fontSize: 12 },
   inviteCopyBtnLabel: { color: '#F8FAFC' },
   copyFeedbackText: { color: '#A7F3D0', fontSize: 11, marginTop: 8, textAlign: 'center' },
-  quickChatPlayerSlot: { width: '100%', alignItems: 'flex-end', marginBottom: 6 },
-  quickChatBubble: { maxWidth: '86%', marginBottom: 6, marginRight: 12, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(245,210,122,0.96)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' },
-  quickChatBubbleText: { color: '#1a1207', fontSize: 13, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
   playerRow: { flexDirection: 'row', alignItems: 'center', width: '100%', backgroundColor: 'rgba(0,0,0,0.24)', borderRadius: 12, borderWidth: 1, borderColor: GOLD_LINE, padding: 12, marginBottom: 6 },
   playerName: { color: TEXT_MAIN, fontSize: 16, flex: 1, textAlign: 'right' },
   hostBadge: { backgroundColor: brand.gold, color: '#111827', fontSize: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
   disconnectedBadge: { color: '#EF4444', fontSize: 10 },
-  quickChatFab: { alignSelf: 'center', marginTop: 18, width: 48, height: 48, borderRadius: 24, backgroundColor: ACTION_GOLD, borderWidth: 2, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
-  quickChatFabIcon: { fontSize: 22, lineHeight: 26 },
-  quickChatSheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.54)' },
-  quickChatSheet: { width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: GOLD_LINE_STRONG, backgroundColor: SURFACE_ALT, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 26 },
-  quickChatPhrasesWrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
-  quickChatPhraseBtn: { minHeight: 42, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: ACTION_GOLD, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' },
-  quickChatPhraseText: { color: '#1a1207', fontSize: 14, fontWeight: '800', textAlign: 'center', writingDirection: 'rtl' },
   botStartBox: { width: '100%', marginTop: 8 },
   botOfferInlineText: { color: '#DDD6FE', fontSize: 13, lineHeight: 20, marginBottom: 10 },
   botDifficultyLabel: { marginTop: 0, marginBottom: 8, textAlign: 'center', alignSelf: 'center', width: '100%' },

@@ -463,11 +463,11 @@ const styles = StyleSheet.create({
   courageCoinRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
+    gap: 2,
+    marginTop: 0,
   },
   courageCoinRowCompact: {
-    marginTop: 4,
+    marginTop: 0,
   },
   courageCoinText: {
     color: '#FCD34D',

@@ -341,7 +341,7 @@ export function LobbyScreen({ onOpenCelebrationMockup }: { onOpenCelebrationMock
   const [showSolveExercise, setShowSolveExercise] = useState(true);
   const [timerSetting, setTimerSetting] = useState<HostGameSettings['timerSetting']>('90');
   const [timerCustomSeconds, setTimerCustomSeconds] = useState(90);
-  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('easy');
   const [botDisplayName, setBotDisplayName] = useState('');
   const [starting, setStarting] = useState(false);
   const [startingBot, setStartingBot] = useState(false);

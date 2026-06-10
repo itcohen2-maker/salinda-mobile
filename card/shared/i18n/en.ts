@@ -208,7 +208,7 @@ export const en: Record<string, string> = {
   'lobby.continueToRoom': 'Save',
   'lobby.roomCodeLabel': 'Room code',
   'lobby.shareCodeHint': 'Share the code so friends can join',
-  'lobby.shareWebLinkHint': 'Found the ultimate card game to tune out the world. Quiet, clever, and deeply addictive. Take on the Salinda challenge straight from your browser:',
+  'lobby.shareWebLinkHint': 'Found the ultimate card game to tune out the world. Quiet, clever, and deeply addictive. Take on the Salinda challenge straight from your browser. Beta version — coming soon to the app stores:',
   'lobby.browserInvite': 'Browser invite link',
   'lobby.inviteHintConfigured':
     'Full links use {{base}}. For guests outside your LAN, enter a public HTTPS URL for the same web app below (or set EXPO_PUBLIC_WEB_APP_URL in build).',
@@ -330,6 +330,7 @@ export const en: Record<string, string> = {
   'start.title': 'Salinda',
   'start.subtitle': 'Salinda · educational math card game',
   'start.playerCount': 'Number of players',
+  'start.fillNames': 'Fill in your names',
   'start.playerNames': 'Player names',
   'start.playerPlaceholder': 'Player {{n}}',
   'start.difficulty': 'Difficulty',

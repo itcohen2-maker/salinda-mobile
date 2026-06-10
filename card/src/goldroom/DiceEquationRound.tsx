@@ -26,7 +26,7 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AnimatedDice, { type AnimatedDiceHandle, GoldDieFace } from '../../AnimatedDice';
 import { GameCard, type Card, type Fraction, type Operation } from '../../components/CardDesign';
@@ -1010,28 +1010,27 @@ function SalindaOperatorSelector({ title, body, onPick, onClose }: { title: stri
   );
 }
 
-// ── The opening showcase: all four signs as a 2×2 grid of premium 3D bronze
-// "operator buttons" (the gold glyph embossed on a beveled copper face).
+// ── The opening showcase: all four signs as a clean 2×2 grid.
 function SignShowcaseGrid() {
   return (
     <View style={styles.signGrid}>
       {SIGN_SHOWCASE_OPS.map((op) => (
         <LinearGradient
           key={op}
-          colors={['#E7C08A', '#C8915A', '#9A6532', '#6E441F']}
-          locations={[0, 0.4, 0.75, 1]}
+          colors={['#FFE7A6', '#F5C76B', '#D79B3C']}
+          locations={[0, 0.62, 1]}
           start={{ x: 0.2, y: 0 }}
           end={{ x: 0.8, y: 1 }}
           style={styles.signGridCell}
         >
           <LinearGradient
             pointerEvents="none"
-            colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+            colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.signGridSheen}
           />
-          <OperatorGlyph op={op} color="#FBE6A2" size={38} />
+          <OperatorGlyph op={op} color="#3D2A0E" size={op === '÷' ? 44 : 42} />
         </LinearGradient>
       ))}
     </View>
@@ -1076,6 +1075,7 @@ function getSpecialsFallbackLaunchCard(step: SpecialsStepId, wildPlaced: boolean
 type SpecialsFlowPhase =
   | 'symbolsShowcase'
   | 'symbolsPractice'
+  | 'salindaIntro'
   | 'salindaShowcase'
   | 'salindaPractice'
   | 'feraIntro'
@@ -1084,17 +1084,22 @@ type SpecialsFlowPhase =
 
 type SpecialsFlyTarget = 'op' | 'left' | 'right';
 type SpecialsFlyKind = 'sign' | 'salindaSign' | 'feraNumber';
+type SpecialsPendingPlacement = 'symbolMinus' | 'salindaOperator' | 'feraNumber' | null;
 
 interface SpecialsFlowState {
   phase: SpecialsFlowPhase;
   op: Operation | null;
   leftValue: number | null;
   rightValue: number | null;
+  rightCard: Card | null;
   busy: boolean;
+  pendingPlacement: SpecialsPendingPlacement;
   symbolsDemoDone: boolean;
   salindaDemoDone: boolean;
+  salindaIntroLocked: boolean;
   salindaBubblesOpen: boolean;
   salindaSelectorOpen: boolean;
+  salindaSelectedOp: Operation | null;
   feraDemoDone: boolean;
   feraShowcaseStarted: boolean;
   feraShowcaseCardUsed: boolean;
@@ -1110,19 +1115,26 @@ interface SpecialsFlyToken {
 }
 
 const SPECIALS_SYMBOLS_SHOWCASE_TEXT =
-  'ברוכים הבאים לשלב הסימנים! כדי להיפטר מקלפים, אתם חייבים לשלוט בסימני הפעולה שיוצרים את התרגיל.';
+  'ברוכים הבאים לשלב הסימנים! כדי להיפטר מקלפים, אתם חייבים לשלוט בקלפי סימני הפעולה שיוצרים את התרגיל.';
 const SPECIALS_SYMBOLS_PRACTICE_TEXT =
-  'עכשיו תורכם! לחצו על סימן החיסור (-) כדי להשלים את המשוואה בהצלחה.';
+  'עכשיו תורכם! ליחצו על קלף סימן החיסור (-) כדי להשלים את המשוואה בהצלחה.';
 const SPECIALS_SALINDA_SHOWCASE_TEXT =
   'הכירו את הג׳וקר שלכם: קלף סלינדה! הוא לא מייצג מספר, אלא מכיל בתוכו את כל ארבעת סימני הפעולה יחד. לחצו על חץ ההמשך כדי לראות את הקסם.';
+const SPECIALS_SALINDA_INTRO_SPIN_TEXT = 'הכירו את סלינדה – מלכת המשחק! 👑';
+const SPECIALS_SALINDA_INTRO_LOCKED_TEXT =
+  'היא לא קלף רגיל, היא מכילה בתוכה את כל ארבעת סימני הפעולה יחד! לחצו על הכפתור כדי לראות איך משתמשים בכוח שלה.';
 const SPECIALS_SALINDA_PRACTICE_TEXT =
-  'עכשיו תורכם! 😎 הביטו בקלף הסלינדה שבמניפה ובואו נבנה לו תרגיל שיתאים לו. לחצו על קלף סלינדה, ובחרו בסימן החיסור (-)!';
+  'עכשיו תורכם! הביטו בקלף הסלינדה שבמניפה. ביחרו את סימן הכפל (×)!';
 const SPECIALS_FERA_INTRO_TEXT =
   'הכירו את הנשק הסודי של המשחק: קלף הפרא! הקלף הזה הוא לוח חלק – הוא יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח.';
+const SPECIALS_FERA_SHOWCASE_TEXT =
+  'הקלף הזה יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח. לחצו על קלף הפרא שבמניפה.';
 const SPECIALS_FERA_READY_TEXT =
   'ראיתם את זה? קלף הפרא הפך בדיוק למספר 2 שהיה חסר לנו במשוואה! לחצו על חץ ההמשך כדי לנסות בעצמכם.';
 const SPECIALS_FERA_PRACTICE_TEXT =
   'התור שלכם! לחצו על קלף הפרא שבמניפה והפכו אותו למספר 4 כדי להשלים את המשוואה המנצחת!';
+
+const SPECIALS_TARGET_PROMPT = 'מעולה! עכשיו לחצו על המשבצת המהבהבת במשוואה כדי להציב את הקלף.';
 
 const SPECIALS_SIGN_OPS: Operation[] = ['+', '-', 'x', '÷'];
 const SPECIALS_SIGN_CARDS: Card[] = SPECIALS_SIGN_OPS.map((op) => ({
@@ -1171,6 +1183,24 @@ const SPECIALS_FERA_PRACTICE_HAND: Card[] = [
   { id: 'specials-fera-practice-3', type: 'number', value: 3 },
 ];
 
+function generateSpecialsSymbolPracticeExercise(): { left: number; right: number; result: number } {
+  const right = 1 + Math.floor(Math.random() * 5);
+  const result = 1 + Math.floor(Math.random() * 6);
+  return { left: right + result, right, result };
+}
+
+function generateSpecialsSalindaPracticeExercise(): { left: number; right: number; result: number } {
+  const left = 2 + Math.floor(Math.random() * 7);
+  const right = 2 + Math.floor(Math.random() * 6);
+  return { left, right, result: left * right };
+}
+
+function generateSpecialsFeraPracticeExercise(): { left: number; right: number; result: number } {
+  const left = 3 + Math.floor(Math.random() * 6);
+  const right = 2 + Math.floor(Math.random() * 6);
+  return { left, right, result: left + right };
+}
+
 function opDisplay(op: Operation): string {
   if (op === 'x') return '×';
   if (op === '÷') return '÷';
@@ -1178,30 +1208,49 @@ function opDisplay(op: Operation): string {
 }
 
 function getSpecialsInstruction(state: SpecialsFlowState): string {
+  if (state.pendingPlacement) return SPECIALS_TARGET_PROMPT;
   if (state.phase === 'symbolsShowcase') return SPECIALS_SYMBOLS_SHOWCASE_TEXT;
   if (state.phase === 'symbolsPractice') return SPECIALS_SYMBOLS_PRACTICE_TEXT;
-  if (state.phase === 'salindaShowcase') return SPECIALS_SALINDA_SHOWCASE_TEXT;
-  if (state.phase === 'salindaPractice') return SPECIALS_SALINDA_PRACTICE_TEXT;
+  if (state.phase === 'salindaIntro') return state.salindaIntroLocked ? SPECIALS_SALINDA_INTRO_LOCKED_TEXT : SPECIALS_SALINDA_INTRO_SPIN_TEXT;
+  if (state.phase === 'salindaShowcase') {
+    if (state.salindaSelectorOpen) return 'בחרו את סימן המינוס (−) כדי לפתור את ההדגמה: 5 [?] 2 = 3.';
+    if (state.salindaDemoDone) return 'מעולה! סלינדה השלימה את תרגיל המינוס. לחצו על החץ כדי לתרגל בעצמכם.';
+    return 'הכירו את קלף סלינדה: הוא מכיל את כל סימני הפעולה. לחצו על קלף סלינדה במניפה כדי לפתוח את בועות הסימנים.';
+  }
+  if (state.phase === 'salindaPractice') {
+    const left = state.leftValue ?? 4;
+    const right = state.rightValue ?? 3;
+    const result = left * right;
+    if (state.salindaSelectorOpen) return `בחרו את סימן הכפל (×) כדי לפתור את התרגול: ${left} [?] ${right} = ${result}.`;
+    return `עכשיו תורכם! הביטו בקלף הסלינדה שבמניפה. ביחרו את סימן הכפל (×)!`;
+  }
   if (state.phase === 'feraIntro') return SPECIALS_FERA_INTRO_TEXT;
-  if (state.phase === 'feraShowcase') return state.feraDemoDone ? SPECIALS_FERA_READY_TEXT : SPECIALS_FERA_INTRO_TEXT;
-  return SPECIALS_FERA_PRACTICE_TEXT;
+  if (state.phase === 'feraShowcase') return state.feraDemoDone ? SPECIALS_FERA_READY_TEXT : SPECIALS_FERA_SHOWCASE_TEXT;
+  const feraRight = state.rightValue ?? 4;
+  return `התור שלכם! לחצו על קלף הפרא שבמניפה והפכו אותו למספר ${feraRight} כדי להשלים את המשוואה המנצחת!`;
 }
 
 function getSpecialsEquation(state: SpecialsFlowState): { left: number | null; op: Operation | null; right: number | null; result: number } | null {
   switch (state.phase) {
     case 'symbolsShowcase':
       return { left: 4, op: state.op, right: 2, result: 6 };
-    case 'symbolsPractice':
-      return { left: 4, op: state.op, right: 2, result: 2 };
+    case 'symbolsPractice': {
+      const left = state.leftValue ?? 4;
+      const right = state.rightValue ?? 2;
+      return { left, op: state.op, right, result: left - right };
+    }
+    case 'salindaIntro':
+      return null;
     case 'salindaShowcase':
-    case 'salindaPractice':
       return { left: 5, op: state.op, right: 2, result: 3 };
+    case 'salindaPractice':
+      return { left: state.leftValue ?? 4, op: state.op, right: state.rightValue ?? 3, result: (state.leftValue ?? 4) * (state.rightValue ?? 3) };
     case 'feraIntro':
       return null;
     case 'feraShowcase':
       return { left: 4, op: '+' as Operation, right: state.rightValue, result: 6 };
     case 'feraPractice':
-      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: 10 };
+      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: (state.leftValue ?? 6) + (state.rightValue ?? 4) };
   }
 }
 
@@ -1229,28 +1278,89 @@ function SpecialsEquation({
   left,
   op,
   right,
+  rightCard,
   result,
   bounceKey,
+  opSlotReady,
+  rightSlotReady,
+  pulse,
+  onPressOpSlot,
+  onPressRightSlot,
 }: {
   left: number | null;
   op: Operation | null;
   right: number | null;
+  rightCard?: Card | null;
   result: number;
   bounceKey: number;
+  opSlotReady?: boolean;
+  rightSlotReady?: boolean;
+  pulse?: Animated.Value;
+  onPressOpSlot?: () => void;
+  onPressRightSlot?: () => void;
 }) {
+  const glowOpacity = pulse?.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.92] });
+  const glowScale = pulse?.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.16] });
+  const renderGlow = () =>
+    pulse ? (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.specialsEquationSlotGlow,
+          {
+            opacity: glowOpacity,
+            transform: [{ scale: glowScale ?? 1 }],
+          },
+        ]}
+      />
+    ) : null;
+
+  const opSlot = (
+    <View style={[styles.specialsEquationSlot, !op && styles.specialsEquationSlotEmpty, opSlotReady && styles.specialsEquationSlotReady]}>
+      {opSlotReady ? renderGlow() : null}
+      {op ? (
+        <View pointerEvents="none" style={styles.specialsEquationCardInSlot}>
+          <GameCard card={{ id: `specials-equation-op-${op}`, type: 'operation', operation: op }} small onPress={undefined} />
+        </View>
+      ) : (
+        <Text allowFontScaling={false} style={styles.specialsQuestionText}>?</Text>
+      )}
+    </View>
+  );
+  const rightSlot = (
+    <View style={[styles.specialsEquationSlot, (right === null || rightCard) && styles.specialsEquationSlotEmpty, rightSlotReady && styles.specialsEquationSlotReady]}>
+      {rightSlotReady ? renderGlow() : null}
+      {rightCard ? (
+        <View pointerEvents="none" style={styles.specialsEquationCardInSlot}>
+          <GameCard card={rightCard} selected small onPress={undefined} />
+        </View>
+      ) : (
+        <Text allowFontScaling={false} style={right === null ? styles.specialsQuestionText : styles.specialsEquationText}>
+          {right ?? '?'}
+        </Text>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.specialsEquationRow}>
       <BouncyEquationNumber value={left} bounceKey={bounceKey} />
-      <View style={[styles.specialsEquationSlot, !op && styles.specialsEquationSlotEmpty]}>
-        {op ? (
-          <View pointerEvents="none" style={styles.specialsEquationCardInSlot}>
-            <GameCard card={{ id: `specials-equation-op-${op}`, type: 'operation', operation: op }} small onPress={undefined} />
-          </View>
-        ) : (
-          <Text allowFontScaling={false} style={styles.specialsQuestionText}>?</Text>
-        )}
-      </View>
-      <BouncyEquationNumber value={right} bounceKey={bounceKey} />
+      {opSlotReady && onPressOpSlot ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="place operator" onPress={onPressOpSlot}>
+          {opSlot}
+        </Pressable>
+      ) : (
+        opSlot
+      )}
+      {rightSlotReady && onPressRightSlot ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="place wild card" onPress={onPressRightSlot}>
+          {rightSlot}
+        </Pressable>
+      ) : rightCard ? (
+        rightSlot
+      ) : (
+        <BouncyEquationNumber value={right} bounceKey={bounceKey} />
+      )}
       <Text allowFontScaling={false} style={styles.specialsEquals}>=</Text>
       <View style={styles.specialsEquationSlot}>
         <Text allowFontScaling={false} style={styles.specialsEquationText}>{result}</Text>
@@ -1261,49 +1371,106 @@ function SpecialsEquation({
 
 function SpecialsFeraIntroCard() {
   const pulse = useRef(new Animated.Value(1)).current;
+  const intro = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    intro.setValue(0);
+    Animated.spring(intro, {
+      toValue: 1,
+      damping: 9,
+      stiffness: 120,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.06, duration: 820, useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 1, duration: 820, useNativeDriver: true }),
       ]),
     );
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
     loop.start();
-    return () => loop.stop();
-  }, [pulse]);
+    floatLoop.start();
+    return () => {
+      loop.stop();
+      floatLoop.stop();
+    };
+  }, [float, intro, pulse]);
+
+  const introScale = intro.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
+  const introY = intro.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
+  const floatY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const haloOpacity = pulse.interpolate({ inputRange: [1, 1.06], outputRange: [0.5, 0.92] });
 
   return (
-    <View style={styles.specialsFeraIntroStage}>
-      <Animated.View style={[styles.specialsFeraIntroHalo, { transform: [{ scale: pulse }] }]} />
-      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+    <Animated.View
+      style={[
+        styles.specialsFeraIntroStage,
+        {
+          opacity: intro,
+          transform: [{ translateY: introY }, { scale: introScale }],
+        },
+      ]}
+    >
+      <Animated.View style={[styles.specialsFeraIntroHalo, { opacity: haloOpacity, transform: [{ scale: pulse }] }]} />
+      <Animated.View style={{ transform: [{ translateY: floatY }, { scale: pulse }] }}>
         <GameCard card={{ id: SPECIALS_FERA_ID, type: 'wild' }} selected />
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
 function SpecialsSignDock({ disabled, activeOp, onPick }: { disabled: boolean; activeOp?: Operation | null; onPick: (op: Operation) => void }) {
+  const entrances = useRef(SPECIALS_SIGN_OPS.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    entrances.forEach((value) => value.setValue(0));
+    Animated.stagger(
+      90,
+      entrances.map((value) =>
+        Animated.spring(value, {
+          toValue: 1,
+          damping: 8,
+          stiffness: 170,
+          mass: 0.72,
+          useNativeDriver: true,
+        }),
+      ),
+    ).start();
+  }, [entrances]);
+
   return (
     <View style={styles.specialsSignDock}>
-      {SPECIALS_SIGN_CARDS.map((card) => (
-        <Pressable
-          key={card.id}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={`בחר קלף סימן ${opDisplay(card.operation ?? '+')}`}
-          onPress={() => onPick(card.operation ?? '+')}
-          style={({ pressed }) => [
-            styles.specialsSignCardButton,
-            activeOp === card.operation && styles.specialsSignCardActive,
-            pressed && !disabled && styles.specialsSignCardPressed,
-            disabled && styles.specialsSignButtonDisabled,
-          ]}
-        >
-          <View pointerEvents="none" style={styles.specialsSignCardFace}>
-            <GameCard card={card} selected={activeOp === card.operation} small onPress={undefined} />
-          </View>
-        </Pressable>
-      ))}
+      {SPECIALS_SIGN_OPS.map((op, index) => {
+        const entrance = entrances[index];
+        const translateY = entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
+        const scale = entrance.interpolate({ inputRange: [0, 0.72, 1], outputRange: [0.72, 1.07, 1] });
+        return (
+          <Animated.View key={op} style={{ opacity: entrance, transform: [{ translateY }, { scale }] }}>
+            <Pressable
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityLabel={`בחר קלף סימן ${opDisplay(op)}`}
+              onPress={() => onPick(op)}
+              style={({ pressed }) => [
+                styles.specialsSignButton,
+                activeOp === op && styles.specialsSignButtonActive,
+                pressed && !disabled && styles.specialsSignButtonPressed,
+                disabled && styles.specialsSignButtonDisabled,
+              ]}
+            >
+              <View pointerEvents="none" style={styles.specialsSignFace}>
+                <OperatorGlyph op={op} color={activeOp === op ? '#12321D' : '#3D2A0E'} size={op === '÷' ? 42 : 40} />
+              </View>
+            </Pressable>
+          </Animated.View>
+        );
+      })}
     </View>
   );
 }
@@ -1365,7 +1532,7 @@ function SpecialsFlyingToken({ token, onDone }: { token: SpecialsFlyToken; onDon
   const targetX = token.target === 'op' ? 0 : token.target === 'left' ? -98 : 98;
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, targetX] });
   const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -222] });
-  const scale = progress.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, 1.08, 0.42] });
+  const scale = progress.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, token.kind === 'feraNumber' ? 0.72 : 1.08, 0.38] });
   const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', token.kind === 'feraNumber' ? '-6deg' : '8deg'] });
   const opacity = progress.interpolate({ inputRange: [0, 0.9, 1], outputRange: [1, 1, 0.78] });
   const flyingCard: Card =
@@ -1373,7 +1540,7 @@ function SpecialsFlyingToken({ token, onDone }: { token: SpecialsFlyToken; onDon
       ? { id: `specials-flying-sign-${token.label}`, type: 'operation', operation: token.label as Operation }
       : token.kind === 'salindaSign'
       ? { id: `specials-flying-salinda-${token.label}`, type: 'salinda', operation: token.label as Operation }
-      : { id: `specials-flying-number-${token.label}`, type: 'number', value: Number(token.label) };
+      : { id: `specials-flying-fera-${token.label}`, type: 'wild', resolvedValue: Number(token.label) };
 
   return (
     <View pointerEvents="none" style={styles.specialsFlyingLayer}>
@@ -1403,6 +1570,120 @@ function SalindaOperatorBubbles({ onPick, disabled = false }: { onPick?: (op: Op
   );
 }
 
+// Orbit radius (px) of the operator signs around the central Salinda card.
+const SALINDA_ORBIT_RADIUS = 112;
+
+function SalindaShowcaseIntro({
+  locked,
+  onLocked,
+  onContinue,
+}: {
+  locked: boolean;
+  onLocked: () => void;
+  onContinue: () => void;
+}) {
+  // Standard RN Animated (no native Reanimated dependency — keeps Expo Go alive).
+  const spin = useRef(new Animated.Value(0)).current;
+  const lockProgress = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0.92)).current;
+  const flash = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    spin.setValue(0);
+    lockProgress.setValue(0);
+    flash.setValue(0);
+    cardScale.setValue(0.92);
+
+    Animated.spring(cardScale, {
+      toValue: 1,
+      damping: 9,
+      stiffness: 125,
+      mass: 1,
+      useNativeDriver: true,
+    }).start();
+
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+
+    const timer = setTimeout(() => {
+      Animated.spring(lockProgress, {
+        toValue: 1,
+        damping: 9,
+        stiffness: 160,
+        mass: 1,
+        useNativeDriver: true,
+      }).start(() => loop.stop());
+      Animated.sequence([
+        Animated.spring(cardScale, { toValue: 1.08, damping: 7, stiffness: 190, mass: 1, useNativeDriver: true }),
+        Animated.spring(cardScale, { toValue: 1, damping: 8, stiffness: 150, mass: 1, useNativeDriver: true }),
+      ]).start();
+      Animated.timing(flash, { toValue: 1, duration: 180, useNativeDriver: true }).start(({ finished }) => {
+        if (!finished) return;
+        Animated.timing(flash, { toValue: 0, duration: 520, useNativeDriver: true }).start();
+        onLocked();
+      });
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.72 });
+    }, 2500);
+
+    return () => {
+      clearTimeout(timer);
+      loop.stop();
+    };
+  }, [cardScale, flash, lockProgress, onLocked, spin]);
+
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  // lockProgress 0→1 collapses the ring inward (radius→0) and shrinks the signs,
+  // matching the original cos/sin orbit's lock-in.
+  const ringScale = lockProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.0001] });
+  const ringOpacity = lockProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82] });
+  const flashScale = flash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
+
+  return (
+    <View style={styles.salindaIntroStage}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.salindaIntroFlash, { opacity: flash, transform: [{ scale: flashScale }] }]}
+      />
+      <View style={styles.salindaIntroOrbit}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.salindaIntroOrbitRing, { opacity: ringOpacity, transform: [{ rotate }, { scale: ringScale }] }]}
+        >
+          {SPECIALS_SIGN_OPS.map((op, index) => {
+            const baseDeg = (index / SPECIALS_SIGN_OPS.length) * 360;
+            return (
+              <View
+                key={op}
+                style={[
+                  styles.salindaIntroOrbitSign,
+                  { transform: [{ rotate: `${baseDeg}deg` }, { translateY: -SALINDA_ORBIT_RADIUS }, { rotate: `-${baseDeg}deg` }] },
+                ]}
+              >
+                <OperatorGlyph op={op} color="#F8E08E" size={42} />
+              </View>
+            );
+          })}
+        </Animated.View>
+        <Animated.View style={[styles.salindaIntroCardWrap, { transform: [{ scale: cardScale }] }]}>
+          <GameCard card={{ id: SPECIALS_SALINDA_ID, type: 'salinda' }} selected />
+        </Animated.View>
+      </View>
+      {locked ? (
+        <View style={styles.salindaIntroCta}>
+          <GoldButton label="בואו נראה!" onPress={onContinue} accessibilityLabel="בואו נראה" fullWidth height={56} radius={28} fontSize={21} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function SpecialsEndModal({ onFinish }: { onFinish: () => void }) {
   return (
     <View style={styles.successOverlay}>
@@ -1427,11 +1708,15 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     op: null,
     leftValue: null,
     rightValue: null,
+    rightCard: null,
     busy: false,
-    symbolsDemoDone: false,
+    pendingPlacement: null,
+    symbolsDemoDone: true,
     salindaDemoDone: false,
+    salindaIntroLocked: false,
     salindaBubblesOpen: false,
     salindaSelectorOpen: false,
+    salindaSelectedOp: null,
     feraDemoDone: false,
     feraShowcaseStarted: false,
     feraShowcaseCardUsed: false,
@@ -1441,6 +1726,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   const [flyToken, setFlyToken] = useState<SpecialsFlyToken | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [bounceKey, setBounceKey] = useState(0);
+  const slotPulse = useRef(new Animated.Value(0)).current;
   const flyDoneRef = useRef<(() => void) | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -1478,31 +1764,28 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     setBounceKey((key) => key + 1);
   }, []);
 
-  useEffect(() => {
-    if (state.phase !== 'symbolsShowcase' || state.symbolsDemoDone || state.busy) return;
-    setState((current) => ({ ...current, busy: true }));
-    schedule(() => {
-      beginFly({ kind: 'sign', label: '+', target: 'op' }, () => {
-        setState((current) => ({ ...current, op: '+', symbolsDemoDone: true, busy: false }));
-        bounceEquation();
-        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
-      });
-    }, 420);
-  }, [beginFly, bounceEquation, schedule, state.busy, state.phase, state.symbolsDemoDone]);
+  usePulseLoop(slotPulse, state.pendingPlacement !== null && !state.busy, 0, 1, 500);
 
   const moveTo = useCallback((phase: SpecialsFlowPhase) => {
     clearTimers();
     setFlyToken(null);
     flyDoneRef.current = null;
+    const symbolExercise = phase === 'symbolsPractice' ? generateSpecialsSymbolPracticeExercise() : null;
+    const salindaExercise = phase === 'salindaPractice' ? generateSpecialsSalindaPracticeExercise() : null;
+    const feraExercise = phase === 'feraPractice' ? generateSpecialsFeraPracticeExercise() : null;
     setState((current) => ({
       ...current,
       phase,
       op: phase === 'feraPractice' ? '+' : null,
-      leftValue: phase === 'feraPractice' ? 6 : null,
-      rightValue: null,
+      leftValue: feraExercise?.left ?? salindaExercise?.left ?? symbolExercise?.left ?? null,
+      rightValue: feraExercise?.right ?? salindaExercise?.right ?? symbolExercise?.right ?? null,
+      rightCard: null,
       busy: false,
+      pendingPlacement: null,
+      salindaIntroLocked: false,
       salindaBubblesOpen: false,
       salindaSelectorOpen: false,
+      salindaSelectedOp: null,
       feraDemoDone: phase === 'feraShowcase' ? false : current.feraDemoDone,
       feraShowcaseStarted: false,
       feraShowcaseCardUsed: false,
@@ -1517,30 +1800,12 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       showToast();
       return;
     }
-    setState((current) => ({ ...current, busy: true }));
-    beginFly({ kind: 'sign', label: '-', target: 'op' }, () => {
-      setState((current) => ({ ...current, op: '-', busy: true }));
-      bounceEquation();
-      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
-      schedule(() => moveTo('salindaShowcase'), 620);
-    });
-  }, [beginFly, bounceEquation, moveTo, schedule, showToast, state.busy, state.phase]);
-
-  const runSalindaShowcase = useCallback(() => {
-    if (state.busy || state.phase !== 'salindaShowcase' || state.salindaDemoDone) return;
-    setState((current) => ({ ...current, busy: true, salindaBubblesOpen: true }));
-    void playSfx('meterCelebrateIntro', { cooldownMs: 0, volumeOverride: 0.65 });
-    schedule(() => {
-      beginFly({ kind: 'salindaSign', label: '-', target: 'op' }, () => {
-        setState((current) => ({ ...current, op: '-', busy: false, salindaDemoDone: true, salindaBubblesOpen: false }));
-        bounceEquation();
-        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
-      });
-    }, 780);
-  }, [beginFly, bounceEquation, schedule, state.busy, state.phase, state.salindaDemoDone]);
+    setState((current) => ({ ...current, op: null, pendingPlacement: 'symbolMinus' }));
+    playEquationTapSfx();
+  }, [showToast, state.busy, state.phase]);
 
   const handleSalindaCardTap = useCallback((card: Card) => {
-    if (state.busy || state.phase !== 'salindaPractice') return;
+    if (state.busy || (state.phase !== 'salindaPractice' && state.phase !== 'salindaShowcase')) return;
     if (card.id !== SPECIALS_SALINDA_ID || card.type !== 'salinda') {
       showToast();
       return;
@@ -1550,65 +1815,95 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   }, [showToast, state.busy, state.phase]);
 
   const handleSalindaOperatorPick = useCallback((op: Operation) => {
-    if (state.busy || state.phase !== 'salindaPractice') return;
-    if (op !== '-') {
+    if (state.busy || (state.phase !== 'salindaPractice' && state.phase !== 'salindaShowcase')) return;
+    const expectedOp: Operation = state.phase === 'salindaPractice' ? 'x' : '-';
+    if (op !== expectedOp) {
       showToast();
       return;
     }
-    setState((current) => ({ ...current, busy: true, salindaSelectorOpen: false }));
-    beginFly({ kind: 'salindaSign', label: '-', target: 'op' }, () => {
-      setState((current) => ({ ...current, op: '-', busy: true }));
-      bounceEquation();
-      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.62 });
-      schedule(() => moveTo('feraIntro'), 620);
-    });
-  }, [beginFly, bounceEquation, moveTo, schedule, showToast, state.busy, state.phase]);
+    setState((current) => ({
+      ...current,
+      salindaSelectedOp: expectedOp,
+      salindaSelectorOpen: false,
+      salindaBubblesOpen: false,
+      pendingPlacement: 'salindaOperator',
+    }));
+    void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
+  }, [showToast, state.busy, state.phase]);
 
-  const runFeraShowcase = useCallback(() => {
-    if (state.busy || state.phase !== 'feraShowcase' || state.feraDemoDone) return;
-    setState((current) => ({ ...current, busy: true }));
-    void playSfx('transition', { cooldownMs: 0, volumeOverride: 0.45 });
-    schedule(() => {
-      beginFly({ kind: 'feraNumber', label: '2', target: 'right' }, () => {
+  const placePendingSpecial = useCallback(() => {
+    if (state.busy || !state.pendingPlacement) return;
+    if (state.pendingPlacement === 'symbolMinus' && state.phase === 'symbolsPractice') {
+      setState((current) => ({ ...current, busy: true }));
+      beginFly({ kind: 'sign', label: '-', target: 'op' }, () => {
+        setState((current) => ({ ...current, op: '-', pendingPlacement: null, busy: false }));
+        bounceEquation();
+        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
+      });
+      return;
+    }
+    if (state.pendingPlacement === 'salindaOperator' && (state.phase === 'salindaShowcase' || state.phase === 'salindaPractice')) {
+      const op = state.salindaSelectedOp ?? (state.phase === 'salindaPractice' ? 'x' : '-');
+      setState((current) => ({ ...current, busy: true }));
+      beginFly({ kind: 'salindaSign', label: op, target: 'op' }, () => {
         setState((current) => ({
           ...current,
-          rightValue: 2,
-          op: '+',
+          op,
+          pendingPlacement: null,
           busy: false,
-          feraDemoDone: true,
-          feraShowcaseCardUsed: true,
+          salindaDemoDone: current.phase === 'salindaShowcase' ? true : current.salindaDemoDone,
+          salindaSelectedOp: null,
         }));
         bounceEquation();
         void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.62 });
       });
-    }, 280);
-  }, [beginFly, bounceEquation, schedule, state.busy, state.feraDemoDone, state.phase]);
+      return;
+    }
+    if (state.pendingPlacement === 'feraNumber' && (state.phase === 'feraShowcase' || state.phase === 'feraPractice')) {
+      const value = state.phase === 'feraPractice' ? state.rightValue ?? 4 : 2;
+      setState((current) => ({ ...current, busy: true }));
+      beginFly({ kind: 'feraNumber', label: String(value), target: 'right' }, () => {
+        setState((current) => ({
+          ...current,
+          rightCard: { id: `specials-placed-fera-${value}`, type: 'wild', resolvedValue: value },
+          rightValue: null,
+          op: '+',
+          pendingPlacement: null,
+          busy: true,
+          feraDemoDone: current.phase === 'feraShowcase' ? true : current.feraDemoDone,
+          feraShowcaseCardUsed: current.phase === 'feraShowcase' ? true : current.feraShowcaseCardUsed,
+          feraPracticeCardUsed: current.phase === 'feraPractice' ? true : current.feraPracticeCardUsed,
+        }));
+        bounceEquation();
+        void playSfx(state.phase === 'feraPractice' ? 'gameWin' : 'complete', { cooldownMs: 0, volumeOverride: state.phase === 'feraPractice' ? 0.9 : 0.62 });
+        schedule(() => {
+          setState((current) => ({
+            ...current,
+            rightValue: value,
+            rightCard: null,
+            busy: false,
+            showEndModal: current.phase === 'feraPractice' ? true : current.showEndModal,
+          }));
+          bounceEquation();
+        }, 2000);
+      });
+    }
+  }, [beginFly, bounceEquation, moveTo, schedule, state.busy, state.pendingPlacement, state.phase, state.salindaSelectedOp]);
 
   useEffect(() => {
-    if (state.phase !== 'feraShowcase' || state.feraShowcaseStarted || state.feraDemoDone || state.busy) return;
+    if (state.phase !== 'feraShowcase' || state.feraShowcaseStarted) return;
     setState((current) => ({ ...current, feraShowcaseStarted: true }));
-    runFeraShowcase();
-  }, [runFeraShowcase, state.busy, state.feraDemoDone, state.feraShowcaseStarted, state.phase]);
+  }, [state.feraShowcaseStarted, state.phase]);
 
   const handleFeraTap = useCallback((card: Card) => {
-    if (state.busy || state.phase !== 'feraPractice') return;
+    if (state.busy || (state.phase !== 'feraPractice' && state.phase !== 'feraShowcase')) return;
     if (card.id !== SPECIALS_FERA_ID || card.type !== 'wild') {
       showToast();
       return;
     }
-    setState((current) => ({ ...current, busy: true }));
-    beginFly({ kind: 'feraNumber', label: '4', target: 'right' }, () => {
-      setState((current) => ({
-        ...current,
-        rightValue: 4,
-        busy: false,
-        feraPracticeCardUsed: true,
-        showEndModal: true,
-      }));
-      bounceEquation();
-      void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 0.9 });
-    });
-  }, [beginFly, bounceEquation, showToast, state.busy, state.phase]);
+    setState((current) => ({ ...current, pendingPlacement: 'feraNumber' }));
+    playEquationTapSfx();
+  }, [showToast, state.busy, state.phase]);
 
   const handleNext = useCallback(() => {
     if (state.busy) return;
@@ -1616,9 +1911,20 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       moveTo('symbolsPractice');
       return;
     }
+    if (state.phase === 'symbolsPractice' && state.op) {
+      moveTo('salindaIntro');
+      return;
+    }
+    if (state.phase === 'salindaIntro' && state.salindaIntroLocked) {
+      moveTo('salindaPractice');
+      return;
+    }
     if (state.phase === 'salindaShowcase') {
-      if (!state.salindaDemoDone) runSalindaShowcase();
-      else moveTo('salindaPractice');
+      if (state.salindaDemoDone) moveTo('salindaPractice');
+      return;
+    }
+    if (state.phase === 'salindaPractice' && state.op) {
+      moveTo('feraIntro');
       return;
     }
     if (state.phase === 'feraIntro') {
@@ -1628,7 +1934,11 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     if (state.phase === 'feraShowcase' && state.feraDemoDone) {
       moveTo('feraPractice');
     }
-  }, [moveTo, runSalindaShowcase, state.busy, state.feraDemoDone, state.phase, state.salindaDemoDone, state.symbolsDemoDone]);
+  }, [moveTo, state.busy, state.feraDemoDone, state.op, state.phase, state.salindaDemoDone, state.salindaIntroLocked, state.symbolsDemoDone]);
+
+  const handleSalindaIntroLocked = useCallback(() => {
+    setState((current) => current.phase === 'salindaIntro' ? { ...current, salindaIntroLocked: true } : current);
+  }, []);
 
   const finishSpecials = useCallback(() => {
     onComplete?.();
@@ -1637,14 +1947,17 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
 
   const equation = getSpecialsEquation(state);
   const instruction = getSpecialsInstruction(state);
-  const showSignDock = state.phase === 'symbolsShowcase';
+  const showSignDock = false;
   const showNext =
-    (state.phase === 'symbolsShowcase' && state.symbolsDemoDone) ||
-    state.phase === 'salindaShowcase' ||
-    state.phase === 'feraIntro' ||
-    (state.phase === 'feraShowcase' && state.feraDemoDone);
+    state.pendingPlacement === null &&
+    ((state.phase === 'symbolsShowcase' && state.symbolsDemoDone) ||
+      (state.phase === 'symbolsPractice' && state.op !== null) ||
+      (state.phase === 'salindaShowcase' && state.salindaDemoDone) ||
+      (state.phase === 'salindaPractice' && state.op !== null) ||
+      state.phase === 'feraIntro' ||
+      (state.phase === 'feraShowcase' && state.feraDemoDone));
   const hand =
-    state.phase === 'symbolsPractice'
+    state.phase === 'symbolsShowcase' || state.phase === 'symbolsPractice'
       ? SPECIALS_SIGN_CARDS
       : state.phase === 'salindaShowcase'
       ? SPECIALS_SALINDA_SHOWCASE_HAND
@@ -1656,38 +1969,55 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
         : SPECIALS_FERA_INTRO_HAND
       : state.phase === 'feraPractice'
       ? state.feraPracticeCardUsed
-        ? SPECIALS_FERA_PRACTICE_HAND.filter((card) => card.id !== SPECIALS_FERA_ID)
-        : SPECIALS_FERA_PRACTICE_HAND
+        ? []
+        : SPECIALS_FERA_PRACTICE_HAND.filter((card) => card.id === SPECIALS_FERA_ID)
       : [];
+  const displayHand = useMemo(
+    () => hand.map((card) => (card.id === SPECIALS_SALINDA_ID && state.salindaSelectedOp ? { ...card, operation: state.salindaSelectedOp } : card)),
+    [hand, state.salindaSelectedOp],
+  );
   const selectedIds = useMemo(() => {
-    if (state.phase === 'symbolsPractice' && state.op) {
-      const selectedSignCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === state.op);
+    if (state.phase === 'symbolsPractice' && (state.pendingPlacement === 'symbolMinus' || state.op)) {
+      const selectedSignCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === (state.op ?? '-'));
       return selectedSignCard ? new Set([selectedSignCard.id]) : new Set<string>();
     }
-    if (state.phase === 'salindaShowcase' || state.phase === 'salindaPractice') return new Set([SPECIALS_SALINDA_ID]);
-    if (state.phase === 'feraIntro' || state.phase === 'feraShowcase' || state.phase === 'feraPractice') return new Set([SPECIALS_FERA_ID]);
+    if ((state.phase === 'salindaShowcase' || state.phase === 'salindaPractice') && (state.salindaSelectorOpen || state.pendingPlacement === 'salindaOperator' || state.op)) {
+      return new Set([SPECIALS_SALINDA_ID]);
+    }
+    if (state.phase === 'feraIntro' || state.phase === 'feraShowcase' || state.phase === 'feraPractice') {
+      return new Set([SPECIALS_FERA_ID]);
+    }
     return new Set<string>();
-  }, [state.op, state.phase]);
+  }, [state.op, state.pendingPlacement, state.phase, state.salindaSelectorOpen]);
   const showFeraIntroCenter = state.phase === 'feraIntro';
-  const showBottomHand = state.phase !== 'feraIntro';
+  const showSalindaIntroCenter = state.phase === 'salindaIntro';
+  const showBottomHand = state.phase !== 'feraIntro' && state.phase !== 'salindaIntro';
 
   return (
     <View style={styles.root}>
       <InstructionBanner text={instruction} />
       <View style={styles.playArea}>
-        <View style={styles.tableZone}>
-          <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
+        <View style={[styles.tableZone, showFeraIntroCenter && styles.specialsFeraCleanZone, showSalindaIntroCenter && styles.salindaIntroCleanZone]}>
+          {!showFeraIntroCenter && !showSalindaIntroCenter ? <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} /> : null}
           <View style={styles.tableOverlay} pointerEvents="box-none">
             <View style={styles.specialsBoardContent}>
-              {showFeraIntroCenter ? (
+              {showSalindaIntroCenter ? (
+                <SalindaShowcaseIntro locked={state.salindaIntroLocked} onLocked={handleSalindaIntroLocked} onContinue={handleNext} />
+              ) : showFeraIntroCenter ? (
                 <SpecialsFeraIntroCard />
               ) : equation ? (
                 <SpecialsEquation
                   left={equation.left}
                   op={equation.op}
                   right={equation.right}
+                  rightCard={state.rightCard}
                   result={equation.result}
                   bounceKey={bounceKey}
+                  opSlotReady={(state.pendingPlacement === 'symbolMinus' || state.pendingPlacement === 'salindaOperator') && !state.busy}
+                  rightSlotReady={state.pendingPlacement === 'feraNumber' && !state.busy}
+                  pulse={slotPulse}
+                  onPressOpSlot={placePendingSpecial}
+                  onPressRightSlot={placePendingSpecial}
                 />
               ) : null}
             </View>
@@ -1704,36 +2034,37 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
               <SalindaOperatorBubbles onPick={state.salindaSelectorOpen ? handleSalindaOperatorPick : undefined} disabled={state.busy} />
             ) : null}
             <HandFan
-              cards={hand}
+              cards={displayHand}
               width={fanW}
               selectedIds={selectedIds}
+              smoothDrag={state.phase === 'feraShowcase' || state.phase === 'feraPractice'}
               onTapCard={
                 state.phase === 'symbolsPractice'
                   ? (card) => {
                       if (card.type === 'operation' && card.operation) handleSymbolPick(card.operation);
                     }
-                  : state.phase === 'salindaPractice'
+                  : state.phase === 'salindaPractice' || state.phase === 'salindaShowcase'
                   ? handleSalindaCardTap
-                  : state.phase === 'feraPractice'
+                  : state.phase === 'feraPractice' || state.phase === 'feraShowcase'
                   ? handleFeraTap
                   : undefined
               }
               canTap={(card) =>
                 state.phase === 'symbolsPractice'
-                  ? card.type === 'operation'
-                  : state.phase === 'salindaPractice'
-                  ? card.id === SPECIALS_SALINDA_ID || card.type !== 'salinda'
-                  : state.phase === 'feraPractice'
-                  ? true
+                  ? card.type === 'operation' && state.pendingPlacement !== 'symbolMinus'
+                  : state.phase === 'salindaPractice' || state.phase === 'salindaShowcase'
+                  ? card.id === SPECIALS_SALINDA_ID && state.pendingPlacement !== 'salindaOperator' && !state.op
+                  : state.phase === 'feraPractice' || state.phase === 'feraShowcase'
+                  ? card.id === SPECIALS_FERA_ID && state.pendingPlacement !== 'feraNumber'
                   : false
               }
               centerCardId={
-                state.phase === 'symbolsPractice'
+                state.phase === 'symbolsShowcase' || state.phase === 'symbolsPractice'
                   ? SPECIALS_SIGN_CARDS.find((card) => card.operation === '-')?.id ?? null
                   : state.phase === 'salindaShowcase' || state.phase === 'salindaPractice'
                   ? SPECIALS_SALINDA_ID
                   : state.phase === 'feraShowcase' || state.phase === 'feraPractice'
-                  ? SPECIALS_FERA_ID
+                  ? null
                   : null
               }
             />
@@ -2336,13 +2667,13 @@ const PRACTICE_CONFIG: Record<PracticeStepId, PracticeStepConfig> = {
 // Seeded "possible result" mini-cards per practice step (illustrative, easily editable).
 const DISCARD_OPTIONS: Record<PracticeStepId, DiscardOption[]> = {
   plus: [
-    { value: 6, equation: '2 + 4 = 6', dice: [2, 4], targetId: PLUS_TARGET_ID },
-    { value: 9, equation: '4 + 5 = 9', dice: [4, 5], targetId: PLUS_TARGET_9_ID },
-    { value: 11, equation: '2 + 4 + 5 = 11', dice: [2, 4, 5], targetId: PLUS_TARGET_11_ID },
+    { value: 6, equation: '(2 + 4) = 6', dice: [2, 4], targetId: PLUS_TARGET_ID },
+    { value: 9, equation: '(4 + 5) = 9', dice: [4, 5], targetId: PLUS_TARGET_9_ID },
+    { value: 11, equation: '(2 + 4 + 5) = 11', dice: [2, 4, 5], targetId: PLUS_TARGET_11_ID },
   ],
   minus: [
-    { value: 3, equation: '5 - 2 = 3' },
-    { value: 4, equation: '5 - 2 + 1 = 4' },
+    { value: 3, equation: '(5 - 2) = 3' },
+    { value: 4, equation: '(5 - 2 + 1) = 4' },
   ],
   mul: [
     { value: 6, equation: '3 × 2 = 6' },
@@ -2353,6 +2684,25 @@ const DISCARD_OPTIONS: Record<PracticeStepId, DiscardOption[]> = {
     { value: 8, equation: '6 ÷ 2 + 5 = 8' },
   ],
 };
+
+type LifelineScreen = 'intro' | 'solutions' | 'practice';
+type LifelinePlacement = 'idle' | 'targetArmed' | 'cardPicked' | 'slotReady' | 'flying' | 'complete';
+
+interface LifelineState {
+  screen: LifelineScreen;
+  selectedValue: number | null;
+  placement: LifelinePlacement;
+  completedMiniExploration: boolean;
+}
+
+const LIFELINE_DICE: [number, number, number] = [2, 4, 5];
+const LIFELINE_HAND: Card[] = PRACTICE_CONFIG.plus.hand;
+const LIFELINE_OPTIONS = DISCARD_OPTIONS.plus;
+const LIFELINE_DEFAULT_RED_LABEL = 'לחץ על מיני קלף\nכדי לראות את התרגיל';
+const LIFELINE_INTRO_TEXT = 'לא מוצאים תרגיל מתאים לקלפים שלכם? הכפתור הירוק ייתן את התשובה!';
+const LIFELINE_SHOWCASE_TEXT = `הכפתור הירוק סרק את המניפה ומצא ${LIFELINE_OPTIONS.length} פתרונות! כל מיני-קלף הוא פתרון אפשרי. לחצו עליו לחשיפת התרגיל.`;
+const LIFELINE_SELECTED_TEXT = 'תוכלו להשתמש בתרגיל הזה כדי להיפטר מהקלף!';
+const LIFELINE_PRACTICE_TEXT = 'בואו נתרגל! לחצו על מיני-קלף, ראו את התרגיל, והציבו את הקלף המתאים במשוואה!';
 
 // ── The build track for the active practice: [die1][op-slot][die2] = [result].
 // Each cell shows "?" until the learner fills it; the operator slot is a tappable,
@@ -2423,9 +2773,18 @@ function BuildEquationTrack({
 function PreviewEquationBoard({ equation }: { equation: string | null }) {
   return (
     <View style={styles.previewBoard}>
-      <Text allowFontScaling={false} style={equation ? styles.previewEquationText : styles.previewEquationEmpty}>
-        {equation ?? ' '}
-      </Text>
+      {equation ? (
+        <Text allowFontScaling={false} style={styles.previewEquationText}>
+          {equation}
+        </Text>
+      ) : (
+        <View style={styles.previewEmptyEquationRow}>
+          <Text allowFontScaling={false} style={styles.previewEquationEmpty}>=</Text>
+          <View style={styles.previewQuestionCard}>
+            <Text allowFontScaling={false} style={styles.previewQuestionText}>?</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -2534,75 +2893,216 @@ function HelperPointerArrow() {
   );
 }
 
+function LifelineEquationTrack({
+  selectedOption,
+  slotReady,
+  solved,
+  pulse,
+  onPressSlot,
+}: {
+  selectedOption: DiscardOption | null;
+  slotReady: boolean;
+  solved: boolean;
+  pulse: Animated.Value;
+  onPressSlot: () => void;
+}) {
+  const dice = selectedOption?.dice ?? [];
+  const left = solved || selectedOption ? dice[0] ?? null : null;
+  const right = solved || selectedOption ? dice[1] ?? null : null;
+  const result = solved ? selectedOption?.value ?? null : null;
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.9] });
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.1] });
+  const resultSlot = (
+    <View style={[styles.slot, styles.resultSlot, slotReady && styles.resultSlotGlow]}>
+      {slotReady ? (
+        <Animated.View pointerEvents="none" style={[styles.resultGlowRing, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+      ) : null}
+      <Text allowFontScaling={false} style={result === null ? styles.slotHintTxt : styles.slotTxt}>
+        {result === null ? '?' : result}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={[styles.track, styles.lifelineTrack]}>
+      <Text allowFontScaling={false} style={styles.lifelineParen}>(</Text>
+      <View style={[styles.slot, left === null ? styles.slotEmpty : styles.slotFilled]}>
+        <Text allowFontScaling={false} style={left === null ? styles.slotHintTxt : styles.slotTxt}>{left === null ? '?' : left}</Text>
+      </View>
+      <Text allowFontScaling={false} style={styles.lifelineOp}>+</Text>
+      <View style={[styles.slot, right === null ? styles.slotEmpty : styles.slotFilled]}>
+        <Text allowFontScaling={false} style={right === null ? styles.slotHintTxt : styles.slotTxt}>{right === null ? '?' : right}</Text>
+      </View>
+      <Text allowFontScaling={false} style={styles.lifelineParen}>)</Text>
+      <Text allowFontScaling={false} style={styles.equals}>=</Text>
+      {slotReady ? (
+        <Pressable onPress={onPressSlot} accessibilityRole="button" accessibilityLabel="הצב קלף במשוואה">
+          {resultSlot}
+        </Pressable>
+      ) : (
+        resultSlot
+      )}
+    </View>
+  );
+}
+
 export function DiscardHelperShowcase({ onComplete }: { onComplete: () => void }) {
-  const copy = useGoldRoomCopy();
   const { width: winW } = useWindowDimensions();
   const fanW = Math.min(winW, 480);
-  const [currentStep, setCurrentStep] = useState<0 | 1 | 2>(0);
-  const [selectedMini, setSelectedMini] = useState<number | null>(null);
+  const [state, setState] = useState<LifelineState>({
+    screen: 'intro',
+    selectedValue: null,
+    placement: 'idle',
+    completedMiniExploration: false,
+  });
   const reveal = useRef(new Animated.Value(0)).current;
+  const fanFocus = useRef(new Animated.Value(0)).current;
+  const slotPulse = useRef(new Animated.Value(0)).current;
+  const greenPulse = useRef(new Animated.Value(1)).current;
+
+  const selectedOption = useMemo(
+    () => LIFELINE_OPTIONS.find((option) => option.value === state.selectedValue) ?? null,
+    [state.selectedValue],
+  );
+  const selectedIds = useMemo(
+    () => (selectedOption?.targetId ? new Set([selectedOption.targetId]) : new Set<string>()),
+    [selectedOption?.targetId],
+  );
+  const slotReady = state.screen === 'practice' && state.placement === 'slotReady';
+  const solved = state.placement === 'complete';
+  const instruction = state.screen === 'intro'
+    ? LIFELINE_INTRO_TEXT
+    : state.screen === 'solutions' && selectedOption
+    ? LIFELINE_SELECTED_TEXT
+    : state.screen === 'solutions'
+    ? LIFELINE_SHOWCASE_TEXT
+    : LIFELINE_PRACTICE_TEXT;
 
   useEffect(() => {
     reveal.setValue(0);
     Animated.timing(reveal, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-    if (currentStep === 2) setSelectedMini(6);
-  }, [currentStep, reveal]);
+  }, [reveal, state.screen]);
 
-  const showcaseOptions = DISCARD_OPTIONS.plus;
-  const selectedOption = currentStep === 2
-    ? showcaseOptions.find((option) => option.value === (selectedMini ?? 6)) ?? null
-    : null;
-  const selectedEquation = selectedOption?.equation ?? null;
-  const instruction = currentStep === 0
-    ? copy.discardHelperIntroBody
-    : currentStep === 1
-    ? copy.discardHelperShowcaseStep2
-    : copy.discardHelperShowcaseStep3;
+  useEffect(() => {
+    if (state.screen !== 'intro') return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(greenPulse, { toValue: 1.05, duration: 720, useNativeDriver: true }),
+        Animated.timing(greenPulse, { toValue: 0.96, duration: 720, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [greenPulse, state.screen]);
+
+  usePulseLoop(slotPulse, slotReady, 0, 1, 500);
+
+  const focusOption = useCallback(
+    (option: DiscardOption) => {
+      playEquationTapSfx(0.46);
+      fanFocus.setValue(0);
+      Animated.timing(fanFocus, { toValue: 1, duration: 420, useNativeDriver: true }).start();
+      setState((current) => ({
+        ...current,
+        selectedValue: option.value,
+        placement: current.screen === 'practice' ? 'targetArmed' : 'idle',
+        completedMiniExploration: true,
+      }));
+    },
+    [fanFocus],
+  );
 
   const advance = useCallback(() => {
-    if (currentStep === 2) {
-      onComplete();
+    if (state.screen === 'intro') {
+      setState((current) => ({ ...current, screen: 'solutions', selectedValue: null, placement: 'idle' }));
       return;
     }
-    setCurrentStep((step) => (step + 1) as 0 | 1 | 2);
-  }, [currentStep, onComplete]);
+    if (state.screen === 'solutions' && state.completedMiniExploration) {
+      setState({ screen: 'practice', selectedValue: null, placement: 'idle', completedMiniExploration: true });
+    }
+  }, [state.completedMiniExploration, state.screen]);
+
+  const tapFanCard = useCallback((_card: Card) => {
+    // In the lifeline tutorial, hand cards never fly into the equation.
+    // The equation must be built only from the dice on the board.
+  }, []);
+
+  const greenButton = (
+    <Animated.View style={{ transform: [{ scale: state.screen === 'intro' ? greenPulse : 1 }] }}>
+      <StaticHelperButton state="green" />
+    </Animated.View>
+  );
 
   return (
     <View style={styles.root}>
       <InstructionBanner text={instruction} />
-      <View style={styles.playArea}>
-        <View style={styles.showcaseHelperSlot}>
-          {currentStep === 0 ? <HelperPointerArrow /> : null}
-          <StaticHelperButton state={currentStep === 0 ? 'green' : 'red'} redText={selectedEquation ?? undefined} />
+      <View style={[styles.playArea, styles.lifelinePlayArea]}>
+        <View style={styles.lifelineHelperAboveTable}>
+          {state.screen === 'intro' ? greenButton : (
+            <StaticHelperButton state="red" redText={selectedOption?.equation ?? LIFELINE_DEFAULT_RED_LABEL} />
+          )}
         </View>
         <View style={styles.tableZone}>
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
           <View style={styles.tableOverlay} pointerEvents="box-none">
-            <Animated.View style={[styles.solveZone, styles.solveZoneImprove, { opacity: reveal }]}>
-              <PreviewDiceRow dice={selectedOption?.dice ?? []} />
-              <PreviewEquationBoard equation={null} />
-              {currentStep >= 1 ? (
-                <View style={styles.showcaseMiniRow}>
-                  {showcaseOptions.map((option) => (
-                    <MiniSolutionCard
-                      key={option.value}
-                      value={option.value}
-                      active={currentStep === 2 && option.value === (selectedMini ?? 6)}
-                      onPress={currentStep === 2 ? () => setSelectedMini(option.value) : undefined}
-                    />
-                  ))}
-                </View>
-              ) : null}
+            <Animated.View style={[styles.solveZone, styles.lifelineBoardZone, { opacity: reveal }]}>
+              <PreviewDiceRow dice={LIFELINE_DICE} />
+              {state.screen === 'practice' ? (
+                <LifelineEquationTrack
+                  selectedOption={selectedOption}
+                  slotReady={slotReady}
+                  solved={solved}
+                  pulse={slotPulse}
+                  onPressSlot={() => {}}
+                />
+              ) : (
+                <PreviewEquationBoard equation={null} />
+              )}
             </Animated.View>
           </View>
         </View>
+
+        {state.screen !== 'intro' ? (
+          <View style={styles.lifelineMiniBelowTable}>
+            <View style={styles.showcaseMiniRow}>
+              {LIFELINE_OPTIONS.map((option) => (
+                <MiniSolutionCard
+                  key={option.value}
+                  value={option.value}
+                  active={option.value === state.selectedValue}
+                  onPress={() => focusOption(option)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
-      <Animated.View style={[styles.fanWrap, { width: fanW, alignSelf: 'center' }]}>
-        <HandFan cards={PRACTICE_CONFIG.plus.hand} width={fanW} canTap={() => false} playTapSound={false} />
+
+      <Animated.View style={[styles.fanWrap, styles.lifelineFanWrap, { width: fanW, alignSelf: 'center' }]}>
+        <HandFan
+          cards={LIFELINE_HAND}
+          width={fanW}
+          selectedIds={new Set<string>()}
+          onTapCard={tapFanCard}
+          canTap={() => false}
+          centerCardId={null}
+          playTapSound={false}
+        />
       </Animated.View>
-      <View style={styles.showcaseArrowWrap}>
-        <ShowcaseNextArrow onPress={advance} />
-      </View>
+
+      {state.screen !== 'practice' ? (
+        <View style={styles.showcaseArrowWrap}>
+          <ShowcaseNextArrow onPress={advance} />
+        </View>
+      ) : null}
+
+      {solved ? (
+        <SuccessCelebration
+          title="כל הכבוד!"
+          subtitle="השתמשתם בגלגל ההצלה, הצבתם את הקלף במשוואה, והשלמתם את האריח."
+          onDone={onComplete}
+        />
+      ) : null}
     </View>
   );
 }
@@ -3064,23 +3564,100 @@ const styles = StyleSheet.create({
 
   specialsBoardContent: { alignItems: 'center', justifyContent: 'center', width: '100%' },
   specialsFeraIntroStage: {
-    width: 150,
-    height: 196,
+    width: 190,
+    height: 248,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  specialsFeraCleanZone: {
+    maxWidth: 360,
+    aspectRatio: 1,
+    borderRadius: 28,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  salindaIntroCleanZone: {
+    maxWidth: 420,
+    aspectRatio: 0.92,
+    borderRadius: 32,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  salindaIntroStage: {
+    width: '100%',
+    minHeight: 420,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  salindaIntroOrbit: {
+    width: 300,
+    height: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  salindaIntroCardWrap: {
+    width: 130,
+    height: 178,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  salindaIntroOrbitRing: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  salindaIntroOrbitSign: {
+    position: 'absolute',
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 16,
+    elevation: 14,
+    zIndex: 4,
+  },
+  salindaIntroFlash: {
+    position: 'absolute',
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.72,
+    shadowRadius: 34,
+    elevation: 22,
+  },
+  salindaIntroCta: {
+    position: 'absolute',
+    left: 34,
+    right: 34,
+    bottom: 10,
+  },
   specialsFeraIntroHalo: {
     position: 'absolute',
-    width: 142,
-    height: 188,
+    width: 174,
+    height: 228,
     borderRadius: 22,
-    backgroundColor: 'rgba(196,181,253,0.22)',
-    borderWidth: 2,
-    borderColor: 'rgba(248,224,142,0.62)',
+    backgroundColor: 'rgba(196,181,253,0.08)',
+    borderWidth: 0,
+    borderColor: 'transparent',
     shadowColor: '#C4B5FD',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.86,
-    shadowRadius: 18,
+    shadowOpacity: 0.72,
+    shadowRadius: 24,
     elevation: 16,
   },
   specialsEquationRow: {
@@ -3107,6 +3684,26 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   specialsEquationSlotEmpty: { borderStyle: 'dashed', backgroundColor: 'rgba(248,224,142,0.2)' },
+  specialsEquationSlotReady: {
+    borderColor: '#7BE08A',
+    backgroundColor: 'rgba(123,224,138,0.18)',
+    shadowColor: '#7BE08A',
+    shadowOpacity: 0.75,
+  },
+  specialsEquationSlotGlow: {
+    position: 'absolute',
+    width: 68,
+    height: 70,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#7BE08A',
+    backgroundColor: 'rgba(123,224,138,0.24)',
+    shadowColor: '#7BE08A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.86,
+    shadowRadius: 16,
+    elevation: 18,
+  },
   specialsEquationCardInSlot: {
     width: 40,
     height: 56,
@@ -3123,46 +3720,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 12,
     paddingBottom: 18,
   },
-  specialsSignCardButton: {
-    width: 74,
-    height: 106,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-  },
-  specialsSignCardFace: {
-    width: 100,
-    height: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ scale: 0.72 }],
-  },
-  specialsSignCardActive: {
-    shadowColor: '#7BE08A',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 14,
-    elevation: 14,
-  },
-  specialsSignCardPressed: { transform: [{ scale: 0.94 }] },
   specialsSignButton: {
-    width: 66,
-    height: 66,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#4A2E14',
+    width: 62,
+    height: 62,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#6B4516',
+    backgroundColor: '#F6D889',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  specialsSignButtonFace: { flex: 1, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  specialsSignButtonActive: { borderColor: '#7BE08A', shadowColor: '#7BE08A', shadowOpacity: 0.75 },
-  specialsSignButtonPressed: { transform: [{ scale: 0.94 }] },
+  specialsSignFace: {
+    width: 52,
+    height: 52,
+    borderRadius: 11,
+    backgroundColor: '#FFE7A6',
+    borderWidth: 1,
+    borderColor: 'rgba(61,42,14,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialsSignButtonActive: { borderColor: '#2E7D43', backgroundColor: '#C9F0B8', shadowColor: '#7BE08A', shadowOpacity: 0.45 },
+  specialsSignButtonPressed: { transform: [{ scale: 0.96 }] },
   specialsSignButtonDisabled: { opacity: 0.72 },
   specialsArrowWrap: { position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center', zIndex: 45 },
   specialsNextArrow: {
@@ -3269,14 +3856,16 @@ const styles = StyleSheet.create({
   // clear of the instruction banner pinned at the top (no overlap).
   playArea: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 18, gap: 12 },
   playAreaImprove: { paddingBottom: 6, gap: 6 },
+  lifelinePlayArea: { justifyContent: 'flex-end', paddingBottom: 132, gap: 4 },
   // The table: a sized, semi-transparent surface. Content is overlaid centered
   // ON it, so the dice / equation always sit on the table, not off it.
   tableZone: { width: '94%', maxWidth: 380, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
   tableZoneImprove: { maxWidth: 390, aspectRatio: 0.78 },
-  tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.55 },
-  tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.78 },
+  tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: 14, paddingTop: 56 },
   solveZone: { alignItems: 'center', width: '100%', gap: 14 },
   solveZoneImprove: { gap: 7 },
+  lifelineBoardZone: { gap: 18 },
   discardHelperAboveTable: { alignItems: 'center', justifyContent: 'center', marginBottom: 2, zIndex: 5 },
   // The rolling-dice layer sits absolutely over the solve UI and centers the
   // dice; it fades out (never unmounts) once the dice land.
@@ -3347,6 +3936,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(20,12,4,0.55)',
     borderWidth: 1,
     borderColor: 'rgba(244,205,90,0.35)',
+  },
+  lifelineTrack: {
+    direction: 'ltr',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  lifelineParen: {
+    color: '#F8E08E',
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+  },
+  lifelineOp: {
+    color: '#F8E08E',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 26,
+    textAlign: 'center',
   },
   slot: {
     minWidth: 44,
@@ -3475,19 +4083,19 @@ const styles = StyleSheet.create({
   signGridCell: {
     width: 76,
     height: 76,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#4A2E14',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#6B4516',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.45,
-    shadowRadius: 7,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  signGridSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
+  signGridSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '34%' },
   // The fraction center pile — a number card on a small discard stack, with a
   // glow + challenge/roll-over marker on its corner.
   fractionPileWrap: {
@@ -3554,12 +4162,11 @@ const styles = StyleSheet.create({
   },
   equals: { color: '#F8E08E', fontSize: 20, fontWeight: '900', marginHorizontal: 2 },
   previewBoard: {
-    minWidth: 238,
-    minHeight: 58,
+    minWidth: 142,
+    minHeight: 62,
     borderRadius: 14,
-    borderWidth: 2,
-    borderColor: 'rgba(248,224,142,0.72)',
-    backgroundColor: 'rgba(18,11,4,0.82)',
+    borderWidth: 0,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
@@ -3573,29 +4180,57 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   previewEquationEmpty: {
-    color: 'rgba(248,224,142,0.42)',
-    fontSize: 22,
+    color: '#F4B32B',
+    fontSize: 34,
     fontWeight: '900',
     textAlign: 'center',
     letterSpacing: 0,
   },
+  previewEmptyEquationRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  previewQuestionCard: {
+    width: 58,
+    height: 58,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#C58B28',
+    backgroundColor: '#FFF7EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewQuestionText: {
+    color: '#0E335C',
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+  },
   previewDiceRow: {
     flexDirection: 'row',
     direction: 'ltr',
-    gap: 10,
+    gap: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 54,
+    minHeight: 74,
   },
   previewDieSlot: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+    width: 68,
+    height: 68,
+    borderRadius: 15,
     borderWidth: 2,
-    borderColor: 'rgba(248,224,142,0.7)',
-    backgroundColor: 'rgba(20,12,4,0.32)',
+    borderColor: '#D89D10',
+    backgroundColor: '#F7C61D',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#7A4D00',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 8,
   },
   previewDieSlotIdle: {
     opacity: 0.52,
@@ -3607,12 +4242,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 100,
   },
+  lifelineControls: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 104,
+  },
+  lifelineHelperAboveTable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: -4,
+    zIndex: 8,
+  },
+  lifelineMiniBelowTable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -10,
+    zIndex: 9,
+  },
+  lifelineGreenLowered: {
+    marginTop: 0,
+  },
+  lifelineActiveGreen: {
+    transform: [{ scale: 0.74 }],
+    marginVertical: -12,
+  },
+  lifelineRedLow: {
+    marginTop: 0,
+    alignItems: 'center',
+  },
   showcaseHelperButton: {
-    width: 92,
-    minHeight: 92,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    borderRadius: 16,
+    width: 152,
+    minHeight: 78,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 18,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3626,9 +4291,9 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   showcaseHelperRed: {
-    width: 238,
-    minHeight: 54,
-    borderRadius: 16,
+    width: 218,
+    minHeight: 82,
+    borderRadius: 18,
     borderColor: '#F5D45A',
     shadowColor: '#F8E08E',
     shadowOpacity: 0.28,
@@ -3637,11 +4302,12 @@ const styles = StyleSheet.create({
   },
   showcaseHelperText: {
     color: '#FFF1C2',
-    fontSize: 12.2,
+    fontSize: 16,
     fontWeight: '900',
-    lineHeight: 15,
+    lineHeight: 21,
     textAlign: 'center',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
+    direction: 'ltr',
   },
   showcaseHelperGlowRing: {
     position: 'absolute',
@@ -3680,17 +4346,18 @@ const styles = StyleSheet.create({
   },
   showcaseMiniRow: {
     flexDirection: 'row',
-    gap: 10,
+    direction: 'ltr',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,
   },
   showcaseMiniCard: {
-    width: 38,
-    height: 50,
+    width: 46,
+    height: 54,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#F5D45A',
+    borderColor: '#42A5F5',
     backgroundColor: '#F8F4EA',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3703,8 +4370,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   showcaseMiniText: {
-    color: '#3D2A0E',
-    fontSize: 18,
+    color: '#0B63A3',
+    fontSize: 20,
     fontWeight: '900',
   },
   showcaseArrowWrap: {
@@ -3746,6 +4413,7 @@ const styles = StyleSheet.create({
   // Hand fan — anchored low at the bottom of the screen, swipeable; only a small
   // safe-area gap below it (clear of the iPhone home indicator).
   fanWrap: { alignItems: 'center', paddingBottom: 28 },
+  lifelineFanWrap: { paddingBottom: 16 },
   fanFocusHalo: {
     position: 'absolute',
     backgroundColor: 'rgba(248,224,142,0.25)',

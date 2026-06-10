@@ -30,7 +30,19 @@ interface RemoteControlScreenProps {
   onBack: () => void;
 }
 
-const DEFAULT_INTERVAL = 30;
+// A row counts as "online now" if seen within this window. Wider than the
+// default 30s gate poll so a momentary missed beat doesn't drop the glow.
+const ONLINE_WINDOW_MS = 120_000;
+
+type InviteState = 'online' | 'joined' | 'pending' | 'blocked';
+
+function inviteState(row: InviteRow, nowMs: number): InviteState {
+  if (row.status === 'blocked') return 'blocked';
+  const seen = row.last_seen_at ? Date.parse(row.last_seen_at) : NaN;
+  if (Number.isFinite(seen) && nowMs - seen <= ONLINE_WINDOW_MS) return 'online';
+  if (row.first_login_at) return 'joined';
+  return 'pending';
+}
 
 export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
   const { locale, isRTL } = useLocale();
@@ -40,8 +52,6 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
   const [rows, setRows] = useState<InviteRow[]>([]);
   const [listBusy, setListBusy] = useState(false);
   const [submitBusy, setSubmitBusy] = useState(false);
-  const [interval, setIntervalValue] = useState(String(DEFAULT_INTERVAL));
-  const [intervalBusy, setIntervalBusy] = useState(false);
   const [banner, setBanner] = useState<{ text: string; tone: BannerTone } | null>(null);
   const [lastInvited, setLastInvited] = useState<string | null>(null);
 
@@ -58,6 +68,9 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
         empty: 'אין מוזמנים עדיין.',
         statusInvited: 'מוזמן',
         statusBlocked: 'חסום',
+        stateOnline: '🟢 מחובר עכשיו',
+        stateJoined: '🔵 נכנס בעבר',
+        statePending: '🟡 הוזמן, עדיין לא נכנס',
         disconnect: 'נתק',
         restore: 'החזר',
         sendLink: 'שלח קישור 📲',
@@ -95,6 +108,9 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
       empty: 'No invitees yet.',
       statusInvited: 'Invited',
       statusBlocked: 'Blocked',
+      stateOnline: '🟢 Online now',
+      stateJoined: '🔵 Joined before',
+      statePending: '🟡 Invited, not in yet',
       disconnect: 'Disconnect',
       restore: 'Restore',
       sendLink: 'Send link 📲',
@@ -127,6 +143,9 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     writingDirection: (isRTL ? 'rtl' : 'ltr') as 'ltr' | 'rtl',
   };
 
+  // Recomputed each render; the 8s silent poll keeps the "online" glow fresh.
+  const nowMs = Date.now();
+
   // `silent` skips the spinner so the auto-refresh poll doesn't flash the UI.
   const loadList = useCallback(async (silent = false) => {
     if (!silent) setListBusy(true);
@@ -147,28 +166,13 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     }
   }, [copy.loadError]);
 
-  const loadInterval = useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('app_config')
-        .select('value')
-        .eq('key', 'gate_recheck')
-        .maybeSingle();
-      const raw = Number((data?.value as { intervalSeconds?: unknown } | undefined)?.intervalSeconds);
-      if (Number.isFinite(raw) && raw > 0) setIntervalValue(String(raw));
-    } catch {
-      // keep default
-    }
-  }, []);
-
   useEffect(() => {
     if (!isAdmin) return;
     void loadList();
-    void loadInterval();
     // Auto-refresh the list silently so the admin never needs to tap refresh.
     const id = setInterval(() => { void loadList(true); }, 8000);
     return () => clearInterval(id);
-  }, [isAdmin, loadList, loadInterval]);
+  }, [isAdmin, loadList]);
 
   const setInvite = useCallback(
     async (targetEmail: string, status: 'invited' | 'blocked', successText: string) => {
@@ -242,25 +246,6 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
       setLastInvited(normalized);
     }
   }, [email, copy, setInvite]);
-
-  const handleSaveInterval = useCallback(async () => {
-    const seconds = Math.floor(Number(interval) || 0);
-    if (seconds < 5) {
-      setBanner({ text: copy.invalidInterval, tone: 'error' });
-      return;
-    }
-    setIntervalBusy(true);
-    const { data, error } = await supabase.rpc('admin_set_config', {
-      p_key: 'gate_recheck',
-      p_value: { intervalSeconds: seconds, graceSeconds: 0 },
-    });
-    setIntervalBusy(false);
-    if (error || data === 'forbidden' || data !== 'ok') {
-      setBanner({ text: data === 'forbidden' ? copy.forbidden : copy.actionError, tone: 'error' });
-      return;
-    }
-    setBanner({ text: copy.intervalSaved, tone: 'success' });
-  }, [interval, copy]);
 
   if (loading) {
     return (
@@ -356,29 +341,6 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
         </View>
 
         <View style={styles.formCard}>
-          <Text style={[styles.fieldLabel, { marginTop: 0 }, textDirectionStyle]}>{copy.intervalTitle}</Text>
-          <View style={styles.intervalRow}>
-            <TextInput
-              keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'}
-              style={[styles.input, styles.intervalInput, textDirectionStyle]}
-              testID="remote-interval"
-              value={interval}
-              onChangeText={(next) => setIntervalValue(next.replace(/[^0-9]/g, ''))}
-            />
-            <TouchableOpacity
-              activeOpacity={0.9}
-              disabled={intervalBusy}
-              onPress={() => void handleSaveInterval()}
-              style={[styles.secondaryButton, styles.intervalButton, intervalBusy ? styles.buttonDisabled : null]}
-              testID="remote-interval-save"
-            >
-              <Text style={styles.secondaryButtonText}>{copy.intervalSave}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={[styles.helperText, textDirectionStyle]}>{copy.intervalHelper}</Text>
-        </View>
-
-        <View style={styles.formCard}>
           <View style={styles.listHeaderRow}>
             <Text style={[styles.fieldLabel, { marginTop: 0 }, textDirectionStyle]}>{copy.listTitle}</Text>
             {listBusy ? <ActivityIndicator color="#93C5FD" /> : null}
@@ -388,14 +350,28 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
             <Text style={[styles.helperText, textDirectionStyle]}>{copy.empty}</Text>
           ) : null}
 
-          {rows.map((row) => (
-            <View key={row.email} style={styles.inviteRow}>
+          {rows.map((row) => {
+            const state = inviteState(row, nowMs);
+            const stateLabel =
+              state === 'blocked'
+                ? copy.statusBlocked
+                : state === 'online'
+                  ? copy.stateOnline
+                  : state === 'joined'
+                    ? copy.stateJoined
+                    : copy.statePending;
+            return (
+            <View key={row.email} style={[styles.inviteRow, styles[`row_${state}`]]}>
               <View style={styles.inviteInfo}>
-                <Text style={[styles.inviteEmail, textDirectionStyle]} numberOfLines={1}>
+                <Text
+                  style={[styles.inviteEmail, { writingDirection: 'ltr', textAlign: isRTL ? 'right' : 'left' }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   {row.email}
                 </Text>
                 <Text style={[styles.inviteMeta, textDirectionStyle]}>
-                  {`${row.status === 'invited' ? copy.statusInvited : copy.statusBlocked} · ${
+                  {`${stateLabel} · ${
                     row.last_seen_at ? `${copy.lastSeen}: ${formatWhen(row.last_seen_at)}` : copy.neverSeen
                   }`}
                 </Text>
@@ -428,7 +404,8 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
                 </TouchableOpacity>
               )}
             </View>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -603,10 +580,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148,163,184,0.14)',
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderStartWidth: 4,
+    borderStartColor: 'transparent',
+    backgroundColor: 'rgba(148,163,184,0.06)',
+  },
+  // Transparent state tints layered over each row (start-edge accent + soft fill).
+  row_online: {
+    backgroundColor: 'rgba(34,197,94,0.16)',
+    borderStartColor: 'rgba(74,222,128,0.75)',
+  },
+  row_joined: {
+    backgroundColor: 'rgba(20,184,166,0.14)',
+    borderStartColor: 'rgba(45,212,191,0.7)',
+  },
+  row_pending: {
+    backgroundColor: 'rgba(245,158,11,0.13)',
+    borderStartColor: 'rgba(251,191,36,0.7)',
+  },
+  row_blocked: {
+    backgroundColor: 'rgba(220,38,38,0.14)',
+    borderStartColor: 'rgba(248,113,113,0.7)',
   },
   inviteInfo: {
     flex: 1,

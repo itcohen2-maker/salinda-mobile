@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   layerLabel: {
-    marginTop: 5,
+    marginTop: 0,
     fontSize: 12,
     fontWeight: '900',
     color: '#FFD700',

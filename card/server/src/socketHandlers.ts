@@ -101,7 +101,7 @@ import { deductCoinsForPlayer, fetchPlayerActiveTableTheme, recordMatch, RATING_
 import { shouldAutoStartWhenRoomIsFull } from './tableAutoStart';
 import { resolveBotConfig, onMatchEnd } from './ddaService';
 import { generateDisguisedProfile } from './botDisguise';
-import { isQuickChatPhraseId } from '../../shared/quickChatPhrases';
+import { isQuickChatPhraseId, type QuickChatPhraseId } from '../../shared/quickChatPhrases';
 
 type IOServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type IOSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -422,6 +422,15 @@ function broadcastState(io: IOServer, room: Room): void {
   }
 }
 
+function broadcastQuickChatPhrase(io: IOServer, room: Room, playerId: string, phraseId: QuickChatPhraseId): void {
+  const activePlayerIds = new Set(room.players.filter((player) => player.isConnected && !player.isBot).map((player) => player.id));
+  for (const [, sock] of io.sockets.sockets) {
+    const info = getRoomBySocket(sock.id);
+    if (!info || info.room.code !== room.code || !activePlayerIds.has(info.playerId)) continue;
+    sock.emit('quick_chat_phrase', { playerId, phraseId });
+  }
+}
+
 function scheduleRoomTurnTimer(io: IOServer, room: Room): void {
   clearRoomTurnTimer(room);
   // Don't fire turn timers while waiting for the survivor to make a disconnect choice —
@@ -610,7 +619,7 @@ function canPlayerAct(
 
 /** בוט משתמש לכל היותר בקלף פעולה/סלינדה אחד במשבצת 0 */
 function handleBotDefense(io: IOServer, room: Room, state: ServerGameState): void {
-  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
+  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'easy';
 
   // Pity bot: always ignore defense — take the penalty.
   if (diff === 'pity') {
@@ -682,7 +691,7 @@ function handleBotDefense(io: IOServer, room: Room, state: ServerGameState): voi
 }
 
 function handleBotPreRoll(io: IOServer, room: Room, state: ServerGameState): void {
-  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
+  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'easy';
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const topDiscard = state.discardPile[state.discardPile.length - 1];
 
@@ -766,7 +775,7 @@ function handleBotBuilding(io: IOServer, room: Room, state: ServerGameState): vo
     return;
   }
 
-  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'medium';
+  const diff: BotDifficulty = state.hostGameSettings.botDifficulty ?? 'easy';
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const picked = pickBotStagedPlan(
     state.validTargets,
@@ -830,7 +839,7 @@ function runBotStep(io: IOServer, room: Room): void {
   // This simulates a frustrated human player disconnecting.
   // Surrender only applies in 1v1 bot games. roundsPlayed increments once per full
   // round (both players take a turn), so >= 4 means the bot has had 4 complete turns.
-  const pityDiff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'medium';
+  const pityDiff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'easy';
   if (pityDiff === 'pity') {
     const botPlayer = room.state.players.find((p) => p.isBot);
     const humanPlayer = room.state.players.find((p) => !p.isBot && !p.isEliminated && !p.isSpectator);
@@ -906,7 +915,7 @@ function scheduleBotAction(io: IOServer, room: Room): void {
   const player = currentPlayer(room);
   if (!player?.isBot || player.isEliminated || player.isSpectator) return;
 
-  const diff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'medium';
+  const diff: BotDifficulty = room.state.hostGameSettings.botDifficulty ?? 'easy';
   const { min, max } = botStepDelayRange(diff);
   const delay = min + randomInt(0, Math.max(1, max - min + 1));
   room.botActionTimer = setTimeout(() => runBotStep(io, room), delay);
@@ -1196,16 +1205,29 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
       return;
     }
     const { room, playerId } = info;
-    if (room.state) {
-      socket.emit('error', { message: t(loc, 'room.gameAlreadyStarted') });
-      return;
-    }
     const player = room.players.find((candidate) => candidate.id === playerId && candidate.isConnected);
     if (!player || player.isBot || !isQuickChatPhraseId(phraseId)) {
       socket.emit('error', { message: 'Invalid quick chat phrase' });
       return;
     }
-    io.to(room.code).emit('quick_chat_phrase', { playerId, phraseId });
+    if (!room.state || room.state.phase !== 'turn-transition') {
+      socket.emit('error', { message: t(loc, 'game.invalidPhase') });
+      return;
+    }
+    const state = room.state;
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.id !== playerId) {
+      socket.emit('error', { message: t(loc, 'game.notYourTurn') });
+      return;
+    }
+    const turnKey = `${state.roundsPlayed ?? 0}:${state.currentPlayerIndex}:${currentPlayer.id}`;
+    if (room.quickChatTurnKey === turnKey) {
+      socket.emit('error', { message: 'Quick chat already sent this turn' });
+      return;
+    }
+    room.quickChatTurnKey = turnKey;
+    room.lastActivity = Date.now();
+    broadcastQuickChatPhrase(io, room, playerId, phraseId);
   });
 
   socket.on('create_room', ({ playerName, locale }) => {
@@ -1407,7 +1429,7 @@ export function registerSocketHandlers(io: IOServer, socket: IOSocket): void {
     }
 
     const normalizedSettings = normalizeGameSettingsPatch(gameSettings);
-    const requestedBotDiff: BotDifficulty = normalizedSettings?.botDifficulty ?? 'medium';
+    const requestedBotDiff: BotDifficulty = normalizedSettings?.botDifficulty ?? 'easy';
     const userId = socket.data.userId ?? null;
     const { difficulty: resolvedBotDiff, isPity } = await resolveBotConfig(userId, requestedBotDiff);
 

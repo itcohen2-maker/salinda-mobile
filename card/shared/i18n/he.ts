@@ -217,7 +217,7 @@ export const he: Record<string, string> = {
   'lobby.continueToRoom': 'שמור',
   'lobby.roomCodeLabel': 'קוד החדר',
   'lobby.shareCodeHint': 'שתף את הקוד עם החברים כדי שיוכלו להצטרף',
-  'lobby.shareWebLinkHint': 'מצאתי את משחק הקלפים שינתק אתכם מהעולם. שקט, חכם, וממכר בטירוף. כנסו לאתגר של סלינדה ישירות מהדפדפן:',
+  'lobby.shareWebLinkHint': 'מצאתי את משחק הקלפים שינתק אתכם מהעולם. שקט, חכם, וממכר בטירוף. כנסו לאתגר של סלינדה ישירות מהדפדפן. גרסת בטא — בקרוב בחנויות האפליקציות:',
   'lobby.browserInvite': 'קישור אורח לדפדפן',
   'lobby.inviteHintConfigured': 'לינק מלא משתמש ב־{{base}}. להזמנת מישהו מחוץ לרשת המקומית, הזן/י למטה כתובת HTTPS ציבורית של אותו משחק (או הגדר EXPO_PUBLIC_WEB_APP_URL בבנייה).',
   'lobby.inviteHintMobile':
@@ -331,6 +331,7 @@ export const he: Record<string, string> = {
   'start.title': 'סלינדה',
   'start.subtitle': 'סלינדה · משחק חשבוני חינוכי',
   'start.playerCount': 'מספר שחקנים',
+  'start.fillNames': 'מלאו את שמותכם',
   'start.playerNames': 'שמות השחקנים',
   'start.playerPlaceholder': 'שחקן {{n}}',
   'start.difficulty': 'רמת קושי',

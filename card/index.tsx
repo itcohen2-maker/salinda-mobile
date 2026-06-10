@@ -21787,7 +21787,6 @@ export function PlayModeChoiceScreen({
     typeof window !== 'undefined' &&
     /[?&]goldroom=1/.test(window.location.search);
   const [goldRoomOpen, setGoldRoomOpen] = useState(forceGoldRoom);
-  const [tutorialDone, setTutorialDone] = useState(true); // optimistic: assume done until AsyncStorage says otherwise
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 14 : 24;
   const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 16 : 30);
@@ -21831,18 +21830,23 @@ export function PlayModeChoiceScreen({
     };
   }, [onPreferredNameChange, preferredName]);
 
+  // First-time users are sent straight into the Gold Room "how to play" entry
+  // screen once. When they close it they land on this lobby. The one-shot flag
+  // means every later launch goes straight to the lobby (no auto-open).
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem('salinda_tutorial_done').then((v) => {
-      if (!cancelled) setTutorialDone(v === 'true');
+    AsyncStorage.getItem('salinda_intro_seen').then((v) => {
+      if (cancelled || v === 'true') return;
+      setGoldRoomOpen(true);
+      void AsyncStorage.setItem('salinda_intro_seen', 'true').catch(() => {});
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
-  // Hero button label and action depend on tutorial completion state
-  const heroLabel = tutorialDone ? t('lobby.playNow') : t('lobby.startTutorial');
-  const heroAction = tutorialDone ? onPlay : onHowToPlay;
-  const heroTestID = tutorialDone ? 'lobby-single-player' : 'lobby-start-tutorial';
+  // Green hero button is always "play now" → starts a game.
+  const heroLabel = t('lobby.playNow');
+  const heroAction = onPlay;
+  const heroTestID = 'lobby-single-player';
   const nextLocale = locale === 'he' ? 'en' : 'he';
 
   return (
@@ -21908,29 +21912,6 @@ export function PlayModeChoiceScreen({
                 onPress={heroAction}
               />
               <HomeMenuSparkles tone="cool" />
-              {!tutorialDone ? (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    backgroundColor: '#F59E0B',
-                    borderRadius: 10,
-                    paddingHorizontal: 7,
-                    paddingVertical: 2,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.18,
-                    shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 2 },
-                    elevation: 4,
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                    {t('lobby.tutorialContinueBadge')}
-                  </Text>
-                </View>
-              ) : null}
             </View>
 
             <View testID="lobby-language-toggle" style={[menuItemFrameStyle, { writingDirection: 'ltr' } as any]}>

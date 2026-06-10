@@ -378,7 +378,7 @@ describe('OnlineTableScreens LobbyScreen', () => {
     expect(onStartLocalBotGame).toHaveBeenCalledTimes(1);
     expect(onStartLocalBotGame).toHaveBeenCalledWith(
       'full',
-      expect.objectContaining({ botDifficulty: 'medium' }),
+      expect.objectContaining({ botDifficulty: 'easy' }),
     );
   });
 

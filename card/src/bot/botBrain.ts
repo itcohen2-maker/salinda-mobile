@@ -132,9 +132,18 @@ function handleBotPreRoll(
   const hand = state.players[state.currentPlayerIndex]?.hand ?? [];
   const topDiscard = state.discardPile[state.discardPile.length - 1];
 
-  const allIdenticalCandidates = hand.filter((card) =>
-    validateIdenticalPlay(card, topDiscard),
-  );
+  // Mirror the PLAY_IDENTICAL reducer guards (index.tsx): identical play is a
+  // no-op after a fraction resolution or once two identicals have been chained.
+  // Choosing it anyway makes the reducer no-op and the bot re-decide the same
+  // rejected action forever → frozen turn. (The reducer also requires pre-roll
+  // phase, but the BOT_STEP safety net covers the dormant roll-dice case, and
+  // gating on phase here would change handleBotPreRoll's roll-dice behaviour.)
+  const canPlayIdentical =
+    !state.fractionAttackResolved &&
+    (state.consecutiveIdenticalPlays ?? 0) < 2;
+  const allIdenticalCandidates = canPlayIdentical
+    ? hand.filter((card) => validateIdenticalPlay(card, topDiscard))
+    : [];
 
   let identicalCard: Card | undefined = allIdenticalCandidates[0];
 

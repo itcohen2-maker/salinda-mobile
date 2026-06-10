@@ -147,7 +147,7 @@ export function RollButton({
     >
       <View style={styles.rollBtnOuter}>
         <LinearGradient colors={[...C.btnGrad]} style={styles.rollBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.rollBtnText}>{rolling ? '🎲 מגלגל...' : (label || '🎲 הטל קוביות')}</Text>
+          <Text style={styles.rollBtnText}>{rolling ? 'מגלגל...' : (label || 'הטל קוביות')}</Text>
         </LinearGradient>
       </View>
     </TouchableOpacity>

@@ -37,6 +37,8 @@ export interface Room {
   gameStartedAt?: number;
   /** Guard: true once recordMatch has been called for this game session */
   matchRecorded?: boolean;
+  /** Last turn-transition key that accepted a quick-chat phrase. */
+  quickChatTurnKey?: string | null;
   tableVisibility: LobbyTableVisibility;
   tableStatus: LobbyTableStatus;
   inviteCode: string | null;
@@ -148,6 +150,7 @@ export function createRoom(
     tableTheme: 'classic',
     configuredDifficulty: null,
     configuredGameSettings: null,
+    quickChatTurnKey: null,
   };
   rooms.set(code, room);
   socketToRoom.set(socketId, { roomCode: code, playerId });

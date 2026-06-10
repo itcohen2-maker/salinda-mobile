@@ -31,8 +31,19 @@ export function getNativeGameLayout(viewportHeight: number, platform: string): N
   const bottomControlClearance = isAndroid ? 14 : 10;
   const bottomControlTop = Math.max(0, safeHeight - handBottom + bottomControlClearance);
   const goldActionButtonTopBase = Math.max(96, Math.min(680, safeHeight - Math.round(140 + compactRatio * 40)));
+  // The fan cards visually extend below their layout strip, so lower action
+  // buttons need to start after the rendered fan, not merely after the strip.
+  const visualFanBottom = safeHeight - handBottom - metrics.stripHeight + 195;
+  const lowerActionBottomReserve = 60;
+  const belowFanActionTop = Math.min(
+    safeHeight - lowerActionBottomReserve,
+    Math.max(
+      safeHeight - Math.round(110 - compactRatio * 25),
+      visualFanBottom + 32,
+    ),
+  );
   const goldActionButtonTop = isAndroid
-    ? Math.max(goldActionButtonTopBase, bottomControlTop)
+    ? Math.max(goldActionButtonTopBase, belowFanActionTop)
     : goldActionButtonTopBase;
 
   return {

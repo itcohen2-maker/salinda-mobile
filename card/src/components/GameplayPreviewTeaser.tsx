@@ -33,7 +33,7 @@ const slides: Slide[] = [
 
 function BigVisual({ type }: { type: Slide['visual'] }) {
   if (type === 'goal') return <Text style={styles.bigVisual}>🎯 9</Text>;
-  if (type === 'dice') return <Text style={styles.bigVisual}>🎲 5  4  1</Text>;
+  if (type === 'dice') return <Text style={styles.bigVisual}>5  4  1</Text>;
   if (type === 'equation') return <Text style={styles.bigVisual}>5 + 4 = 9</Text>;
   if (type === 'cards') return <Text style={styles.bigVisual}>4 + 5</Text>;
   if (type === 'special') {
@@ -202,7 +202,7 @@ export default function GameplayPreviewTeaser({ t, onSkip, onComplete }: Gamepla
         <>
           <View style={styles.visualCard}>
             <Text style={styles.bigVisual}>
-              {mini.rolled ? '🎲 6  2' : '🎲 ?  ?'}{'\n'}
+              {mini.rolled ? '6  2' : '?  ?'}{'\n'}
               {mini.equationOk ? '6 − 2 = 4' : '? − ? = 4'}
             </Text>
           </View>

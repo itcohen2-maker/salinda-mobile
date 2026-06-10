@@ -12,7 +12,14 @@ describe('getNativeGameLayout', () => {
     expect(layout.parensTop).toBe(170);
     expect(layout.timerTop).toBe(400);
     expect(layout.bottomControlTop).toBe(663);
-    expect(layout.goldActionButtonTop).toBe(680);
+    expect(layout.goldActionButtonTop).toBe(764);
+  });
+
+  it('keeps lower android actions below the fan when fullscreen increases the viewport', () => {
+    const layout = getNativeGameLayout(900, 'android');
+
+    expect(layout.bottomControlTop).toBe(719);
+    expect(layout.goldActionButtonTop).toBe(820);
   });
 
   it('compacts the android layout on short screens so lower actions stay visible', () => {
@@ -26,7 +33,7 @@ describe('getNativeGameLayout', () => {
     expect(layout.parensTop).toBe(156);
     expect(layout.timerTop).toBe(348);
     expect(layout.bottomControlTop).toBe(579);
-    expect(layout.goldActionButtonTop).toBe(579);
+    expect(layout.goldActionButtonTop).toBe(660);
   });
 
   it('does not compact iOS layout with the android-only rule set', () => {

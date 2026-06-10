@@ -38,6 +38,18 @@
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
     },
+    "androidStatusBar": {
+      "hidden": true,
+      "translucent": true,
+      "barStyle": "light-content",
+      "backgroundColor": "#121118"
+    },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive",
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
+      "enforceContrast": false
+    },
     "web": {
       "favicon": "./assets/favicon.png",
       "name": "Salinda / סלינדה",

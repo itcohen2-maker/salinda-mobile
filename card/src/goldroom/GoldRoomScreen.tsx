@@ -28,8 +28,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import AnimatedDice from '../../AnimatedDice';
 import { useTrainingProgress } from './useTrainingProgress';
-import { DiceEquationRound, DiscardHelperShowcase } from './DiceEquationRound';
-import { VictorySecretFlow } from './VictorySecretFlow';
+import { DiceEquationRound } from './DiceEquationRound';
+import { VictorySecretFlow } from '../tutorial/InteractiveTutorialScreen';
+import { LifelineTile } from './LifelineTile';
 import HandFan from '../../components/HandFan';
 import { GameCard, type Card } from '../../components/CardDesign';
 import { useAuthOptional } from '../hooks/useAuth';
@@ -141,7 +142,7 @@ function buildBasicsSteps(copy: GoldRoomCopy): Step[] {
 // ---- The Hub's task catalog ----
 function buildTasks(copy: GoldRoomCopy): Task[] {
   return [
-    { id: 'basics', badge: '🎲', title: copy.basicsPracticeTitle, desc: copy.basicsPracticeDesc, steps: buildBasicsSteps(copy) },
+    { id: 'basics', badge: '', title: copy.basicsPracticeTitle, desc: copy.basicsPracticeDesc, steps: buildBasicsSteps(copy) },
     { id: 'operations', badge: '⚡', badgeImage: SALINDA_JESTER_IMG, title: copy.specialsTitle, desc: copy.specialsSteps.join(' · '), interactive: true },
     { id: 'discard-helper', badge: '🟢', title: copy.discardHelperTileTitle, desc: copy.discardHelperTileDesc, interactive: true },
     { id: 'victory-secret', badge: '🏆', title: copy.improveTitle, desc: copy.improveDesc, interactive: true },
@@ -546,10 +547,10 @@ function GoldTaskCard({ task, done, eligible, onPress }: { task: Task; done: boo
             <Text style={styles.tileCheckText}>✓</Text>
           </View>
         ) : null}
-        {task.badgeImage ? (
+        {task.id === 'basics' ? null : task.badgeImage ? (
           <Image source={task.badgeImage} style={styles.tileBadgeImg} resizeMode="contain" />
         ) : (
-          <Text style={[styles.tileBadge, task.id === 'basics' && styles.tileBadgeBasics]}>{task.badge}</Text>
+          <Text style={styles.tileBadge}>{task.badge}</Text>
         )}
         <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.82}>
           {task.title}
@@ -770,7 +771,6 @@ function TrainingTask({
 export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRoomScreenProps) {
   const copy = useGoldRoomCopy();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [discardHelperIntroDone, setDiscardHelperIntroDone] = useState(false);
   const { isComplete, markComplete } = useTrainingProgress();
   // Optional so the room can render outside an <AuthProvider> (e.g. previews);
   // in the live app awardCoins is always available.
@@ -811,7 +811,6 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
 
   const exitToHub = useCallback(() => {
     setActiveTaskId(null);
-    setDiscardHelperIntroDone(false);
     setRewardShown(false);
     setCollectError(false);
   }, []);
@@ -839,16 +838,12 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
     }
   }, [auth, collecting, isComplete, markComplete]);
 
-  const handleSelect = useCallback(
-    (id: string) => {
-      if (id === 'discard-helper') setDiscardHelperIntroDone(false);
-      setActiveTaskId(id);
-    },
-    [],
-  );
+  const handleSelect = useCallback((id: string) => {
+    setActiveTaskId(id);
+  }, []);
 
   const activeTask = activeTaskId === 'basics-practice'
-    ? { id: 'basics-practice', badge: '🎲', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true }
+    ? { id: 'basics-practice', badge: '', title: copy.practiceTitle, desc: copy.practiceDesc, interactive: true }
     : tasks.find((tk) => tk.id === activeTaskId);
 
   return (
@@ -882,13 +877,12 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
                     onExit={() => setActiveTaskId(null)}
                     onComplete={() => markComplete('fractions')}
                   />
-                ) : activeTask.id === 'discard-helper' && !discardHelperIntroDone ? (
-                  <DiscardHelperShowcase onComplete={() => setDiscardHelperIntroDone(true)} />
                 ) : activeTask.id === 'discard-helper' ? (
-                  <DiceEquationRound
-                    mode="improve"
-                    onExit={() => setActiveTaskId(null)}
-                    onComplete={() => markComplete('discard-helper')}
+                  <LifelineTile
+                    onComplete={() => {
+                      markComplete('discard-helper');
+                      setActiveTaskId(null);
+                    }}
                   />
                 ) : activeTask.id === 'victory-secret' ? (
                   <VictorySecretFlow
@@ -898,10 +892,7 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
                 ) : (
                   <DiceEquationRound
                     onExit={() => setActiveTaskId(null)}
-                    onComplete={() => {
-                      markComplete('basics');
-                      setActiveTaskId(null);
-                    }}
+                    onComplete={() => markComplete('basics')}
                   />
                 )}
               </View>

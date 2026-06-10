@@ -34,7 +34,7 @@ const DEFAULT_HOST_GAME_SETTINGS: HostGameSettings = {
   abVariant: 'variant_0_15_plus',
   timerSetting: '90',
   timerCustomSeconds: 90,
-  botDifficulty: 'medium',
+  botDifficulty: 'easy',
 };
 import { generateDeck, shuffle, dealCards } from './deck';
 import {

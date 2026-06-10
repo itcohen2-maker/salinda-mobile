@@ -5,6 +5,7 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { LocaleProvider } from '../../i18n/LocaleContext';
+import { AuthProvider } from '../../hooks/useAuth';
 
 // Minimal consumer that captures the context value reference on each render.
 function CaptureConsumer({ capture }: { capture: (value: unknown) => void }) {
@@ -31,18 +32,22 @@ describe('GameContext.Provider value stability', () => {
 
     const { rerender } = render(
       <LocaleProvider>
-        <GameProvider>
-          <CaptureConsumer capture={capture} />
-        </GameProvider>
+        <AuthProvider>
+          <GameProvider>
+            <CaptureConsumer capture={capture} />
+          </GameProvider>
+        </AuthProvider>
       </LocaleProvider>,
     );
 
     // Force a re-render of the consumer without changing state.
     rerender(
       <LocaleProvider>
-        <GameProvider>
-          <CaptureConsumer capture={capture} />
-        </GameProvider>
+        <AuthProvider>
+          <GameProvider>
+            <CaptureConsumer capture={capture} />
+          </GameProvider>
+        </AuthProvider>
       </LocaleProvider>,
     );
 

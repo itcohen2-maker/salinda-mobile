@@ -6,15 +6,18 @@
 // real game UI does all the heavy lifting; we just talk.
 // ============================================================
 
-import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ScrollView,
   useWindowDimensions,
   type ViewStyle,
 } from 'react-native';
@@ -34,6 +37,8 @@ import { HappyBubble, type HappyBubbleTone } from '../components/HappyBubble';
 import { GoldDieFace } from '../../AnimatedDice';
 import { GoldDiceButton } from '../../components/GoldDiceButton';
 import { GoldButton } from '../../components/GoldButton';
+import { GameCard, type Card as DesignCard } from '../../components/CardDesign';
+import HandFan from '../../components/HandFan';
 import { initializeSfx, isSfxMuted, playSfx, setSfxMuted } from '../audio/sfx';
 import { getAudioLoadStatus, getAudioReplayStatus } from '../audio/playbackStatus';
 import { SlindaCoin } from '../../components/SlindaCoin';
@@ -1241,6 +1246,1196 @@ function buildPreparedMultiPlayBonusCards(addA: number, addB: number, prefix: st
   ];
 }
 
+const VICTORY_GOLD = ['#F8E08E', '#F0C659', '#D9A23A', '#8A5A1C'] as const;
+const VICTORY_TABLE_IMG = require('../../assets/table_golden_nobg.png');
+const VICTORY_WILD_ID = 'victory-secret-flow-wild';
+const VICTORY_CARD_14_ID = 'victory-secret-flow-card-14';
+const VICTORY_CARD_21_A_ID = 'victory-secret-flow-card-21-a';
+const VICTORY_CARD_21_B_ID = 'victory-secret-flow-card-21-b';
+
+type VictorySecretStep = 'intro' | 'double-clear' | 'fera' | 'parentheses' | 'complete';
+type VictorySecretSelection = null | 'wild' | 'target14';
+type VictorySecretState = {
+  step: VictorySecretStep;
+  selected: VictorySecretSelection;
+  targetFlashing: boolean;
+  doubleClearDone: boolean;
+  feraSolved: boolean;
+  parensMoved: boolean;
+  finalSolved: boolean;
+  toast: string | null;
+};
+type VictorySecretAction =
+  | { type: 'START' }
+  | { type: 'DOUBLE_CLEAR_DONE' }
+  | { type: 'NEXT_AFTER_DOUBLE_CLEAR' }
+  | { type: 'SELECT_WILD' }
+  | { type: 'PLACE_WILD' }
+  | { type: 'FERA_SOLVED' }
+  | { type: 'MOVE_PARENS' }
+  | { type: 'SELECT_14' }
+  | { type: 'PLACE_14' }
+  | { type: 'FINAL_SOLVED' }
+  | { type: 'SHOW_TOAST'; message: string }
+  | { type: 'CLEAR_TOAST' };
+
+const VICTORY_SECRET_INITIAL_STATE: VictorySecretState = {
+  step: 'intro',
+  selected: null,
+  targetFlashing: false,
+  doubleClearDone: false,
+  feraSolved: false,
+  parensMoved: false,
+  finalSolved: false,
+  toast: null,
+};
+
+function victorySecretReducer(state: VictorySecretState, action: VictorySecretAction): VictorySecretState {
+  switch (action.type) {
+    case 'START':
+      return { ...state, step: 'double-clear', selected: null, targetFlashing: false };
+    case 'DOUBLE_CLEAR_DONE':
+      return { ...state, doubleClearDone: true };
+    case 'NEXT_AFTER_DOUBLE_CLEAR':
+      return { ...state, step: 'fera', selected: null, targetFlashing: false };
+    case 'SELECT_WILD':
+      if (state.step !== 'fera' || state.feraSolved) return state;
+      return { ...state, selected: 'wild', targetFlashing: true };
+    case 'PLACE_WILD':
+      if (state.step !== 'fera' || state.selected !== 'wild') return state;
+      return { ...state, targetFlashing: false };
+    case 'FERA_SOLVED':
+      return { ...state, step: 'parentheses', selected: null, feraSolved: true, targetFlashing: false };
+    case 'MOVE_PARENS':
+      if (state.step !== 'parentheses') return state;
+      return { ...state, parensMoved: true, toast: null };
+    case 'SELECT_14':
+      if (state.step !== 'parentheses') return state;
+      if (!state.parensMoved) return { ...state, toast: 'שנו את מיקום הסוגריים קודם' };
+      return { ...state, selected: 'target14', targetFlashing: true };
+    case 'PLACE_14':
+      if (state.step !== 'parentheses') return state;
+      if (!state.parensMoved) return { ...state, toast: 'שנו את מיקום הסוגריים קודם' };
+      if (state.selected !== 'target14') return state;
+      return { ...state, targetFlashing: false };
+    case 'FINAL_SOLVED':
+      return { ...state, step: 'complete', selected: null, finalSolved: true, targetFlashing: false };
+    case 'SHOW_TOAST':
+      return { ...state, toast: action.message };
+    case 'CLEAR_TOAST':
+      return { ...state, toast: null };
+    default:
+      return state;
+  }
+}
+
+const VICTORY_DOUBLE_HAND: DesignCard[] = [
+  { id: 'victory-secret-flow-noise-8', type: 'number', value: 8 },
+  { id: VICTORY_CARD_21_A_ID, type: 'number', value: 21 },
+  { id: 'victory-secret-flow-noise-13', type: 'number', value: 13 },
+  { id: VICTORY_CARD_21_B_ID, type: 'number', value: 21 },
+  { id: 'victory-secret-flow-noise-4', type: 'number', value: 4 },
+];
+const VICTORY_WILD_HAND: DesignCard[] = [{ id: VICTORY_WILD_ID, type: 'wild' }];
+const VICTORY_TARGET_14_HAND: DesignCard[] = [{ id: VICTORY_CARD_14_ID, type: 'number', value: 14 }];
+
+type VictoryFlightKind = 'double' | 'wild' | 'target14';
+type VictoryFlight = { key: number; kind: VictoryFlightKind; cards: DesignCard[]; onDone: () => void };
+
+function useVictoryPulse(active: boolean, from = 0, to = 1, duration = 540) {
+  const value = useRef(new Animated.Value(from)).current;
+  useEffect(() => {
+    value.stopAnimation();
+    if (!active) {
+      value.setValue(from);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: to, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(value, { toValue: from, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, duration, from, to, value]);
+  return value;
+}
+
+function VictoryGoldBanner({ title, body }: { title?: string; body: string }) {
+  return (
+    <View style={victoryStyles.bannerWrap}>
+      <LinearGradient colors={VICTORY_GOLD} locations={[0, 0.3, 0.62, 1]} style={victoryStyles.banner}>
+        <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']} style={victoryStyles.bannerSheen} />
+        {title ? <Text style={victoryStyles.bannerTitle}>{title}</Text> : null}
+        <Text style={victoryStyles.bannerBody}>{body}</Text>
+      </LinearGradient>
+    </View>
+  );
+}
+
+function VictoryDiceRow({ values }: { values: number[] }) {
+  return (
+    <View style={victoryStyles.diceRow}>
+      {values.map((value, index) => (
+        <View key={`${value}-${index}`} style={victoryStyles.die}>
+          <Text style={victoryStyles.dieText}>{value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function VictorySlot({ active, filled, onPress, children }: { active?: boolean; filled?: boolean; onPress?: () => void; children?: React.ReactNode }) {
+  const pulse = useVictoryPulse(!!active, 0.34, 1, 420);
+  const opacity = active ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) : 1;
+  const scale = active ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.05] }) : 1;
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined}>
+      <Animated.View style={[victoryStyles.slot, active && victoryStyles.slotActive, filled && victoryStyles.slotFilled, { opacity, transform: [{ scale }] }]}>
+        {children ?? <Text style={victoryStyles.slotText}>?</Text>}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function VictoryBoardShell({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={victoryStyles.boardShell}>
+      <Image source={VICTORY_TABLE_IMG} resizeMode="contain" style={victoryStyles.tableImage} />
+      <View style={victoryStyles.boardOverlay}>{children}</View>
+    </View>
+  );
+}
+
+function VictoryDoubleClearBoard() {
+  return (
+    <VictoryBoardShell>
+      <VictoryDiceRow values={[3, 5, 6]} />
+      <Text style={victoryStyles.ltrEquation}>(3 * 5) + 6 = 21</Text>
+      <View style={victoryStyles.redLifelineButton}>
+        <Text style={victoryStyles.redLifelineText}>(3 * 5) + 6</Text>
+      </View>
+    </VictoryBoardShell>
+  );
+}
+
+function VictoryFeraBoard({ solved, active, onSlotPress }: { solved: boolean; active: boolean; onSlotPress: () => void }) {
+  return (
+    <VictoryBoardShell>
+      <View style={victoryStyles.equationRow}>
+        <Text style={victoryStyles.ltrEquation}>(4 *</Text>
+        <VictorySlot active={active} filled={solved} onPress={solved ? undefined : onSlotPress}>
+          {solved ? <GameCard card={{ id: 'victory-secret-flow-wild-5', type: 'wild', resolvedValue: 5 }} small /> : <Text style={victoryStyles.slotText}>?</Text>}
+        </VictorySlot>
+        <Text style={victoryStyles.ltrEquation}>) + 1 = 21</Text>
+      </View>
+    </VictoryBoardShell>
+  );
+}
+
+function VictoryParenthesesBoard({
+  moved,
+  moveProgress,
+  active,
+  solved,
+  onSlotPress,
+}: {
+  moved: boolean;
+  moveProgress: Animated.Value;
+  active: boolean;
+  solved: boolean;
+  onSlotPress: () => void;
+}) {
+  const wrongOpacity = moveProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const rightOpacity = moveProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const wrongX = moveProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -20] });
+  const rightX = moveProgress.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
+  return (
+    <VictoryBoardShell>
+      <VictoryDiceRow values={[2, 3, 4]} />
+      <View style={victoryStyles.targetPill}>
+        <Text style={victoryStyles.targetPillLabel}>מטרה</Text>
+        <Text style={victoryStyles.targetPillValue}>14</Text>
+      </View>
+      <View style={victoryStyles.parenthesesEquationStage}>
+        <Animated.View style={[victoryStyles.parenthesesEquationLayer, { opacity: wrongOpacity, transform: [{ translateX: wrongX }] }]}>
+          <Text style={victoryStyles.ltrEquation}>(2 + 3) * 4 = 20</Text>
+        </Animated.View>
+        <Animated.View style={[victoryStyles.parenthesesEquationLayer, { opacity: rightOpacity, transform: [{ translateX: rightX }] }]}>
+          <Text style={victoryStyles.ltrEquation}>2 + (3 * 4) = 14</Text>
+        </Animated.View>
+      </View>
+      <View style={victoryStyles.resultPill}>
+        <Text style={[victoryStyles.resultPillText, moved && victoryStyles.resultPillTextGood]}>{moved ? '2 + 12 = 14' : '5 * 4 = 20'}</Text>
+      </View>
+      <VictorySlot active={active} filled={solved} onPress={solved ? undefined : onSlotPress}>
+        {solved ? <GameCard card={{ id: 'victory-secret-flow-placed-14', type: 'number', value: 14 }} small /> : <Text style={victoryStyles.slotText}>?</Text>}
+      </VictorySlot>
+    </VictoryBoardShell>
+  );
+}
+
+function VictoryFlyingCards({ flight }: { flight: VictoryFlight | null }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!flight) return;
+    progress.setValue(0);
+    void playSfx(flight.kind === 'double' ? 'combo' : 'tap', { cooldownMs: 0, volumeOverride: flight.kind === 'double' ? 0.75 : 0.58 });
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: flight.kind === 'double' ? 920 : 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) flight.onDone();
+    });
+  }, [flight, progress]);
+  if (!flight) return null;
+  return (
+    <View pointerEvents="none" style={victoryStyles.flyingLayer}>
+      {flight.cards.map((card, index) => {
+        const spread = (index - (flight.cards.length - 1) / 2) * 76;
+        const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [spread, flight.kind === 'double' ? spread * 2 : 0] });
+        const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, flight.kind === 'double' ? -430 - index * 18 : -330] });
+        const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', flight.kind === 'double' ? `${(index ? 1 : -1) * 20}deg` : '0deg'] });
+        const scale = progress.interpolate({ inputRange: [0, 0.34, 1], outputRange: [0.84, 1.08, flight.kind === 'double' ? 0.46 : 0.4] });
+        const opacity = progress.interpolate({ inputRange: [0, 0.78, 1], outputRange: [1, 1, 0] });
+        const displayCard = flight.kind === 'wild' ? { ...card, resolvedValue: 5 } : card;
+        return (
+          <Animated.View key={`${flight.key}-${card.id}`} style={[victoryStyles.flyingCard, { opacity, transform: [{ translateX }, { translateY }, { rotate }, { scale }] }]}>
+            <GameCard card={displayCard} small />
+          </Animated.View>
+        );
+      })}
+    </View>
+  );
+}
+
+function VictoryToast({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <View pointerEvents="none" style={victoryStyles.toast}>
+      <Text style={victoryStyles.toastText}>{message}</Text>
+    </View>
+  );
+}
+
+function VictoryExitModal({ onFinish }: { onFinish: () => void }) {
+  return (
+    <View style={victoryStyles.modalOverlay}>
+      <View style={victoryStyles.exitCard}>
+        <Text style={victoryStyles.exitTitle}>סוד הניצחון בידיים שלך! 🏆</Text>
+        <Text style={victoryStyles.exitBody}>
+          למדתם את הסודות המתקדמים ביותר של סלינדה: פינוי כפול, קלף הפרא, והכוח המשנה חיים של הזזת הסוגריים. עכשיו אתם מוכנים למשחק האמיתי!
+        </Text>
+        <GoldButton label="סיום וחזרה לחדר" onPress={onFinish} fullWidth height={56} radius={24} fontSize={20} />
+      </View>
+    </View>
+  );
+}
+
+export function VictorySecretFlow({ onExit, onComplete }: { onExit?: () => void; onComplete?: () => void }) {
+  const { width } = useWindowDimensions();
+  const [state, dispatch] = useReducer(victorySecretReducer, VICTORY_SECRET_INITIAL_STATE);
+  const [flight, setFlight] = useState<VictoryFlight | null>(null);
+  const flightSeq = useRef(0);
+  const doublePulse = useVictoryPulse(state.step === 'double-clear' && !state.doubleClearDone && !flight, 0, 1, 430);
+  const parensMoveProgress = useRef(new Animated.Value(0)).current;
+  const fanWidth = Math.min(width, 480);
+
+  const highlightedDoubleIds = useMemo(
+    () => (state.step === 'double-clear' && !state.doubleClearDone ? new Set([VICTORY_CARD_21_A_ID, VICTORY_CARD_21_B_ID]) : undefined),
+    [state.doubleClearDone, state.step],
+  );
+  const launchFlight = useCallback((kind: VictoryFlightKind, cards: DesignCard[], onDone: () => void) => {
+    flightSeq.current += 1;
+    setFlight({ key: flightSeq.current, kind, cards, onDone });
+  }, []);
+
+  useEffect(() => {
+    if (state.step !== 'double-clear' || state.doubleClearDone || flight) return;
+    const timer = setTimeout(() => {
+      launchFlight('double', VICTORY_DOUBLE_HAND.filter((card) => card.value === 21), () => {
+        setFlight(null);
+        dispatch({ type: 'DOUBLE_CLEAR_DONE' });
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [flight, launchFlight, state.doubleClearDone, state.step]);
+
+  useEffect(() => {
+    if (!state.toast) return;
+    const timer = setTimeout(() => dispatch({ type: 'CLEAR_TOAST' }), 1600);
+    return () => clearTimeout(timer);
+  }, [state.toast]);
+
+  const placeWild = useCallback(() => {
+    if (state.selected !== 'wild' || flight) return;
+    dispatch({ type: 'PLACE_WILD' });
+    launchFlight('wild', VICTORY_WILD_HAND, () => {
+      setFlight(null);
+      dispatch({ type: 'FERA_SOLVED' });
+      parensMoveProgress.setValue(0);
+    });
+  }, [flight, launchFlight, parensMoveProgress, state.selected]);
+
+  const moveParens = useCallback(() => {
+    if (state.parensMoved || flight) return;
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.52 });
+    Animated.timing(parensMoveProgress, {
+      toValue: 1,
+      duration: 540,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) dispatch({ type: 'MOVE_PARENS' });
+    });
+  }, [flight, parensMoveProgress, state.parensMoved]);
+
+  const place14 = useCallback(() => {
+    if (!state.parensMoved) {
+      dispatch({ type: 'SHOW_TOAST', message: 'שנו את מיקום הסוגריים קודם' });
+      return;
+    }
+    if (state.selected !== 'target14' || flight) return;
+    dispatch({ type: 'PLACE_14' });
+    launchFlight('target14', VICTORY_TARGET_14_HAND, () => {
+      setFlight(null);
+      dispatch({ type: 'FINAL_SOLVED' });
+      void playSfx('combo', { cooldownMs: 0, volumeOverride: 0.72 });
+    });
+  }, [flight, launchFlight, state.parensMoved, state.selected]);
+
+  const finish = useCallback(() => {
+    onComplete?.();
+    onExit?.();
+  }, [onComplete, onExit]);
+
+  if (state.step === 'intro') {
+    return (
+      <View style={victoryStyles.root}>
+        <LinearGradient colors={['#050505', '#120C05', '#291707', '#050505']} locations={[0, 0.38, 0.72, 1]} style={StyleSheet.absoluteFill} />
+        <View pointerEvents="none" style={victoryStyles.introGlow} />
+        <View style={victoryStyles.introContent}>
+          <VictoryGoldBanner body="ברוכים הבאים לשלב המתקדם ביותר! כאן תלמדו את הסודות שיגרמו לכם לנצח משחקים ולהיפטר מכמויות של קלפים במכה אחת." />
+          <View style={victoryStyles.introTitleWrap}>
+            <Text style={victoryStyles.introTitle}>סוד הניצחון 🏆</Text>
+          </View>
+        </View>
+        <View style={victoryStyles.bottomButtonWrap}>
+          <GoldButton label="קדימה, לדרך!" onPress={() => dispatch({ type: 'START' })} fullWidth height={58} radius={28} fontSize={22} />
+        </View>
+      </View>
+    );
+  }
+
+  const bannerTitle = state.step === 'fera' ? 'קלף הפרא – הקלף שפותח את הכל!' : undefined;
+  const bannerBody =
+    state.step === 'double-clear'
+      ? 'איזה כיף! הגענו למטרה 21 עם התרגיל שעל הלוח. כשיש לכם שני קלפים ביד שמתאימים בדיוק לתוצאה – הקישו עליהם כדי לבצע פינוי כפול ולהיפטר משניהם במכה אחת!'
+      : state.step === 'fera'
+        ? 'כדי להגיע למטרה 21, חסר לנו מספר אחד במשוואה. קלף הפרא ישלים לנו את החסר!'
+        : state.parensMoved
+          ? 'בינגו! עכשיו התרגיל שווה 14. הציבו את הקלף מהמניפה למשוואה!'
+          : 'רגע, התרגיל מגיע ל-20 ולא למטרה 14! הקישו על חצי הסוגריים כדי להזיז אותם ולשנות את סדר הפעולות!';
+
+  const doubleOpacity = doublePulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] });
+  return (
+    <View style={victoryStyles.root}>
+      <LinearGradient colors={['#050505', '#130D06', '#241407', '#050505']} locations={[0, 0.42, 0.72, 1]} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={victoryStyles.tableGlow} />
+      <View style={victoryStyles.topArea}>
+        <VictoryGoldBanner title={bannerTitle} body={bannerBody} />
+        {state.step === 'double-clear' ? <VictoryDoubleClearBoard /> : null}
+        {state.step === 'fera' ? <VictoryFeraBoard solved={state.feraSolved} active={state.targetFlashing} onSlotPress={placeWild} /> : null}
+        {state.step === 'parentheses' || state.step === 'complete' ? (
+          <VictoryParenthesesBoard moved={state.parensMoved} moveProgress={parensMoveProgress} active={state.targetFlashing} solved={state.finalSolved} onSlotPress={place14} />
+        ) : null}
+      </View>
+      {state.step === 'parentheses' && !state.finalSolved ? (
+        <View style={victoryStyles.parenthesesButtons}>
+          <GoldButton label="‹" onPress={moveParens} disabled={state.parensMoved || !!flight} height={40} radius={14} raise={5} fontSize={26} />
+          <GoldButton label="›" onPress={moveParens} disabled={state.parensMoved || !!flight} height={40} radius={14} raise={5} fontSize={26} />
+        </View>
+      ) : null}
+      <View style={victoryStyles.fanWrap}>
+        {state.step === 'double-clear' ? (
+          <Animated.View style={{ opacity: state.doubleClearDone ? 1 : doubleOpacity }}>
+            <HandFan cards={VICTORY_DOUBLE_HAND} width={fanWidth} selectedIds={highlightedDoubleIds} centerCardId={VICTORY_CARD_21_A_ID} />
+          </Animated.View>
+        ) : null}
+        {state.step === 'fera' ? (
+          <HandFan
+            cards={VICTORY_WILD_HAND}
+            width={fanWidth}
+            selectedIds={state.selected === 'wild' ? new Set([VICTORY_WILD_ID]) : undefined}
+            onTapCard={() => dispatch({ type: 'SELECT_WILD' })}
+            canTap={() => !state.feraSolved && !flight}
+            centerCardId={VICTORY_WILD_ID}
+          />
+        ) : null}
+        {state.step === 'parentheses' && !state.finalSolved ? (
+          <HandFan
+            cards={VICTORY_TARGET_14_HAND}
+            width={fanWidth}
+            selectedIds={state.selected === 'target14' ? new Set([VICTORY_CARD_14_ID]) : undefined}
+            onTapCard={() => dispatch({ type: 'SELECT_14' })}
+            canTap={() => !flight}
+            centerCardId={VICTORY_CARD_14_ID}
+          />
+        ) : null}
+      </View>
+      {state.step === 'double-clear' && state.doubleClearDone ? (
+        <View style={victoryStyles.continueButtonWrap}>
+          <GoldButton label="המשך ›" onPress={() => dispatch({ type: 'NEXT_AFTER_DOUBLE_CLEAR' })} height={52} radius={26} raise={6} fontSize={20} />
+        </View>
+      ) : null}
+      <VictoryFlyingCards flight={flight} />
+      <VictoryToast message={state.toast} />
+      {state.step === 'complete' ? <VictoryExitModal onFinish={finish} /> : null}
+    </View>
+  );
+}
+
+type LifelineStage = 'intro' | 'solutions' | 'practice';
+type LifelinePracticeStep = 'chooseMini' | 'placeDice' | 'complete';
+
+type LifelineOption = {
+  value: string;
+  equation: string;
+  dice: [number, number];
+};
+
+const LIFELINE_DICE_VALUES = [6, 4, 2] as const;
+const LIFELINE_HAND: DesignCard[] = [
+  { id: 'lifeline-hand-1', type: 'number', value: 1 },
+  { id: 'lifeline-hand-2', type: 'number', value: 2 },
+  { id: 'lifeline-hand-4', type: 'number', value: 4 },
+  { id: 'lifeline-hand-7', type: 'number', value: 7 },
+  { id: 'lifeline-hand-5', type: 'number', value: 5 },
+];
+const LIFELINE_OPTIONS: LifelineOption[] = [
+  { value: '1', equation: '10 = (6 + 4)', dice: [6, 4] },
+  { value: '2', equation: '2 = (6 - 4)', dice: [6, 4] },
+  { value: '4', equation: '4 = (6 - 2)', dice: [6, 2] },
+  { value: '7', equation: '7 = (4 + 2 + 1)', dice: [4, 2] },
+  { value: '1/2', equation: '1/2 = (2 / 4)', dice: [2, 4] },
+];
+
+const LIFELINE_INTRO_COPY = 'לא מוצאים תרגיל מתאים לקלפים שלכם? הכפתור הירוק ייתן את התשובה!';
+const LIFELINE_SOLUTIONS_COPY = 'הכפתור הירוק סרק את המניפה ומצא פתרונות! כל מיני-קלף הוא פתרון אפשרי. לחצו עליו לחשיפת התרגיל.';
+const LIFELINE_SELECTED_COPY = 'תוכלו להשתמש בתרגיל הזה כדי להיפטר מהקלף! לחצו על חץ ההמשך כדי לתרגל בעצמכם.';
+const LIFELINE_PRACTICE_COPY = 'עכשיו מתרגלים בעצמכם: לחצו על מיני-קלף, ואז בנו את התרגיל רק מהקוביות שעל השולחן.';
+const LIFELINE_RED_DEFAULT_COPY = 'לחץ על מיני קלף\nכדי לראות את התרגיל';
+
+function LifelineGoldBanner({ text }: { text: string }) {
+  return (
+    <View pointerEvents="none" style={lifelineStyles.bannerPin}>
+      <LinearGradient colors={VICTORY_GOLD} locations={[0, 0.3, 0.62, 1]} style={lifelineStyles.banner}>
+        <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.52)', 'rgba(255,255,255,0)']} style={lifelineStyles.bannerSheen} />
+        <Text allowFontScaling={false} style={lifelineStyles.bannerText}>{text}</Text>
+      </LinearGradient>
+    </View>
+  );
+}
+
+function LifelineDiceRow({
+  selected,
+  placedDice,
+  onPressDie,
+}: {
+  selected?: LifelineOption | null;
+  placedDice?: number[];
+  onPressDie?: (value: number) => void;
+}) {
+  return (
+    <View style={lifelineStyles.diceRow}>
+      {LIFELINE_DICE_VALUES.map((value) => {
+        const wanted = selected?.dice.includes(value) === true;
+        const usedCount = placedDice?.filter((v) => v === value).length ?? 0;
+        const targetCount = selected?.dice.filter((v) => v === value).length ?? 0;
+        const used = wanted && usedCount >= targetCount && targetCount > 0;
+        const enabled = !!selected && wanted && !used && !!onPressDie;
+        return (
+          <Pressable
+            key={value}
+            disabled={!enabled}
+            onPress={() => enabled && onPressDie?.(value)}
+            accessibilityRole="button"
+            accessibilityLabel={`קוביה ${value}`}
+          >
+            <View style={[lifelineStyles.diceCube, enabled && lifelineStyles.diceCubeActive, used && lifelineStyles.diceCubeUsed]}>
+              <Text allowFontScaling={false} style={lifelineStyles.diceText}>{value}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function LifelineGreenButton({ onPress }: { onPress: () => void }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.05, duration: 660, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.96, duration: 660, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="הפעל גלגל הצלה">
+      <Animated.View style={[lifelineStyles.helperSlot, { transform: [{ scale: pulse }] }]}>
+        <LinearGradient colors={['#37A66A', '#247C4A', '#145B32']} style={[lifelineStyles.helperButton, lifelineStyles.greenButton]}>
+          <View pointerEvents="none" style={lifelineStyles.greenInnerRing} />
+          <Text allowFontScaling={false} style={lifelineStyles.greenButtonText}>גלגל הצלה</Text>
+        </LinearGradient>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function LifelineRedButton({ text }: { text: string }) {
+  const isEquation = /=/.test(text);
+  return (
+    <View style={lifelineStyles.helperSlot}>
+      <LinearGradient colors={['#C43C32', '#942720', '#671717']} style={[lifelineStyles.helperButton, lifelineStyles.redButton]}>
+        <View style={isEquation ? lifelineStyles.redEquationRow : lifelineStyles.redCopyRow}>
+          {isEquation ? (
+            <Text allowFontScaling={false} style={[lifelineStyles.redButtonText, lifelineStyles.redEquationText]}>
+              {text}
+            </Text>
+          ) : (
+            <>
+              <Text allowFontScaling={false} style={lifelineStyles.redButtonText}>לחץ על מיני קלף</Text>
+              <Text allowFontScaling={false} style={lifelineStyles.redButtonText}>כדי לראות את התרגיל</Text>
+            </>
+          )}
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
+function LifelineMiniCards({ selectedValue, onPress }: { selectedValue: string | null; onPress: (option: LifelineOption) => void }) {
+  return (
+    <View style={lifelineStyles.miniRow}>
+      {LIFELINE_OPTIONS.map((option) => (
+        <Pressable key={option.value} onPress={() => onPress(option)} accessibilityRole="button" accessibilityLabel={`פתרון ${option.value}`}>
+          <View style={[lifelineStyles.miniCard, selectedValue === option.value && lifelineStyles.miniCardActive]}>
+            <Text allowFontScaling={false} style={lifelineStyles.miniCardText}>{option.value}</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function LifelineEmptyEquation() {
+  return (
+    <View style={lifelineStyles.emptyEquation}>
+      <Text allowFontScaling={false} style={lifelineStyles.emptyEquals}>=</Text>
+      <View style={lifelineStyles.emptyResultCard}>
+        <Text allowFontScaling={false} style={lifelineStyles.emptyResultText}>?</Text>
+      </View>
+    </View>
+  );
+}
+
+function LifelinePracticeEquation({
+  selected,
+  placedDice,
+  onPressDie,
+}: {
+  selected: LifelineOption | null;
+  placedDice: number[];
+  onPressDie: (value: number) => void;
+}) {
+  const target = selected?.equation.split('=')[0]?.trim() ?? '?';
+  const left = placedDice[0] ?? null;
+  const right = placedDice[1] ?? null;
+  return (
+    <View style={lifelineStyles.practiceEquationWrap}>
+      <Text allowFontScaling={false} style={lifelineStyles.practiceEquationToken}>{target}</Text>
+      <Text allowFontScaling={false} style={lifelineStyles.practiceEquationToken}>=</Text>
+      <Text allowFontScaling={false} style={lifelineStyles.practiceEquationToken}>(</Text>
+      <View style={[lifelineStyles.practiceSlot, left != null && lifelineStyles.practiceSlotFilled]}>
+        <Text allowFontScaling={false} style={left != null ? lifelineStyles.practiceSlotText : lifelineStyles.practiceSlotHint}>
+          {left ?? '?'}
+        </Text>
+      </View>
+      <Text allowFontScaling={false} style={lifelineStyles.practiceEquationToken}>+</Text>
+      <View style={[lifelineStyles.practiceSlot, right != null && lifelineStyles.practiceSlotFilled]}>
+        <Text allowFontScaling={false} style={right != null ? lifelineStyles.practiceSlotText : lifelineStyles.practiceSlotHint}>
+          {right ?? '?'}
+        </Text>
+      </View>
+      <Text allowFontScaling={false} style={lifelineStyles.practiceEquationToken}>)</Text>
+    </View>
+  );
+}
+
+function LifelineNextArrow({ onPress }: { onPress: () => void }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="המשך">
+      <Animated.View style={[lifelineStyles.nextArrow, { transform: [{ scale: pulse }] }]}>
+        <Text allowFontScaling={false} style={lifelineStyles.nextArrowText}>›</Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+export function DiscardHelperShowcase({ onComplete }: { onComplete: () => void }) {
+  const { width } = useWindowDimensions();
+  const [stage, setStage] = useState<LifelineStage>('intro');
+  const [selectedValue, setSelectedValue] = useState<string | null>(null);
+  const [practiceStep, setPracticeStep] = useState<LifelinePracticeStep>('chooseMini');
+  const [placedDice, setPlacedDice] = useState<number[]>([]);
+  const boardFade = useRef(new Animated.Value(1)).current;
+  const fanFocus = useRef(new Animated.Value(0)).current;
+  const fanW = Math.min(width, 480);
+  const selected = useMemo(
+    () => LIFELINE_OPTIONS.find((option) => option.value === selectedValue) ?? null,
+    [selectedValue],
+  );
+  const selectedIds = useMemo(() => new Set<string>(), []);
+  const instruction =
+    stage === 'intro'
+      ? LIFELINE_INTRO_COPY
+      : stage === 'solutions' && selected
+        ? LIFELINE_SELECTED_COPY
+        : stage === 'solutions'
+          ? LIFELINE_SOLUTIONS_COPY
+          : LIFELINE_PRACTICE_COPY;
+
+  const animateBoardSwap = useCallback(() => {
+    boardFade.setValue(0);
+    Animated.timing(boardFade, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [boardFade]);
+
+  const revealSolutions = useCallback(() => {
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+    setStage('solutions');
+    setSelectedValue(null);
+    setPracticeStep('chooseMini');
+    setPlacedDice([]);
+    animateBoardSwap();
+  }, [animateBoardSwap]);
+
+  const pickMini = useCallback((option: LifelineOption) => {
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+    setSelectedValue(option.value);
+    setPlacedDice([]);
+    setPracticeStep(stage === 'practice' ? 'placeDice' : 'chooseMini');
+    fanFocus.setValue(0);
+    Animated.timing(fanFocus, { toValue: 1, duration: 460, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [fanFocus, stage]);
+
+  const enterPractice = useCallback(() => {
+    setStage('practice');
+    setSelectedValue(null);
+    setPracticeStep('chooseMini');
+    setPlacedDice([]);
+    animateBoardSwap();
+  }, [animateBoardSwap]);
+
+  const placeDie = useCallback((value: number) => {
+    if (stage !== 'practice' || practiceStep !== 'placeDice' || !selected) return;
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.56 });
+    setPlacedDice((prev) => {
+      if (prev.length >= selected.dice.length) return prev;
+      const next = [...prev, value];
+      if (next.length >= selected.dice.length) {
+        setPracticeStep('complete');
+        setTimeout(onComplete, 820);
+      }
+      return next;
+    });
+  }, [onComplete, practiceStep, selected, stage]);
+
+  const fanScale = fanFocus.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
+  const fanTranslateY = fanFocus.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const redText = selected ? selected.equation : LIFELINE_RED_DEFAULT_COPY;
+  const showMiniCards = stage !== 'intro';
+
+  return (
+    <View style={lifelineStyles.root}>
+      <LinearGradient colors={['#050505', '#130D06', '#241407', '#050505']} locations={[0, 0.42, 0.72, 1]} style={StyleSheet.absoluteFill} />
+      <LifelineGoldBanner text={instruction} />
+
+      <View style={lifelineStyles.centerStage}>
+        <Animated.View style={[lifelineStyles.tableShell, { opacity: boardFade }]}>
+          <Image source={VICTORY_TABLE_IMG} resizeMode="contain" style={lifelineStyles.tableImage} />
+          <View style={lifelineStyles.tableContent}>
+            <LifelineDiceRow
+              selected={stage === 'practice' ? selected : null}
+              placedDice={stage === 'practice' ? placedDice : []}
+              onPressDie={stage === 'practice' ? placeDie : undefined}
+            />
+            {stage === 'practice' ? (
+              <LifelinePracticeEquation selected={selected} placedDice={placedDice} onPressDie={placeDie} />
+            ) : (
+              <LifelineEmptyEquation />
+            )}
+          </View>
+        </Animated.View>
+      </View>
+
+      <View style={lifelineStyles.helperDock}>
+        {stage === 'intro' ? <LifelineGreenButton onPress={revealSolutions} /> : <LifelineRedButton text={redText} />}
+      </View>
+
+      {showMiniCards ? (
+        <View style={lifelineStyles.miniDock}>
+          <LifelineMiniCards selectedValue={selectedValue} onPress={pickMini} />
+        </View>
+      ) : null}
+
+      <Animated.View style={[lifelineStyles.fanWrap, { width: fanW, transform: [{ translateY: fanTranslateY }, { scale: fanScale }] }]}>
+        <HandFan
+          cards={LIFELINE_HAND}
+          width={fanW}
+          selectedIds={selectedIds}
+          centerCardId={null}
+          canTap={() => false}
+          playTapSound={false}
+        />
+      </Animated.View>
+
+      {stage === 'intro' ? (
+        <View style={lifelineStyles.arrowWrap}>
+          <LifelineNextArrow onPress={revealSolutions} />
+        </View>
+      ) : null}
+      {stage === 'solutions' && selected ? (
+        <View style={lifelineStyles.arrowWrap}>
+          <LifelineNextArrow onPress={enterPractice} />
+        </View>
+      ) : null}
+      {practiceStep === 'complete' ? (
+        <View pointerEvents="none" style={lifelineStyles.doneToast}>
+          <Text allowFontScaling={false} style={lifelineStyles.doneTitle}>כל הכבוד!</Text>
+          <Text allowFontScaling={false} style={lifelineStyles.doneBody}>השתמשתם בגלגל ההצלה והשלמתם את האריח.</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const lifelineStyles = StyleSheet.create({
+  root: { flex: 1, overflow: 'hidden' },
+  bannerPin: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    right: 12,
+    zIndex: 20,
+    alignItems: 'center',
+  },
+  banner: {
+    width: '100%',
+    maxWidth: 430,
+    minHeight: 86,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#8A5A1C',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.42,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  bannerSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
+  bannerText: {
+    color: '#2F2009',
+    fontSize: 14.5,
+    lineHeight: 20,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  centerStage: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 236,
+  },
+  tableShell: {
+    width: '100%',
+    maxWidth: 390,
+    aspectRatio: 1024 / 774,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.78 },
+  tableContent: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 20,
+    paddingHorizontal: 18,
+    paddingTop: 58,
+    paddingBottom: 26,
+  },
+  helperDock: {
+    position: 'absolute',
+    top: 190,
+    left: 0,
+    right: 0,
+    zIndex: 28,
+    alignItems: 'center',
+  },
+  miniDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 214,
+    zIndex: 24,
+    alignItems: 'center',
+  },
+  helperSlot: {
+    width: 230,
+    minHeight: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helperButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#F5D45A',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  greenButton: {
+    width: 152,
+    height: 78,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+  },
+  greenInnerRing: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    top: 8,
+    bottom: 8,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(255,241,168,0.9)',
+  },
+  greenButtonText: {
+    color: '#FFF7D6',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  redButton: {
+    width: 218,
+    minHeight: 82,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  redCopyRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redEquationRow: {
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redButtonText: {
+    color: '#FFF7D6',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  redEquationText: {
+    width: '100%',
+    fontSize: 20,
+    lineHeight: 25,
+    textAlign: 'center',
+    writingDirection: 'ltr',
+    direction: 'ltr',
+  },
+  miniRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 54,
+  },
+  miniCard: {
+    width: 46,
+    height: 54,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#42A5F5',
+    backgroundColor: '#F8F4EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniCardActive: {
+    borderColor: '#7BE08A',
+    shadowColor: '#7BE08A',
+    shadowOpacity: 0.75,
+    shadowRadius: 12,
+    elevation: 10,
+    transform: [{ translateY: -2 }],
+  },
+  miniCardText: { color: '#0B63A3', fontSize: 20, fontWeight: '900' },
+  diceRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    gap: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 72,
+  },
+  diceCube: {
+    width: 66,
+    height: 66,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#D89D10',
+    backgroundColor: '#F7C61D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7A4D00',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  diceCubeActive: {
+    borderColor: '#FFF6A8',
+    shadowColor: '#FDE047',
+    shadowOpacity: 0.85,
+    shadowRadius: 12,
+    transform: [{ translateY: -2 }],
+  },
+  diceCubeUsed: {
+    opacity: 0.48,
+    transform: [{ scale: 0.94 }],
+  },
+  diceText: { color: '#1A1207', fontSize: 28, lineHeight: 32, fontWeight: '900' },
+  emptyEquation: {
+    minWidth: 140,
+    height: 62,
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyEquals: {
+    color: '#F4B32B',
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+  },
+  emptyResultCard: {
+    width: 58,
+    height: 58,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#C58B28',
+    backgroundColor: '#FFF7EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyResultText: {
+    color: '#0E335C',
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+  },
+  practiceEquationWrap: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(14,76,45,0.46)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(84,180,117,0.58)',
+  },
+  practiceEquationToken: {
+    color: '#F8E08E',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  practiceSlot: {
+    minWidth: 42,
+    height: 44,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(248,224,142,0.42)',
+    backgroundColor: 'rgba(255,243,201,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  practiceSlotReady: {
+    borderStyle: 'solid',
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(248,224,142,0.2)',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  practiceSlotFilled: {
+    borderStyle: 'solid',
+    borderColor: '#7BE08A',
+    backgroundColor: 'rgba(46,125,67,0.22)',
+  },
+  practiceSlotText: { color: '#F8E08E', fontSize: 19, fontWeight: '900' },
+  practiceSlotHint: { color: 'rgba(248,224,142,0.42)', fontSize: 19, fontWeight: '900' },
+  fanWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 6,
+    alignSelf: 'center',
+    alignItems: 'center',
+    zIndex: 8,
+  },
+  arrowWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 128,
+    alignItems: 'center',
+    zIndex: 22,
+  },
+  nextArrow: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 2,
+    borderColor: '#6B4516',
+    backgroundColor: '#D9A23A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F8E08E',
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 14,
+  },
+  nextArrowText: {
+    color: '#171006',
+    fontSize: 42,
+    fontWeight: '900',
+    lineHeight: 48,
+    marginTop: -2,
+  },
+  doneToast: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 144,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#F8E08E',
+    backgroundColor: 'rgba(18,10,4,0.96)',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  doneTitle: { color: '#F8E08E', fontSize: 22, lineHeight: 28, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' },
+  doneBody: { color: '#FFF4B8', fontSize: 15, lineHeight: 22, fontWeight: '800', textAlign: 'center', writingDirection: 'rtl' },
+});
+
+const victoryStyles = StyleSheet.create({
+  root: { flex: 1, overflow: 'hidden' },
+  introGlow: { position: 'absolute', left: 38, right: 38, top: 170, height: 300, borderRadius: 160, backgroundColor: 'rgba(244,205,90,0.09)', shadowColor: '#F8E08E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.32, shadowRadius: 30 },
+  tableGlow: { position: 'absolute', left: 44, right: 44, top: 128, height: 260, borderRadius: 150, backgroundColor: 'rgba(244,205,90,0.08)', shadowColor: '#F8E08E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.28, shadowRadius: 26 },
+  introContent: { flex: 1, paddingTop: 28, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', paddingBottom: 120 },
+  introTitleWrap: { marginTop: 40, paddingHorizontal: 26, paddingVertical: 24, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(248,224,142,0.38)', backgroundColor: 'rgba(18,10,4,0.72)' },
+  introTitle: { color: '#F8E08E', fontSize: 38, lineHeight: 46, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 8 },
+  bannerWrap: { width: '100%', maxWidth: 430, alignSelf: 'center' },
+  banner: { minHeight: 108, borderRadius: 18, borderWidth: 2, borderColor: '#8A5A1C', paddingHorizontal: 18, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.42, shadowRadius: 14, elevation: 10 },
+  bannerSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
+  bannerTitle: { color: '#2B1D08', fontSize: 20, lineHeight: 25, fontWeight: '900', textAlign: 'center', marginBottom: 7 },
+  bannerBody: { color: '#2F2009', fontSize: 15.5, lineHeight: 23, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' },
+  topArea: { paddingTop: 14, paddingHorizontal: 14, alignItems: 'center', zIndex: 2 },
+  boardShell: { width: '100%', maxWidth: 430, aspectRatio: 1024 / 774, marginTop: 10, alignItems: 'center', justifyContent: 'center' },
+  tableImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.72 },
+  boardOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 14, gap: 10 },
+  diceRow: { flexDirection: 'row', direction: 'ltr', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  die: { width: 46, height: 46, borderRadius: 11, borderWidth: 2, borderColor: '#8A5A1C', backgroundColor: '#F8E08E', alignItems: 'center', justifyContent: 'center' },
+  dieText: { color: '#2B1D08', fontSize: 23, fontWeight: '900' },
+  ltrEquation: { color: '#F8E08E', fontSize: 24, lineHeight: 31, fontWeight: '900', textAlign: 'center', writingDirection: 'ltr' },
+  redLifelineButton: { marginTop: 14, minWidth: 190, minHeight: 48, borderRadius: 24, borderWidth: 2, borderColor: '#7F1D1D', backgroundColor: '#B91C1C', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8 },
+  redLifelineText: { color: '#FFF7D6', fontSize: 17, fontWeight: '900', writingDirection: 'ltr', textAlign: 'center' },
+  equationRow: { flexDirection: 'row', direction: 'ltr', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' },
+  slot: { width: 74, height: 92, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: '#F8E08E', backgroundColor: 'rgba(248,224,142,0.08)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  slotActive: { borderColor: '#FFFFFF', backgroundColor: 'rgba(248,224,142,0.2)', shadowColor: '#F8E08E', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 10, elevation: 10 },
+  slotFilled: { borderStyle: 'solid', borderColor: '#7BE08A', backgroundColor: 'rgba(46,125,67,0.22)' },
+  slotText: { color: '#F8E08E', fontSize: 34, fontWeight: '900' },
+  targetPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(248,224,142,0.52)', backgroundColor: 'rgba(8,5,2,0.72)', paddingHorizontal: 14, paddingVertical: 5, alignItems: 'center' },
+  targetPillLabel: { color: 'rgba(245,230,191,0.75)', fontSize: 11, fontWeight: '800' },
+  targetPillValue: { color: '#F8E08E', fontSize: 23, fontWeight: '900', lineHeight: 27 },
+  parenthesesEquationStage: { width: '100%', height: 46, alignItems: 'center', justifyContent: 'center' },
+  parenthesesEquationLayer: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  resultPill: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(244,205,90,0.35)', backgroundColor: 'rgba(8,5,2,0.56)', paddingHorizontal: 14, paddingVertical: 6 },
+  resultPillText: { color: '#F5E6BF', fontSize: 15, fontWeight: '900', writingDirection: 'ltr' },
+  resultPillTextGood: { color: '#C8F7CE' },
+  parenthesesButtons: { position: 'absolute', left: 0, right: 0, bottom: 190, flexDirection: 'row', direction: 'ltr', justifyContent: 'center', alignItems: 'center', gap: 14, zIndex: 5 },
+  fanWrap: { position: 'absolute', left: 0, right: 0, bottom: 18, alignItems: 'center', zIndex: 4 },
+  bottomButtonWrap: { position: 'absolute', left: 24, right: 24, bottom: 34, zIndex: 10 },
+  continueButtonWrap: { position: 'absolute', left: 24, right: 24, bottom: 180, alignItems: 'center', zIndex: 7 },
+  flyingLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 92, zIndex: 18 },
+  flyingCard: { position: 'absolute', bottom: 0 },
+  toast: { position: 'absolute', left: 26, right: 26, bottom: 172, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(248,224,142,0.45)', backgroundColor: 'rgba(18,10,4,0.94)', paddingHorizontal: 16, paddingVertical: 12, zIndex: 28 },
+  toastText: { color: '#F8E08E', fontSize: 15, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' },
+  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,5,2,0.86)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, zIndex: 30 },
+  exitCard: { width: '100%', maxWidth: 420, borderRadius: 22, borderWidth: 2, borderColor: '#8A5A1C', backgroundColor: 'rgba(17,12,4,0.98)', paddingHorizontal: 24, paddingVertical: 28, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 9 }, shadowOpacity: 0.5, shadowRadius: 18, elevation: 14 },
+  exitTitle: { color: '#F8E08E', fontSize: 25, lineHeight: 31, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' },
+  exitBody: { color: '#D8C49A', fontSize: 16, lineHeight: 24, fontWeight: '700', textAlign: 'center', writingDirection: 'rtl', marginBottom: 4 },
+});
+
 export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispatch, gameState }: Props): React.ReactElement | null {
   const { t, locale, setLocale } = useLocale();
   const [welcomeLocale, setWelcomeLocale] = useState<AppLocale>(() => locale);
@@ -1371,6 +2566,15 @@ export function InteractiveTutorialScreen({ onExit, onProgressChange, gameDispat
   const [l5SalindaWrong, setL5SalindaWrong] = useState(false);
   const l5SalindaWrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const l5SlotPulse = useRef(new Animated.Value(0)).current;
+  const [symbolsChapterScreen, setSymbolsChapterScreen] = useState<'intro' | 'practice'>('intro');
+  const [symbolsSelectedOp, setSymbolsSelectedOp] = useState<L5Op | null>(null);
+  const [symbolsPlacedOp, setSymbolsPlacedOp] = useState<L5Op | null>(null);
+  const [symbolsToast, setSymbolsToast] = useState<string | null>(null);
+  const [symbolsFlyingMinus, setSymbolsFlyingMinus] = useState(false);
+  const symbolsSlotPulse = useRef(new Animated.Value(0)).current;
+  const symbolsFlyProgress = useRef(new Animated.Value(0)).current;
+  const symbolsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const symbolsCompleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Fractions lesson ג€” pulse halo around the discard pile so the learner's
   // eye lands on the pile card (8 ג†' 9 ג†' fraction attack ג†' fraction attack)
   // before reading the bubble.
@@ -3071,6 +4275,15 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
   useEffect(() => {
     if (engine.lessonIndex !== 4) {
       setL5SalindaOpen(false);
+      setSymbolsChapterScreen('intro');
+      setSymbolsSelectedOp(null);
+      setSymbolsPlacedOp(null);
+      setSymbolsToast(null);
+      setSymbolsFlyingMinus(false);
+      symbolsSlotPulse.setValue(0);
+      symbolsFlyProgress.setValue(0);
+      if (symbolsToastTimerRef.current) clearTimeout(symbolsToastTimerRef.current);
+      if (symbolsCompleteTimerRef.current) clearTimeout(symbolsCompleteTimerRef.current);
       return;
     }
     const cfg = pickL5Pair();
@@ -3084,6 +4297,62 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
     tutorialBus.setL5Config(cfg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.lessonIndex]);
+
+  useEffect(() => {
+    const shouldPulse =
+      engine.lessonIndex === 4 &&
+      symbolsChapterScreen === 'practice' &&
+      symbolsSelectedOp === '-' &&
+      symbolsPlacedOp === null &&
+      !symbolsFlyingMinus;
+    if (!shouldPulse) {
+      symbolsSlotPulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(symbolsSlotPulse, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(symbolsSlotPulse, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [engine.lessonIndex, symbolsChapterScreen, symbolsFlyingMinus, symbolsPlacedOp, symbolsSelectedOp, symbolsSlotPulse]);
+
+  const showSymbolsToast = useCallback(() => {
+    setSymbolsToast('תנסה שוב');
+    if (symbolsToastTimerRef.current) clearTimeout(symbolsToastTimerRef.current);
+    symbolsToastTimerRef.current = setTimeout(() => setSymbolsToast(null), 760);
+    void playSfx('errorSoft', { cooldownMs: 0, volumeOverride: 0.45 });
+  }, []);
+
+  const handleSymbolsOpPick = useCallback((op: L5Op) => {
+    if (symbolsFlyingMinus || symbolsPlacedOp) return;
+    if (op !== '-') {
+      showSymbolsToast();
+      return;
+    }
+    setSymbolsSelectedOp('-');
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+  }, [showSymbolsToast, symbolsFlyingMinus, symbolsPlacedOp]);
+
+  const handleSymbolsSlotPress = useCallback(() => {
+    if (symbolsSelectedOp !== '-' || symbolsPlacedOp || symbolsFlyingMinus) return;
+    symbolsFlyProgress.setValue(0);
+    setSymbolsFlyingMinus(true);
+    Animated.timing(symbolsFlyProgress, {
+      toValue: 1,
+      duration: 720,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setSymbolsFlyingMinus(false);
+      setSymbolsPlacedOp('-');
+      setSymbolsSelectedOp(null);
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
+    });
+  }, [dispatchEngine, symbolsFlyingMinus, symbolsFlyProgress, symbolsPlacedOp, symbolsSelectedOp]);
 
   // ג”€ג”€ Between lesson-5 steps (place-op ג†' salinda), reset per-step state so
   //    each step starts on a clean slate (modal closed, no pending salinda
@@ -5466,12 +6735,213 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
   useEffect(() => tutorialBus.subscribeRequestBack(handleTutorialBack), [handleTutorialBack]);
   useEffect(() => tutorialBus.subscribeRequestSkip(skipForward), [skipForward]);
 
+  const symbolsOperationCards = useMemo<DesignCard[]>(() => [
+    { id: 'symbols-practice-plus', type: 'operation', operation: '+' },
+    { id: 'symbols-practice-minus', type: 'operation', operation: '-' },
+    { id: 'symbols-practice-times', type: 'operation', operation: 'x' },
+    { id: 'symbols-practice-divide', type: 'operation', operation: '÷' },
+  ], []);
+
+  const symbolsIntroHand = symbolsOperationCards;
+
+  const renderSymbolsGoldBanner = (text: string) => (
+    <View pointerEvents="none" style={{ position: 'absolute', top: tutorialSafeTop + 18, left: 18, right: 18, zIndex: 3 }}>
+      <LinearGradient
+        colors={['#FFF3BA', '#F4CD5A', '#C88828']}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={{
+          borderRadius: 18,
+          borderWidth: 2,
+          borderColor: '#6B4516',
+          paddingVertical: 13,
+          paddingHorizontal: 16,
+          ...Platform.select({
+            ios: { shadowColor: '#F8E08E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.48, shadowRadius: 12 },
+            android: { elevation: 12 },
+          }),
+        }}
+      >
+        <Text style={{ color: '#3D2A0E', fontSize: 16, lineHeight: 23, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' }}>
+          {text}
+        </Text>
+      </LinearGradient>
+    </View>
+  );
+
+  const renderSymbolsEquationSlot = () => {
+    const slotReady = symbolsSelectedOp === '-' && symbolsPlacedOp === null && !symbolsFlyingMinus;
+    const glowOpacity = symbolsSlotPulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.95] });
+    const glowScale = symbolsSlotPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel="הצב את סימן החיסור" onPress={handleSymbolsSlotPress} disabled={!slotReady}>
+        <View style={{
+          width: 64,
+          height: 78,
+          borderRadius: 14,
+          borderWidth: 2,
+          borderStyle: symbolsPlacedOp ? 'solid' : 'dashed',
+          borderColor: symbolsPlacedOp ? '#7BE08A' : slotReady ? '#FFFFFF' : '#F8E08E',
+          backgroundColor: symbolsPlacedOp ? 'rgba(46,125,67,0.18)' : 'rgba(248,224,142,0.10)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'visible',
+        }}>
+          {slotReady ? (
+            <Animated.View pointerEvents="none" style={{
+              position: 'absolute',
+              width: 78,
+              height: 92,
+              borderRadius: 18,
+              borderWidth: 3,
+              borderColor: '#F8E08E',
+              opacity: glowOpacity,
+              transform: [{ scale: glowScale }],
+            }} />
+          ) : null}
+          {symbolsPlacedOp ? (
+            <View style={{ transform: [{ scale: 0.46 }] }}>
+              <GameCard card={{ id: 'symbols-equation-minus', type: 'operation', operation: '-' }} small />
+            </View>
+          ) : (
+            <Text style={{ color: '#F8E08E', fontSize: 34, lineHeight: 40, fontWeight: '900' }}>?</Text>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
+  const renderSymbolsChapter = () => {
+    const active =
+      engine.lessonIndex === 4 &&
+      engine.stepIndex === 0 &&
+      (engine.phase === 'intro' || engine.phase === 'bot-demo' || engine.phase === 'await-mimic' || engine.phase === 'celebrate');
+    if (!active) return null;
+    const fanW = Math.min(Math.max(tutorialWindowWidth, 320), 520);
+    const isIntro = symbolsChapterScreen === 'intro' && symbolsPlacedOp === null;
+    const flyTranslateX = symbolsFlyProgress.interpolate({ inputRange: [0, 1], outputRange: [-52, 0] });
+    const flyTranslateY = symbolsFlyProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -286] });
+    const flyScale = symbolsFlyProgress.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.72, 0.58, 0.33] });
+    const flyOpacity = symbolsFlyProgress.interpolate({ inputRange: [0, 0.92, 1], outputRange: [1, 1, 0.72] });
+    const continueSymbolsPractice = () => {
+      dispatchEngine({ type: 'OUTCOME_MATCHED' });
+      if (symbolsCompleteTimerRef.current) clearTimeout(symbolsCompleteTimerRef.current);
+      symbolsCompleteTimerRef.current = setTimeout(() => dispatchEngine({ type: 'CELEBRATE_DONE' }), 120);
+    };
+
+    return (
+      <View pointerEvents="auto" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9240 }}>
+        <LinearGradient colors={['#050505', '#130D06', '#241407', '#050505']} locations={[0, 0.42, 0.72, 1]} style={StyleSheet.absoluteFill} />
+        {renderSymbolsGoldBanner(isIntro
+          ? 'ברוכים הבאים לשלב הסימנים! כדי להיפטר מקלפים, אתם חייבים לשלוט בקלפי סימני הפעולה שיוצרים את התרגיל.'
+          : 'עכשיו תורכם! ליחצו על קלף סימן החיסור (-) כדי להשלים את המשוואה בהצלחה.')}
+
+        <View style={{ position: 'absolute', top: tutorialSafeTop + 112, left: 20, right: 20, height: isIntro ? 238 : 250, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 420,
+            height: '100%',
+            borderRadius: 24,
+            borderWidth: 2,
+            borderColor: 'rgba(248,224,142,0.34)',
+            backgroundColor: 'rgba(8,5,2,0.48)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {isIntro ? null : (
+              <View style={{ direction: 'ltr', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ width: 58, height: 74, borderRadius: 14, backgroundColor: '#EFF6FF', borderWidth: 2, borderColor: '#60A5FA', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#1D4ED8', fontSize: 32, lineHeight: 38, fontWeight: '900' }}>4</Text>
+                </View>
+                {renderSymbolsEquationSlot()}
+                <View style={{ width: 58, height: 74, borderRadius: 14, backgroundColor: '#EFF6FF', borderWidth: 2, borderColor: '#60A5FA', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#1D4ED8', fontSize: 32, lineHeight: 38, fontWeight: '900' }}>2</Text>
+                </View>
+                <Text style={{ color: '#F8E08E', fontSize: 31, lineHeight: 38, fontWeight: '900' }}>=</Text>
+                <View style={{ minWidth: 58, height: 74, borderRadius: 14, backgroundColor: 'rgba(16,185,129,0.14)', borderWidth: 2, borderColor: '#34D399', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 }}>
+                  <Text style={{ color: '#A7F3D0', fontSize: 32, lineHeight: 38, fontWeight: '900' }}>2</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {isIntro ? (
+          <>
+            <View style={{ position: 'absolute', left: 0, right: 0, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM + 76, alignItems: 'center' }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces contentContainerStyle={{ width: Math.max(fanW + 180, 680), alignItems: 'center', justifyContent: 'center' }}>
+                <HandFan cards={symbolsIntroHand} width={fanW} centerCardId="symbols-practice-minus" />
+              </ScrollView>
+            </View>
+            <View style={{ position: 'absolute', left: 0, right: 0, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, alignItems: 'center' }}>
+              <GoldButton
+                label="המשך ›"
+                height={52}
+                radius={26}
+                fontSize={19}
+                onPress={() => {
+                  setSymbolsChapterScreen('practice');
+                  if (engine.phase === 'intro') dispatchEngine({ type: 'DISMISS_INTRO' });
+                  dispatchEngine({ type: 'BOT_DEMO_DONE' });
+                }}
+              />
+            </View>
+          </>
+        ) : (
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM + (symbolsPlacedOp ? 86 : 20), alignItems: 'center' }}>
+            <View style={{ direction: 'ltr', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              {symbolsOperationCards.map((card) => {
+                const op = card.operation as L5Op;
+                const selected = symbolsSelectedOp === op || symbolsPlacedOp === op;
+                return (
+                  <Pressable key={card.id} accessibilityRole="button" accessibilityLabel={`בחר סימן ${op}`} onPress={() => handleSymbolsOpPick(op)} disabled={!!symbolsPlacedOp || symbolsFlyingMinus}>
+                    <View style={{ width: 72, height: 104, alignItems: 'center', justifyContent: 'center', transform: [{ scale: selected ? 1.04 : 1 }] }}>
+                      <View style={{ transform: [{ scale: 0.68 }] }}>
+                        <GameCard card={card} selected={selected} small />
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {!isIntro && symbolsPlacedOp === '-' && !symbolsFlyingMinus ? (
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM, alignItems: 'center' }}>
+            <GoldButton
+              label="›"
+              height={50}
+              radius={25}
+              fontSize={34}
+              onPress={continueSymbolsPractice}
+            />
+          </View>
+        ) : null}
+
+        {symbolsFlyingMinus ? (
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM + 62, alignItems: 'center', opacity: flyOpacity, transform: [{ translateX: flyTranslateX }, { translateY: flyTranslateY }, { scale: flyScale }] }}>
+            <GameCard card={{ id: 'symbols-flying-minus', type: 'operation', operation: '-' }} small />
+          </Animated.View>
+        ) : null}
+
+        {symbolsToast ? (
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 32, right: 32, bottom: TUTORIAL_ACTION_BUTTON_BOTTOM + 154, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(248,224,142,0.52)', backgroundColor: 'rgba(18,10,4,0.96)', paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' }}>
+            <Text style={{ color: '#F8E08E', fontSize: 16, fontWeight: '900', textAlign: 'center', writingDirection: 'rtl' }}>{symbolsToast}</Text>
+          </Animated.View>
+        ) : null}
+      </View>
+    );
+  };
+
   if (shouldHideTutorialLayer) {
     return null;
   }
 
   const tutorialOverlay = (
     <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {renderSymbolsChapter()}
+
       {/* Single-tone tutorial coverage ג€” one opaque color (#0a1628) painted
           as contiguous bands around the lesson's focal "window". All bands
           bleed past the screen edges (top:-60, sides:-10, bottom:-60) so
@@ -6113,7 +7583,7 @@ const [l5FlowHintPhase, setL5FlowHintPhase] = useState<'tapSalinda' | 'pickModal
       {/* L5a step 0 (place-op): "׳”׳™׳“׳¢׳×?" sign-card mockup ג€” shown until the
           learner taps "׳”׳'׳ ׳×׳™". Bot-demo runs behind the overlay; the button
           only appears during await-mimic so the learner can't skip too early. */}
-      {engine.lessonIndex === 4 && engine.stepIndex === 0 && !l5aSignTipApproved && (
+      {false && engine.lessonIndex === 4 && engine.stepIndex === 0 && !l5aSignTipApproved && (
         <>
           <View
             pointerEvents="auto"

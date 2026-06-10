@@ -20,6 +20,9 @@ const PRACTICE_CORRECT_SALINDA_ID = 'salinda-practice-correct';
 const PRACTICE_DECOY_SALINDA_ID = 'salinda-practice-decoy';
 const CORRECT_OP: Operation = '-';
 const OPS: Operation[] = ['+', '-', 'x', '\u00F7'];
+const SALINDA_SHOWCASE_ANIMATION_DELAY_MS = 1500;
+const SALINDA_SHOWCASE_FLY_DURATION_MS = 1200;
+const SALINDA_PRACTICE_FLY_DURATION_MS = 1200;
 
 export const SALINDA_PRACTICE_HAND: Card[] = [
   { id: 'salinda-practice-num-8', type: 'number', value: 8 },
@@ -189,6 +192,7 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     open.stopAnimation();
     fly.stopAnimation();
+    let flyTimer: ReturnType<typeof setTimeout> | null = null;
     if (step === 2) {
       open.setValue(0);
       void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.52 });
@@ -197,14 +201,24 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
     if (step === 3) {
       fly.setValue(0);
       setMinusInserted(false);
-      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.58 });
-      Animated.timing(fly, { toValue: 1, duration: 760, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
-        if (finished) {
-          setMinusInserted(true);
-          void playSfx('success', { cooldownMs: 0, volumeOverride: 0.78 });
-        }
-      });
+      flyTimer = setTimeout(() => {
+        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.58 });
+        Animated.timing(fly, {
+          toValue: 1,
+          duration: SALINDA_SHOWCASE_FLY_DURATION_MS,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished) {
+            setMinusInserted(true);
+            void playSfx('success', { cooldownMs: 0, volumeOverride: 0.78 });
+          }
+        });
+      }, SALINDA_SHOWCASE_ANIMATION_DELAY_MS);
     }
+    return () => {
+      if (flyTimer) clearTimeout(flyTimer);
+    };
   }, [fly, open, step]);
 
   const copy =
@@ -261,9 +275,11 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
       <View style={styles.singleFanArea}>
         <ShowcaseSalindaCard selected={step > 1} pulsing={step === 1} />
       </View>
-      <Pressable onPress={advance} accessibilityRole="button" accessibilityLabel="המשך" style={({ pressed }) => [styles.nextArrow, pressed && styles.nextArrowPressed]}>
-        <Text style={styles.nextArrowText}>›</Text>
-      </Pressable>
+      {step !== 3 || minusInserted ? (
+        <Pressable onPress={advance} accessibilityRole="button" accessibilityLabel="המשך" style={({ pressed }) => [styles.nextArrow, pressed && styles.nextArrowPressed]}>
+          <Text style={styles.nextArrowText}>›</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -330,7 +346,12 @@ function SalindaPractice({ onSolved }: { onSolved: () => void }) {
       setState('flying');
       fly.setValue(0);
       void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
-      Animated.timing(fly, { toValue: 1, duration: 820, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      Animated.timing(fly, {
+        toValue: 1,
+        duration: SALINDA_PRACTICE_FLY_DURATION_MS,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
         if (!finished) return;
         setInserted(true);
         setState('solved');

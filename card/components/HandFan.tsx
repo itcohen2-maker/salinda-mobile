@@ -39,6 +39,8 @@ export interface HandFanProps {
   /** Override the platform metrics when a training mockup must match another
    *  platform's exact fan geometry. */
   metricsPlatform?: string;
+  /** Lower drag threshold for tutorial moments where the fan must feel very free. */
+  smoothDrag?: boolean;
 }
 
 export default function HandFan({
@@ -50,6 +52,7 @@ export default function HandFan({
   centerCardId = null,
   playTapSound = true,
   metricsPlatform,
+  smoothDrag = false,
 }: HandFanProps) {
   const metrics = useMemo(() => getNativeHandFanMetrics(metricsPlatform ?? Platform.OS), [metricsPlatform]);
   const cardW = metrics.cardWidth;
@@ -72,6 +75,8 @@ export default function HandFan({
   const previewOnly = !onTapCard;
   const previewOnlyRef = useRef(previewOnly);
   previewOnlyRef.current = previewOnly;
+  const smoothDragRef = useRef(smoothDrag);
+  smoothDragRef.current = smoothDrag;
   const centerStart = Math.floor(Math.max(0, count - 1) / 2);
 
   // scrollX is a floating card index: when scrollX === i, card i is centered.
@@ -130,8 +135,16 @@ export default function HandFan({
     PanResponder.create({
       onStartShouldSetPanResponder: () => previewOnlyRef.current,
       onStartShouldSetPanResponderCapture: () => previewOnlyRef.current,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 0.6,
-      onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
+      onMoveShouldSetPanResponder: (_e, g) => {
+        const threshold = smoothDragRef.current ? 4 : 10;
+        const ratio = smoothDragRef.current ? 0.45 : 0.6;
+        return Math.abs(g.dx) > threshold && Math.abs(g.dx) > Math.abs(g.dy) * ratio;
+      },
+      onMoveShouldSetPanResponderCapture: (_e, g) => {
+        const threshold = smoothDragRef.current ? 6 : 14;
+        const ratio = smoothDragRef.current ? 0.8 : 1.2;
+        return Math.abs(g.dx) > threshold && Math.abs(g.dx) > Math.abs(g.dy) * ratio;
+      },
       onPanResponderGrant: () => {
         startScrollRef.current = scrollRef.current;
         scrollX.stopAnimation();

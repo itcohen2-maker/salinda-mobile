@@ -61,6 +61,7 @@ test.describe('Single-player vs Bot', () => {
     await page.waitForTimeout(1_500);
     await dismissGuidanceAndAlerts(page);
     await expect(page.getByTestId('turn-im-ready')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('turn-current-player-chip')).toBeVisible();
 
     await page.getByTestId('turn-im-ready').click({ force: true });
     await game.waitReady();
@@ -71,5 +72,6 @@ test.describe('Single-player vs Bot', () => {
 
     await expect(page.getByTestId('bot-thinking-overlay')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('bot-speed-up')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('turn-current-player-chip')).toBeHidden();
   });
 });

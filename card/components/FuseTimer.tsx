@@ -9,7 +9,12 @@ const FUSE_Y = 40;
 const CORD_THICK = 8;
 const BRAID_REPEAT = 14;
 
-/** צבע הפתיל לפי הזמן שנותר: ירוק → צהוב → כתום → אדום (בולט יותר) */
+// --- Mini-explosion config (terminal blast at tip end, x: 0 / left edge) ---
+const EXPLOSION_DURATION = 1500;
+const EXPLOSION_CORE = 45; // final core diameter (px)
+const PARTICLE_COUNT = 9;
+const PARTICLE_COLORS = ['#FFE000', '#FF5500', '#FFFFFF'];
+
 function interpolateColor(t: number): string {
   if (t <= 0.33) {
     const s = t / 0.33;
@@ -146,12 +151,19 @@ export interface FuseTimerProps {
   running: boolean;
 }
 
+type ExplosionParticle = {
+  tx: Animated.Value;
+  ty: Animated.Value;
+  op: Animated.Value;
+  color: string;
+  size: number;
+};
+
 export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerProps) {
   const [, setTick] = useState(0);
   const segmentStartTimeRef = useRef<number>(Date.now());
   const segmentStartRemainingRef = useRef<number>(secsLeft);
   const fuseShake = useRef(new Animated.Value(0)).current;
-  const zapFlash = useRef(new Animated.Value(0)).current;
 
   const spark1Y = useRef(new Animated.Value(0)).current;
   const spark1X = useRef(new Animated.Value(0)).current;
@@ -169,6 +181,22 @@ export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerPro
   const spark5X = useRef(new Animated.Value(0)).current;
   const spark5O = useRef(new Animated.Value(0)).current;
   const finishedPlayedRef = useRef(false);
+
+  // --- Terminal mini-explosion state + animated values ---
+  const [showExplosion, setShowExplosion] = useState(false);
+  const coreScale = useRef(new Animated.Value(0)).current;
+  const coreOpacity = useRef(new Animated.Value(0)).current;
+  const explosionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 9 ember particles created once; their angle/distance are randomized at each blast.
+  const explosionParticles = useRef<ExplosionParticle[]>(
+    Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
+      tx: new Animated.Value(0),
+      ty: new Animated.Value(0),
+      op: new Animated.Value(0),
+      color: PARTICLE_COLORS[i % PARTICLE_COLORS.length],
+      size: 3 + (i % 3), // 3 / 4 / 5 px mix
+    }))
+  ).current;
 
   const fuseW = FUSE_TOTAL_W;
   let visualRemaining: number;
@@ -227,16 +255,11 @@ export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerPro
   }, [running]);
 
   useEffect(() => {
-    // Play the "fuse finished" flash only when the countdown actually ends while running.
     if (!running || secsLeft !== 0) return;
     if (finishedPlayedRef.current) return;
     finishedPlayedRef.current = true;
-    Animated.sequence([
-      Animated.timing(zapFlash, { toValue: 1, duration: 80, useNativeDriver: true }),
-      Animated.timing(zapFlash, { toValue: 0.3, duration: 120, useNativeDriver: true }),
-      Animated.timing(zapFlash, { toValue: 0.9, duration: 60, useNativeDriver: true }),
-      Animated.timing(zapFlash, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
+
+    // Existing shake
     Animated.sequence([
       Animated.timing(fuseShake, { toValue: 8, duration: 40, useNativeDriver: true }),
       Animated.timing(fuseShake, { toValue: -8, duration: 40, useNativeDriver: true }),
@@ -244,15 +267,89 @@ export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerPro
       Animated.timing(fuseShake, { toValue: -6, duration: 40, useNativeDriver: true }),
       Animated.timing(fuseShake, { toValue: 0, duration: 60, useNativeDriver: true }),
     ]).start();
+
+    // --- NEW: 1500ms mini-explosion + radial ember burst at the tip end (x: 0) ---
+    Vibration.vibrate([0, 80]);
+    setShowExplosion(true);
+
+    // Bursting fire core: rapid elastic pop-in -> brief hold -> graceful fade to scale 0.
+    coreScale.setValue(0);
+    coreOpacity.setValue(0);
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(coreScale, { toValue: 1, duration: 220, easing: Easing.out(Easing.back(2.2)), useNativeDriver: true }),
+        Animated.delay(360),
+        Animated.timing(coreScale, { toValue: 0, duration: EXPLOSION_DURATION - 580, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(coreOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.delay(480),
+        Animated.timing(coreOpacity, { toValue: 0, duration: EXPLOSION_DURATION - 600, useNativeDriver: true }),
+      ]),
+    ]).start();
+
+    // Spark / ember burst: each particle shoots out in a random radial direction,
+    // using correlated translateX/translateY (cos/sin of the same angle), fading over 1500ms.
+    explosionParticles.forEach((p, i) => {
+      const angle = (i / PARTICLE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.7;
+      const dist = 32 + Math.random() * 40;
+      p.tx.setValue(0);
+      p.ty.setValue(0);
+      p.op.setValue(0);
+      Animated.parallel([
+        Animated.timing(p.tx, { toValue: Math.cos(angle) * dist, duration: EXPLOSION_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(p.ty, { toValue: Math.sin(angle) * dist, duration: EXPLOSION_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.sequence([
+          Animated.timing(p.op, { toValue: 1, duration: 60, useNativeDriver: true }),
+          Animated.timing(p.op, { toValue: 0, duration: EXPLOSION_DURATION - 60, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ]),
+      ]).start();
+    });
+
+    // Turn the explosion off after exactly 1500ms.
+    if (explosionTimerRef.current) clearTimeout(explosionTimerRef.current);
+    explosionTimerRef.current = setTimeout(() => {
+      setShowExplosion(false);
+      explosionTimerRef.current = null;
+    }, EXPLOSION_DURATION);
+
+    // Cleanup: clear the timer and stop animations if the timer resets / unmounts mid-blast.
+    return () => {
+      if (explosionTimerRef.current) {
+        clearTimeout(explosionTimerRef.current);
+        explosionTimerRef.current = null;
+      }
+      coreScale.stopAnimation();
+      coreOpacity.stopAnimation();
+      explosionParticles.forEach((p) => {
+        p.tx.stopAnimation();
+        p.ty.stopAnimation();
+        p.op.stopAnimation();
+      });
+    };
   }, [secsLeft, running]);
 
   useEffect(() => {
-    if (secsLeft > 0) finishedPlayedRef.current = false;
+    if (secsLeft > 0) {
+      finishedPlayedRef.current = false;
+      // Reset the explosion when the timer is restarted / topped up.
+      if (explosionTimerRef.current) {
+        clearTimeout(explosionTimerRef.current);
+        explosionTimerRef.current = null;
+      }
+      setShowExplosion(false);
+      coreScale.setValue(0);
+      coreOpacity.setValue(0);
+      explosionParticles.forEach((p) => {
+        p.tx.setValue(0);
+        p.ty.setValue(0);
+        p.op.setValue(0);
+      });
+    }
   }, [secsLeft]);
 
   return (
     <View style={[styles.wrap, { direction: 'ltr' } as any]}>
-      <Animated.View style={[styles.flashOverlay, { opacity: zapFlash }]} pointerEvents="none" />
       <Animated.View style={[styles.svgWrap, { width: fuseW }, { transform: [{ translateX: fuseShake }] }]}>
         <FuseView totalW={fuseW} remainW={remainW} tipColor={tipColor} showFull={showFull} isRunning={running} />
         {running && !showFull && tipAbsX > 4 && tipAbsX < fuseW - 4 && (
@@ -271,6 +368,45 @@ export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerPro
             <Animated.View style={[styles.spark, { backgroundColor: '#FF6600', width: 3, height: 3, left: tipAbsX - 1, top: FUSE_Y - 1, transform: [{ translateX: spark5X }, { translateY: spark5Y }], opacity: spark5O }]} />
           </>
         )}
+
+        {/* --- NEW: terminal mini-explosion + radial ember burst, rendered at the tip end (x: 0, y: FUSE_Y) --- */}
+        {showExplosion && (
+          <View pointerEvents="none" style={styles.explosionLayer}>
+            {/* Bursting fire core */}
+            <Animated.View
+              style={[
+                styles.explosionCore,
+                {
+                  left: -EXPLOSION_CORE / 2,
+                  top: FUSE_Y - EXPLOSION_CORE / 2,
+                  opacity: coreOpacity,
+                  transform: [{ scale: coreScale }],
+                },
+              ]}
+            >
+              <View style={styles.explosionCoreInner} />
+            </Animated.View>
+            {/* Ember / spark particles */}
+            {explosionParticles.map((p, i) => (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.explosionParticle,
+                  {
+                    width: p.size,
+                    height: p.size,
+                    borderRadius: p.size / 2,
+                    backgroundColor: p.color,
+                    left: -p.size / 2,
+                    top: FUSE_Y - p.size / 2,
+                    opacity: p.op,
+                    transform: [{ translateX: p.tx }, { translateY: p.ty }],
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        )}
       </Animated.View>
     </View>
   );
@@ -278,8 +414,29 @@ export default function FuseTimer({ totalTime, secsLeft, running }: FuseTimerPro
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
-  flashOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#FFD700', zIndex: 10, borderRadius: 8 },
   svgWrap: { position: 'relative', height: FUSE_H },
   fuseSvg: {},
   spark: { position: 'absolute', borderRadius: 2.5 },
+  explosionLayer: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 9 },
+  explosionCore: {
+    position: 'absolute',
+    width: EXPLOSION_CORE,
+    height: EXPLOSION_CORE,
+    borderRadius: EXPLOSION_CORE / 2,
+    backgroundColor: '#FF4400',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF6A00',
+    shadowOpacity: 0.9,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  explosionCoreInner: {
+    width: EXPLOSION_CORE * 0.5,
+    height: EXPLOSION_CORE * 0.5,
+    borderRadius: (EXPLOSION_CORE * 0.5) / 2,
+    backgroundColor: '#FFDD00',
+  },
+  explosionParticle: { position: 'absolute' },
 });
