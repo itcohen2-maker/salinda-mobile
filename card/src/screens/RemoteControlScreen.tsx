@@ -111,22 +111,23 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     writingDirection: (isRTL ? 'rtl' : 'ltr') as 'ltr' | 'rtl',
   };
 
-  const loadList = useCallback(async () => {
-    setListBusy(true);
+  // `silent` skips the spinner so the auto-refresh poll doesn't flash the UI.
+  const loadList = useCallback(async (silent = false) => {
+    if (!silent) setListBusy(true);
     try {
       const { data, error } = await supabase
         .from('invited_users')
         .select('email, status, first_login_at, last_seen_at')
         .order('invited_at', { ascending: false });
       if (error) {
-        setBanner({ text: copy.loadError, tone: 'error' });
+        if (!silent) setBanner({ text: copy.loadError, tone: 'error' });
         return;
       }
       setRows((data ?? []) as InviteRow[]);
     } catch {
-      setBanner({ text: copy.loadError, tone: 'error' });
+      if (!silent) setBanner({ text: copy.loadError, tone: 'error' });
     } finally {
-      setListBusy(false);
+      if (!silent) setListBusy(false);
     }
   }, [copy.loadError]);
 
@@ -148,6 +149,9 @@ export function RemoteControlScreen({ onBack }: RemoteControlScreenProps) {
     if (!isAdmin) return;
     void loadList();
     void loadInterval();
+    // Auto-refresh the list silently so the admin never needs to tap refresh.
+    const id = setInterval(() => { void loadList(true); }, 8000);
+    return () => clearInterval(id);
   }, [isAdmin, loadList, loadInterval]);
 
   const setInvite = useCallback(

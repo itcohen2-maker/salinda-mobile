@@ -22772,20 +22772,9 @@ function GameRouter({ onPlayModeChange }: { onPlayModeChange?: (playMode: ShellP
     AsyncStorage.setItem(PREFERRED_NAME_KEY, preferredName).catch(() => {});
   }, [preferredName]);
 
-  // FTU routing: auto-navigate new users to tutorial if they have never completed it
-  useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem('salinda_tutorial_done').then((v) => {
-      if (cancelled) return;
-      if (Platform.OS === 'web' && parseJoinParamsFromUrl().roomCode) return;
-      if (v === null) {
-        // First-time user — route directly to tutorial
-        openTutorial('choose');
-      }
-      // v === 'true' → returning user, keep default 'choose'
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [openTutorial]);
+  // Landing screen: everyone (including first-time users) starts on the home
+  // lobby ('choose'), which offers the "how to play" button. The old tutorial
+  // is no longer forced on new users — it stays reachable from the lobby.
 
   const launchClassroomPractice = useCallback((config: ClassroomLaunchConfig) => {
     classroomPracticeStartedAtRef.current = Date.now();
