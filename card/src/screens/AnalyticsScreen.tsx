@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  Platform as RNPlatform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +14,7 @@ import {
 import { useAdminAccess } from '../admin/useAdminAccess';
 import { useLocale } from '../i18n/LocaleContext';
 import { supabase } from '../lib/supabase';
+import { AnalyticsReportScreen } from './AnalyticsReportScreen';
 
 type Platform = 'android' | 'ios' | 'web';
 type UserTypeFilter = 'all' | 'anonymous' | 'registered';
@@ -120,6 +123,9 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
 
   const [invite, setInvite] = useState<InviteAnalytics | null>(null);
 
+  const [showReport, setShowReport] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const liveOpacity = React.useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -206,6 +212,49 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
     return () => clearInterval(interval);
   }, [isAdmin, loadStats]);
 
+  const resetFilters = useCallback(() => {
+    setPlatformFilter('all');
+    setUserTypeFilter('all');
+  }, []);
+
+  const handleDeleteSession = useCallback(
+    (id: string) => {
+      const doDelete = async () => {
+        setDeletingId(id);
+        try {
+          const { error } = await supabase.rpc('admin_delete_session', { p_session_id: id });
+          if (error) {
+            if (RNPlatform.OS === 'web' && typeof window !== 'undefined') {
+              window.alert(t('analytics.deleteSessionError'));
+            } else {
+              Alert.alert(t('analytics.deleteSessionError'));
+            }
+            return;
+          }
+          setSessions((prev) => prev.filter((s) => s.id !== id));
+        } catch {
+          // swallow — surfaced above on the error branch
+        } finally {
+          setDeletingId(null);
+        }
+      };
+
+      if (RNPlatform.OS === 'web' && typeof window !== 'undefined') {
+        if (window.confirm(t('analytics.deleteSessionConfirm'))) void doDelete();
+      } else {
+        Alert.alert(t('analytics.deleteSessionConfirmTitle'), t('analytics.deleteSessionConfirm'), [
+          { text: t('analytics.cancel'), style: 'cancel' },
+          { text: t('analytics.confirmDelete'), style: 'destructive', onPress: () => void doDelete() },
+        ]);
+      }
+    },
+    [t],
+  );
+
+  if (showReport) {
+    return <AnalyticsReportScreen onBack={() => setShowReport(false)} />;
+  }
+
   if (adminLoading) {
     return (
       <View style={styles.loadingShell}>
@@ -276,8 +325,17 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
         style={styles.outerScroll}
         contentContainerStyle={styles.outerScrollContent}
       >
-        {/* Live panel */}
-        <Text style={styles.sectionTitle}>{t('analytics.liveTitle')}</Text>
+        {/* Generate report */}
+        <TouchableOpacity
+          onPress={() => setShowReport(true)}
+          style={styles.reportButton}
+          testID="analytics-generate-report"
+        >
+          <Text style={styles.reportButtonText}>{t('analytics.generateReport')}</Text>
+        </TouchableOpacity>
+
+        {/* ── Group: Live now ── */}
+        <Text style={styles.groupTitle}>{t('analytics.groupLive')}</Text>
         <View testID="analytics-live-panel" style={styles.livePanel}>
           <View style={styles.liveBadgeRow}>
             <Text style={styles.livePanelTitle}>{t('analytics.liveTitle')}</Text>
@@ -298,6 +356,9 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
             </>
           )}
         </View>
+
+        {/* ── Group: Summary ── */}
+        <Text style={styles.groupTitle}>{t('analytics.groupSummary')}</Text>
 
         {/* Entries by time */}
         <Text style={styles.sectionTitle}>{t('analytics.entriesTitle')}</Text>
@@ -408,6 +469,18 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
           {`${t('analytics.autoRefreshHint')} · ${t('analytics.updatedAt')} ${lastUpdated ? lastUpdated.toLocaleTimeString('he-IL') : '—'}`}
         </Text>
 
+        {/* ── Group: Sessions ── */}
+        <View style={styles.sessionsGroupHeader}>
+          <Text style={styles.groupTitle}>{t('analytics.groupSessions')}</Text>
+          <TouchableOpacity
+            onPress={resetFilters}
+            style={styles.resetFiltersButton}
+            testID="analytics-reset-filters"
+          >
+            <Text style={styles.resetFiltersText}>{t('analytics.resetFilters')}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Platform filter */}
         <View style={styles.filterRow}>
           {platformOptions.map((opt) => (
@@ -484,6 +557,20 @@ export function AnalyticsScreen({ onBack }: AnalyticsScreenProps) {
                       {session.is_anonymous ? t('analytics.badgeAnonymous') : t('analytics.badgeRegistered')}
                     </Text>
                   </View>
+                  <View style={styles.cardHeaderSpacer} />
+                  <TouchableOpacity
+                    onPress={() => handleDeleteSession(session.id)}
+                    disabled={deletingId === session.id}
+                    style={styles.deleteSessionButton}
+                    accessibilityLabel={t('analytics.deleteSession')}
+                    testID={`analytics-delete-session-${session.id}`}
+                  >
+                    {deletingId === session.id ? (
+                      <ActivityIndicator size="small" color="#FCA5A5" />
+                    ) : (
+                      <Text style={styles.deleteSessionText}>🗑</Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
 
                 <Text style={styles.durationText}>
@@ -561,6 +648,71 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 6,
     textAlign: 'right',
+  },
+  groupTitle: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 20,
+    marginBottom: 2,
+    textAlign: 'right',
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(96,165,250,0.34)',
+    paddingBottom: 6,
+  },
+  reportButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(250,204,21,0.16)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(250,204,21,0.5)',
+    marginTop: 12,
+  },
+  reportButtonText: {
+    color: '#FDE68A',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  sessionsGroupHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  resetFiltersButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(148,163,184,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.34)',
+    marginTop: 16,
+  },
+  resetFiltersText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  cardHeaderSpacer: {
+    flex: 1,
+  },
+  deleteSessionButton: {
+    minWidth: 36,
+    minHeight: 32,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.4)',
+  },
+  deleteSessionText: {
+    fontSize: 15,
   },
   livePanel: {
     borderRadius: 20,
