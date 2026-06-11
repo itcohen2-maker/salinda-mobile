@@ -456,7 +456,10 @@ export function SalindaCardFlow({ onExit, onComplete, onContinueNext }: SalindaC
 export default SalindaCardFlow;
 
 const styles = StyleSheet.create({
-  root: { flex: 1, overflow: 'hidden' },
+  // No `overflow: 'hidden'` here on purpose: the wide "המשך" GoldButton is
+  // hard-pinned to bottom: 40 and must never be clipped by the container on
+  // tall iPhone viewports.
+  root: { flex: 1 },
   instructionWrap: { position: 'absolute', top: 14, left: 14, right: 14, zIndex: 12 },
   instructionBubble: {
     minHeight: 104,

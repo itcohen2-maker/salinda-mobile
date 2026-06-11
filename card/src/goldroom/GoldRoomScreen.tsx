@@ -999,6 +999,12 @@ const styles = StyleSheet.create({
     right: 0,
     height: 92,
     zIndex: 5,
+    // Force an LTR coordinate system on the bar itself. Without this, an RTL
+    // device (Hebrew Android) triggers I18nManager.doLeftAndRightSwapInRTL
+    // (default true) and physically swaps the `left`/`right` of the absolute
+    // children below — reordering Back and X. Pinning the container to 'ltr'
+    // makes `right: 16` / `left: 16` physical on every locale and OS.
+    direction: 'ltr',
   },
   topbarStart: {
     position: 'absolute',
