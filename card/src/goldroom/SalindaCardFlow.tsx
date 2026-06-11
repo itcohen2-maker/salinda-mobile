@@ -272,14 +272,33 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
       </View>
       {step === 1 ? <PointerArrow target="card" /> : null}
       {step === 2 ? <PointerArrow target="minus" /> : null}
-      <View style={styles.singleFanArea}>
+      {/* Big Salinda card — wrapped in a dedicated stage that carves out an
+          explicit visible band (top inset below the instruction, bottom inset
+          above the button) and centers WITHIN it. This does not rely on the
+          parent's height resolving, so the card can never collapse to the
+          physical screen bottom inside the Gold Room frame. */}
+      <View style={styles.showcaseCardStage} pointerEvents="box-none">
         <ShowcaseSalindaCard selected={step > 1} pulsing={step === 1} />
       </View>
-      {step !== 3 || minusInserted ? (
-        <View style={styles.nextBar} pointerEvents="box-none">
-          <GoldButton label="המשך" onPress={advance} accessibilityLabel="המשך" fullWidth height={56} fontSize={19} radius={16} raise={6} />
-        </View>
-      ) : null}
+
+      {/* "המשך" — hoisted to the very root of this step's JSX, out of every
+          sub-container/animated layer, with a brute-force absolute pin and
+          zIndex 9999 so nothing can clip or hide it on a real device. It stays
+          on screen at all times; it's only disabled while the step-3 insert
+          animation is still playing. */}
+      <View style={styles.showcaseNextBar} pointerEvents="box-none">
+        <GoldButton
+          label="המשך"
+          onPress={advance}
+          disabled={step === 3 && !minusInserted}
+          accessibilityLabel="המשך"
+          fullWidth
+          height={56}
+          fontSize={19}
+          radius={16}
+          raise={6}
+        />
+      </View>
     </View>
   );
 }
@@ -559,6 +578,29 @@ const styles = StyleSheet.create({
   flyingOperator: { position: 'absolute', zIndex: 20 },
   // The celebratory Salinda card: dead-centre on the screen.
   singleFanArea: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
+  // Brute-force stage for the showcase Salinda card. Explicit top + bottom
+  // insets reserve a fixed visible band (clear of the instruction plank and the
+  // Continue button), and the card is centred inside that band. Because both
+  // edges are pinned, the card cannot drift to the screen bottom even if
+  // flexbox mis-resolves inside the nested Gold Room frame on a device.
+  showcaseCardStage: {
+    position: 'absolute',
+    top: 132,
+    left: 0,
+    right: 0,
+    bottom: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 8,
+  },
+  // Continue button: hard-pinned to the screen root, above every layer.
+  showcaseNextBar: {
+    position: 'absolute',
+    bottom: 60,
+    left: 20,
+    right: 20,
+    zIndex: 9999,
+  },
   fanArea: { position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center', zIndex: 8 },
   singleCardWrap: { alignItems: 'center', justifyContent: 'center' },
   cardHalo: {

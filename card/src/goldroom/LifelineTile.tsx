@@ -147,9 +147,14 @@ function RedExerciseButton({ option }: { option: LifelineOption | null }) {
   return (
     <LinearGradient colors={RED_GRADIENT} style={styles.redButton}>
       {option ? (
-        <Text allowFontScaling={false} style={styles.redEquationText}>
-          {option.equation}
-        </Text>
+        // STRICT LTR row: forces the equation (e.g. "9 = (5 + 4)") to render
+        // left-to-right so Hebrew Android's RTL base direction can never mirror
+        // the brackets/operators. direction:'ltr' on both the row and the text.
+        <View style={styles.redEquationRow}>
+          <Text allowFontScaling={false} style={styles.redEquationText}>
+            {option.equation}
+          </Text>
+        </View>
       ) : (
         <>
           <Text allowFontScaling={false} style={styles.redDefaultText}>
@@ -451,9 +456,13 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
       <LinearGradient colors={DARK_GRADIENT} locations={[0, 0.38, 0.72, 1]} style={StyleSheet.absoluteFill} />
       <InstructionBanner text={instruction} />
 
-      {/* Board + action button layer — centered in the upper area so the fan and
-       *  the bottom CTA always own the lower band without colliding. */}
-      <View style={styles.centerLayer} pointerEvents="box-none">
+      {/* Fixed TOP-ANCHORED stack — NOT vertically centred. A plain flex column
+       *  (helper button → dice → table → mini-cards) so each element keeps its
+       *  own band and can never overlap the one beneath it. No flex:1 child, so
+       *  nothing gets squashed. Pinned tight under the banner. */}
+      <View style={styles.upperStack} pointerEvents="box-none">
+        {/* (1) Helper button — pinned high, tight beneath the banner, fully clear
+         *      above the table board. */}
         <View style={styles.topActions}>
           {stage === 'intro' ? (
             <RoundGreenButton onPress={openSolutions} active={false} />
@@ -462,22 +471,29 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
           )}
         </View>
 
+        {/* (3) Dice — distinct ELEVATED elements ABOVE the table board; lifted
+         *      out of the table so they never touch its borders/surface. */}
+        <View style={styles.diceDock}>
+          <DiceRow option={selectedOption} values={equationValues} stage={stage} onPressDie={pressDie} />
+        </View>
+
+        {/* Table board — now frames the EQUATION ONLY (dice removed from it). */}
         <Animated.View style={[styles.tableWrap, { opacity: boardFade }]}>
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImage} />
           <View style={styles.tableContent}>
-            <DiceRow option={selectedOption} values={equationValues} stage={stage} onPressDie={pressDie} />
             <EquationBoard option={selectedOption} values={equationValues} activeSlot={activeSlot} />
           </View>
         </Animated.View>
-      </View>
 
-      {/* Mini-cards float ABOVE the fan (higher zIndex) so they are never hidden
-       *  behind it — the bug that pushed them "under the fan". */}
-      {stage !== 'intro' ? (
-        <View style={styles.miniDock} pointerEvents="box-none">
-          <MiniCards selectedValue={selectedValue} onSelect={selectMini} />
-        </View>
-      ) : null}
+        {/* (4) Mini-cards — tight dock row directly under the table, bridging the
+         *      table bottom and the fan top. zIndex above the fan so they are
+         *      never hidden behind it. */}
+        {stage !== 'intro' ? (
+          <View style={styles.miniDock} pointerEvents="box-none">
+            <MiniCards selectedValue={selectedValue} onSelect={selectMini} />
+          </View>
+        ) : null}
+      </View>
 
       <Animated.View
         style={[styles.fanWrap, { width: fanWidth, transform: [{ translateY: fanTranslate }, { scale: fanScale }] }]}
@@ -557,14 +573,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  centerLayer: {
-    ...StyleSheet.absoluteFillObject,
+  // Top-anchored stack (see render). flex-start column, fixed gap, no flex:1
+  // child — guarantees button/dice/table/mini-cards each keep their band.
+  upperStack: {
+    position: 'absolute',
+    top: 90,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 96,
-    paddingBottom: 270,
     paddingHorizontal: 12,
-    gap: 10,
+    gap: 12,
     zIndex: 10,
   },
   topActions: {
@@ -625,6 +643,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 2,
     borderColor: '#F8E08E',
+    direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
@@ -643,6 +662,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+  redEquationRow: {
+    width: '100%',
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   redEquationText: {
     color: '#FFF4CF',
     fontSize: 19,
@@ -652,10 +678,19 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
     direction: 'ltr',
   },
+  // Dock that holds the dice ABOVE the table. Own band in the flex column so the
+  // dice are visually separate, elevated elements — never on the table surface.
+  diceDock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 12,
+  },
+  // Table is now shorter: it only frames the equation (dice were lifted out), so
+  // the board stays compact and leaves room for the dice above + mini-cards below.
   tableWrap: {
     width: '100%',
-    maxWidth: 360,
-    maxHeight: 232,
+    maxWidth: 318,
+    maxHeight: 170,
     aspectRatio: 1024 / 774,
     alignItems: 'center',
     justifyContent: 'center',
@@ -670,10 +705,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 16,
+    justifyContent: 'center',
     paddingHorizontal: 14,
-    paddingTop: 46,
   },
   diceRow: {
     flexDirection: 'row',
@@ -813,13 +846,11 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '900',
   },
+  // Mini-cards now flow in the column directly under the table. zIndex keeps the
+  // dock above the (lower-z) fan so the cards are never hidden behind the hand.
   miniDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 200,
-    zIndex: 25,
     alignItems: 'center',
+    zIndex: 25,
   },
   miniRow: {
     maxWidth: 320,
