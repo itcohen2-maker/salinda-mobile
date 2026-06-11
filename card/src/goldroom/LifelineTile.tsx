@@ -12,8 +12,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import HandFan from '../../components/HandFan';
 import type { Card } from '../../components/CardDesign';
-import ExcellenceMeter from '../../components/ExcellenceMeter';
-import { SlindaCoin } from '../../components/SlindaCoin';
 import { GoldButton } from '../../components/GoldButton';
 import { playSfx } from '../audio/sfx';
 
@@ -134,7 +132,10 @@ function RoundGreenButton({ onPress, active }: { onPress: () => void; active: bo
         <LinearGradient colors={GREEN_GRADIENT} style={styles.greenButton}>
           <View pointerEvents="none" style={styles.greenInnerRing} />
           <Text allowFontScaling={false} style={styles.greenText}>
-            גלגל הצלה
+            גלגל
+          </Text>
+          <Text allowFontScaling={false} style={styles.greenText}>
+            הצלה
           </Text>
         </LinearGradient>
       </Animated.View>
@@ -160,21 +161,6 @@ function RedExerciseButton({ option }: { option: LifelineOption | null }) {
         </>
       )}
     </LinearGradient>
-  );
-}
-
-function StatusRail() {
-  return (
-    <View pointerEvents="none" style={styles.statusRail}>
-      <View style={styles.meterBox}>
-        <ExcellenceMeter value={54} compact height={48} courageCoins={0} />
-      </View>
-      <View style={styles.coinStack}>
-        {[0, 1, 2].map((idx) => (
-          <SlindaCoin key={idx} size={23} spin={idx === 0} style={idx > 0 ? styles.coinOverlap : undefined} />
-        ))}
-      </View>
-    </View>
   );
 }
 
@@ -317,7 +303,7 @@ function MiniCards({
   onSelect: (option: LifelineOption) => void;
 }) {
   return (
-    <View style={styles.miniDock}>
+    <View style={styles.miniRow}>
       {LIFELINE_OPTIONS.map((option) => (
         <Pressable
           key={option.value}
@@ -333,31 +319,6 @@ function MiniCards({
         </Pressable>
       ))}
     </View>
-  );
-}
-
-function NextArrow({ onPress }: { onPress: () => void }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="המשך">
-      <Animated.View style={[styles.nextArrow, { transform: [{ scale: pulse }] }]}>
-        <Text allowFontScaling={false} style={styles.nextArrowText}>
-          ›
-        </Text>
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -476,16 +437,26 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
   const fanScale = fanPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
   const fanTranslate = fanPulse.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
 
+  // The single bottom "המשך" CTA — like the roll button in the real game. Drives
+  // the same stage advance the (removed) floating arrow used to.
+  const continueAction =
+    stage === 'intro'
+      ? openSolutions
+      : stage === 'solutions' && selectedOption
+        ? startPractice
+        : null;
+
   return (
     <View style={styles.root}>
       <LinearGradient colors={DARK_GRADIENT} locations={[0, 0.38, 0.72, 1]} style={StyleSheet.absoluteFill} />
       <InstructionBanner text={instruction} />
-      <StatusRail />
 
-      <View style={styles.content}>
+      {/* Board + action button layer — centered in the upper area so the fan and
+       *  the bottom CTA always own the lower band without colliding. */}
+      <View style={styles.centerLayer} pointerEvents="box-none">
         <View style={styles.topActions}>
           {stage === 'intro' ? (
-            <RoundGreenButton onPress={openSolutions} active={stage !== 'intro'} />
+            <RoundGreenButton onPress={openSolutions} active={false} />
           ) : (
             <RedExerciseButton option={selectedOption} />
           )}
@@ -498,11 +469,20 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
             <EquationBoard option={selectedOption} values={equationValues} activeSlot={activeSlot} />
           </View>
         </Animated.View>
-
-        {stage !== 'intro' ? <MiniCards selectedValue={selectedValue} onSelect={selectMini} /> : <View style={styles.miniPlaceholder} />}
       </View>
 
-      <Animated.View style={[styles.fanWrap, { width: fanWidth, transform: [{ translateY: fanTranslate }, { scale: fanScale }] }]}>
+      {/* Mini-cards float ABOVE the fan (higher zIndex) so they are never hidden
+       *  behind it — the bug that pushed them "under the fan". */}
+      {stage !== 'intro' ? (
+        <View style={styles.miniDock} pointerEvents="box-none">
+          <MiniCards selectedValue={selectedValue} onSelect={selectMini} />
+        </View>
+      ) : null}
+
+      <Animated.View
+        style={[styles.fanWrap, { width: fanWidth, transform: [{ translateY: fanTranslate }, { scale: fanScale }] }]}
+        pointerEvents="box-none"
+      >
         <HandFan
           cards={FAN_CARDS}
           width={fanWidth}
@@ -513,16 +493,19 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
         />
       </Animated.View>
 
-      {stage === 'intro' ? (
-        <View style={styles.arrowWrap}>
-          <NextArrow onPress={openSolutions} />
+      {continueAction ? (
+        <View style={styles.ctaBar} pointerEvents="box-none">
+          <GoldButton
+            label="המשך  ›"
+            onPress={continueAction}
+            accessibilityLabel="המשך"
+            fullWidth
+            height={56}
+            fontSize={22}
+          />
         </View>
       ) : null}
-      {stage === 'solutions' && selectedOption ? (
-        <View style={styles.arrowWrap}>
-          <NextArrow onPress={startPractice} />
-        </View>
-      ) : null}
+
       {stage === 'complete' ? <CompletionModal onComplete={onComplete} /> : null}
     </View>
   );
@@ -574,51 +557,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  statusRail: {
-    position: 'absolute',
-    top: 86,
-    right: 10,
-    zIndex: 30,
-    alignItems: 'center',
-    gap: 4,
-  },
-  meterBox: {
-    width: 36,
-    height: 54,
+  centerLayer: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'visible',
-  },
-  coinStack: {
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  coinOverlap: {
-    marginTop: -9,
-  },
-  content: {
-    ...StyleSheet.absoluteFillObject,
-    top: 84,
-    bottom: 198,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 10,
-    gap: 4,
+    paddingTop: 96,
+    paddingBottom: 270,
+    paddingHorizontal: 12,
+    gap: 10,
+    zIndex: 10,
   },
   topActions: {
     width: '100%',
     maxWidth: 392,
-    minHeight: 88,
+    minHeight: 104,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row-reverse',
     gap: 8,
   },
   greenOuterRing: {
-    width: 158,
-    height: 84,
-    borderRadius: 20,
+    width: 104,
+    height: 104,
+    borderRadius: 24,
     borderWidth: 3,
     borderColor: '#FFF2A8',
     alignItems: 'center',
@@ -631,9 +592,9 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   greenButton: {
-    width: 146,
-    height: 72,
-    borderRadius: 17,
+    width: 92,
+    height: 92,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: '#143824',
     alignItems: 'center',
@@ -646,14 +607,14 @@ const styles = StyleSheet.create({
     right: 5,
     top: 5,
     bottom: 5,
-    borderRadius: 13,
+    borderRadius: 15,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.56)',
   },
   greenText: {
     color: '#FFF7C9',
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: '900',
     textAlign: 'center',
     writingDirection: 'rtl',
@@ -693,7 +654,8 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     width: '100%',
-    maxWidth: 386,
+    maxWidth: 360,
+    maxHeight: 232,
     aspectRatio: 1024 / 774,
     alignItems: 'center',
     justifyContent: 'center',
@@ -709,9 +671,9 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 20,
+    gap: 16,
     paddingHorizontal: 14,
-    paddingTop: 58,
+    paddingTop: 46,
   },
   diceRow: {
     flexDirection: 'row',
@@ -855,8 +817,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: -10,
-    width: '100%',
+    bottom: 200,
+    zIndex: 25,
+    alignItems: 'center',
+  },
+  miniRow: {
     maxWidth: 320,
     minHeight: 48,
     flexDirection: 'row',
@@ -864,10 +829,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
-    marginTop: -2,
-  },
-  miniPlaceholder: {
-    minHeight: 48,
   },
   miniCard: {
     width: 40,
@@ -902,40 +863,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 20,
+    bottom: 82,
     alignSelf: 'center',
     alignItems: 'center',
-    zIndex: 18,
+    zIndex: 8,
   },
-  arrowWrap: {
+  ctaBar: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 108,
-    zIndex: 32,
+    left: 18,
+    right: 18,
+    bottom: 18,
+    zIndex: 50,
     alignItems: 'center',
-  },
-  nextArrow: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
-    borderColor: '#6B4516',
-    backgroundColor: '#D9A23A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#F8E08E',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.42,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  nextArrowText: {
-    color: '#171006',
-    fontSize: 40,
-    lineHeight: 46,
-    fontWeight: '900',
-    marginTop: -2,
   },
   completeOverlay: {
     ...StyleSheet.absoluteFillObject,

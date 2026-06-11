@@ -3854,12 +3854,17 @@ const styles = StyleSheet.create({
   // Play area — fills the space above the bottom hand. Anchored to the BOTTOM
   // (just above the fan) with a small gap, so the dice/equation sit LOW and well
   // clear of the instruction banner pinned at the top (no overlap).
-  playArea: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 18, gap: 12 },
+  // paddingTop reserves the band occupied by the absolutely-positioned
+  // InstructionBanner. On tall screens the board is bottom-anchored so this
+  // empty top space is invisible; on short iPhones it stops the board from
+  // rising into the banner. maxHeight on the table (below) caps its growth so
+  // the equation never slides under the explanation.
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingTop: 92, paddingHorizontal: 16, paddingBottom: 18, gap: 12 },
   playAreaImprove: { paddingBottom: 6, gap: 6 },
   lifelinePlayArea: { justifyContent: 'flex-end', paddingBottom: 132, gap: 4 },
   // The table: a sized, semi-transparent surface. Content is overlaid centered
   // ON it, so the dice / equation always sit on the table, not off it.
-  tableZone: { width: '94%', maxWidth: 380, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
+  tableZone: { width: '94%', maxWidth: 380, maxHeight: 264, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
   tableZoneImprove: { maxWidth: 390, aspectRatio: 0.78 },
   tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.78 },
   tableOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: 14, paddingTop: 56 },

@@ -237,8 +237,8 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
     <View style={styles.root}>
       <LinearGradient colors={['#070502', '#151008', '#070502']} style={StyleSheet.absoluteFill} />
       <InstructionPlank text={copy} />
-      <View style={styles.boardArea}>
-        <View style={styles.tableZone}>
+      <View style={styles.showcaseBoardArea}>
+        <View style={styles.showcaseTableZone}>
           <Animated.Image source={TABLE} resizeMode="contain" style={styles.tableImg} />
           <EquationTrack inserted={minusInserted} />
           {step === 3 && !minusInserted ? <FlyingOperator progress={fly} /> : null}
@@ -276,9 +276,9 @@ function SalindaCardShowcase({ onDone }: { onDone: () => void }) {
         <ShowcaseSalindaCard selected={step > 1} pulsing={step === 1} />
       </View>
       {step !== 3 || minusInserted ? (
-        <Pressable onPress={advance} accessibilityRole="button" accessibilityLabel="המשך" style={({ pressed }) => [styles.nextArrow, pressed && styles.nextArrowPressed]}>
-          <Text style={styles.nextArrowText}>›</Text>
-        </Pressable>
+        <View style={styles.nextBar} pointerEvents="box-none">
+          <GoldButton label="המשך" onPress={advance} accessibilityLabel="המשך" fullWidth height={56} fontSize={19} radius={16} raise={6} />
+        </View>
       ) : null}
     </View>
   );
@@ -505,8 +505,14 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   toastText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  // Practice screen board (unchanged): the table fills the central area.
   boardArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 112, paddingBottom: 218, paddingHorizontal: 16 },
   tableZone: { width: '96%', maxWidth: 390, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
+  // Showcase board: the equation/table is pinned to the UPPER area and kept
+  // small, so the big Salinda card can sit dead-centre below it without the
+  // card covering the equation.
+  showcaseBoardArea: { position: 'absolute', top: 120, left: 0, right: 0, alignItems: 'center', zIndex: 5 },
+  showcaseTableZone: { width: '82%', maxWidth: 300, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
   tableImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', opacity: 0.55 },
   track: {
     flexDirection: 'row',
@@ -548,7 +554,8 @@ const styles = StyleSheet.create({
   question: { color: 'rgba(244,205,90,0.65)', fontSize: 24, fontWeight: '900' },
   equals: { color: '#F8E08E', fontSize: 22, fontWeight: '900', marginHorizontal: 2 },
   flyingOperator: { position: 'absolute', zIndex: 20 },
-  singleFanArea: { position: 'absolute', left: 0, right: 0, bottom: 34, alignItems: 'center', zIndex: 8 },
+  // The celebratory Salinda card: dead-centre on the screen.
+  singleFanArea: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
   fanArea: { position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center', zIndex: 8 },
   singleCardWrap: { alignItems: 'center', justifyContent: 'center' },
   cardHalo: {
@@ -576,7 +583,9 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 14,
   },
-  showcaseOptionsLayer: { position: 'absolute', left: 0, right: 0, bottom: 156, alignItems: 'center', zIndex: 9 },
+  // Step-2 operator fan: centred on the same point as the card so the signs
+  // read as fanning out of the card.
+  showcaseOptionsLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 9 },
   optionFromCard: { position: 'absolute' },
   opBubble: {
     width: 58,
@@ -611,8 +620,8 @@ const styles = StyleSheet.create({
     elevation: 13,
   },
   bubbleSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '46%' },
-  arrowToCard: { position: 'absolute', bottom: 198, alignSelf: 'center', zIndex: 11 },
-  arrowToMinus: { position: 'absolute', bottom: 246, alignSelf: 'center', marginLeft: 46, zIndex: 11 },
+  arrowToCard: { position: 'absolute', top: '34%', alignSelf: 'center', zIndex: 11 },
+  arrowToMinus: { position: 'absolute', top: '30%', alignSelf: 'center', marginLeft: 46, zIndex: 11 },
   arrowText: {
     color: '#FFF4B8',
     fontSize: 54,
@@ -623,22 +632,16 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 5,
   },
-  nextArrow: {
+  // Continue control: a wide, always-visible gold button hard-pinned above the
+  // bottom safe area (bottom: 40). High zIndex keeps it above every other layer
+  // so nothing can hide it on iPhone.
+  nextBar: {
     position: 'absolute',
+    left: 24,
     right: 24,
-    bottom: 38,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1.5,
-    borderColor: 'rgba(248,224,142,0.72)',
-    backgroundColor: 'rgba(248,224,142,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20,
+    bottom: 40,
+    zIndex: 30,
   },
-  nextArrowPressed: { transform: [{ scale: 0.94 }], backgroundColor: 'rgba(248,224,142,0.28)' },
-  nextArrowText: { color: '#F8E08E', fontSize: 36, lineHeight: 40, fontWeight: '900', textAlign: 'center', marginTop: -2 },
   practiceOptions: {
     position: 'absolute',
     left: 26,

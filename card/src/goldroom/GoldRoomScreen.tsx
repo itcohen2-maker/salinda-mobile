@@ -584,8 +584,12 @@ function TrainingHub({
     <View style={styles.root}>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
       <View style={styles.topbar}>
-        <Text style={styles.hubHeader}>{copy.roomTitle}</Text>
-        <CloseButton onPress={onClose} />
+        <View style={styles.topbarStart}>
+          <Text style={styles.hubHeader}>{copy.roomTitle}</Text>
+        </View>
+        <View style={styles.topbarEnd}>
+          <CloseButton onPress={onClose} />
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.hubScroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.hubSub}>{interpolateCopy(copy.chooseTask, { doneCount, totalUnlocked })}</Text>
@@ -716,8 +720,12 @@ function TrainingTask({
       {step.mock === 'winFan' && size.w > 0 ? <DemoHandFan W={size.w} mode="win" onAnimationComplete={handleFanAnimationComplete} /> : null}
 
       <View style={styles.topbar}>
-        <GoldButton label={copy.skip} onPress={onExit} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
-        <CloseButton onPress={onClose} />
+        <View style={styles.topbarStart}>
+          <GoldButton label={copy.skip} onPress={onExit} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+        </View>
+        <View style={styles.topbarEnd}>
+          <CloseButton onPress={onClose} />
+        </View>
       </View>
 
       <Animated.View
@@ -856,11 +864,15 @@ export function GoldRoomScreen({ visible, onClose, onStartLiveTutorial }: GoldRo
           {activeTask && activeTask.interactive ? (
             <View style={styles.root}>
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} />
-              <View style={[styles.topbar, activeTask.id === 'victory-secret' && styles.topbarExitOnly]}>
+              <View style={styles.topbar}>
                 {activeTask.id !== 'victory-secret' ? (
-                  <GoldButton label={copy.backShort} onPress={() => setActiveTaskId(null)} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+                  <View style={styles.topbarStart}>
+                    <GoldButton label={copy.backShort} onPress={() => setActiveTaskId(null)} accessibilityLabel={copy.backToRoom} tone="stone" height={38} fontSize={14} radius={12} raise={6} />
+                  </View>
                 ) : null}
-                <CloseButton onPress={exitToHub} />
+                <View style={styles.topbarEnd}>
+                  <CloseButton onPress={exitToHub} />
+                </View>
               </View>
               <View style={[styles.interactiveBody, activeTask.id === 'victory-secret' && styles.interactiveBodyVictorySecret]}>
                 {activeTask.id === 'operations' ? (
@@ -976,21 +988,27 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   interactiveBody: { flex: 1, paddingTop: 96 },
   interactiveBodyVictorySecret: { paddingTop: 52 },
+  // The top bar is a bare absolute container. The two controls are pinned with
+  // HARD absolute positions (not flexbox), so RTL/LTR device language can never
+  // reorder them: Back/secondary is always on the RIGHT, the X is always on the
+  // LEFT — identical on iPhone and Android regardless of locale.
   topbar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 44,
-    paddingHorizontal: 22,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    height: 92,
     zIndex: 5,
   },
-  topbarExitOnly: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
+  topbarStart: {
+    position: 'absolute',
+    top: 44,
+    right: 16,
+  },
+  topbarEnd: {
+    position: 'absolute',
+    top: 44,
+    left: 16,
   },
   closeBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,243,201,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#3A2A10', fontSize: 20, fontWeight: '900', lineHeight: 22 },
