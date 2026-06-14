@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Platform,
+  View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Platform, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -46,9 +46,23 @@ const DOT_POS: Record<number, [number, number][]> = {
 // ═══════════════════════════════════════
 // GOLD DIE FACE — exported for static display
 // ═══════════════════════════════════════
-export function GoldDieFace({ value, size = DICE_SIZE, accessibilityLabel }: { value: number; size?: number; accessibilityLabel?: string }) {
+export function GoldDieFace({ value, size = DICE_SIZE, accessibilityLabel, faces }: { value: number; size?: number; accessibilityLabel?: string; faces?: any[] | null }) {
   const dots = DOT_POS[value] || DOT_POS[1];
   const dotR = size * 0.075;
+
+  // Premium image skin: render the delivered face PNG (indexed by value 1..6)
+  // instead of the procedural gradient + pips. Falls back to procedural below.
+  const faceImg = faces && faces.length >= 6 ? faces[Math.min(6, Math.max(1, value)) - 1] : null;
+  if (faceImg) {
+    return (
+      <Image
+        accessibilityLabel={accessibilityLabel ?? `Die showing ${value}`}
+        source={faceImg}
+        resizeMode="contain"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
 
   return (
     <View accessibilityLabel={accessibilityLabel ?? `Die showing ${value}`} style={[{
@@ -171,6 +185,8 @@ interface AnimatedDiceProps {
   hideRollButton?: boolean;
   /** When true, do not show the post-roll sum badge (e.g. preview where sum is not "the" target). */
   hideSumBadge?: boolean;
+  /** Premium dice-skin face images (6, indexed by value-1). Omit/null = procedural gold. */
+  faces?: any[] | null;
 }
 
 // Imperative handle: lets a parent trigger a roll from its OWN button (e.g. a
@@ -189,6 +205,7 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
   autoRollOnMount = false,
   hideRollButton = false,
   hideSumBadge = false,
+  faces = null,
 }, ref) {
   const [displayVals, setDisplayVals] = useState<[number, number, number]>([4, 2, 5]);
   const [rolling, setRolling] = useState(false);
@@ -445,7 +462,7 @@ const AnimatedDice = forwardRef<AnimatedDiceHandle, AnimatedDiceProps>(function 
               {/* Gold glow halo */}
               <Animated.View style={[styles.halo, { opacity: glowOp }]} />
               {/* Die face */}
-              <GoldDieFace value={displayVals[i]} size={size} />
+              <GoldDieFace value={displayVals[i]} size={size} faces={faces} />
               {/* Ground shadow */}
               <Animated.View style={[styles.dieShadow, {
                 opacity: shOp[i], width: size * 0.8,

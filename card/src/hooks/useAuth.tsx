@@ -34,6 +34,14 @@ export interface PlayerProfile {
   active_card_back: string;
   active_table_theme: string;
   active_table_skin: string | null;
+  /** Equipped dice skin id ('classic' = free procedural gold dice). */
+  active_dice_skin: string;
+  /** Equipped premium card-back id ('classic' = default). */
+  active_card_back_image: string;
+  /** Equipped premium table id ('classic' = default). */
+  active_premium_table: string;
+  /** Unified cosmetic ownership (catalog ids from public.cosmetic_inventory). */
+  cosmetics_owned: string[];
   created_at: string;
 }
 
@@ -72,8 +80,16 @@ interface AuthContextValue {
   purchaseTableSkin: (skinId: TableSkinId) => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'invalid_skin' | 'error'>;
   /** Set active card back, table theme, or table skin (must already be owned). */
   setActiveSkin: (kind: 'card_back' | 'table_theme' | 'table_skin', themeId: string) => Promise<'ok' | 'not_owned' | 'invalid' | 'error'>;
+  /** Purchase any unified cosmetic (dice skin, card back, table) by its catalog id. Idempotent (D2). */
+  purchaseCosmetic: (cosmeticId: string) => Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'invalid' | 'error'>;
+  /** Equip any unified cosmetic by kind (must be owned, or the free 'classic'). */
+  setActiveCosmetic: (kind: 'dice_skin' | 'card_back' | 'table', id: string) => Promise<'ok' | 'not_owned' | 'invalid' | 'error'>;
+  /** Equip a dice skin (must be owned, or the free 'classic'). */
+  setActiveDiceSkin: (skinId: string) => Promise<'ok' | 'not_owned' | 'error'>;
   /** Award coins to the current user wallet and refresh local profile cache. */
   awardCoins: (amount: number, source: SalindaCoinSource | string, idempotencyKey?: string | null) => Promise<'ok' | 'error'>;
+  /** Server-date-idempotent daily bonus; no-op after the day's first win. */
+  awardFirstWinOfDay: (amount: number) => Promise<'ok' | 'error'>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -202,13 +218,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const [localWildOwnedRaw, profileResult] = await Promise.all([
+      const [localWildOwnedRaw, profileResult, inventoryResult] = await Promise.all([
         AsyncStorage.getItem(localWildOwnedKey(userId)),
         supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .single(),
+        // Unified cosmetic ownership (D1). Tolerate absence (pre-migration) gracefully.
+        supabase
+          .from('cosmetic_inventory')
+          .select('cosmetic_id')
+          .eq('user_id', userId),
       ]);
       const { data, error } = profileResult;
       if (error) {
@@ -218,10 +239,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const localWildOwned = localWildOwnedRaw === 'true';
         const rawProfile = data as PlayerProfile;
         const syncedCoins = await ensureMinimumProfileCoins(userId, rawProfile.total_coins);
+        const cosmeticsOwned = Array.isArray(inventoryResult?.data)
+          ? (inventoryResult.data as Array<{ cosmetic_id: string }>).map((r) => r.cosmetic_id)
+          : [];
         setProfile({
           ...rawProfile,
           total_coins: syncedCoins,
           wild_owned: (rawProfile as Partial<PlayerProfile>).wild_owned === true || localWildOwned,
+          active_dice_skin: (rawProfile as Partial<PlayerProfile>).active_dice_skin ?? 'classic',
+          active_card_back_image: (rawProfile as Partial<PlayerProfile>).active_card_back_image ?? 'classic',
+          active_premium_table: (rawProfile as Partial<PlayerProfile>).active_premium_table ?? 'classic',
+          cosmetics_owned: cosmeticsOwned,
         });
         void syncTutorialCoins();
       }
@@ -596,6 +624,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshProfile]);
 
+  const purchaseCosmetic = useCallback(async (
+    cosmeticId: string,
+  ): Promise<'ok' | 'already_owned' | 'insufficient_coins' | 'invalid' | 'error'> => {
+    try {
+      const { data, error } = await supabase.rpc('purchase_cosmetic', { p_cosmetic_id: cosmeticId });
+      if (error) return 'error';
+      const result = data as string;
+      if (result === 'ok' || result === 'already_owned') await refreshProfile();
+      return result as 'ok' | 'already_owned' | 'insufficient_coins' | 'invalid';
+    } catch {
+      return 'error';
+    }
+  }, [refreshProfile]);
+
+  const setActiveCosmetic = useCallback(async (
+    kind: 'dice_skin' | 'card_back' | 'table',
+    id: string,
+  ): Promise<'ok' | 'not_owned' | 'invalid' | 'error'> => {
+    try {
+      const { data, error } = await supabase.rpc('set_active_cosmetic', { p_kind: kind, p_id: id });
+      if (error) return 'error';
+      const result = data as string;
+      if (result === 'ok') {
+        const column =
+          kind === 'dice_skin' ? 'active_dice_skin'
+          : kind === 'card_back' ? 'active_card_back_image'
+          : 'active_premium_table';
+        setProfile((prev) => (prev ? { ...prev, [column]: id } : prev));
+        await refreshProfile();
+      }
+      return result as 'ok' | 'not_owned' | 'invalid';
+    } catch {
+      return 'error';
+    }
+  }, [refreshProfile]);
+
+  const setActiveDiceSkin = useCallback(async (
+    skinId: string,
+  ): Promise<'ok' | 'not_owned' | 'error'> => {
+    const result = await setActiveCosmetic('dice_skin', skinId);
+    return (result === 'invalid' ? 'error' : result) as 'ok' | 'not_owned' | 'error';
+  }, [setActiveCosmetic]);
+
   const awardCoins = useCallback(async (
     amount: number,
     source: SalindaCoinSource | string,
@@ -616,6 +687,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return 'error';
     }
   }, []);
+
+  const awardFirstWinOfDay = useCallback(async (
+    amount: number,
+  ): Promise<'ok' | 'error'> => {
+    if (!Number.isFinite(amount) || amount <= 0) return 'error';
+    try {
+      const { error } = await supabase.rpc('award_first_win_of_day', { p_amount: amount });
+      if (error) return 'error';
+      // Optimistic: the RPC is a no-op after the first win of the day, so we
+      // reconcile from the server instead of blindly adding to the balance.
+      await refreshProfile();
+      return 'ok';
+    } catch {
+      return 'error';
+    }
+  }, [refreshProfile]);
 
   const signOutFn = useCallback(async () => {
     intentionalSignOutRef.current = true;
@@ -665,7 +752,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         purchaseTheme,
         purchaseTableSkin,
         setActiveSkin,
+        purchaseCosmetic,
+        setActiveCosmetic,
+        setActiveDiceSkin,
         awardCoins,
+        awardFirstWinOfDay,
       }}
     >
       {children}

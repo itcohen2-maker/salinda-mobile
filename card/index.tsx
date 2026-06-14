@@ -67,6 +67,7 @@ if (Platform.OS === 'android') {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle as SvgCircle, Rect as SvgRect, Path as SvgPath, Polygon as SvgPolygon, Text as SvgText } from 'react-native-svg';
 import { GoldDieFace } from './AnimatedDice';
+import { diceSkinFaces } from './src/theme/diceSkins';
 import { InteractiveTutorialScreen, type TutorialProgressPayload } from './src/tutorial/InteractiveTutorialScreen';
 import { isL6WildTutorialSelectionReady } from './src/tutorial/l6WildSelection';
 import type { L4EquationProgressMissing } from './src/tutorial/l4EquationProgress';
@@ -75,6 +76,7 @@ import { tutorialBus } from './src/tutorial/tutorialBus';
 import { HappyBubble } from './src/components/HappyBubble';
 import { GoldRoomScreen } from './src/goldroom/GoldRoomScreen';
 import { GoldButton } from './components/GoldButton';
+import BetaWelcomeScreen from './components/BetaWelcomeScreen';
 import { CoinAwardCelebrationCard } from './src/components/CoinAwardCelebrationCard';
 // RoamingDice inlined below (was ./components/RoamingDice)
 import { GoldDiceButton } from './components/GoldDiceButton';
@@ -108,6 +110,8 @@ import {
   SALINDA_COIN_SOURCES,
   SALINDA_GAMEPLAY_REWARDS,
   shouldAwardLocalStandardWinReward,
+  shouldAwardParticipationReward,
+  sessionMomentumReward,
 } from './shared/salindaEconomy';
 
 const WELCOME_NOTIFICATION_TITLES = new Set([t('he', 'welcome.title'), t('en', 'welcome.title')]);
@@ -383,6 +387,7 @@ import { getNativeGameLayout } from './src/theme/nativeGameLayout';
 import { getScreenSafeTop } from './src/theme/screenInsets';
 import { useWebViewportSize } from './src/hooks/useWebViewportSize';
 import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
+import { useMeterAnimationReleaseFallback } from './src/hooks/useMeterAnimationReleaseFallback';
 import { WebGameScreenFrame } from './src/components/layout/WebGameScreenFrame';
 
 function useCardSelectSound(soundOn: boolean): () => void {
@@ -4499,9 +4504,24 @@ function GameProvider({ children }: { children: ReactNode }) {
   // Award coins when the excellence meter fills. Placed here (GameProvider) rather than
   // GameScreen because applyCourageStepReward + endTurnLogic fire in the same state
   // update — GameScreen unmounts before its effect can run when phase → turn-transition.
-  const { awardCoins: _awardCoinsForMeter } = useAuth();
+  const { awardCoins: _awardCoinsForMeter, awardFirstWinOfDay: _awardFirstWinOfDay } = useAuth();
   const lastAwardSyncedPulseRef = useRef<number>(0);
   const lastStandardWinAwardedSessionKeyRef = useRef<string | null>(null);
+  // Consecutive games finished in THIS app session. Resets when the app
+  // backgrounds, so "more games per session" is what momentum rewards.
+  const sessionGamesRef = useRef<number>(0);
+  const lastParticipationSessionKeyRef = useRef<string | null>(null);
+  const lastFirstWinSessionKeyRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string>(`s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        sessionGamesRef.current = 0;
+        sessionIdRef.current = `s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      }
+    });
+    return () => sub.remove();
+  }, []);
   useEffect(() => {
     if ((state.courageRewardPulseId ?? 0) === 0) {
       lastAwardSyncedPulseRef.current = 0;
@@ -4543,6 +4563,90 @@ function GameProvider({ children }: { children: ReactNode }) {
   }, [
     override,
     _awardCoinsForMeter,
+    state.isTutorial,
+    state.mode,
+    state.openingDrawId,
+    state.phase,
+    state.soloSessionStats?.startedAtMs,
+    state.turnStartedAt,
+    state.winner?.isBot,
+  ]);
+
+  // Participation + session momentum: fire once per finished local game (win OR
+  // loss). Participation is a flat reward "for showing up"; momentum grows with
+  // each consecutive game this session — the core "one more game" driver.
+  useEffect(() => {
+    if (override) return;
+    const rewardSessionKey =
+      state.openingDrawId ??
+      (state.soloSessionStats?.startedAtMs != null
+        ? `solo-${state.soloSessionStats.startedAtMs}`
+        : state.turnStartedAt != null
+          ? `${state.mode}-${state.turnStartedAt}`
+          : null);
+    if (!shouldAwardParticipationReward({
+      phase: state.phase,
+      mode: state.mode,
+      isTutorial: state.isTutorial,
+      rewardSessionKey,
+      lastAwardedSessionKey: lastParticipationSessionKeyRef.current,
+    })) {
+      return;
+    }
+    lastParticipationSessionKeyRef.current = rewardSessionKey;
+
+    void _awardCoinsForMeter(
+      SALINDA_GAMEPLAY_REWARDS.game_participation,
+      SALINDA_COIN_SOURCES.game_participation,
+      rewardSessionKey!,
+    );
+
+    sessionGamesRef.current += 1;
+    const momentum = sessionMomentumReward(sessionGamesRef.current);
+    if (momentum > 0) {
+      void _awardCoinsForMeter(
+        momentum,
+        SALINDA_COIN_SOURCES.session_momentum,
+        `momentum:${sessionIdRef.current}:${sessionGamesRef.current}`,
+      );
+    }
+  }, [
+    override,
+    _awardCoinsForMeter,
+    state.isTutorial,
+    state.mode,
+    state.openingDrawId,
+    state.phase,
+    state.soloSessionStats?.startedAtMs,
+    state.turnStartedAt,
+  ]);
+
+  // First win of the day: a human win triggers the server-date-idempotent RPC.
+  // Safe to fire on every win — the RPC is a no-op after the day's first.
+  useEffect(() => {
+    if (override) return;
+    const rewardSessionKey =
+      state.openingDrawId ??
+      (state.soloSessionStats?.startedAtMs != null
+        ? `solo-${state.soloSessionStats.startedAtMs}`
+        : state.turnStartedAt != null
+          ? `${state.mode}-${state.turnStartedAt}`
+          : null);
+    if (!shouldAwardLocalStandardWinReward({
+      phase: state.phase,
+      mode: state.mode,
+      isTutorial: state.isTutorial,
+      winnerIsBot: state.winner?.isBot === true,
+      rewardSessionKey,
+      lastAwardedSessionKey: lastFirstWinSessionKeyRef.current,
+    })) {
+      return;
+    }
+    lastFirstWinSessionKeyRef.current = rewardSessionKey;
+    void _awardFirstWinOfDay(SALINDA_GAMEPLAY_REWARDS.first_win_of_day);
+  }, [
+    override,
+    _awardFirstWinOfDay,
     state.isTutorial,
     state.mode,
     state.openingDrawId,
@@ -7298,6 +7402,9 @@ function DiceJumpOverlay({
 const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data: { onConfirm: () => void } | null) => void; onResultChange?: (data: { result: number | null; ok: boolean; hasError: boolean } | null) => void; onBuildStarted?: () => void; timerProgress?: number | null; interactive?: boolean; parensRight?: boolean; onParensRightChange?: (v: boolean) => void }>(function EquationBuilder({ onConfirmChange, onResultChange, onBuildStarted, timerProgress = null, interactive = true, parensRight: parensRightProp, onParensRightChange }, ref) {
   const { state, dispatch } = useGame();
   const { t } = useLocale();
+  const { profile: diceProfile } = useAuth();
+  // Equipped premium dice skin faces (null = the free procedural gold die).
+  const activeDiceFaces = diceSkinFaces(diceProfile?.active_dice_skin);
   const equationTouchViewport = useWebViewportSize();
   const tutorialMobileTouch =
     state.isTutorial &&
@@ -8932,7 +9039,7 @@ const EquationBuilder = forwardRef<EquationBuilderRef, { onConfirmChange?: (data
                   ]}
                   disabled={isFractionTutorialLocked || (isFace && !tutorialMobileTouch && !state.isTutorial)}>
                   {isFace ? (
-                    <GoldDieFace value={dv} size={52} />
+                    <GoldDieFace value={dv} size={52} faces={activeDiceFaces} />
                   ) : (() => {
                     const isPulseTarget = l4bDicePulseOn && !isUsed;
                     return isPulseTarget ? (
@@ -9479,11 +9586,10 @@ function ActionBar() {
   const salindaButtonGap = isTutorialSalindaPicker ? 12 : 12;
   return (
     <View style={{width:'100%',gap:10}}>
-      {canUseActiveTurnUi && (pr||bl||so)&&hp && !state.isTutorial && (
-        <View style={{alignItems:'center',gap:6}}>
-          <SalindaButton text={t('game.endTurn')} color="green" width={160} height={52} testID="end-turn" onPress={()=>dispatch({type:'END_TURN'})} />
-        </View>
-      )}
+      {/* Removed: vestigial "סיים תור" (End turn) button. Every play auto-ends the
+          turn (endTurnWithMeterCheck/withOverflowSwapTurnTransition); this button
+          only appeared during the meter-animation hold — when the UI is locked —
+          so it did nothing and only misled taps. */}
       <AppModal
         visible={state.salindaModalOpen}
         onClose={()=>dispatch({type:'CLOSE_SALINDA_MODAL'})}
@@ -17377,6 +17483,15 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
     );
   const lockUiForBotTurn = isLocalBotTurn && !state.isTutorial;
   const lockUiForMeterAnimation = state.meterAnimationPending === true;
+  // Anti-freeze safety net: the meter-animation lock is normally released by an
+  // ExcellenceMeter firing onAnimationComplete → METER_ANIMATION_DONE. But that
+  // meter is unmounted whenever the results dock is showing, so a meter advance
+  // in the solved phase would otherwise lock the whole screen forever (observed
+  // mid-game freeze). This guarantees the lock always releases.
+  useMeterAnimationReleaseFallback(
+    lockUiForMeterAnimation,
+    () => dispatch({ type: 'METER_ANIMATION_DONE' }),
+  );
   const onlineBotPlayer =
     isOnlineGame ? state.players.find((p: any) => p?.isBot) ?? null : null;
   // Is the ONLINE bot currently playing? Used for showing demo visuals
@@ -21787,6 +21902,17 @@ export function PlayModeChoiceScreen({
     typeof window !== 'undefined' &&
     /[?&]goldroom=1/.test(window.location.search);
   const [goldRoomOpen, setGoldRoomOpen] = useState(forceGoldRoom);
+  // Dev-only preview deep link (?betawelcome=1) forces the beta welcome card
+  // open without the first-launch gating, so its layout can be inspected for
+  // clipping on any surface. Web + __DEV__ only; used as INITIAL state so the
+  // card's own button still dismisses it.
+  const forceBetaWelcome =
+    __DEV__ &&
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    /[?&]betawelcome=1/.test(window.location.search);
+  // Beta welcome card — shown once on first launch, above the lobby.
+  const [betaWelcomeOpen, setBetaWelcomeOpen] = useState(forceBetaWelcome);
   const compactMainMenu = responsive.isTight;
   const sectionGap = compactMainMenu ? 14 : 24;
   const menuTopPadding = Math.max(insets.top + 10, compactMainMenu ? 16 : 30);
@@ -21830,17 +21956,26 @@ export function PlayModeChoiceScreen({
     };
   }, [onPreferredNameChange, preferredName]);
 
-  // First-time users are sent straight into the Gold Room "how to play" entry
-  // screen once. When they close it they land on this lobby. The one-shot flag
-  // means every later launch goes straight to the lobby (no auto-open).
+  // First-time users see the beta welcome card once. Tapping its button records
+  // the one-shot flag and opens the Gold Room "how to play" entry (the tutorial);
+  // when they close that they land on this lobby. Every later launch goes
+  // straight to the lobby (no welcome, no auto-open).
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem('salinda_intro_seen').then((v) => {
+    AsyncStorage.getItem('HAS_SEEN_BETA_WELCOME').then((v) => {
       if (cancelled || v === 'true') return;
-      setGoldRoomOpen(true);
-      void AsyncStorage.setItem('salinda_intro_seen', 'true').catch(() => {});
+      setBetaWelcomeOpen(true);
     }).catch(() => {});
     return () => { cancelled = true; };
+  }, []);
+
+  // Welcome dismissed → persist the flag, hide the card, launch the tutorial.
+  const handleBetaWelcomeDismiss = useCallback(() => {
+    setBetaWelcomeOpen(false);
+    setGoldRoomOpen(true);
+    void AsyncStorage.setItem('HAS_SEEN_BETA_WELCOME', 'true').catch(() => {});
+    // Keep the legacy one-shot flag in sync so the old auto-open never re-fires.
+    void AsyncStorage.setItem('salinda_intro_seen', 'true').catch(() => {});
   }, []);
 
   // Green hero button is always "play now" → starts a game.
@@ -22134,6 +22269,9 @@ export function PlayModeChoiceScreen({
           </View>
         </View>
       </ScrollView>
+
+      {/* First-launch beta welcome card — full-screen overlay above the lobby. */}
+      <BetaWelcomeScreen visible={betaWelcomeOpen} onDismiss={handleBetaWelcomeDismiss} />
     </View>
   );
 }
@@ -24575,6 +24713,20 @@ function App() {
   }, [fontsLoaded, fontError]);
   // fontError: render without custom font rather than showing blank screen forever
   if (!fontsLoaded && !fontError) return null;
+
+  // Dev-only ISOLATED preview (?betawelcome=1): render ONLY the beta welcome
+  // card, short-circuiting auth + the invite gate + the lobby entirely. Lets the
+  // card be inspected without logging in / passing the allowlist. Web + __DEV__
+  // only. The card's button re-opens it so the flip can be replayed.
+  if (
+    __DEV__ &&
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    /[?&]betawelcome=1/.test(window.location.search)
+  ) {
+    return <BetaWelcomePreview />;
+  }
+
   return (
     <AuthProvider>
       <LocaleProvider>
@@ -24589,6 +24741,21 @@ function App() {
         </ThemeProvider>
       </LocaleProvider>
     </AuthProvider>
+  );
+}
+
+// Dev-only isolated preview host for the beta welcome card. Keeps it permanently
+// mounted; the dismiss button just re-arms it (bump key) so the flip replays.
+function BetaWelcomePreview() {
+  const [round, setRound] = useState(0);
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0a0d14' }}>
+      <BetaWelcomeScreen
+        key={round}
+        visible
+        onDismiss={() => setRound((n) => n + 1)}
+      />
+    </View>
   );
 }
 

@@ -82,15 +82,17 @@ describe('Salinda economy validation suite', () => {
     console.log(logs.join('\n'));
   });
 
-  it('awards 1 coin when the excellence meter fills during gameplay', () => {
+  it('awards the excellence-meter reward when the meter fills during gameplay', () => {
     const tx = applyRewardTransaction(createEconomyState(0), {
       txId: 'TX_EXCELLENCE',
       action: 'Excellence Meter Full',
       reward: SALINDA_GAMEPLAY_REWARDS.excellence_meter_full,
     });
 
-    expect(tx.state.balance).toBe(1);
-    expect(tx.entry.costOrReward).toBe(1);
+    // Phase 1 rebalance: meter reward 1 → 15 (now actually felt).
+    expect(tx.state.balance).toBe(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full);
+    expect(tx.entry.costOrReward).toBe(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full);
+    expect(SALINDA_GAMEPLAY_REWARDS.excellence_meter_full).toBe(15);
   });
 
   it('keeps catalog prices aligned with production catalog definitions', () => {

@@ -8,7 +8,6 @@ export class GamePage {
   readonly equationArea: Locator = this.page.getByTestId('equation-area');
   readonly equationResultBox: Locator = this.page.getByTestId('equation-result-box');
   readonly diceArea: Locator = this.page.getByTestId('dice-area');
-  readonly endTurnButton: Locator = this.page.getByTestId('end-turn');
   readonly rollDiceButton: Locator = this.page.getByTestId('roll-dice');
   readonly resetEquationButton: Locator = this.page.getByTestId('reset-equation');
   readonly drawForfeitButton: Locator = this.page.getByTestId('draw-card-forfeit');

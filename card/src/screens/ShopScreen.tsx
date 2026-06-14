@@ -10,7 +10,13 @@ import { SlindaCoin } from '../../components/SlindaCoin';
 import { ThemePreview } from '../components/ThemePreview';
 import { THEMES, THEME_IDS, type ThemeId } from '../theme/themes';
 import { TABLE_SKINS, TABLE_SKIN_IDS, resolveTableSkinId, type TableSkinId } from '../theme/tableSkins';
+import { DICE_SKINS, DICE_SKIN_IDS, resolveDiceSkinId } from '../theme/diceSkins';
+import { PREMIUM_CARD_BACKS, PREMIUM_CARD_BACK_IDS, resolvePremiumCardBackId } from '../theme/premiumCardBacks';
+import { leagueForRating, meetsLeague, LEAGUES } from '../theme/leagues';
+import { GoldDieFace } from '../../AnimatedDice';
+import { SpinningCard } from '../components/SpinningCard';
 import { useAuth } from '../hooks/useAuth';
+import { useAdminAccess } from '../admin/useAdminAccess';
 import { useLocale } from '../i18n/LocaleContext';
 import { useActiveTheme } from '../theme/ThemeContext';
 import { useWebViewportSize } from '../hooks/useWebViewportSize';
@@ -33,7 +39,8 @@ function isThemeId(value: string | null | undefined): value is ThemeId {
 
 export function ShopScreen({ visible, onClose }: Props) {
   const { t, locale, isRTL } = useLocale();
-  const { profile, purchaseTheme, purchaseTableSkin, setActiveSkin } = useAuth();
+  const { profile, purchaseTheme, purchaseTableSkin, setActiveSkin, purchaseCosmetic, setActiveCosmetic } = useAuth();
+  const { isAdmin } = useAdminAccess();
   const { background } = useActiveTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -54,6 +61,7 @@ export function ShopScreen({ visible, onClose }: Props) {
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
   const [previewTableSkin, setPreviewTableSkin] = useState<TableSkinId | 'none' | null>(null);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const [cosmeticLoading, setCosmeticLoading] = useState<string | null>(null);
 
   const rawOwnedThemes = profile?.themes_owned ?? ['classic'];
   const ownedThemes = THEME_IDS.filter((themeId) => themeId === 'classic' || rawOwnedThemes.includes(themeId));
@@ -78,6 +86,10 @@ export function ShopScreen({ visible, onClose }: Props) {
   const activeBackgroundThemeId = isThemeId(profile?.active_card_back) ? profile.active_card_back : 'classic';
   const activeTableThemeId = isThemeId(profile?.active_table_theme) ? profile.active_table_theme : 'classic';
   const activeTableSkinId = resolveTableSkinId(profile?.active_table_skin);
+  const ownedCosmetics = profile?.cosmetics_owned ?? [];
+  const activeDiceSkin = resolveDiceSkinId(profile?.active_dice_skin);
+  const activeCardBack = resolvePremiumCardBackId(profile?.active_card_back_image);
+  const currentLeague = leagueForRating(profile?.rating);
 
   const previewData = previewTheme ? THEMES[previewTheme] : null;
   const previewTableSkinData =
@@ -85,6 +97,20 @@ export function ShopScreen({ visible, onClose }: Props) {
       ? TABLE_SKINS[previewTableSkin]
       : null;
   const isPreviewOpen = !!previewTheme || !!previewTableSkin;
+
+  // Localized "you haven't reached the required league" message.
+  const leagueLockedMessage = locale === 'he'
+    ? 'עדיין לא הגעת לליגה הנדרשת כדי לרכוש פריט זה.'
+    : "You haven't reached the league required to buy this item yet.";
+
+  // Purchase lock for a unified cosmetic. Admin (God Mode) bypasses ALL gates.
+  // Returns the blocking reason, or null when the player may buy.
+  function purchaseLock(requiredLeague: string, price: number): 'league' | 'coins' | null {
+    if (isAdmin) return null;
+    if (!meetsLeague(profile?.rating, requiredLeague as any)) return 'league';
+    if (coins < price) return 'coins';
+    return null;
+  }
 
   function clearFeedback() {
     setFeedback(null);
@@ -128,11 +154,10 @@ export function ShopScreen({ visible, onClose }: Props) {
   async function handleBuyTableSkin(skinId: TableSkinId) {
     const skin = TABLE_SKINS[skinId];
     if (ownedTableSkins.includes(skinId) || tableSkinLoading) return;
-    if (coins < skin.price) {
-      clearFeedback();
-      showError(t('shop.insufficientCoins'));
-      return;
-    }
+    // Smart, contextual gate (Admin God Mode bypasses both).
+    const lock = purchaseLock(skin.requiredLeague, skin.price);
+    if (lock === 'league') { clearFeedback(); showError(leagueLockedMessage); return; }
+    if (lock === 'coins') { clearFeedback(); showError(t('shop.insufficientCoins')); return; }
     setTableSkinLoading(skinId);
     clearFeedback();
     try {
@@ -303,7 +328,7 @@ export function ShopScreen({ visible, onClose }: Props) {
     const active = activeTableSkinId === skinId;
     const busy = tableSkinLoading === skinId || activationLoading === `table_skin:${skinId}`;
     const skin = TABLE_SKINS[skinId];
-    const canAfford = coins >= skin.price;
+    const lock = purchaseLock(skin.requiredLeague, skin.price); // null when admin / buyable
     const containerStyle = previewMode ? styles.previewActionBtn : styles.productBtn;
     const textStyle = [
       previewMode ? styles.previewActionBtnText : styles.productBtnText,
@@ -328,7 +353,7 @@ export function ShopScreen({ visible, onClose }: Props) {
 
     return (
       <TouchableOpacity
-        style={[containerStyle, !canAfford ? styles.productBtnLocked : styles.productBtnBuy]}
+        style={[containerStyle, lock ? styles.productBtnLocked : styles.productBtnBuy]}
         onPress={() => void handleBuyTableSkin(skinId)}
         disabled={busy}
         activeOpacity={0.8}
@@ -336,8 +361,81 @@ export function ShopScreen({ visible, onClose }: Props) {
       >
         {busy
           ? <ActivityIndicator color="#FFF" size="small" />
-          : <Text style={textStyle}>{!canAfford ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}</Text>
+          : <Text style={textStyle}>{lock ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}</Text>
         }
+      </TouchableOpacity>
+    );
+  }
+
+  async function handleBuyCosmetic(
+    kind: 'dice_skin' | 'card_back', cosmeticId: string, equipId: string,
+    requiredLeague: string, price: number,
+  ) {
+    // Smart, contextual gate (Admin God Mode bypasses both).
+    const lock = purchaseLock(requiredLeague, price);
+    if (lock === 'league') { clearFeedback(); showError(leagueLockedMessage); return; }
+    if (lock === 'coins') { clearFeedback(); showError(t('shop.insufficientCoins')); return; }
+    const key = `buy:${kind}:${equipId}`;
+    if (cosmeticLoading === key) return;
+    setCosmeticLoading(key);
+    clearFeedback();
+    try {
+      const result = await purchaseCosmetic(cosmeticId);
+      if (result === 'ok' || result === 'already_owned') {
+        await setActiveCosmetic(kind, equipId);
+        showSuccess(t('shop.activationSuccess'));
+      } else if (result === 'insufficient_coins') showError(t('shop.insufficientCoins'));
+      else showError(t('shop.purchaseError'));
+    } finally {
+      setCosmeticLoading(null);
+    }
+  }
+
+  async function handleEquipCosmetic(kind: 'dice_skin' | 'card_back', equipId: string) {
+    const key = `equip:${kind}:${equipId}`;
+    if (cosmeticLoading === key) return;
+    setCosmeticLoading(key);
+    clearFeedback();
+    try {
+      await setActiveCosmetic(kind, equipId);
+    } finally {
+      setCosmeticLoading(null);
+    }
+  }
+
+  // Buy / equip / active button for a unified cosmetic (dice skin or card back).
+  function renderCosmeticAction(
+    kind: 'dice_skin' | 'card_back',
+    opts: { equipId: string; cosmeticId: string | null; price: number; owned: boolean; active: boolean; requiredLeague: string },
+  ) {
+    const { equipId, cosmeticId, price, owned, active, requiredLeague } = opts;
+    const busy = cosmeticLoading === `buy:${kind}:${equipId}` || cosmeticLoading === `equip:${kind}:${equipId}`;
+    const lock = purchaseLock(requiredLeague, price); // null when admin / buyable
+    const textStyle = [styles.productBtnText, shouldRightAlignAll ? styles.rtlTextFull : null];
+    if (owned) {
+      return (
+        <TouchableOpacity
+          style={[styles.productBtn, active ? styles.productBtnActive : styles.productBtnSelect]}
+          onPress={() => void handleEquipCosmetic(kind, equipId)}
+          disabled={active || busy}
+          activeOpacity={0.8}
+        >
+          {busy ? <ActivityIndicator color="#FFF" size="small" />
+            : <Text style={textStyle}>{active ? t('shop.activeBadge') : t('shop.activateButton')}</Text>}
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        style={[styles.productBtn, lock ? styles.productBtnLocked : styles.productBtnBuy]}
+        // Not disabled when locked: pressing surfaces the contextual reason (league vs coins).
+        onPress={() => cosmeticId && void handleBuyCosmetic(kind, cosmeticId, equipId, requiredLeague, price)}
+        disabled={busy}
+        activeOpacity={0.8}
+        testID={`shop-${kind}-buy-${equipId}`}
+      >
+        {busy ? <ActivityIndicator color="#FFF" size="small" />
+          : <Text style={textStyle}>{lock ? `🔒 ${t('shop.buyButton')}` : t('shop.buyButton')}</Text>}
       </TouchableOpacity>
     );
   }
@@ -524,15 +622,95 @@ export function ShopScreen({ visible, onClose }: Props) {
               })}
             </ScrollView>
 
+            <SectionHeader title={locale === 'he' ? 'קוביות' : 'Dice'} rightAligned={shouldRightAlignAll} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+              {DICE_SKIN_IDS.map((id) => {
+                const skin = DICE_SKINS[id];
+                const owned = id === 'classic' || (skin.cosmeticId != null && ownedCosmetics.includes(skin.cosmeticId));
+                const active = id === activeDiceSkin;
+                return (
+                  <View key={id} style={[styles.productCard, owned && styles.productCardOwned]}>
+                    {owned && <LinearGradient colors={['rgba(252,211,77,0.12)', 'transparent']} style={StyleSheet.absoluteFill} />}
+                    <View style={styles.diceThumb}>
+                      <GoldDieFace value={5} size={56} faces={skin.faces} />
+                    </View>
+                    <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                      {locale === 'he' ? skin.name_he : skin.name_en}
+                    </Text>
+                    {!owned && (
+                      <View style={[styles.productPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
+                        <SlindaCoin size={13} />
+                        <Text style={styles.productPriceText}>{skin.price}</Text>
+                      </View>
+                    )}
+                    {renderCosmeticAction('dice_skin', { equipId: id, cosmeticId: skin.cosmeticId, price: skin.price, owned, active, requiredLeague: skin.requiredLeague })}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <SectionHeader title={locale === 'he' ? 'גב קלף' : 'Card Backs'} rightAligned={shouldRightAlignAll} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+              {PREMIUM_CARD_BACK_IDS.map((id) => {
+                const item = PREMIUM_CARD_BACKS[id];
+                const owned = id === 'classic' || (item.cosmeticId != null && ownedCosmetics.includes(item.cosmeticId));
+                const active = id === activeCardBack;
+                return (
+                  <View key={id} style={[styles.productCard, owned && styles.productCardOwned]}>
+                    {owned && <LinearGradient colors={['rgba(252,211,77,0.12)', 'transparent']} style={StyleSheet.absoluteFill} />}
+                    <View style={styles.cardBackThumb}>
+                      {item.image ? (
+                        // Premium feel: the card back continuously flips/rotates to show it off.
+                        <SpinningCard frontSource={item.image} width={58} speed={45} active={visible} />
+                      ) : (
+                        <Image source={CLASSIC_TABLE_IMAGE as any} resizeMode="cover" style={styles.cardBackThumbImg} />
+                      )}
+                    </View>
+                    <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                      {locale === 'he' ? item.name_he : item.name_en}
+                    </Text>
+                    {!owned && (
+                      <View style={[styles.productPriceRow, shouldRightAlignAll ? styles.priceRowRtl : null]}>
+                        <SlindaCoin size={13} />
+                        <Text style={styles.productPriceText}>{item.price}</Text>
+                      </View>
+                    )}
+                    {renderCosmeticAction('card_back', { equipId: id, cosmeticId: item.cosmeticId, price: item.price, owned, active, requiredLeague: item.requiredLeague })}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <SectionHeader title={locale === 'he' ? 'ליגות' : 'Leagues'} rightAligned={shouldRightAlignAll} />
+            <Text style={[styles.subsectionTitle, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+              {locale === 'he' ? `הליגה שלך: ${currentLeague.name_he}` : `Your league: ${currentLeague.name_en}`}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+              {LEAGUES.map((lg) => {
+                const isCurrent = lg.id === currentLeague.id;
+                return (
+                  <View key={lg.id} style={[styles.badgeCard, (isCurrent || isAdmin) && styles.productCardOwned]}>
+                    {(isCurrent || isAdmin) && <LinearGradient colors={['rgba(252,211,77,0.12)', 'transparent']} style={StyleSheet.absoluteFill} />}
+                    {/* Admin God Mode unlocks (un-dims) every league for free testing. */}
+                    <Image source={lg.badge} resizeMode="contain" style={[styles.badgeImg, !isCurrent && !isAdmin && styles.badgeImgLocked]} />
+                    <Text style={[styles.productName, shouldRightAlignAll ? styles.rtlTextFull : null]}>
+                      {locale === 'he' ? lg.name_he : lg.name_en}
+                    </Text>
+                    <Text style={styles.badgeReq}>
+                      {isCurrent ? (locale === 'he' ? 'נוכחי' : 'Current')
+                        : isAdmin ? (locale === 'he' ? 'פתוח' : 'Unlocked')
+                        : `${lg.minRating}+`}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
             {!!feedback && (
-              <View style={[styles.feedbackWrap, shouldRightAlignAll ? styles.feedbackWrapRtl : null]}>
-                <Text style={[
-                  styles.feedbackText,
-                  feedbackTone === 'success' ? styles.feedbackSuccess : null,
-                  shouldRightAlignAll ? styles.rtlTextFull : null,
-                ]}>
-                  {feedback}
-                </Text>
+              <View style={styles.feedbackWrap}>
+                <View style={[styles.feedbackBanner, feedbackTone === 'success' ? styles.feedbackBannerSuccess : styles.feedbackBannerError]}>
+                  <Text style={styles.feedbackBannerText}>{feedback}</Text>
+                </View>
               </View>
             )}
 
@@ -880,6 +1058,23 @@ const styles = StyleSheet.create({
   },
   tableSkinThumbImg: { width: 120, height: 46 },
   classicTableThumbImg: { width: 120, height: 46 },
+  diceThumb: {
+    width: 120, height: 70, borderRadius: 8, overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  cardBackThumb: {
+    width: 64, height: 88, borderRadius: 8, overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', alignSelf: 'center',
+  },
+  cardBackThumbImg: { width: 64, height: 88 },
+  badgeCard: {
+    width: 100, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 8,
+    marginRight: 10, alignItems: 'center', overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  badgeImg: { width: 60, height: 60 },
+  badgeImgLocked: { opacity: 0.4 },
+  badgeReq: { color: '#94A3B8', fontSize: 11, fontWeight: '700', marginTop: 4 },
   noneSkinThumb: {
     backgroundColor: 'rgba(0,0,0,0.2)',
     overflow: 'hidden',
@@ -899,10 +1094,19 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  feedbackWrap: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, alignItems: 'center' },
-  feedbackWrapRtl: { alignItems: 'flex-end' },
-  feedbackText: { color: '#F87171', fontSize: 13, textAlign: 'center', fontWeight: '600' },
-  feedbackSuccess: { color: '#4ADE80' },
+  // Centered premium feedback banner (always centered, regardless of RTL).
+  feedbackWrap: { width: '100%', paddingHorizontal: 20, marginTop: 14, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  feedbackBanner: {
+    alignSelf: 'center', maxWidth: 380, width: '100%',
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 18, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+    ...(Platform.OS !== 'android'
+      ? { shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }
+      : { elevation: 6 }),
+  },
+  feedbackBannerError: { backgroundColor: 'rgba(190,45,45,0.22)', borderColor: '#F4A4A4' },
+  feedbackBannerSuccess: { backgroundColor: 'rgba(34,160,80,0.22)', borderColor: '#86EFAC' },
+  feedbackBannerText: { color: '#FFFFFF', fontSize: 14, lineHeight: 20, fontWeight: '800', textAlign: 'center' },
 
   bottomFade: {
     position: 'absolute',

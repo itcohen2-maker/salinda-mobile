@@ -26,7 +26,7 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, I18nManager, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AnimatedDice, { type AnimatedDiceHandle, GoldDieFace } from '../../AnimatedDice';
 import { GameCard, type Card, type Fraction, type Operation } from '../../components/CardDesign';
@@ -680,13 +680,14 @@ function FirstWinCelebration({ onContinue }: { onContinue: () => void }) {
 
 // ── Success — the explicit finish. A trophy pops, then a single "סיום"
 // returns to the Hub. No Retry/Next/Menu choice overlay.
-function SuccessCelebration({ onDone, title, subtitle }: { onDone?: () => void; title?: string; subtitle?: string }) {
+function SuccessCelebration({ onDone, title, subtitle, ctaLabel }: { onDone?: () => void; title?: string; subtitle?: string; ctaLabel?: string }) {
   const copy = useGoldRoomCopy();
   const pop = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(pop, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }).start();
   }, [pop]);
   const scale = pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] });
+  const label = ctaLabel ?? copy.finish;
   return (
     <View style={styles.successOverlay}>
       <View style={styles.successCard}>
@@ -694,7 +695,7 @@ function SuccessCelebration({ onDone, title, subtitle }: { onDone?: () => void; 
         <Text style={styles.successTitle}>{title ?? copy.rewardTitle}</Text>
         <Text style={styles.successSub}>{subtitle ?? copy.successSub}</Text>
         <View style={styles.successCta}>
-          <GoldButton label={copy.finish} onPress={onDone} accessibilityLabel={copy.finish} fullWidth height={56} fontSize={20} />
+          <GoldButton label={label} onPress={onDone} accessibilityLabel={label} fullWidth height={56} fontSize={20} />
         </View>
       </View>
     </View>
@@ -1082,7 +1083,7 @@ type SpecialsFlowPhase =
   | 'feraShowcase'
   | 'feraPractice';
 
-type SpecialsFlyTarget = 'op' | 'left' | 'right';
+type SpecialsFlyTarget = 'op' | 'left' | 'right' | 'result';
 type SpecialsFlyKind = 'sign' | 'salindaSign' | 'feraNumber';
 type SpecialsPendingPlacement = 'symbolMinus' | 'salindaOperator' | 'feraNumber' | null;
 
@@ -1104,6 +1105,16 @@ interface SpecialsFlowState {
   feraShowcaseStarted: boolean;
   feraShowcaseCardUsed: boolean;
   feraPracticeCardUsed: boolean;
+  // ── Wild ("פרא") round: the equation is fully formed (left + right = ?) and the
+  // wild is LAUNCHED to MATCH the result — it never enters the operand/sign grid. ──
+  feraResult: number | null;        // the target result the wild must match
+  feraResolvedCard: Card | null;    // the wild once it has landed in the result slot
+  feraHand: Card[];                 // rich 5-card hand: 4 decoys (≠ result) + 1 wild
+  // ── Wild showcase dice storyboard: 3 dice float in, then auto-fill the two
+  // operands (4, 2) and the result auto-computes & DISPLAYS the answer (6). ──
+  feraDiceDone: boolean;            // operands have rolled in + result is shown
+  feraArmed: boolean;               // wild is selected/armed, awaiting the שגר launch
+  showSignSuccess: boolean;         // sign-card lesson celebration overlay is open
   showEndModal: boolean;
 }
 
@@ -1128,11 +1139,17 @@ const SPECIALS_SALINDA_PRACTICE_TEXT =
 const SPECIALS_FERA_INTRO_TEXT =
   'הכירו את הנשק הסודי של המשחק: קלף הפרא! הקלף הזה הוא לוח חלק – הוא יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח.';
 const SPECIALS_FERA_SHOWCASE_TEXT =
-  'הקלף הזה יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח. לחצו על קלף הפרא שבמניפה.';
+  "אין לכם את התוצאה ביד? בחרו בקלף הפרא במקום הקלף שחסר לכם, ואז לחצו על 'שגר'!";
 const SPECIALS_FERA_READY_TEXT =
-  'ראיתם את זה? קלף הפרא הפך בדיוק למספר 2 שהיה חסר לנו במשוואה! לחצו על חץ ההמשך כדי לנסות בעצמכם.';
+  'ראיתם את זה? קלף הפרא השלים את המספר שהיה חסר לכם ופתר את התרגיל!';
 const SPECIALS_FERA_PRACTICE_TEXT =
-  'התור שלכם! לחצו על קלף הפרא שבמניפה והפכו אותו למספר 4 כדי להשלים את המשוואה המנצחת!';
+  "התור שלכם! אין לכם את התוצאה ביד — בחרו בקלף הפרא ולחצו על 'שגר' כדי לפתור!";
+// Shown the moment the player arms (selects) the wild, before pressing שגר.
+const SPECIALS_FERA_ARMED_TEXT = "מצוין! עכשיו לחצו על 'שגר' כדי לשלוח את קלף הפרא ולפתור את התרגיל!";
+// Sign-card lesson celebration — fires after the learner places the (−) sign.
+const SPECIALS_SIGN_SUCCESS_TITLE = 'כל הכבוד! 🎉';
+const SPECIALS_SIGN_SUCCESS_TEXT =
+  'עכשיו אתם יודעים איך נפטרים מקלף סימן! פשוט מניחים אותו בתוך התרגיל. קלי קלות! 🎉';
 
 const SPECIALS_TARGET_PROMPT = 'מעולה! עכשיו לחצו על המשבצת המהבהבת במשוואה כדי להציב את הקלף.';
 
@@ -1190,8 +1207,15 @@ function generateSpecialsSymbolPracticeExercise(): { left: number; right: number
 }
 
 function generateSpecialsSalindaPracticeExercise(): { left: number; right: number; result: number } {
-  const left = 2 + Math.floor(Math.random() * 7);
-  const right = 2 + Math.floor(Math.random() * 6);
+  // Salinda demonstrates multiplication — keep the product within the game's
+  // ≤25 range so the equation stays valid (e.g. 4 × 5 = 20, never 7 × 6 = 42).
+  const pairs: Array<[number, number]> = [];
+  for (let l = 2; l <= 9; l++) {
+    for (let r = 2; r <= 9; r++) {
+      if (l * r <= 25) pairs.push([l, r]);
+    }
+  }
+  const [left, right] = pairs[Math.floor(Math.random() * pairs.length)];
   return { left, right, result: left * right };
 }
 
@@ -1199,6 +1223,24 @@ function generateSpecialsFeraPracticeExercise(): { left: number; right: number; 
   const left = 3 + Math.floor(Math.random() * 6);
   const right = 2 + Math.floor(Math.random() * 6);
   return { left, right, result: left + right };
+}
+
+// A rich, realistic Wild ("פרא") hand: exactly 5 cards — 4 distinct random
+// number cards explicitly filtered so NONE equals the round's target result
+// (the "No-Solution Trap": only the wild can win) + 1 wild card. The wild is
+// seated mid-fan so the spread reads like a real hand across iOS/Android/web.
+function buildFeraHand(result: number): Card[] {
+  const numbers: number[] = [];
+  let guard = 0;
+  while (numbers.length < 4 && guard++ < 400) {
+    const v = 1 + Math.floor(Math.random() * 25); // regular number cards 1..25
+    if (v === result) continue;                   // never equal to the target result
+    if (numbers.includes(v)) continue;             // distinct → a fuller-looking fan
+    numbers.push(v);
+  }
+  const cards: Card[] = numbers.map((value, i) => ({ id: `specials-fera-num-${i}-${value}`, type: 'number', value }));
+  cards.splice(2, 0, { id: SPECIALS_FERA_ID, type: 'wild' });
+  return cards;
 }
 
 function opDisplay(op: Operation): string {
@@ -1225,9 +1267,14 @@ function getSpecialsInstruction(state: SpecialsFlowState): string {
     return `עכשיו תורכם! הביטו בקלף הסלינדה שבמניפה. ביחרו את סימן הכפל (×)!`;
   }
   if (state.phase === 'feraIntro') return SPECIALS_FERA_INTRO_TEXT;
-  if (state.phase === 'feraShowcase') return state.feraDemoDone ? SPECIALS_FERA_READY_TEXT : SPECIALS_FERA_SHOWCASE_TEXT;
-  const feraRight = state.rightValue ?? 4;
-  return `התור שלכם! לחצו על קלף הפרא שבמניפה והפכו אותו למספר ${feraRight} כדי להשלים את המשוואה המנצחת!`;
+  if (state.phase === 'feraShowcase') {
+    if (state.feraDemoDone) return SPECIALS_FERA_READY_TEXT;
+    if (state.feraArmed) return SPECIALS_FERA_ARMED_TEXT;
+    return SPECIALS_FERA_SHOWCASE_TEXT;
+  }
+  // feraPractice
+  if (state.feraArmed && !state.feraResolvedCard) return SPECIALS_FERA_ARMED_TEXT;
+  return SPECIALS_FERA_PRACTICE_TEXT;
 }
 
 function getSpecialsEquation(state: SpecialsFlowState): { left: number | null; op: Operation | null; right: number | null; result: number } | null {
@@ -1248,9 +1295,10 @@ function getSpecialsEquation(state: SpecialsFlowState): { left: number | null; o
     case 'feraIntro':
       return null;
     case 'feraShowcase':
-      return { left: 4, op: '+' as Operation, right: state.rightValue, result: 6 };
+      // Operands are null until the dice storyboard rolls them in (4, then 2).
+      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: state.feraResult ?? 6 };
     case 'feraPractice':
-      return { left: state.leftValue, op: '+' as Operation, right: state.rightValue, result: (state.leftValue ?? 6) + (state.rightValue ?? 4) };
+      return { left: state.leftValue ?? 6, op: '+' as Operation, right: state.rightValue ?? 4, result: state.feraResult ?? 10 };
   }
 }
 
@@ -1267,9 +1315,13 @@ function BouncyEquationNumber({ value, bounceKey }: { value: number | null; boun
 
   return (
     <Animated.View style={[styles.specialsEquationSlot, value === null && styles.specialsEquationSlotEmpty, { transform: [{ translateY: y }, { scale }] }]}>
-      <Text allowFontScaling={false} style={value === null ? styles.specialsQuestionText : styles.specialsEquationText}>
-        {value ?? '?'}
-      </Text>
+      {/* An empty operand slot stays blank (no "?") — it's the dashed target the
+       *  storyboard die drops into; the digit bounces in once the die lands. */}
+      {value === null ? null : (
+        <Text allowFontScaling={false} style={styles.specialsEquationText}>
+          {value}
+        </Text>
+      )}
     </Animated.View>
   );
 }
@@ -1280,6 +1332,9 @@ function SpecialsEquation({
   right,
   rightCard,
   result,
+  resultCard,
+  resultHidden,
+  resultSlotReady,
   bounceKey,
   opSlotReady,
   rightSlotReady,
@@ -1292,6 +1347,9 @@ function SpecialsEquation({
   right: number | null;
   rightCard?: Card | null;
   result: number;
+  resultCard?: Card | null;
+  resultHidden?: boolean;
+  resultSlotReady?: boolean;
   bounceKey: number;
   opSlotReady?: boolean;
   rightSlotReady?: boolean;
@@ -1362,8 +1420,21 @@ function SpecialsEquation({
         <BouncyEquationNumber value={right} bounceKey={bounceKey} />
       )}
       <Text allowFontScaling={false} style={styles.specialsEquals}>=</Text>
-      <View style={styles.specialsEquationSlot}>
-        <Text allowFontScaling={false} style={styles.specialsEquationText}>{result}</Text>
+      <View style={[styles.specialsEquationSlot, (resultHidden || resultCard) && styles.specialsEquationSlotEmpty, resultSlotReady && styles.specialsEquationSlotReady]}>
+        {resultSlotReady ? renderGlow() : null}
+        {resultCard ? (
+          <View pointerEvents="none" style={styles.specialsEquationCardInSlot}>
+            <GameCard card={resultCard} selected small onPress={undefined} />
+          </View>
+        ) : resultHidden ? (
+          // Result stays blank until both operands roll in; then it auto-computes
+          // and the number flashes in (BouncyEquationNumber-style) — never a "?".
+          null
+        ) : (
+          <Text allowFontScaling={false} style={styles.specialsEquationText}>
+            {result}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -1529,7 +1600,7 @@ function SpecialsFlyingToken({ token, onDone }: { token: SpecialsFlyToken; onDon
     });
   }, [onDone, progress, token.id]);
 
-  const targetX = token.target === 'op' ? 0 : token.target === 'left' ? -98 : 98;
+  const targetX = token.target === 'op' ? 0 : token.target === 'left' ? -98 : token.target === 'result' ? 205 : 98;
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, targetX] });
   const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -222] });
   const scale = progress.interpolate({ inputRange: [0, 0.72, 1], outputRange: [1, token.kind === 'feraNumber' ? 0.72 : 1.08, 0.38] });
@@ -1571,7 +1642,7 @@ function SalindaOperatorBubbles({ onPick, disabled = false }: { onPick?: (op: Op
 }
 
 // Orbit radius (px) of the operator signs around the central Salinda card.
-const SALINDA_ORBIT_RADIUS = 112;
+const SALINDA_ORBIT_RADIUS = 132;
 
 function SalindaShowcaseIntro({
   locked,
@@ -1711,7 +1782,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     rightCard: null,
     busy: false,
     pendingPlacement: null,
-    symbolsDemoDone: true,
+    symbolsDemoDone: false,
     salindaDemoDone: false,
     salindaIntroLocked: false,
     salindaBubblesOpen: false,
@@ -1721,6 +1792,12 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     feraShowcaseStarted: false,
     feraShowcaseCardUsed: false,
     feraPracticeCardUsed: false,
+    feraResult: null,
+    feraResolvedCard: null,
+    feraHand: [],
+    feraDiceDone: false,
+    feraArmed: false,
+    showSignSuccess: false,
     showEndModal: false,
   });
   const [flyToken, setFlyToken] = useState<SpecialsFlyToken | null>(null);
@@ -1729,6 +1806,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   const slotPulse = useRef(new Animated.Value(0)).current;
   const flyDoneRef = useRef<(() => void) | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const symbolsDemoStarted = useRef(false);
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
@@ -1764,7 +1842,10 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     setBounceKey((key) => key + 1);
   }, []);
 
-  usePulseLoop(slotPulse, state.pendingPlacement !== null && !state.busy, 0, 1, 500);
+  // The result-slot glow during the wild round cues "match THIS number".
+  const feraAwaitingMatch =
+    (state.phase === 'feraShowcase' || state.phase === 'feraPractice') && !state.feraResolvedCard;
+  usePulseLoop(slotPulse, (state.pendingPlacement !== null || feraAwaitingMatch) && !state.busy, 0, 1, 500);
 
   const moveTo = useCallback((phase: SpecialsFlowPhase) => {
     clearTimers();
@@ -1773,12 +1854,20 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     const symbolExercise = phase === 'symbolsPractice' ? generateSpecialsSymbolPracticeExercise() : null;
     const salindaExercise = phase === 'salindaPractice' ? generateSpecialsSalindaPracticeExercise() : null;
     const feraExercise = phase === 'feraPractice' ? generateSpecialsFeraPracticeExercise() : null;
+    // Wild round: a fully-formed equation (left + right = ?) whose result the wild
+    // matches. Showcase is a fixed 4 + 2 = 6 demo; practice is randomised.
+    const isFeraRound = phase === 'feraShowcase' || phase === 'feraPractice';
+    // Showcase operands start EMPTY: the dice storyboard rolls them in (4, then 2)
+    // and the result then auto-computes & displays 6. Practice fills immediately.
+    const feraLeft = phase === 'feraShowcase' ? null : feraExercise?.left ?? null;
+    const feraRight = phase === 'feraShowcase' ? null : feraExercise?.right ?? null;
+    const feraResult = phase === 'feraShowcase' ? 6 : feraExercise?.result ?? null;
     setState((current) => ({
       ...current,
       phase,
-      op: phase === 'feraPractice' ? '+' : null,
-      leftValue: feraExercise?.left ?? salindaExercise?.left ?? symbolExercise?.left ?? null,
-      rightValue: feraExercise?.right ?? salindaExercise?.right ?? symbolExercise?.right ?? null,
+      op: isFeraRound ? '+' : null,
+      leftValue: feraLeft ?? salindaExercise?.left ?? symbolExercise?.left ?? null,
+      rightValue: feraRight ?? salindaExercise?.right ?? symbolExercise?.right ?? null,
       rightCard: null,
       busy: false,
       pendingPlacement: null,
@@ -1786,10 +1875,17 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       salindaBubblesOpen: false,
       salindaSelectorOpen: false,
       salindaSelectedOp: null,
+      feraResult: isFeraRound ? feraResult : current.feraResult,
+      feraResolvedCard: null,
+      feraHand: isFeraRound ? buildFeraHand(feraResult ?? 6) : current.feraHand,
       feraDemoDone: phase === 'feraShowcase' ? false : current.feraDemoDone,
       feraShowcaseStarted: false,
       feraShowcaseCardUsed: false,
       feraPracticeCardUsed: false,
+      // Only the showcase plays the dice storyboard; practice is "done" up front.
+      feraDiceDone: phase === 'feraShowcase' ? false : true,
+      feraArmed: false,
+      showSignSuccess: false,
     }));
     bounceEquation();
   }, [bounceEquation, clearTimers]);
@@ -1839,6 +1935,11 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
         setState((current) => ({ ...current, op: '-', pendingPlacement: null, busy: false }));
         bounceEquation();
         void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
+        // Celebrate the sign-card lesson before moving on to Salinda.
+        schedule(() => {
+          setState((current) => (current.phase === 'symbolsPractice' ? { ...current, showSignSuccess: true } : current));
+          void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 0.85 });
+        }, 700);
       });
       return;
     }
@@ -1859,51 +1960,97 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       });
       return;
     }
-    if (state.pendingPlacement === 'feraNumber' && (state.phase === 'feraShowcase' || state.phase === 'feraPractice')) {
-      const value = state.phase === 'feraPractice' ? state.rightValue ?? 4 : 2;
-      setState((current) => ({ ...current, busy: true }));
-      beginFly({ kind: 'feraNumber', label: String(value), target: 'right' }, () => {
-        setState((current) => ({
-          ...current,
-          rightCard: { id: `specials-placed-fera-${value}`, type: 'wild', resolvedValue: value },
-          rightValue: null,
-          op: '+',
-          pendingPlacement: null,
-          busy: true,
-          feraDemoDone: current.phase === 'feraShowcase' ? true : current.feraDemoDone,
-          feraShowcaseCardUsed: current.phase === 'feraShowcase' ? true : current.feraShowcaseCardUsed,
-          feraPracticeCardUsed: current.phase === 'feraPractice' ? true : current.feraPracticeCardUsed,
-        }));
-        bounceEquation();
-        void playSfx(state.phase === 'feraPractice' ? 'gameWin' : 'complete', { cooldownMs: 0, volumeOverride: state.phase === 'feraPractice' ? 0.9 : 0.62 });
-        schedule(() => {
-          setState((current) => ({
-            ...current,
-            rightValue: value,
-            rightCard: null,
-            busy: false,
-            showEndModal: current.phase === 'feraPractice' ? true : current.showEndModal,
-          }));
-          bounceEquation();
-        }, 2000);
-      });
-    }
   }, [beginFly, bounceEquation, moveTo, schedule, state.busy, state.pendingPlacement, state.phase, state.salindaSelectedOp]);
 
   useEffect(() => {
     if (state.phase !== 'feraShowcase' || state.feraShowcaseStarted) return;
     setState((current) => ({ ...current, feraShowcaseStarted: true }));
-  }, [state.feraShowcaseStarted, state.phase]);
+    // Dice storyboard: 3 dice float above the table, then die→4 and die→2 drop
+    // into the operand slots and the result auto-computes & flashes 6. Only then
+    // does the wild step open. Timers are swept by clearTimers() on phase change.
+    schedule(() => {
+      setState((c) => (c.phase === 'feraShowcase' ? { ...c, leftValue: 4 } : c));
+      bounceEquation();
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.5 });
+    }, 750);
+    schedule(() => {
+      setState((c) => (c.phase === 'feraShowcase' ? { ...c, rightValue: 2 } : c));
+      bounceEquation();
+      void playSfx('place', { cooldownMs: 0, volumeOverride: 0.5 });
+    }, 1550);
+    schedule(() => {
+      setState((c) => (c.phase === 'feraShowcase' ? { ...c, feraDiceDone: true } : c));
+      bounceEquation();
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
+    }, 2350);
+  }, [bounceEquation, schedule, state.feraShowcaseStarted, state.phase]);
+
+  // ── Phase 1 "Show" demo for the sign-card lesson: on entering symbolsShowcase,
+  // auto-place the correct sign (+) into the operator slot of 4 _ 2 = 6 — exactly
+  // what the player then does by hand in symbolsPractice. Reuses the same beginFly
+  // card-flight + SFX as the practice (no new audio). Marks symbolsDemoDone when it
+  // lands, which reveals the "next" arrow. Timers are swept by clearTimers.
+  useEffect(() => {
+    if (state.phase !== 'symbolsShowcase' || symbolsDemoStarted.current) return;
+    symbolsDemoStarted.current = true;
+    // Beat 1: "select" the sign card (same tap SFX the fan uses).
+    schedule(() => {
+      void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+    }, 650);
+    // Beat 2: fly the + into the operator slot, then settle it + reveal the arrow.
+    schedule(() => {
+      setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, busy: true } : c));
+      beginFly({ kind: 'sign', label: '+', target: 'op' }, () => {
+        setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, op: '+', busy: false, symbolsDemoDone: true } : c));
+        bounceEquation();
+        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
+      });
+    }, 1350);
+  }, [beginFly, bounceEquation, schedule, state.phase]);
+
+  // Launch the wild to MATCH the result: it flies to the result slot (never into
+  // an operand/sign slot) and becomes exactly the target number.
+  const launchFera = useCallback(() => {
+    if (state.busy || (state.phase !== 'feraShowcase' && state.phase !== 'feraPractice')) return;
+    const result = state.feraResult ?? (state.phase === 'feraShowcase' ? 6 : 10);
+    setState((current) => ({ ...current, busy: true }));
+    playEquationTapSfx();
+    beginFly({ kind: 'feraNumber', label: String(result), target: 'result' }, () => {
+      setState((current) => ({
+        ...current,
+        feraArmed: false,
+        feraResolvedCard: { id: `specials-resolved-fera-${result}`, type: 'wild', resolvedValue: result },
+        feraDemoDone: current.phase === 'feraShowcase' ? true : current.feraDemoDone,
+        feraShowcaseCardUsed: current.phase === 'feraShowcase' ? true : current.feraShowcaseCardUsed,
+        feraPracticeCardUsed: current.phase === 'feraPractice' ? true : current.feraPracticeCardUsed,
+        busy: current.phase === 'feraPractice', // hold input through the win beat
+      }));
+      bounceEquation();
+      void playSfx(state.phase === 'feraPractice' ? 'gameWin' : 'complete', { cooldownMs: 0, volumeOverride: state.phase === 'feraPractice' ? 0.9 : 0.62 });
+      if (state.phase === 'feraPractice') {
+        schedule(() => {
+          setState((current) => ({ ...current, busy: false, showEndModal: true }));
+        }, 2000);
+      }
+    });
+  }, [beginFly, bounceEquation, schedule, state.busy, state.feraResult, state.phase]);
 
   const handleFeraTap = useCallback((card: Card) => {
     if (state.busy || (state.phase !== 'feraPractice' && state.phase !== 'feraShowcase')) return;
-    if (card.id !== SPECIALS_FERA_ID || card.type !== 'wild') {
+    // In the showcase the wild can't be armed until the dice storyboard has rolled
+    // the operands in and revealed the result.
+    if (state.phase === 'feraShowcase' && !state.feraDiceDone) return;
+    if (state.feraArmed) return; // already armed — the launch happens via "שגר".
+    // Only the wild can win — the decoy numbers never equal the result, so a tap
+    // on one is gently rejected ("try again"). Tapping the wild ARMS it; the player
+    // then presses "שגר" to launch it to the result slot.
+    if (card.type !== 'wild') {
       showToast();
       return;
     }
-    setState((current) => ({ ...current, pendingPlacement: 'feraNumber' }));
-    playEquationTapSfx();
-  }, [showToast, state.busy, state.phase]);
+    setState((current) => ({ ...current, feraArmed: true }));
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.55 });
+  }, [showToast, state.busy, state.feraArmed, state.feraDiceDone, state.phase]);
 
   const handleNext = useCallback(() => {
     if (state.busy) return;
@@ -1945,13 +2092,17 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     onExit?.();
   }, [onComplete, onExit]);
 
+  // Dismiss the sign-card celebration and continue into the Salinda lesson.
+  const dismissSignSuccess = useCallback(() => {
+    moveTo('salindaIntro');
+  }, [moveTo]);
+
   const equation = getSpecialsEquation(state);
   const instruction = getSpecialsInstruction(state);
-  const showSignDock = false;
   const showNext =
     state.pendingPlacement === null &&
     ((state.phase === 'symbolsShowcase' && state.symbolsDemoDone) ||
-      (state.phase === 'symbolsPractice' && state.op !== null) ||
+      // symbolsPractice advances via the sign-card celebration overlay, not an arrow.
       (state.phase === 'salindaShowcase' && state.salindaDemoDone) ||
       (state.phase === 'salindaPractice' && state.op !== null) ||
       state.phase === 'feraIntro' ||
@@ -1965,18 +2116,23 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       ? SPECIALS_SALINDA_PRACTICE_HAND
       : state.phase === 'feraShowcase'
       ? state.feraShowcaseCardUsed
-        ? SPECIALS_FERA_INTRO_HAND.filter((card) => card.id !== SPECIALS_FERA_ID)
-        : SPECIALS_FERA_INTRO_HAND
+        ? state.feraHand.filter((card) => card.type !== 'wild')
+        : state.feraHand
       : state.phase === 'feraPractice'
       ? state.feraPracticeCardUsed
-        ? []
-        : SPECIALS_FERA_PRACTICE_HAND.filter((card) => card.id === SPECIALS_FERA_ID)
+        ? state.feraHand.filter((card) => card.type !== 'wild')
+        : state.feraHand
       : [];
   const displayHand = useMemo(
     () => hand.map((card) => (card.id === SPECIALS_SALINDA_ID && state.salindaSelectedOp ? { ...card, operation: state.salindaSelectedOp } : card)),
     [hand, state.salindaSelectedOp],
   );
   const selectedIds = useMemo(() => {
+    // During the showcase demo, highlight the correct (+) sign until it's placed.
+    if (state.phase === 'symbolsShowcase' && state.op === null) {
+      const plusCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === '+');
+      return plusCard ? new Set([plusCard.id]) : new Set<string>();
+    }
     if (state.phase === 'symbolsPractice' && (state.pendingPlacement === 'symbolMinus' || state.op)) {
       const selectedSignCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === (state.op ?? '-'));
       return selectedSignCard ? new Set([selectedSignCard.id]) : new Set<string>();
@@ -1991,45 +2147,87 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   }, [state.op, state.pendingPlacement, state.phase, state.salindaSelectorOpen]);
   const showFeraIntroCenter = state.phase === 'feraIntro';
   const showSalindaIntroCenter = state.phase === 'salindaIntro';
-  const showBottomHand = state.phase !== 'feraIntro' && state.phase !== 'salindaIntro';
 
   return (
     <View style={styles.root}>
       <InstructionBanner text={instruction} />
-      <View style={styles.playArea}>
-        <View style={[styles.tableZone, showFeraIntroCenter && styles.specialsFeraCleanZone, showSalindaIntroCenter && styles.salindaIntroCleanZone]}>
-          {!showFeraIntroCenter && !showSalindaIntroCenter ? <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} /> : null}
-          <View style={styles.tableOverlay} pointerEvents="box-none">
-            <View style={styles.specialsBoardContent}>
-              {showSalindaIntroCenter ? (
-                <SalindaShowcaseIntro locked={state.salindaIntroLocked} onLocked={handleSalindaIntroLocked} onContinue={handleNext} />
-              ) : showFeraIntroCenter ? (
-                <SpecialsFeraIntroCard />
-              ) : equation ? (
-                <SpecialsEquation
-                  left={equation.left}
-                  op={equation.op}
-                  right={equation.right}
-                  rightCard={state.rightCard}
-                  result={equation.result}
-                  bounceKey={bounceKey}
-                  opSlotReady={(state.pendingPlacement === 'symbolMinus' || state.pendingPlacement === 'salindaOperator') && !state.busy}
-                  rightSlotReady={state.pendingPlacement === 'feraNumber' && !state.busy}
-                  pulse={slotPulse}
-                  onPressOpSlot={placePendingSpecial}
-                  onPressRightSlot={placePendingSpecial}
-                />
-              ) : null}
+      {showSalindaIntroCenter ? (
+        // Salinda intro — full play area, card centered, "בואו נראה!" CTA self-pinned.
+        <View style={styles.specialsIntroCenter}>
+          <SalindaShowcaseIntro locked={state.salindaIntroLocked} onLocked={handleSalindaIntroLocked} onContinue={handleNext} />
+        </View>
+      ) : showFeraIntroCenter ? (
+        // The Wild ("פרא") intro card — centered, at the same height as Salinda.
+        <View style={styles.specialsIntroCenter}>
+          <SpecialsFeraIntroCard />
+        </View>
+      ) : (
+        // ── Deterministic board column. Every band keeps a FIXED height (or reserves
+        //    its slot when empty) so the table and the fan sit in the EXACT same spot
+        //    in every step; a single flex spacer absorbs all screen-height slack. The
+        //    paddingTop clears the absolute instruction banner so nothing hides under
+        //    it. (Uses LOCAL styles — the shared playArea/tableZone are untouched.) ──
+        <View style={styles.specialsStage}>
+          {/* (1) Dice band — reserved in every phase (keeps the table Y identical);
+           *     the 3 storyboard dice render only in the fera showcase. */}
+          <View style={styles.specialsDiceBand} pointerEvents="none">
+            {state.phase === 'feraShowcase' ? (
+              <View style={styles.specialsFeraDiceRow}>
+                {[
+                  { v: 4, used: state.leftValue != null },
+                  { v: 2, used: state.rightValue != null },
+                  { v: 5, used: false },
+                ].map((d, i) => (
+                  <View key={i} style={[styles.specialsFeraDie, d.used && styles.specialsFeraDieUsed]}>
+                    <GoldDieFace value={d.v} size={42} />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          {/* (2) Table — LOCKED dimensions + vertical position, identical every step. */}
+          <View style={styles.specialsTableZone}>
+            <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImg} />
+            <View style={styles.tableOverlay} pointerEvents="box-none">
+              <View style={styles.specialsBoardContent}>
+                {equation ? (
+                  <SpecialsEquation
+                    left={equation.left}
+                    op={equation.op}
+                    right={equation.right}
+                    rightCard={state.rightCard}
+                    result={equation.result}
+                    resultCard={state.feraResolvedCard}
+                    resultHidden={state.phase === 'feraShowcase' && !state.feraDiceDone && !state.feraResolvedCard}
+                    resultSlotReady={((state.phase === 'feraShowcase' && state.feraDiceDone) || state.phase === 'feraPractice') && !state.feraResolvedCard && !state.busy}
+                    bounceKey={bounceKey}
+                    opSlotReady={(state.pendingPlacement === 'symbolMinus' || state.pendingPlacement === 'salindaOperator') && !state.busy}
+                    rightSlotReady={state.pendingPlacement === 'feraNumber' && !state.busy}
+                    pulse={slotPulse}
+                    onPressOpSlot={placePendingSpecial}
+                    onPressRightSlot={placePendingSpecial}
+                  />
+                ) : null}
+              </View>
             </View>
           </View>
-        </View>
-      </View>
 
-      {showBottomHand ? <View style={styles.specialsBottomArea}>
-        {showSignDock ? (
-          <SpecialsSignDock disabled={state.busy || state.phase !== 'symbolsPractice'} activeOp={state.op} onPick={handleSymbolPick} />
-        ) : (
-          <View style={{ width: fanW, alignSelf: 'center' }}>
+          {/* (3) Flex spacer — soaks up all slack so the launch slot + fan stay pinned
+           *     to the bottom band on any screen height. */}
+          <View style={styles.specialsSpacer} pointerEvents="none" />
+
+          {/* (4) Launch slot — a reserved fixed-height gap directly above the fan so
+           *     the fan NEVER shifts. The "שגר" button inherits the same GoldButton
+           *     config as the tutorial nav buttons and appears here once armed. */}
+          <View style={styles.specialsLaunchSlot} pointerEvents="box-none">
+            {(state.phase === 'feraShowcase' || state.phase === 'feraPractice') && state.feraArmed && !state.feraResolvedCard ? (
+              <GoldButton label="שגר" onPress={launchFera} accessibilityLabel="שגר" fullWidth height={56} fontSize={22} radius={28} />
+            ) : null}
+          </View>
+
+          {/* (5) Hand fan — pinned to the bottom band. */}
+          <View style={[styles.specialsFanWrap, { width: fanW }]}>
             {(state.salindaBubblesOpen || state.salindaSelectorOpen) ? (
               <SalindaOperatorBubbles onPick={state.salindaSelectorOpen ? handleSalindaOperatorPick : undefined} disabled={state.busy} />
             ) : null}
@@ -2054,8 +2252,10 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
                   ? card.type === 'operation' && state.pendingPlacement !== 'symbolMinus'
                   : state.phase === 'salindaPractice' || state.phase === 'salindaShowcase'
                   ? card.id === SPECIALS_SALINDA_ID && state.pendingPlacement !== 'salindaOperator' && !state.op
-                  : state.phase === 'feraPractice' || state.phase === 'feraShowcase'
-                  ? card.id === SPECIALS_FERA_ID && state.pendingPlacement !== 'feraNumber'
+                  : state.phase === 'feraShowcase'
+                  ? state.feraDiceDone && !state.busy && !state.feraShowcaseCardUsed && !state.feraArmed
+                  : state.phase === 'feraPractice'
+                  ? !state.busy && !state.feraPracticeCardUsed && !state.feraArmed
                   : false
               }
               centerCardId={
@@ -2064,13 +2264,13 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
                   : state.phase === 'salindaShowcase' || state.phase === 'salindaPractice'
                   ? SPECIALS_SALINDA_ID
                   : state.phase === 'feraShowcase' || state.phase === 'feraPractice'
-                  ? null
+                  ? SPECIALS_FERA_ID
                   : null
               }
             />
           </View>
-        )}
-      </View> : null}
+        </View>
+      )}
 
       {showNext ? (
         <View style={styles.specialsArrowWrap}>
@@ -2080,6 +2280,14 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
 
       {flyToken ? <SpecialsFlyingToken token={flyToken} onDone={handleFlyDone} /> : null}
       <SpecialsToast toast={toast} />
+      {state.showSignSuccess ? (
+        <SuccessCelebration
+          title={SPECIALS_SIGN_SUCCESS_TITLE}
+          subtitle={SPECIALS_SIGN_SUCCESS_TEXT}
+          ctaLabel="המשך"
+          onDone={dismissSignSuccess}
+        />
+      ) : null}
       {state.showEndModal ? <SpecialsEndModal onFinish={finishSpecials} /> : null}
     </View>
   );
@@ -3563,6 +3771,25 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
 
   specialsBoardContent: { alignItems: 'center', justifyContent: 'center', width: '100%' },
+  // ── SpecialsFlow deterministic board column (LOCAL — leaves shared playArea/
+  //    tableZone untouched). Fixed bands + one flex spacer keep the table and fan
+  //    in the exact same spot across every tutorial step, on any screen height. ──
+  // paddingTop clears the absolute instruction banner (top:14 + minHeight:96 ≈ 110).
+  specialsStage: { flex: 1, width: '100%', alignItems: 'center', paddingTop: 118, paddingHorizontal: 16, paddingBottom: 10 },
+  // Reserved in EVERY phase so the table never moves; dice sit at its base near the table.
+  specialsDiceBand: { height: 58, alignItems: 'center', justifyContent: 'flex-end', marginBottom: 6 },
+  specialsFeraDiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  specialsFeraDie: { alignItems: 'center', justifyContent: 'center' },
+  // A used die stays clearly visible (it just fed an operand) — only gently dimmed.
+  specialsFeraDieUsed: { opacity: 0.55 },
+  // LOCKED table: fixed max height + aspect → identical size & Y in every step.
+  specialsTableZone: { width: '92%', maxWidth: 360, maxHeight: 234, aspectRatio: 1024 / 774, alignItems: 'center', justifyContent: 'center' },
+  // Absorbs all leftover height so the launch slot + fan stay pinned to the bottom.
+  specialsSpacer: { flex: 1, minHeight: 4 },
+  // Reserved gap directly above the fan — the "שגר" CTA lives here when armed so the
+  // fan never shifts whether or not the button is present.
+  specialsLaunchSlot: { height: 64, width: '100%', maxWidth: 360, alignSelf: 'center', alignItems: 'center', justifyContent: 'center' },
+  specialsFanWrap: { alignSelf: 'center', alignItems: 'center' },
   specialsFeraIntroStage: {
     width: 190,
     height: 248,
@@ -3585,21 +3812,30 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderColor: 'transparent',
   },
+  specialsIntroCenter: {
+    flex: 1,
+    alignSelf: 'stretch',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   salindaIntroStage: {
+    flex: 1,
+    alignSelf: 'stretch',
     width: '100%',
     minHeight: 420,
     alignItems: 'center',
     justifyContent: 'center',
   },
   salindaIntroOrbit: {
-    width: 300,
-    height: 300,
+    width: 330,
+    height: 330,
     alignItems: 'center',
     justifyContent: 'center',
   },
   salindaIntroCardWrap: {
-    width: 130,
-    height: 178,
+    width: 152,
+    height: 208,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 3,
@@ -3661,8 +3897,11 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
   specialsEquationRow: {
-    direction: 'ltr',
-    flexDirection: 'row',
+    // The equation MUST read left-to-right (4 + 2 = 6) on every platform. RN
+    // strips the CSS `direction` property, and Android's global forceRTL flips a
+    // plain `row` to visual RTL (mirroring the equation). Negating the flip with
+    // `row-reverse` under isRTL is the only reliable cross-platform LTR lock.
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
