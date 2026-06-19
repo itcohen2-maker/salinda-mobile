@@ -104,7 +104,12 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\User\\\\salinda-mobile\\\\card\" -Recurse -Filter \"*.tsx\" -o)",
       "Bash(Select-Object -First 20)",
       "Bash(git log *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(unzip -l \"/c/Users/User/Downloads/card.zip\")",
+      "Read(//c/Users/User/.claude/jobs/23017872/tmp/**)",
+      "Bash(unzip -o \"/c/Users/User/Downloads/card.zip\" -d card-handoff)",
+      "Read(//c/c/Users/User/salinda-mobile/**)",
+      "Bash(awk 'NR>=24300 && NR<=24560 && \\(/return \\\\\\(/ || /inviteGate/ || /GameRouter/ || /InviteGate/ || /goldRoom/ || /<GoldRoomScreen/ || /AppContent/ || /children/\\)' index.tsx)"
     ]
   }
 }

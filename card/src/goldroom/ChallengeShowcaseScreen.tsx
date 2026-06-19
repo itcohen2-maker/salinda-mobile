@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, I18nManager, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, I18nManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoldButton } from '../../components/GoldButton';
 import { GameCard, type Card } from '../../components/CardDesign';
@@ -15,10 +15,13 @@ type ScenePhase = 'intro' | 'challenge' | 'answer' | 'success';
 const CHALLENGE_THIRD: Card = { id: 'challenge-showcase-third', type: 'fraction', fraction: '1/3' };
 const BLOCK_TWELVE: Card = { id: 'challenge-showcase-12', type: 'number', value: 12 };
 const ROLL_HALF: Card = { id: 'challenge-showcase-half', type: 'fraction', fraction: '1/2' };
+const SHOWCASE_SCENES: ShowcaseScene[] = ['block', 'roll', 'finished'];
+const GOLD = ['#FFF4B8', '#F8E08E', '#D9A23A', '#8A5A1C'] as const;
 
 export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenProps) {
   const [scene, setScene] = useState<ShowcaseScene>('block');
   const [phase, setPhase] = useState<ScenePhase>('intro');
+  const [replayToken, setReplayToken] = useState(0);
   const sceneOpacity = useRef(new Animated.Value(1)).current;
   const challengeDrop = useRef(new Animated.Value(0)).current;
   const answerJump = useRef(new Animated.Value(0)).current;
@@ -27,23 +30,22 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
+    sceneOpacity.setValue(1);
+    challengeDrop.setValue(0);
+    answerJump.setValue(0);
+    successPop.setValue(0);
+    finalPop.setValue(0);
+    setPhase(scene === 'finished' ? 'success' : 'intro');
 
-    const resetSceneValues = () => {
-      sceneOpacity.setValue(1);
-      challengeDrop.setValue(0);
-      answerJump.setValue(0);
-      successPop.setValue(0);
-    };
-
-    const playScene = (nextScene: Exclude<ShowcaseScene, 'finished'>, offset: number) => {
-      timers.push(
-        setTimeout(() => {
-          setScene(nextScene);
-          setPhase('intro');
-          resetSceneValues();
-        }, offset),
-      );
-
+    if (scene === 'finished') {
+      void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.65 });
+      Animated.spring(finalPop, {
+        toValue: 1,
+        friction: 5,
+        tension: 120,
+        useNativeDriver: true,
+      }).start();
+    } else {
       timers.push(
         setTimeout(() => {
           setPhase('challenge');
@@ -54,7 +56,7 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
             easing: Easing.out(Easing.back(1.05)),
             useNativeDriver: true,
           }).start();
-        }, offset + 280),
+        }, 220),
       );
 
       timers.push(
@@ -67,49 +69,22 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
             easing: Easing.out(Easing.back(1.15)),
             useNativeDriver: true,
           }).start();
-        }, offset + 1320),
+        }, 1150),
       );
 
       timers.push(
         setTimeout(() => {
           setPhase('success');
-          void playSfx(nextScene === 'block' ? 'success' : 'transition', { cooldownMs: 0, volumeOverride: 0.62 });
+          void playSfx(scene === 'block' ? 'success' : 'transition', { cooldownMs: 0, volumeOverride: 0.62 });
           Animated.spring(successPop, {
             toValue: 1,
             friction: 5,
             tension: 130,
             useNativeDriver: true,
           }).start();
-        }, offset + 2100),
+        }, 1880),
       );
-
-      timers.push(
-        setTimeout(() => {
-          Animated.timing(sceneOpacity, {
-            toValue: 0,
-            duration: 300,
-            easing: Easing.in(Easing.quad),
-            useNativeDriver: true,
-          }).start();
-        }, offset + 2920),
-      );
-    };
-
-    playScene('block', 120);
-    playScene('roll', 3380);
-    timers.push(
-      setTimeout(() => {
-        setScene('finished');
-        setPhase('success');
-        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.65 });
-        Animated.spring(finalPop, {
-          toValue: 1,
-          friction: 5,
-          tension: 120,
-          useNativeDriver: true,
-        }).start();
-      }, 6780),
-    );
+    }
 
     return () => {
       timers.forEach(clearTimeout);
@@ -119,7 +94,7 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
       sceneOpacity.stopAnimation();
       finalPop.stopAnimation();
     };
-  }, [answerJump, challengeDrop, finalPop, sceneOpacity, successPop]);
+  }, [answerJump, challengeDrop, finalPop, replayToken, scene, sceneOpacity, successPop]);
 
   const challengeStyle = useMemo(
     () => ({
@@ -174,7 +149,7 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
         }
       : {
           option: 'אפשרות 1: חסימה עם מספר מתחלק',
-          body: 'קלף 12 מתחלק ב-3, ולכן הוא חוסם את ⅓.',
+          body: 'קלף 12 מתחלק ב-3, ולכן הוא חוסם את 1/3.',
           success: 'חסימה מוצלחת',
           answer: BLOCK_TWELVE,
         };
@@ -184,13 +159,39 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
     onContinue();
   }, [onContinue]);
 
+  const handleReplay = useCallback(() => {
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.42 });
+    if (scene === 'finished') {
+      setScene('block');
+    }
+    setReplayToken((value) => value + 1);
+  }, [scene]);
+
+  const sceneIndex = SHOWCASE_SCENES.indexOf(scene);
+  const canGoBack = sceneIndex > 0;
+  const canGoNext = sceneIndex < SHOWCASE_SCENES.length - 1;
+  const goBack = useCallback(() => {
+    if (!canGoBack) return;
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.42 });
+    setScene(SHOWCASE_SCENES[sceneIndex - 1]);
+  }, [canGoBack, sceneIndex]);
+  const goNext = useCallback(() => {
+    if (!canGoNext) return;
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.42 });
+    setScene(SHOWCASE_SCENES[sceneIndex + 1]);
+  }, [canGoNext, sceneIndex]);
+
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['#050609', '#111521', '#050609']} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={styles.dangerGlow} />
+      <LinearGradient colors={['#070502', '#171007', '#070502']} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={styles.roomHalo} />
+      <View pointerEvents="none" style={styles.goldRoomFrame}>
+        <View style={styles.roomColumn} />
+        <View style={styles.roomColumn} />
+      </View>
 
       <View style={styles.header}>
-        <Text style={styles.title}>אותגרת! ⚔️</Text>
+        <Text style={styles.title}>אותגרת!</Text>
         <Text style={styles.subtitle}>כך מגנים מפני קלף שבר</Text>
       </View>
 
@@ -202,6 +203,11 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
           </View>
 
           <View style={styles.board}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0)', 'rgba(138,90,28,0.18)']}
+              style={styles.boardSheen}
+            />
             <View style={styles.cardStack}>
               <Animated.View style={[styles.challengeCard, challengeStyle]}>
                 <GameCard card={CHALLENGE_THIRD} small />
@@ -219,6 +225,12 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
             </View>
             {phase === 'success' ? <Text style={styles.successText}>{sceneCopy.success}</Text> : null}
           </View>
+
+          <Pressable onPress={handleReplay} accessibilityRole="button" accessibilityLabel="הראה לי שוב את האנימציה">
+            <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.replayButton}>
+              <Text style={styles.replayText}>הראה לי שוב</Text>
+            </LinearGradient>
+          </Pressable>
         </Animated.View>
       ) : (
         <Animated.View style={[styles.finalScene, finalStyle]}>
@@ -229,6 +241,11 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
             <View style={styles.finalCardCenter}><GameCard card={CHALLENGE_THIRD} small /></View>
             <View style={styles.finalCardSide}><GameCard card={ROLL_HALF} small /></View>
           </View>
+          <Pressable onPress={handleReplay} accessibilityRole="button" accessibilityLabel="הראה לי שוב את האנימציה">
+            <LinearGradient colors={GOLD} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.replayButton}>
+              <Text style={styles.replayText}>הראה לי שוב</Text>
+            </LinearGradient>
+          </Pressable>
         </Animated.View>
       )}
 
@@ -237,13 +254,31 @@ export function ChallengeShowcaseScreen({ onContinue }: ChallengeShowcaseScreenP
           <GoldButton label="הבנתי, בוא נתגונן!" onPress={handleContinue} accessibilityLabel="הבנתי, בוא נתגונן" fullWidth height={56} fontSize={20} />
         </View>
       ) : null}
+
+      <View style={styles.navWrap} pointerEvents="box-none">
+        <Pressable onPress={goBack} disabled={!canGoBack} accessibilityRole="button" accessibilityLabel="הדגמת אתגר קודמת">
+          <View style={[styles.arrowButton, !canGoBack && styles.arrowButtonDisabled]}>
+            <Text allowFontScaling={false} style={styles.arrowText}>{'<'}</Text>
+          </View>
+        </Pressable>
+        <View style={styles.stepDots} pointerEvents="none">
+          {SHOWCASE_SCENES.map((item) => (
+            <View key={item} style={[styles.stepDot, item === scene && styles.stepDotActive]} />
+          ))}
+        </View>
+        <Pressable onPress={goNext} disabled={!canGoNext} accessibilityRole="button" accessibilityLabel="הדגמת אתגר הבאה">
+          <View style={[styles.arrowButton, !canGoNext && styles.arrowButtonDisabled]}>
+            <Text allowFontScaling={false} style={styles.arrowText}>{'>'}</Text>
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const rtlText = {
   writingDirection: (I18nManager.isRTL ? 'rtl' : 'rtl') as 'rtl',
-  textAlign: 'right' as const,
+  textAlign: 'center' as const,
 };
 
 const styles = StyleSheet.create({
@@ -252,24 +287,39 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     direction: 'rtl',
   } as any,
-  dangerGlow: {
+  roomHalo: {
     position: 'absolute',
-    top: '22%',
-    right: '-22%',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: 'rgba(179,38,30,0.14)',
-    shadowColor: '#B3261E',
+    left: '9%',
+    right: '9%',
+    top: '14%',
+    height: '58%',
+    borderRadius: 220,
+    backgroundColor: 'rgba(248,224,142,0.12)',
+    shadowColor: '#F8E08E',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 38,
-    elevation: 12,
+    shadowOpacity: 0.65,
+    shadowRadius: 36,
+    elevation: 10,
+  },
+  goldRoomFrame: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 110,
+  },
+  roomColumn: {
+    width: 16,
+    height: '62%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,244,184,0.26)',
+    backgroundColor: 'rgba(138,90,28,0.22)',
   },
   header: {
     paddingTop: 26,
     paddingHorizontal: 26,
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
   title: {
     ...rtlText,
@@ -282,7 +332,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...rtlText,
-    color: '#E8EDF7',
+    color: '#F5E6BF',
     fontSize: 18,
     lineHeight: 26,
     fontWeight: '800',
@@ -291,21 +341,21 @@ const styles = StyleSheet.create({
   scene: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 24,
     paddingBottom: 96,
-    alignItems: 'stretch',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   copyBlock: {
     alignSelf: 'stretch',
-    alignItems: 'flex-end',
-    marginBottom: 22,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   optionText: {
     ...rtlText,
     color: '#F8E08E',
-    fontSize: 25,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 33,
     fontWeight: '900',
   },
   bodyText: {
@@ -317,18 +367,31 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   board: {
-    minHeight: 300,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(248,224,142,0.28)',
-    backgroundColor: 'rgba(9,12,19,0.74)',
+    width: '100%',
+    minHeight: 306,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: '#8A5A1C',
+    backgroundColor: 'rgba(20,12,4,0.86)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  boardSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '58%',
   },
   cardStack: {
-    width: 180,
-    height: 210,
+    width: 190,
+    height: 214,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -370,6 +433,28 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     marginTop: 8,
+  },
+  replayButton: {
+    minWidth: 168,
+    height: 46,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,243,201,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+    paddingHorizontal: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.36,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  replayText: {
+    color: '#2B1D08',
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   finalScene: {
     flex: 1,
@@ -416,7 +501,57 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 24,
     right: 24,
-    bottom: 34,
+    bottom: 76,
+  },
+  navWrap: {
+    position: 'absolute',
+    left: 22,
+    right: 22,
+    bottom: 16,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  arrowButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(248,224,142,0.86)',
+    backgroundColor: 'rgba(16,19,29,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F8E08E',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  arrowButtonDisabled: {
+    opacity: 0.28,
+  },
+  arrowText: {
+    color: '#FFF1A8',
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+  },
+  stepDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(248,224,142,0.32)',
+  },
+  stepDotActive: {
+    width: 22,
+    backgroundColor: '#F8E08E',
   },
 });
 

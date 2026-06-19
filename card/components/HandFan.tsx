@@ -41,6 +41,8 @@ export interface HandFanProps {
   metricsPlatform?: string;
   /** Lower drag threshold for tutorial moments where the fan must feel very free. */
   smoothDrag?: boolean;
+  /** Let the hand rest exactly where the learner releases it instead of snapping. */
+  freeRelease?: boolean;
 }
 
 export default function HandFan({
@@ -53,6 +55,7 @@ export default function HandFan({
   playTapSound = true,
   metricsPlatform,
   smoothDrag = false,
+  freeRelease = false,
 }: HandFanProps) {
   const metrics = useMemo(() => getNativeHandFanMetrics(metricsPlatform ?? Platform.OS), [metricsPlatform]);
   const cardW = metrics.cardWidth;
@@ -77,6 +80,8 @@ export default function HandFan({
   previewOnlyRef.current = previewOnly;
   const smoothDragRef = useRef(smoothDrag);
   smoothDragRef.current = smoothDrag;
+  const freeReleaseRef = useRef(freeRelease);
+  freeReleaseRef.current = freeRelease;
   const centerStart = Math.floor(Math.max(0, count - 1) / 2);
 
   // scrollX is a floating card index: when scrollX === i, card i is centered.
@@ -157,6 +162,9 @@ export default function HandFan({
         scrollX.setValue(clamp(next));
       },
       onPanResponderRelease: (_e, g) => {
+        if (freeReleaseRef.current) {
+          return;
+        }
         // Project a little past the release point using the fling velocity
         // (vx is px/ms; divide by the per-card travel to get index/ms), then
         // settle with a gentle, slightly springy snap for a premium feel.

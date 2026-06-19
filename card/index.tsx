@@ -12239,7 +12239,6 @@ function StartScreen({
   const TOP_ACTIONS_TOP = safe.insets.top || 12;
   const TOP_ACTIONS_SIDE_PAD = 16;
   const topActionsRowGap = compactStartScreen ? 10 : 12;
-  const topActionsColumnGap = compactStartScreen ? 8 : 10;
   const topActionsBackWidth = 128;
   const topActionsBackHeight = 38;
   const topActionsBackFontSize = 13;
@@ -12253,14 +12252,11 @@ function StartScreen({
   const topActionsButtonHeight = compactStartScreen ? 38 : 42;
   const topActionsButtonFontSize = compactStartScreen ? 12 : 13;
   const topActionsBackVisualHeight = topActionsBackHeight + 8;
-  const topActionsPrimaryVisualHeight = topActionsButtonHeight + 8;
-  const topActionsSecondaryVisualHeight = topActionsButtonHeight + 8;
+  const topActionsRulesVisualHeight = topActionsButtonHeight + 8;
   const TOP_ACTIONS_H =
     topActionsBackVisualHeight +
     topActionsRowGap +
-    topActionsPrimaryVisualHeight +
-    topActionsRowGap +
-    topActionsSecondaryVisualHeight;
+    topActionsRulesVisualHeight;
   const topActionsInnerWidth = Math.max(240, startScreenWidth - TOP_ACTIONS_SIDE_PAD * 2);
   const topActionGuideSideGap = Math.max(0, (topActionsInnerWidth - topActionsPrimaryWidth) / 2);
   const topActionHeroSlotWidth = Math.max(34, topActionGuideSideGap - 10);
@@ -12287,28 +12283,12 @@ function StartScreen({
       android: { elevation: 12 },
     }),
   } as const;
-  const guideButtonGlowStyle = {
-    borderRadius: 999,
-    backgroundColor: 'rgba(236,72,153,0.16)',
-    ...Platform.select({
-      ios: { shadowColor: '#EC4899', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.92, shadowRadius: 18 },
-      android: { elevation: 16 },
-    }),
-  } as const;
   const rulesButtonGlowStyle = {
     borderRadius: 999,
     backgroundColor: 'rgba(56,189,248,0.12)',
     ...Platform.select({
       ios: { shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.72, shadowRadius: 14 },
       android: { elevation: 10 },
-    }),
-  } as const;
-  const shopButtonGlowStyle = {
-    borderRadius: 999,
-    backgroundColor: 'rgba(250,204,21,0.16)',
-    ...Platform.select({
-      ios: { shadowColor: '#FACC15', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.86, shadowRadius: 17 },
-      android: { elevation: 14 },
     }),
   } as const;
   const letsPlayGlowStyle = {
@@ -12831,41 +12811,23 @@ function StartScreen({
             active
           />
         </Animated.View>
-        <View style={{ alignItems: 'center', gap: topActionsRowGap, zIndex: 4, elevation: 4 }}>
-          {onHowToPlay ? (
-            <SalindaButton
-              text={t('mode.howToPlay')}
-              color="purple"
-              width={topActionsPrimaryWidth}
-              height={topActionsButtonHeight}
-              fontSize={topActionsButtonFontSize}
-              textColor="#FFFFFF"
-              onPress={onHowToPlay}
-              style={guideButtonGlowStyle}
-            />
-          ) : null}
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: topActionsColumnGap }}>
-            <SalindaButton
-              text={t('start.rulesButton')}
-              color="blue"
-              width={topActionsSecondaryWidth}
-              height={topActionsButtonHeight}
-              fontSize={topActionsButtonFontSize}
-              onPress={() => setRulesOpen((prev) => !prev)}
-              style={rulesButtonGlowStyle}
-            />
-            {onShop ? (
-              <SalindaButton
-                text={t('shop.openShop')}
-                color="yellow"
-                width={topActionsSecondaryWidth}
-                height={topActionsButtonHeight}
-                fontSize={topActionsButtonFontSize}
-                onPress={onShop}
-                style={shopButtonGlowStyle}
-              />
-            ) : null}
-          </View>
+        <View
+          style={{
+            width: '100%',
+            alignItems: topBackButtonAlignment,
+            zIndex: 4,
+            elevation: 4,
+          }}
+        >
+          <SalindaButton
+            text={t('start.rulesButton')}
+            color="blue"
+            width={topActionsSecondaryWidth}
+            height={topActionsButtonHeight}
+            fontSize={topActionsButtonFontSize}
+            onPress={() => setRulesOpen((prev) => !prev)}
+            style={rulesButtonGlowStyle}
+          />
         </View>
       </View>
       <AppModal
@@ -18604,6 +18566,16 @@ function GameScreen({ onOpenShop }: { onOpenShop?: () => void } = {}) {
   const [selectedEquationForDisplay, setSelectedEquationForDisplay] = useState<EquationOption | null>(null);
   const [solveExerciseHidden, setSolveExerciseHidden] = useState(false);
   const [solveChipPulseKey, setSolveChipPulseKey] = useState(0);
+  useEffect(() => {
+    if (state.phase !== 'solved' || state.hasPlayedCards || !state.lastEquationDisplay) return;
+    const result = state.equationResult;
+    if (result == null) return;
+    setSelectedEquationForDisplay((prev) => {
+      if (prev?.equation === state.lastEquationDisplay && prev.result === result) return prev;
+      return { equation: state.lastEquationDisplay!, result };
+    });
+    setSolveExerciseHidden(false);
+  }, [state.phase, state.hasPlayedCards, state.lastEquationDisplay, state.equationResult]);
   const hideSolvedResultsUi =
     canUseActiveTurnUi &&
     !state.isTutorial &&

@@ -124,6 +124,15 @@ export type EquationCommitValidationKey =
 
 type EquationCommitCardLike = Pick<Card, 'id' | 'type' | 'operation'>;
 
+function logEquationParseError(context: string, error: unknown, equationDisplay?: string): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[equation] Evaluation failed', {
+    context,
+    message,
+    equationDisplay: sanitizeEquationDisplay(equationDisplay),
+  });
+}
+
 function isDiceTuple(
   dice: DiceResult | readonly [number, number, number],
 ): dice is readonly [number, number, number] {
@@ -179,7 +188,7 @@ function extractRhsResult(raw: string): number | null {
   return Number(trimmed);
 }
 
-export function extractEquationOperators(equationDisplay: string): Operation[] {
+function extractEquationOperatorsUnsafe(equationDisplay: string): Operation[] {
   const lhs = sanitizeEquationDisplay(equationDisplay).split('=')[0] ?? '';
   return (lhs.match(/[+\-x÷*/×]/g) ?? [])
     .map((token) => validateOperation(token))
@@ -187,7 +196,7 @@ export function extractEquationOperators(equationDisplay: string): Operation[] {
     .slice(0, 2);
 }
 
-export function parseEquationDisplay(equationDisplay: string): ParsedEquationDisplay | null {
+function parseEquationDisplayUnsafe(equationDisplay: string): ParsedEquationDisplay | null {
   const clean = sanitizeEquationDisplay(equationDisplay);
   if (!clean) return null;
 
@@ -213,7 +222,7 @@ export function parseEquationDisplay(equationDisplay: string): ParsedEquationDis
   };
 }
 
-export function evaluateEquationDisplay(equationDisplay: string): number | null {
+function evaluateEquationDisplayUnsafe(equationDisplay: string): number | null {
   const parsed = parseEquationDisplay(equationDisplay);
   if (!parsed) return null;
 
@@ -238,7 +247,7 @@ export function evaluateEquationDisplay(equationDisplay: string): number | null 
   return evalEquationThreeTerms(a, op1, b, op2, c);
 }
 
-export function equationMatchesDiceAndResult(
+function equationMatchesDiceAndResultUnsafe(
   equationDisplay: string,
   result: number,
   dice: DiceResult | readonly [number, number, number] | null | undefined,
@@ -265,6 +274,46 @@ export function equationMatchesDiceAndResult(
     counts.set(value, remaining - 1);
   }
   return true;
+}
+
+export function extractEquationOperators(equationDisplay: string): Operation[] {
+  try {
+    return extractEquationOperatorsUnsafe(equationDisplay);
+  } catch (error) {
+    logEquationParseError('extractEquationOperators', error, equationDisplay);
+    return [];
+  }
+}
+
+export function parseEquationDisplay(equationDisplay: string): ParsedEquationDisplay | null {
+  try {
+    return parseEquationDisplayUnsafe(equationDisplay);
+  } catch (error) {
+    logEquationParseError('parseEquationDisplay', error, equationDisplay);
+    return null;
+  }
+}
+
+export function evaluateEquationDisplay(equationDisplay: string): number | null {
+  try {
+    return evaluateEquationDisplayUnsafe(equationDisplay);
+  } catch (error) {
+    logEquationParseError('evaluateEquationDisplay', error, equationDisplay);
+    return null;
+  }
+}
+
+export function equationMatchesDiceAndResult(
+  equationDisplay: string,
+  result: number,
+  dice: DiceResult | readonly [number, number, number] | null | undefined,
+): boolean {
+  try {
+    return equationMatchesDiceAndResultUnsafe(equationDisplay, result, dice);
+  } catch (error) {
+    logEquationParseError('equationMatchesDiceAndResult', error, equationDisplay);
+    return false;
+  }
 }
 
 export function validateEquationCommitsForDisplay(

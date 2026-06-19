@@ -1086,6 +1086,7 @@ type SpecialsFlowPhase =
 type SpecialsFlyTarget = 'op' | 'left' | 'right' | 'result';
 type SpecialsFlyKind = 'sign' | 'salindaSign' | 'feraNumber';
 type SpecialsPendingPlacement = 'symbolMinus' | 'salindaOperator' | 'feraNumber' | null;
+type SpecialsSymbolsDemoStep = 'idle' | 'cardTap' | 'slotTap' | 'flying' | 'done';
 
 interface SpecialsFlowState {
   phase: SpecialsFlowPhase;
@@ -1096,6 +1097,7 @@ interface SpecialsFlowState {
   busy: boolean;
   pendingPlacement: SpecialsPendingPlacement;
   symbolsDemoDone: boolean;
+  symbolsDemoStep: SpecialsSymbolsDemoStep;
   salindaDemoDone: boolean;
   salindaIntroLocked: boolean;
   salindaBubblesOpen: boolean;
@@ -1123,6 +1125,7 @@ interface SpecialsFlyToken {
   kind: SpecialsFlyKind;
   label: string;
   target: SpecialsFlyTarget;
+  durationMs?: number;
 }
 
 const SPECIALS_SYMBOLS_SHOWCASE_TEXT =
@@ -1595,10 +1598,10 @@ function SpecialsFlyingToken({ token, onDone }: { token: SpecialsFlyToken; onDon
 
   useEffect(() => {
     progress.setValue(0);
-    Animated.timing(progress, { toValue: 1, duration: 720, useNativeDriver: true }).start(({ finished }) => {
+    Animated.timing(progress, { toValue: 1, duration: token.durationMs ?? 720, useNativeDriver: true }).start(({ finished }) => {
       if (finished) onDone();
     });
-  }, [onDone, progress, token.id]);
+  }, [onDone, progress, token.durationMs, token.id]);
 
   const targetX = token.target === 'op' ? 0 : token.target === 'left' ? -98 : token.target === 'result' ? 205 : 98;
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, targetX] });
@@ -1783,6 +1786,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     busy: false,
     pendingPlacement: null,
     symbolsDemoDone: false,
+    symbolsDemoStep: 'idle',
     salindaDemoDone: false,
     salindaIntroLocked: false,
     salindaBubblesOpen: false,
@@ -1803,6 +1807,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   const [flyToken, setFlyToken] = useState<SpecialsFlyToken | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const [bounceKey, setBounceKey] = useState(0);
+  const [symbolsDemoRunKey, setSymbolsDemoRunKey] = useState(0);
   const slotPulse = useRef(new Animated.Value(0)).current;
   const flyDoneRef = useRef<(() => void) | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -1845,7 +1850,14 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   // The result-slot glow during the wild round cues "match THIS number".
   const feraAwaitingMatch =
     (state.phase === 'feraShowcase' || state.phase === 'feraPractice') && !state.feraResolvedCard;
-  usePulseLoop(slotPulse, (state.pendingPlacement !== null || feraAwaitingMatch) && !state.busy, 0, 1, 500);
+  usePulseLoop(
+    slotPulse,
+    ((state.pendingPlacement !== null || feraAwaitingMatch) && !state.busy) ||
+      (state.phase === 'symbolsShowcase' && state.symbolsDemoStep === 'slotTap'),
+    0,
+    1,
+    500,
+  );
 
   const moveTo = useCallback((phase: SpecialsFlowPhase) => {
     clearTimers();
@@ -1871,6 +1883,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       rightCard: null,
       busy: false,
       pendingPlacement: null,
+      symbolsDemoStep: phase === 'symbolsShowcase' ? 'idle' : current.symbolsDemoStep,
       salindaIntroLocked: false,
       salindaBubblesOpen: false,
       salindaSelectorOpen: false,
@@ -1993,20 +2006,42 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   useEffect(() => {
     if (state.phase !== 'symbolsShowcase' || symbolsDemoStarted.current) return;
     symbolsDemoStarted.current = true;
-    // Beat 1: "select" the sign card (same tap SFX the fan uses).
+    setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, busy: true, symbolsDemoStep: 'idle' } : c));
+    // Beat 1: tap/select the + card in the fan.
     schedule(() => {
+      setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, symbolsDemoStep: 'cardTap' } : c));
       void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
-    }, 650);
-    // Beat 2: fly the + into the operator slot, then settle it + reveal the arrow.
+    }, 750);
+    // Beat 2: tap the operator slot in the equation.
     schedule(() => {
-      setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, busy: true } : c));
-      beginFly({ kind: 'sign', label: '+', target: 'op' }, () => {
-        setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, op: '+', busy: false, symbolsDemoDone: true } : c));
+      setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, symbolsDemoStep: 'slotTap' } : c));
+      playEquationTapSfx(0.48);
+    }, 1750);
+    // Beat 3: remove the + from the fan and fly it slowly into the operator slot.
+    schedule(() => {
+      setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, symbolsDemoStep: 'flying' } : c));
+      beginFly({ kind: 'sign', label: '+', target: 'op', durationMs: 1350 }, () => {
+        setState((c) => (c.phase === 'symbolsShowcase' ? { ...c, op: '+', busy: false, symbolsDemoDone: true, symbolsDemoStep: 'done' } : c));
         bounceEquation();
         void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.6 });
       });
-    }, 1350);
-  }, [beginFly, bounceEquation, schedule, state.phase]);
+    }, 2750);
+  }, [beginFly, bounceEquation, schedule, state.phase, symbolsDemoRunKey]);
+
+  const replaySymbolsDemo = useCallback(() => {
+    if (state.busy || state.phase !== 'symbolsShowcase') return;
+    clearTimers();
+    setFlyToken(null);
+    flyDoneRef.current = null;
+    symbolsDemoStarted.current = false;
+    setState((current) =>
+      current.phase === 'symbolsShowcase'
+        ? { ...current, op: null, busy: false, symbolsDemoDone: false, symbolsDemoStep: 'idle' }
+        : current,
+    );
+    bounceEquation();
+    setSymbolsDemoRunKey((key) => key + 1);
+  }, [bounceEquation, clearTimers, state.busy, state.phase]);
 
   // Launch the wild to MATCH the result: it flies to the result slot (never into
   // an operand/sign slot) and becomes exactly the target number.
@@ -2107,6 +2142,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       (state.phase === 'salindaPractice' && state.op !== null) ||
       state.phase === 'feraIntro' ||
       (state.phase === 'feraShowcase' && state.feraDemoDone));
+  const showSymbolsReplay = state.phase === 'symbolsShowcase' && state.symbolsDemoDone && !state.busy;
   const hand =
     state.phase === 'symbolsShowcase' || state.phase === 'symbolsPractice'
       ? SPECIALS_SIGN_CARDS
@@ -2123,13 +2159,18 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
         ? state.feraHand.filter((card) => card.type !== 'wild')
         : state.feraHand
       : [];
-  const displayHand = useMemo(
-    () => hand.map((card) => (card.id === SPECIALS_SALINDA_ID && state.salindaSelectedOp ? { ...card, operation: state.salindaSelectedOp } : card)),
-    [hand, state.salindaSelectedOp],
-  );
+  const displayHand = useMemo(() => {
+    const placedShowcasePlus =
+      state.phase === 'symbolsShowcase' &&
+      (state.symbolsDemoStep === 'flying' || state.symbolsDemoStep === 'done' || state.op === '+');
+    return hand
+      .filter((card) => !(placedShowcasePlus && card.type === 'operation' && card.operation === '+'))
+      .map((card) => (card.id === SPECIALS_SALINDA_ID && state.salindaSelectedOp ? { ...card, operation: state.salindaSelectedOp } : card));
+  }, [hand, state.op, state.phase, state.salindaSelectedOp, state.symbolsDemoStep]);
   const selectedIds = useMemo(() => {
-    // During the showcase demo, highlight the correct (+) sign until it's placed.
-    if (state.phase === 'symbolsShowcase' && state.op === null) {
+    // During the showcase demo, highlight the correct (+) sign only on the visible
+    // tap beat. The card then leaves the fan before flying to the equation.
+    if (state.phase === 'symbolsShowcase' && state.symbolsDemoStep === 'cardTap') {
       const plusCard = SPECIALS_SIGN_CARDS.find((card) => card.operation === '+');
       return plusCard ? new Set([plusCard.id]) : new Set<string>();
     }
@@ -2144,7 +2185,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       return new Set([SPECIALS_FERA_ID]);
     }
     return new Set<string>();
-  }, [state.op, state.pendingPlacement, state.phase, state.salindaSelectorOpen]);
+  }, [state.op, state.pendingPlacement, state.phase, state.salindaSelectorOpen, state.symbolsDemoStep]);
   const showFeraIntroCenter = state.phase === 'feraIntro';
   const showSalindaIntroCenter = state.phase === 'salindaIntro';
 
@@ -2202,7 +2243,10 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
                     resultHidden={state.phase === 'feraShowcase' && !state.feraDiceDone && !state.feraResolvedCard}
                     resultSlotReady={((state.phase === 'feraShowcase' && state.feraDiceDone) || state.phase === 'feraPractice') && !state.feraResolvedCard && !state.busy}
                     bounceKey={bounceKey}
-                    opSlotReady={(state.pendingPlacement === 'symbolMinus' || state.pendingPlacement === 'salindaOperator') && !state.busy}
+                    opSlotReady={
+                      ((state.pendingPlacement === 'symbolMinus' || state.pendingPlacement === 'salindaOperator') && !state.busy) ||
+                      (state.phase === 'symbolsShowcase' && state.symbolsDemoStep === 'slotTap')
+                    }
                     rightSlotReady={state.pendingPlacement === 'feraNumber' && !state.busy}
                     pulse={slotPulse}
                     onPressOpSlot={placePendingSpecial}
@@ -2275,6 +2319,12 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       {showNext ? (
         <View style={styles.specialsArrowWrap}>
           <SpecialsNextArrow onPress={handleNext} disabled={state.busy} />
+        </View>
+      ) : null}
+
+      {showSymbolsReplay ? (
+        <View style={styles.specialsReplayWrap}>
+          <GoldButton label="תראה לי שוב" onPress={replaySymbolsDemo} accessibilityLabel="תראה לי שוב" height={46} fontSize={16} radius={23} />
         </View>
       ) : null}
 
@@ -2598,7 +2648,7 @@ function OperatorCardsLesson({
 
   const fanScale = fanHalo.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] });
   const fanHaloOpacity = fanHalo.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.84] });
-  const fractionGuidedCenterId = fractionStage.level === 1 ? fractionStage.answerId : null;
+  const fractionGuidedCenterId = null;
 
   const fanCenterCardId =
     step === 'fractionIntro'
@@ -2616,7 +2666,7 @@ function OperatorCardsLesson({
             : step === 'wild'
               ? WILD_CARD_ID
               : isFractionPractice
-              ? selectedId ?? fractionGuidedCenterId
+              ? fractionGuidedCenterId
               : null;
 
   // The opening showcase: all four signs as a 2×2 grid of 3D buttons on the board.
@@ -2768,6 +2818,8 @@ function OperatorCardsLesson({
             onTapCard={isIntro ? undefined : tapCard}
             canTap={isIntro ? undefined : canTapCard}
             centerCardId={fanCenterCardId}
+            smoothDrag={isFractionPractice}
+            freeRelease={isFractionPractice}
           />
         </Animated.View>
       )}
@@ -3990,6 +4042,7 @@ const styles = StyleSheet.create({
   specialsSignButtonActive: { borderColor: '#2E7D43', backgroundColor: '#C9F0B8', shadowColor: '#7BE08A', shadowOpacity: 0.45 },
   specialsSignButtonPressed: { transform: [{ scale: 0.96 }] },
   specialsSignButtonDisabled: { opacity: 0.72 },
+  specialsReplayWrap: { position: 'absolute', left: 0, right: 0, bottom: 82, zIndex: 46, alignItems: 'center' },
   specialsArrowWrap: { position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center', zIndex: 45 },
   specialsNextArrow: {
     width: 58,
