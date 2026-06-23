@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, I18nManager, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, I18nManager, Image, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import HandFan from '../../components/HandFan';
 import type { Card } from '../../components/CardDesign';
@@ -23,7 +23,6 @@ type LifelineStage =
   | 'practice'
   | 'launchReady'
   | 'parenPractice'
-  | 'parenReview'
   | 'complete';
 
 // The operand slots are filled from the dice; the operator slot is toggled IN
@@ -48,8 +47,14 @@ type LifelineOption = {
 };
 
 type EquationValues = { left: number | null; op: Operator | null; right: number | null };
+type ParensBuildValues = {
+  first: number | null;
+  op1: Operator | null;
+  second: number | null;
+  op2: Operator | null;
+  third: number | null;
+};
 type ParenGroup = 'right' | 'left';
-type ParenRound = 0 | 1;
 type ParensExercise = {
   target: number;
   values: readonly [number, number, number];
@@ -67,15 +72,32 @@ const LIFELINE_REWARD_COINS = SALINDA_TUTORIAL_REWARDS.basic;
 const LIFELINE_REWARD_SOURCE = 'gold_room_lifeline_tile';
 const LIFELINE_REWARD_IDEMPOTENCY_KEY = 'gold_room_lifeline_tile_v1';
 
+// Every parentheses exercise REQUIRES the shift: the board evaluates with ×
+// precedence, so the no-parens value is a+(b×c). The target is (a+b)×c — reachable
+// only by wrapping (a+b) — so the player MUST move the parentheses from (b×c) to
+// (a+b). correctGroup is therefore always 'left'.
+//   e.g. board starts 2 + (3 × 4) = 14  →  shift to  (2 + 3) × 4 = 20  (target 20)
+// Exercises are generated randomly each round (see buildRandomParensExercise); this
+// curated pair is only a safety fallback if the generator can't find a clean one.
+const PARENS_ROUND_COUNT = 2;
 const PARENS_EXERCISES: readonly ParensExercise[] = [
   { target: 20, values: [2, 3, 4], op1: '+', op2: '*', correctGroup: 'left' },
   { target: 21, values: [2, 5, 3], op1: '+', op2: '*', correctGroup: 'left' },
 ];
-
 const DEFAULT_PARENS_EXERCISE: ParensExercise = PARENS_EXERCISES[0];
 
 function displayOperator(op: Operator): string {
   return op === '*' ? '×' : op === '/' ? '÷' : op;
+}
+
+// Wrap a math string in Unicode isolates so it ALWAYS renders strictly
+// left-to-right (e.g. "(2 + 3) × 4 = 20"), even inside an RTL (Hebrew) layout.
+// Without this the bidi algorithm reorders the tokens and mirrors the
+// parentheses, so the equation reads backwards on the device.
+const LTR_ISOLATE = String.fromCharCode(0x2066); // LEFT-TO-RIGHT ISOLATE
+const POP_ISOLATE = String.fromCharCode(0x2069); // POP DIRECTIONAL ISOLATE
+function forceLtr(text: string): string {
+  return `${LTR_ISOLATE}${text}${POP_ISOLATE}`;
 }
 
 function parensExpression(exercise: ParensExercise, group: ParenGroup): string {
@@ -155,11 +177,30 @@ function buildRandomBasicRound(): BasicRound {
   return { diceValues, fanCards, options };
 }
 
+// Random exercise of the form (a + b) × c [State A, wrong] → a + (b × c) [State B,
+// correct = target]. Guaranteed to REQUIRE a right-shift: target ≠ the left-wrap
+// value (true whenever a ≥ 1 and c ≥ 2). Dice are kept distinct so the placement
+// tray never shows two identical tiles.
 function buildRandomParensExercise(): ParensExercise {
+  for (let guard = 0; guard < 200; guard += 1) {
+    const a = randomInt(2, 5);
+    const b = randomInt(2, 6);
+    const c = randomInt(2, 5);
+    if (a === b || a === c || b === c) continue;
+    // The board evaluates with × precedence, so "no parens" already gives a+(b×c).
+    // The target is the OTHER value, (a+b)×c — reachable ONLY by wrapping (a+b), so
+    // the parentheses are genuinely REQUIRED (the two are never equal for a,c ≥ 2).
+    const naturalValue = a + b * c; // a + (b × c) — what the board shows without help
+    const target = (a + b) * c; // (a + b) × c — the goal; needs the parens shifted left
+    if (target === naturalValue) continue; // safety; never true for these ranges
+    if (target > 30 || naturalValue > 30) continue; // keep readable + in mini-card range
+    return { target, values: [a, b, c] as [number, number, number], op1: '+', op2: '*', correctGroup: 'left' };
+  }
   return DEFAULT_PARENS_EXERCISE;
 }
 
 const EMPTY_EQUATION: EquationValues = { left: null, op: null, right: null };
+const EMPTY_PARENS_BUILD: ParensBuildValues = { first: null, op1: null, second: null, op2: null, third: null };
 
 const COPY = {
   intro: 'לא מוצאים תרגיל מתאים לקלפים שלכם? הכפתור הירוק ייתן את התשובה!',
@@ -170,10 +211,12 @@ const COPY = {
   practiceOp: 'עכשיו לחצו על משבצת הסימן שבמשוואה ובחרו את הפעולה הנכונה.',
   practiceRight: 'יופי! הציבו את הקובייה השנייה כדי להשלים את התרגיל.',
   launchReady: 'המשוואה מוכנה! הקישו על הקלף שהתוצאה שלו מתאימה, ואז לחצו שגר.',
-  parensIntro: 'בחר קלף שגר',
+  firstNumber: 'הניחו את המספר הראשון במשוואה',
   parensPractice: 'בחר קלף שגר',
-  parensHint: 'אפשר לשנות את הסוגריים כדי להגיע לתוצאה שלנו.',
-  parensReview: 'בוא נעבור לקלף מיני אחר',
+  parensHint: 'לחץ על הכפתור כדי להזיז את מיקום הסוגריים',
+  // Shown after a round is solved: between rounds vs. on the very last round.
+  tryAnother: 'כל הכבוד! בוא ננסה עוד תרגיל',
+  finalContinue: 'כל הכבוד! לחץ על המשך',
   successTitle: 'כל הכבוד הצלחנו',
   successBody: 'השלמתם את גלגל ההצלה וקיבלתם את תגמול חדר הזהב.',
   redLine1: 'לחצו על מיני קלפים',
@@ -242,9 +285,43 @@ function computeNoParensResult(exercise: ParensExercise): number | null {
   return grouped == null ? null : applyOperator(a, exercise.op1, grouped);
 }
 
-function cycleParenGroup(current: ParenGroup): ParenGroup {
-  const index = PAREN_GROUPS.indexOf(current);
-  return PAREN_GROUPS[(index + 1) % PAREN_GROUPS.length];
+function isParensBuildComplete(build: ParensBuildValues): boolean {
+  return build.first != null && build.op1 != null && build.second != null && build.op2 != null && build.third != null;
+}
+
+function computeBuildNoParensResult(build: ParensBuildValues): number | null {
+  if (!isParensBuildComplete(build)) return null;
+  const first = build.first as number;
+  const second = build.second as number;
+  const third = build.third as number;
+  const op1 = build.op1 as Operator;
+  const op2 = build.op2 as Operator;
+  if (operatorPrecedence(op1) >= operatorPrecedence(op2)) {
+    const grouped = applyOperator(first, op1, second);
+    return grouped == null ? null : applyOperator(grouped, op2, third);
+  }
+  const grouped = applyOperator(second, op2, third);
+  return grouped == null ? null : applyOperator(first, op1, grouped);
+}
+
+function computeBuildParensResult(build: ParensBuildValues, group: ParenGroup): number | null {
+  if (!isParensBuildComplete(build)) return null;
+  const first = build.first as number;
+  const second = build.second as number;
+  const third = build.third as number;
+  const op1 = build.op1 as Operator;
+  const op2 = build.op2 as Operator;
+  if (group === 'left') {
+    const grouped = applyOperator(first, op1, second);
+    return grouped == null ? null : applyOperator(grouped, op2, third);
+  }
+  const grouped = applyOperator(second, op2, third);
+  return grouped == null ? null : applyOperator(first, op1, grouped);
+}
+
+function buildMatchesExercise(build: ParensBuildValues, exercise: ParensExercise): boolean {
+  const [a, b, c] = exercise.values;
+  return build.first === a && build.op1 === exercise.op1 && build.second === b && build.op2 === exercise.op2 && build.third === c;
 }
 
 function wrongStartingParenGroup(exercise: ParensExercise): ParenGroup {
@@ -324,21 +401,25 @@ function RedExerciseButton({
   mode,
   parenGroup,
   parensExercise,
+  parensLabel,
+  basicLabel,
 }: {
   option: LifelineOption | null;
   mode: 'basic' | 'parens';
   parenGroup: ParenGroup;
   parensExercise: ParensExercise;
+  parensLabel?: string;
+  basicLabel?: string;
 }) {
   return (
     <LinearGradient colors={RED_GRADIENT} style={styles.redButton}>
       {mode === 'parens' ? (
         <Text allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={styles.mathText}>
-          {parensEquation(parensExercise, parenGroup)}
+          {parensLabel ?? parensEquation(parensExercise, parenGroup)}
         </Text>
       ) : option ? (
         <Text allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.mathText}>
-          {basicEquation(option)}
+          {basicLabel ?? basicEquation(option)}
         </Text>
       ) : (
         <>
@@ -412,7 +493,7 @@ function OperandSlot({ value, active }: { value: number | null; active: boolean 
     <View style={[styles.slotBox, value != null && styles.slotBoxFilled]}>
       {active ? <Animated.View pointerEvents="none" style={[styles.slotGlow, glow]} /> : null}
       <Text allowFontScaling={false} style={value == null ? styles.slotHint : styles.slotText}>
-        {value == null ? '?' : value}
+        {value == null ? '' : value}
       </Text>
     </View>
   );
@@ -433,11 +514,11 @@ function OperatorSlot({
 }) {
   const glow = useSlotGlow(active);
   return (
-    <Pressable onPress={onPress} disabled={!active} accessibilityRole="button" accessibilityLabel="בחירת סימן">
+    <Pressable onPress={onPress} disabled={!active} accessibilityRole="button" accessibilityLabel="בחירת סימן" hitSlop={10}>
       <View style={[styles.opSlot, active && styles.opSlotActive, locked && styles.opSlotLocked]}>
         {active ? <Animated.View pointerEvents="none" style={[styles.slotGlow, glow]} /> : null}
         <Text allowFontScaling={false} style={op == null ? styles.opSlotHint : styles.opSlotText}>
-          {op == null ? '±' : op}
+          {op == null ? '' : displayOperator(op)}
         </Text>
       </View>
     </Pressable>
@@ -484,21 +565,15 @@ function EquationBoard({
   if (!option) {
     return (
       <View style={styles.equationTrack}>
-        <Text allowFontScaling={false} style={styles.parenText}>
-          (
-        </Text>
         <OperandSlot value={null} active={false} />
         <OperatorSlot op={null} active={false} locked={false} onPress={onPressOperator} />
         <OperandSlot value={null} active={false} />
-        <Text allowFontScaling={false} style={styles.parenText}>
-          )
-        </Text>
         <Text allowFontScaling={false} style={styles.operatorText}>
           =
         </Text>
         <View style={[styles.slotBox, styles.resultSlot]}>
           <Text allowFontScaling={false} style={styles.slotHint}>
-            ?
+            {''}
           </Text>
         </View>
       </View>
@@ -513,21 +588,15 @@ function EquationBoard({
   // parenthesis elements into this same track in a future update.
   return (
     <View style={styles.equationTrack}>
-      <Text allowFontScaling={false} style={styles.parenText}>
-        (
-      </Text>
       <OperandSlot value={values.left} active={step === 'left'} />
       <OperatorSlot op={values.op} active={step === 'op'} locked={opLocked} onPress={onPressOperator} />
       <OperandSlot value={values.right} active={step === 'right'} />
-      <Text allowFontScaling={false} style={styles.parenText}>
-        )
-      </Text>
       <Text allowFontScaling={false} style={styles.operatorText}>
         =
       </Text>
       <View style={[styles.slotBox, styles.resultSlot, result != null && styles.slotBoxFilled]}>
         <Text allowFontScaling={false} style={result == null ? styles.slotHint : styles.slotText}>
-          {result == null ? '?' : result}
+          {result == null ? '' : result}
         </Text>
       </View>
     </View>
@@ -561,11 +630,13 @@ function ParensMark({
   children,
   active,
   disabled,
+  compact = false,
   onPress,
 }: {
   children: string;
   active: boolean;
   disabled: boolean;
+  compact?: boolean;
   onPress: () => void;
 }) {
   const glow = useOrangeGlow(active && !disabled);
@@ -576,9 +647,12 @@ function ParensMark({
       accessibilityRole="button"
       accessibilityLabel="change parentheses position"
     >
-      <View style={[styles.parensMark, active && styles.parensMarkActive, disabled && styles.parensMarkDisabled]}>
+      <View style={[styles.parensMark, compact && { height: 50 }, active && styles.parensMarkActive, disabled && styles.parensMarkDisabled]}>
         {active ? <Animated.View pointerEvents="none" style={[styles.parensMarkGlow, glow]} /> : null}
-        <Text allowFontScaling={false} style={[styles.parensMarkText, active && styles.parensMarkTextActive]}>
+        <Text
+          allowFontScaling={false}
+          style={[styles.parensMarkText, active && styles.parensMarkTextActive, compact && { fontSize: active ? 46 : 42, lineHeight: active ? 50 : 46 }]}
+        >
           {children}
         </Text>
       </View>
@@ -589,36 +663,54 @@ function ParensMark({
 function ParenthesesBoard({
   exercise,
   group,
-  placedCount,
+  build,
+  showParens,
+  compact = false,
   onPressDie,
+  onPressOp,
   onToggleGroup,
 }: {
   exercise: ParensExercise;
   group: ParenGroup;
-  placedCount: number;
-  onPressDie: (index: number) => void;
+  build: ParensBuildValues;
+  showParens: boolean;
+  compact?: boolean;
+  onPressDie: (value: number) => void;
+  onPressOp: (slot: 'op1' | 'op2') => void;
   onToggleGroup: () => void;
 }) {
-  const ready = placedCount >= exercise.values.length;
-  const result = ready ? computeParensResult(exercise, group) : null;
-  const solved = ready && group === exercise.correctGroup;
+  const complete = isParensBuildComplete(build);
+  const result = showParens ? computeBuildParensResult(build, group) : computeBuildNoParensResult(build);
+  const solved = complete && showParens && result === exercise.target;
   const [a, b, c] = exercise.values;
+  const usedValues = [build.first, build.second, build.third].filter((value): value is number => value != null);
+  const visibleDice = exercise.values.filter((value, index) => !usedValues.includes(value) || exercise.values.indexOf(value) !== index);
+  const nextNumber =
+    build.first == null
+      ? a
+      : build.op1 === exercise.op1 && build.second == null
+        ? b
+        : build.op2 === exercise.op2 && build.third == null
+          ? c
+          : null;
+  const op1Locked = build.op1 === exercise.op1;
+  const op2Locked = build.op2 === exercise.op2;
 
   return (
-    <View style={styles.parensBoard}>
-      <View style={styles.parensDiceTray}>
-        {exercise.values.map((value, index) => {
-          const placed = index < placedCount;
-          const enabled = index === placedCount;
+    <View style={[styles.parensBoard, compact && { gap: 6 }]}>
+      <View style={[styles.parensDiceTray, compact && { minHeight: 44, gap: 10 }]}>
+        {visibleDice.map((value, index) => {
+          const enabled = nextNumber === value;
           return (
             <Pressable
               key={`paren-die-${index}-${value}`}
-              onPress={() => onPressDie(index)}
-              disabled={placed || !enabled}
+              onPress={() => onPressDie(value)}
+              disabled={!enabled}
               accessibilityRole="button"
               accessibilityLabel={`place ${value}`}
+              hitSlop={8}
             >
-              <View style={[styles.parensNumberTile, enabled && styles.diceCubeEnabled, placed && styles.parensNumberTilePlaced]}>
+              <View style={[styles.parensNumberTile, compact && { width: 44, height: 44 }, enabled && styles.diceCubeEnabled]}>
                 <Text allowFontScaling={false} style={styles.parensNumberText}>
                   {value}
                 </Text>
@@ -628,34 +720,46 @@ function ParenthesesBoard({
         })}
       </View>
 
-      <View style={[styles.parensSlotTrack, ready && solved && styles.parensWorkSurfaceSolved]}>
-        <ParensMark active={group === 'left'} disabled={false} onPress={onToggleGroup}>
-          (
-        </ParensMark>
-        <OperandSlot value={placedCount > 0 ? a : null} active={placedCount === 0} />
-        <Text allowFontScaling={false} style={styles.parensOperatorText}>
-          {displayOperator(exercise.op1)}
-        </Text>
-        <ParensMark active={group === 'right'} disabled={false} onPress={onToggleGroup}>
-          (
-        </ParensMark>
-        <OperandSlot value={placedCount > 1 ? b : null} active={placedCount === 1} />
-        <ParensMark active={group === 'left'} disabled={false} onPress={onToggleGroup}>
-          )
-        </ParensMark>
-        <Text allowFontScaling={false} style={styles.parensOperatorText}>
-          {displayOperator(exercise.op2)}
-        </Text>
-        <OperandSlot value={placedCount > 2 ? c : null} active={placedCount === 2} />
-        <ParensMark active={group === 'right'} disabled={false} onPress={onToggleGroup}>
-          )
-        </ParensMark>
+      <View style={[styles.parensSlotTrack, compact && { minHeight: 54, paddingVertical: 6 }, complete && solved && styles.parensWorkSurfaceSolved]}>
+        {showParens ? (
+          <ParensMark active={group === 'left'} disabled={false} compact={compact} onPress={onToggleGroup}>
+            (
+          </ParensMark>
+        ) : (
+          <View style={[styles.parensMarkPlaceholder, compact && { height: 50 }]} />
+        )}
+        <OperandSlot value={build.first} active={build.first == null} />
+        <OperatorSlot op={build.op1} active={build.first != null && !op1Locked} locked={op1Locked} onPress={() => onPressOp('op1')} />
+        {showParens ? (
+          <ParensMark active={group === 'right'} disabled={false} compact={compact} onPress={onToggleGroup}>
+            (
+          </ParensMark>
+        ) : (
+          <View style={[styles.parensMarkPlaceholder, compact && { height: 50 }]} />
+        )}
+        <OperandSlot value={build.second} active={op1Locked && build.second == null} />
+        {showParens ? (
+          <ParensMark active={group === 'left'} disabled={false} compact={compact} onPress={onToggleGroup}>
+            )
+          </ParensMark>
+        ) : (
+          <View style={[styles.parensMarkPlaceholder, compact && { height: 50 }]} />
+        )}
+        <OperatorSlot op={build.op2} active={build.second != null && !op2Locked} locked={op2Locked} onPress={() => onPressOp('op2')} />
+        <OperandSlot value={build.third} active={op2Locked && build.third == null} />
+        {showParens ? (
+          <ParensMark active={group === 'right'} disabled={false} compact={compact} onPress={onToggleGroup}>
+            )
+          </ParensMark>
+        ) : (
+          <View style={[styles.parensMarkPlaceholder, compact && { height: 50 }]} />
+        )}
         <Text allowFontScaling={false} style={styles.operatorText}>
           =
         </Text>
         <View style={[styles.slotBox, styles.resultSlot, result != null && styles.slotBoxFilled, solved && styles.parensResultSolved]}>
           <Text allowFontScaling={false} style={result == null ? styles.slotHint : styles.slotText}>
-            {result == null ? '?' : result}
+            {result == null ? '' : result}
           </Text>
         </View>
       </View>
@@ -666,56 +770,34 @@ function ParenthesesBoard({
 
 function NativeOrangeParensButton({
   group,
+  exercise,
   visible,
   disabled,
   solved,
   onPress,
+  pulse,
+  blink,
 }: {
   group: ParenGroup;
+  exercise: ParensExercise;
   visible: boolean;
   disabled: boolean;
   solved: boolean;
   onPress: () => void;
+  // Driven by the PARENT so its click handler can kill the loop synchronously.
+  pulse: Animated.Value;
+  blink: Animated.Value;
 }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-  const blink = useRef(new Animated.Value(1)).current;
-  const shouldPulse = visible && !disabled && !solved;
-
-  useEffect(() => {
-    if (!shouldPulse) {
-      pulse.stopAnimation();
-      blink.stopAnimation();
-      pulse.setValue(1);
-      blink.setValue(1);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.1, duration: 430, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 430, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(blink, { toValue: 0.62, duration: 430, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(blink, { toValue: 1, duration: 430, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        ]),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      pulse.setValue(1);
-      blink.setValue(1);
-    };
-  }, [blink, pulse, shouldPulse]);
-
+  const [a, b, c] = exercise.values;
+  const o1 = displayOperator(exercise.op1);
+  const o2 = displayOperator(exercise.op2);
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel="swap parentheses"
+      hitSlop={12}
     >
       <Animated.View
         style={[
@@ -730,13 +812,13 @@ function NativeOrangeParensButton({
           {group === 'right' ? (
             <>
               <Text allowFontScaling={false} style={styles.nativeParensDigit}>
-                2{' '}
+                {a}{' '}
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensBrace}>
                 (
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensDigit}>
-                3×4
+                {b}{o2}{c}
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensBrace}>
                 )
@@ -748,13 +830,13 @@ function NativeOrangeParensButton({
                 (
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensDigit}>
-                2+3
+                {a}{o1}{b}
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensBrace}>
                 )
               </Text>
               <Text allowFontScaling={false} style={styles.nativeParensDigit}>
-                {' '}4
+                {' '}{c}
               </Text>
             </>
           )}
@@ -764,54 +846,6 @@ function NativeOrangeParensButton({
         </Text>
       </Animated.View>
     </Pressable>
-  );
-}
-
-function ParensUnlockIntro({
-  exercise,
-  onContinue,
-}: {
-  exercise: ParensExercise;
-  onContinue: () => void;
-}) {
-  const [demoGroup, setDemoGroup] = useState<ParenGroup>('left');
-  const demoPulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDemoGroup((current) => (current === 'left' ? 'right' : 'left'));
-      demoPulse.setValue(0.96);
-      Animated.spring(demoPulse, {
-        toValue: 1,
-        friction: 4,
-        tension: 130,
-        useNativeDriver: true,
-      }).start();
-    }, 1150);
-    return () => clearInterval(interval);
-  }, [demoPulse]);
-
-  const result = computeParensResult(exercise, demoGroup);
-
-  return (
-    <View style={styles.unlockPanel}>
-      <NativeOrangeParensButton
-        group={demoGroup}
-        visible
-        disabled={false}
-        solved={false}
-        onPress={() => undefined}
-      />
-      <Animated.View style={[styles.unlockEquation, { transform: [{ scale: demoPulse }] }]}>
-        <Text allowFontScaling={false} style={styles.unlockEquationText}>
-          {parensExpression(exercise, demoGroup)}
-        </Text>
-        <Text allowFontScaling={false} style={styles.unlockResultText}>
-          = {result ?? '?'}
-        </Text>
-      </Animated.View>
-      <GoldButton label="Continue" onPress={onContinue} accessibilityLabel="Continue" fullWidth height={52} fontSize={18} />
-    </View>
   );
 }
 
@@ -939,62 +973,12 @@ function CompletionModal({
             המטבעות יוצגו עכשיו, וננסה לסנכרן את היתרה שוב בהמשך.
           </Text>
         ) : null}
-        <Text allowFontScaling={false} style={styles.completeBody}>
-          מילאתם את המשוואה מהקוביות בלבד והשלמתם את גלגל ההצלה.
+        <Text allowFontScaling={false} style={styles.completePrompt}>
+          עכשיו אפשר לבחור קלף ולשגר.
         </Text>
         <GoldButton label="סיום" onPress={onComplete} fullWidth height={54} fontSize={20} />
       </Animated.View>
     </View>
-  );
-}
-
-function ReviewDownArrow({ onPress }: { onPress: () => void }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.12, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="המשך לתרגול הבא">
-      <Animated.View style={[styles.reviewArrowButton, { transform: [{ scale: pulse }] }]}>
-        <Text allowFontScaling={false} style={styles.reviewArrowText}>
-          ↓
-        </Text>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-function ReviewNextArrow({ onPress }: { onPress: () => void }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.12, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="המשך לתרגול הבא">
-      <Animated.View style={[styles.reviewArrowButton, { transform: [{ scale: pulse }] }]}>
-        <Text allowFontScaling={false} style={styles.reviewArrowText}>
-          ›
-        </Text>
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -1025,7 +1009,11 @@ function LaunchCardFlight({ value, progress }: { value: number; progress: Animat
 }
 
 export function LifelineTile({ onComplete }: { onComplete: () => void }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  // The iPhone mobile-web viewport is only ~390×664 (browser chrome eats the rest).
+  // On such short screens the parentheses board + mini-card + fan can't all sit at
+  // their tall-screen positions, so we switch to a compact, lifted layout.
+  const isShort = height < 720;
   const auth = useAuthOptional();
   const basicRound = useMemo(() => buildRandomBasicRound(), []);
   // Capped tighter than the usual min(width,480): the Lifeline tile stacks a lot
@@ -1040,14 +1028,28 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
   const [launchCardSelected, setLaunchCardSelected] = useState(false);
   const [launchingValue, setLaunchingValue] = useState<number | null>(null);
   const [parensExercise, setParensExercise] = useState<ParensExercise>(() => buildRandomParensExercise());
-  const [parenRound, setParenRound] = useState<ParenRound>(0);
   const [parenGroup, setParenGroup] = useState<ParenGroup>('right');
-  const [parenPlacedCount, setParenPlacedCount] = useState(0);
+  const [parensBuild, setParensBuild] = useState<ParensBuildValues>(EMPTY_PARENS_BUILD);
+  const [parenApplied, setParenApplied] = useState(false);
+  // Which parentheses exercise we're on (index into PARENS_EXERCISES), and whether
+  // the current round has been solved (showing the "next exercise" / "הבנתי" CTA).
+  const [parensRoundIndex, setParensRoundIndex] = useState(0);
+  const [parensRoundSolved, setParensRoundSolved] = useState(false);
+  // Hard lock engaged during the SOLVED_HOLD window — swallows every table/dice/
+  // button tap so nothing can interrupt the 1.5s "visual register" pause.
+  const [isBoardLocked, setIsBoardLocked] = useState(false);
   const [rewardAwarded, setRewardAwarded] = useState(false);
   const [rewardStatus, setRewardStatus] = useState<'idle' | 'awarding' | 'awarded' | 'error'>('idle');
   const [rewardTotalBalance, setRewardTotalBalance] = useState<number | null>(null);
   const boardFade = useRef(new Animated.Value(1)).current;
   const launchProgress = useRef(new Animated.Value(0)).current;
+  // Orange "shift" button pulse/blink live in the PARENT so the click handler can
+  // synchronously .stop() the loop (the kill-switch). The SOLVED_HOLD timeout is
+  // likewise held in a ref so it can be cleared on unmount.
+  const parenPulse = useRef(new Animated.Value(1)).current;
+  const parenBlink = useRef(new Animated.Value(1)).current;
+  const parenPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const solvedHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedOption = useMemo(
     () => basicRound.options.find((option) => option.value === selectedValue) ?? null,
@@ -1061,9 +1063,25 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
   const step = stage === 'practice' ? nextStep(equationValues, selectedOption) : null;
   const computedResult = computeResult(equationValues);
   const solved = isComplete(equationValues, selectedOption);
-  const parensStarted = parenPlacedCount > 0;
-  const parensReady = parenPlacedCount >= parensExercise.values.length;
-  const parensSolved = parensReady && parenGroup === parensExercise.correctGroup;
+  const parensComplete = isParensBuildComplete(parensBuild) && buildMatchesExercise(parensBuild, parensExercise);
+  // The board shows the parentheses in the CURRENT group (default = the wrong LEFT
+  // wrap). A mismatch is when that displayed grouping misses the target — exactly
+  // when the orange "shift" button must blink. Solved once the shift lands on it.
+  const parensDisplayedResult = computeBuildParensResult(parensBuild, parenGroup);
+  const parensMismatch = parensComplete && !parenApplied && parensDisplayedResult !== parensExercise.target;
+  const isLastParensRound = parensRoundIndex >= PARENS_ROUND_COUNT - 1;
+  // The Red Banner shows the FULL solved exercise of the selected mini-card — the
+  // GOAL the player copies onto the board — forced strictly LTR so it never reads
+  // backwards on a mobile RTL layout. e.g. parens goal: "(2 + 3) × 4 = 20". The
+  // board starts at the wrong wrap "2 + (3 × 4) = 14" and is shifted to match it.
+  const basicDisplayLabel = useMemo(
+    () => (selectedOption ? forceLtr(basicEquation(selectedOption)) : undefined),
+    [selectedOption],
+  );
+  const parensDisplayLabel = useMemo(
+    () => forceLtr(parensEquation(parensExercise, parensExercise.correctGroup)),
+    [parensExercise],
+  );
   const projectedRewardBalance = rewardTotalBalance ?? Math.max(0, Math.floor(Number(auth?.profile?.total_coins ?? 0) || 0));
   const instruction =
     stage === 'intro'
@@ -1074,10 +1092,18 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
           : COPY.solutions
         : stage === 'launchReady'
           ? COPY.launchReady
-          : stage === 'parenReview'
-            ? COPY.parensReview
           : stage === 'parenPractice'
-            ? COPY.parensPractice
+            ? parensRoundSolved
+              ? isLastParensRound
+                ? COPY.finalContinue
+                : COPY.tryAnother
+              : isBoardLocked
+                ? COPY.successTitle
+                : parensMismatch
+                  ? COPY.parensHint
+                  : COPY.firstNumber
+            : stage === 'practice' && equationValues.left == null
+              ? COPY.firstNumber
             : step === 'left'
                 ? COPY.practiceLeft
                 : step === 'op'
@@ -1093,18 +1119,47 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
     setStage('launchReady');
   }, [solved, stage]);
 
+  // Drive the orange "shift" button's pulse/blink while a shift is required. The
+  // loop instance is held in a ref so handleParenShift can KILL it synchronously on
+  // the first click (no zombie animation leak).
+  const parenShiftPending = stage === 'parenPractice' && parensMismatch && !isBoardLocked;
   useEffect(() => {
-    if (stage !== 'parenPractice' || !parensSolved) return;
-    void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 0.9 });
-    if (parenRound === 0) {
-      setStage('parenReview');
+    if (!parenShiftPending) {
+      parenPulseLoopRef.current?.stop();
+      parenPulseLoopRef.current = null;
+      parenPulse.setValue(1);
+      parenBlink.setValue(1);
       return;
     }
-    const timer = setTimeout(() => {
-      setStage('complete');
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [parenRound, parensSolved, stage]);
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(parenPulse, { toValue: 1.1, duration: 430, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(parenPulse, { toValue: 1, duration: 430, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(parenBlink, { toValue: 0.62, duration: 430, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(parenBlink, { toValue: 1, duration: 430, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ]),
+      ]),
+    );
+    parenPulseLoopRef.current = loop;
+    loop.start();
+    return () => {
+      loop.stop();
+      parenPulseLoopRef.current = null;
+    };
+  }, [parenBlink, parenPulse, parenShiftPending]);
+
+  // Safety law: guarantee the SOLVED_HOLD timer can never fire after unmount.
+  useEffect(() => {
+    return () => {
+      if (solvedHoldTimerRef.current) {
+        clearTimeout(solvedHoldTimerRef.current);
+        solvedHoldTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (stage !== 'complete' || rewardAwarded) return;
@@ -1143,28 +1198,43 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
     }).start();
   }, [boardFade]);
 
+  // Load a FRESH random parentheses exercise for the given round on a clean board.
+  // The exercise is generated once here so the board, banner and starting (wrong)
+  // wrap all reference the SAME values.
+  const loadParensRound = useCallback((roundIndex: number) => {
+    const exercise = buildRandomParensExercise();
+    setParensRoundIndex(roundIndex);
+    setParensExercise(exercise);
+    setParenGroup(wrongStartingParenGroup(exercise));
+    setParensBuild(EMPTY_PARENS_BUILD);
+    setParenApplied(false);
+    setParensRoundSolved(false);
+    setIsBoardLocked(false);
+  }, []);
+
   const openSolutions = useCallback(() => {
     void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
     setStage('solutions');
     setSelectedValue(null);
     setEquationValues(EMPTY_EQUATION);
     setLaunchCardSelected(false);
-    setParensExercise(DEFAULT_PARENS_EXERCISE);
-    setParenRound(0);
-    setParenGroup(wrongStartingParenGroup(DEFAULT_PARENS_EXERCISE));
-    setParenPlacedCount(0);
+    loadParensRound(0);
     setRewardAwarded(false);
     setRewardStatus('idle');
     setRewardTotalBalance(null);
     fadeBoard();
-  }, [fadeBoard]);
+  }, [fadeBoard, loadParensRound]);
 
   const selectMini = useCallback((option: LifelineOption) => {
     void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.52 });
     setSelectedValue(option.value);
     setEquationValues(EMPTY_EQUATION);
     setLaunchCardSelected(false);
-  }, []);
+    if (stage === 'solutions') {
+      setStage('practice');
+      fadeBoard();
+    }
+  }, [fadeBoard, stage]);
 
   const startPractice = useCallback(() => {
     setStage('practice');
@@ -1187,24 +1257,18 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
       setLaunchingValue(null);
       setLaunchCardSelected(false);
       setStage('parenPractice');
-      setParensExercise(DEFAULT_PARENS_EXERCISE);
-      setParenRound(0);
-      setParenGroup(wrongStartingParenGroup(DEFAULT_PARENS_EXERCISE));
-      setParenPlacedCount(0);
+      loadParensRound(0);
       fadeBoard();
     });
-  }, [fadeBoard, launchCardSelected, launchProgress, launchingValue, selectedOption]);
+  }, [fadeBoard, launchCardSelected, launchProgress, launchingValue, loadParensRound, selectedOption]);
 
   const startParensPractice = useCallback(() => {
     void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
     setStage('parenPractice');
     setSelectedValue(null);
-    setParensExercise(DEFAULT_PARENS_EXERCISE);
-    setParenRound(0);
-    setParenGroup(wrongStartingParenGroup(DEFAULT_PARENS_EXERCISE));
-    setParenPlacedCount(0);
+    loadParensRound(0);
     fadeBoard();
-  }, [fadeBoard]);
+  }, [fadeBoard, loadParensRound]);
 
   const pressDie = useCallback(
     (value: number) => {
@@ -1226,31 +1290,86 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
     setEquationValues((prev) => ({ ...prev, op: cycleOperator(prev.op) }));
   }, [equationValues, selectedOption, stage]);
 
-  const toggleParenGroup = useCallback(() => {
-    if (stage !== 'parenPractice' || !parensStarted) return;
-    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
-    setParenGroup((current) => cycleParenGroup(current));
-  }, [parensStarted, stage]);
+  // ── The orange "shift parentheses" click — a strict 4-step SOLVED_HOLD timeline.
+  //    Replaces the old fire-and-forget toggle that cut to the modal instantly and
+  //    left the pulse loop running as a zombie animation.
+  const handleParenShift = useCallback(() => {
+    if (stage !== 'parenPractice' || isBoardLocked || !parensMismatch) return;
 
-  const advanceAfterParensReview = useCallback(() => {
+    // STEP 1 — KILL-SWITCH: stop the pulsing loop on the very first line, then snap
+    // the button back to a static, solid state. No zombie animation can survive.
+    parenPulseLoopRef.current?.stop();
+    parenPulseLoopRef.current = null;
+    parenPulse.setValue(1);
+    parenBlink.setValue(1);
+
+    // STEP 2 — LOCK & REFLECT: shift the parentheses to the correct (right) wrap so
+    // the board + Red Banner both mirror "2 + (3 × 4) = 14", and hard-lock the board
+    // so any further tap on the table / dice / button is swallowed.
+    setParenGroup(parensExercise.correctGroup);
+    setParenApplied(true);
+    setIsBoardLocked(true);
+    void playSfx('gameWin', { cooldownMs: 0, volumeOverride: 0.9 });
+
+    // STEP 3 — VISUAL REGISTER: hold the corrected equation still for 1,500ms so the
+    // player can actually read it. The timer is stored in a ref and cleared on
+    // unmount (see the cleanup effect) so it can never fire on a dead component.
+    if (solvedHoldTimerRef.current) clearTimeout(solvedHoldTimerRef.current);
+    solvedHoldTimerRef.current = setTimeout(() => {
+      solvedHoldTimerRef.current = null;
+      // STEP 4 — REVEAL THE CTA: after the read-pause, surface the round-review
+      // prompt. A non-final round shows "בוא ננסה עוד תרגיל" + arrow → next round;
+      // the final round shows "הבנתי" → 'complete' (modal + +75 coins + shop text).
+      setParensRoundSolved(true);
+    }, 1500);
+  }, [isBoardLocked, parenBlink, parenPulse, parensExercise.correctGroup, parensMismatch, stage]);
+
+  // "בוא ננסה עוד תרגיל" → load the next parentheses exercise on a fresh board.
+  const advanceParensRound = useCallback(() => {
     void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
-    const nextExercise = PARENS_EXERCISES[1];
-    setParensExercise(nextExercise);
-    setParenRound(1);
-    setParenGroup(wrongStartingParenGroup(nextExercise));
-    setParenPlacedCount(0);
-    setStage('parenPractice');
+    loadParensRound(parensRoundIndex + 1);
     fadeBoard();
-  }, [fadeBoard]);
+  }, [fadeBoard, loadParensRound, parensRoundIndex]);
+
+  // Final "הבנתי" → fire the success modal + +75 coin payout + return to the room.
+  const finishParensLesson = useCallback(() => {
+    void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+    setStage('complete');
+  }, []);
 
   const pressParenDie = useCallback(
-    (index: number) => {
-      if (stage !== 'parenPractice') return;
-      if (index !== parenPlacedCount || parenPlacedCount >= parensExercise.values.length) return;
+    (value: number) => {
+      if (stage !== 'parenPractice' || isBoardLocked) return;
+      const [a, b, c] = parensExercise.values;
+      const expected =
+        parensBuild.first == null
+          ? a
+          : parensBuild.op1 === parensExercise.op1 && parensBuild.second == null
+            ? b
+            : parensBuild.op2 === parensExercise.op2 && parensBuild.third == null
+              ? c
+              : null;
+      if (value !== expected) return;
       void playSfx('place', { cooldownMs: 0, volumeOverride: 0.56 });
-      setParenPlacedCount((current) => Math.min(current + 1, parensExercise.values.length));
+      setParensBuild((current) => {
+        if (current.first == null) return { ...current, first: value };
+        if (current.second == null && current.op1 === parensExercise.op1) return { ...current, second: value };
+        if (current.third == null && current.op2 === parensExercise.op2) return { ...current, third: value };
+        return current;
+      });
     },
-    [parenPlacedCount, parensExercise.values.length, stage],
+    [isBoardLocked, parensBuild.first, parensBuild.op1, parensBuild.op2, parensBuild.second, parensBuild.third, parensExercise.op1, parensExercise.op2, parensExercise.values, stage],
+  );
+
+  const pressParenOperator = useCallback(
+    (slot: 'op1' | 'op2') => {
+      if (stage !== 'parenPractice' || isBoardLocked) return;
+      if (slot === 'op1' && parensBuild.first == null) return;
+      if (slot === 'op2' && parensBuild.second == null) return;
+      void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.5 });
+      setParensBuild((current) => ({ ...current, [slot]: cycleOperator(current[slot]) }));
+    },
+    [isBoardLocked, parensBuild.first, parensBuild.second, stage],
   );
 
   const tapFanCard = useCallback(
@@ -1275,12 +1394,20 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
       ? startPractice
       : stage === 'launchReady' && launchCardSelected
         ? launchFirstCard
-        : null;
+        : stage === 'parenPractice' && parensRoundSolved
+          ? isLastParensRound
+            ? finishParensLesson
+            : advanceParensRound
+          : null;
   const continueLabel =
-    stage === 'launchReady' ? 'שגר  ›' : 'המשך  ›';
+    stage === 'launchReady'
+      ? 'שגר  ›'
+      : stage === 'parenPractice' && parensRoundSolved && isLastParensRound
+        ? 'הבנתי'
+        : 'המשך  ›';
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root}>
       <LinearGradient colors={DARK_GRADIENT} locations={[0, 0.38, 0.72, 1]} style={StyleSheet.absoluteFill} />
       <InstructionBanner text={instruction} />
 
@@ -1288,32 +1415,37 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
        *  table, which carries flex:1 + a rigid minHeight: it absorbs all slack so
        *  there is no dead gap, grows/shrinks deterministically, and pins the
        *  mini-cards directly above the fan on every screen height. */}
-      <View style={styles.column} pointerEvents="box-none">
+      <View style={[styles.column, isShort && { paddingTop: 48, paddingBottom: 232 }]} pointerEvents="box-none">
         {/* (1) Action zone — green helper (intro) or red exercise button, held
          *      clear of the banner by a real top margin. The practice band is
          *      shorter (the red button is smaller than the green ring) so the
          *      enlarged table + mini-cards + fan all fit the short safe-area. */}
-        <View style={[styles.actionZone, stage !== 'intro' && styles.actionZonePractice]}>
+        <View style={[styles.actionZone, stage !== 'intro' && styles.actionZonePractice, isShort && stage !== 'intro' && { minHeight: 60, marginTop: 4 }]}>
           {stage === 'intro' ? (
             <RoundGreenButton onPress={openSolutions} active={false} />
           ) : (
             <RedExerciseButton
               option={selectedOption}
-              mode={stage === 'parenPractice' || stage === 'parenReview' ? 'parens' : 'basic'}
+              mode={stage === 'parenPractice' ? 'parens' : 'basic'}
               parenGroup={parenGroup}
               parensExercise={parensExercise}
+              parensLabel={parensDisplayLabel}
+              basicLabel={basicDisplayLabel}
             />
           )}
         </View>
 
-        {stage === 'parenPractice' ? (
+        {stage === 'parenPractice' && (parensMismatch || (isBoardLocked && !parensRoundSolved)) ? (
           <View style={styles.parensButtonZone} pointerEvents="box-none">
             <NativeOrangeParensButton
               group={parenGroup}
-              visible={parensStarted}
-              disabled={!parensStarted}
-              solved={parensSolved}
-              onPress={toggleParenGroup}
+              exercise={parensExercise}
+              visible={parensMismatch || isBoardLocked}
+              disabled={isBoardLocked || !parensMismatch}
+              solved={isBoardLocked}
+              onPress={handleParenShift}
+              pulse={parenPulse}
+              blink={parenBlink}
             />
           </View>
         ) : null}
@@ -1321,16 +1453,19 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
         {/* (2) Table — enlarged, rigid, and the home of BOTH the dice and the
          *      equation. Dice sit on the upper surface; the equation rests below
          *      them, all framed by the golden table image. */}
-        <Animated.View style={[styles.tableZone, { opacity: boardFade }]}>
+        <Animated.View style={[styles.tableZone, isShort && { maxWidth: 286, marginTop: -6, marginBottom: 2 }, { opacity: boardFade }]}>
           <Image source={GOLD_TABLE_IMG} resizeMode="contain" style={styles.tableImage} />
           <View style={styles.tableContent} pointerEvents="box-none">
-            {stage === 'parenPractice' || stage === 'parenReview' ? (
+            {stage === 'parenPractice' ? (
               <ParenthesesBoard
                 exercise={parensExercise}
                 group={parenGroup}
-                placedCount={parenPlacedCount}
+                build={parensBuild}
+                showParens={parensComplete}
+                compact={isShort}
                 onPressDie={pressParenDie}
-                onToggleGroup={toggleParenGroup}
+                onPressOp={pressParenOperator}
+                onToggleGroup={handleParenShift}
               />
             ) : (
               <>
@@ -1354,13 +1489,13 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
         </Animated.View>
 
         {/* (3) Mini-cards — dedicated band directly above the fan, below table. */}
-        <View style={styles.miniZone} pointerEvents="box-none">
+        <View style={[styles.miniZone, isShort && { bottom: 196 }]} pointerEvents="box-none">
           {stage !== 'intro' ? (
             <MiniCards
               options={basicRound.options}
               selectedValue={selectedValue}
               parensTarget={parensExercise.target}
-              showParensCard={stage === 'parenPractice' || stage === 'parenReview'}
+              showParensCard={stage === 'parenPractice'}
               onSelect={selectMini}
             />
           ) : null}
@@ -1368,14 +1503,8 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
 
       </View>
 
-      {stage === 'parenReview' ? (
-        <View style={styles.reviewArrowZone} pointerEvents="box-none">
-          <ReviewNextArrow onPress={advanceAfterParensReview} />
-        </View>
-      ) : null}
-
-      <View style={styles.fanDock} pointerEvents="box-none">
-        <View style={[styles.fanWrap, { width: fanWidth }]} pointerEvents="box-none">
+      <View style={[styles.fanDock, isShort && { bottom: 6 }]} pointerEvents="box-none">
+        <View style={[styles.fanWrap, { width: fanWidth }, isShort && { transform: [{ scale: 0.84 }] }]} pointerEvents="box-none">
           <HandFan
             cards={basicRound.fanCards}
             width={fanWidth}
@@ -1395,7 +1524,7 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
           <GoldButton
             label={continueLabel}
             onPress={continueAction}
-            accessibilityLabel="המשך"
+            accessibilityLabel={continueLabel}
             fullWidth
             height={56}
             fontSize={22}
@@ -1411,7 +1540,7 @@ export function LifelineTile({ onComplete }: { onComplete: () => void }) {
           rewardStatus={rewardStatus}
         />
       ) : null}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1419,6 +1548,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     overflow: 'hidden',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
   },
   bannerPin: {
     position: 'absolute',
@@ -1760,6 +1890,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     opacity: 0.24,
   },
+  parensMarkPlaceholder: {
+    width: 24,
+    height: 68,
+  },
   parensMarkActive: {
     opacity: 1,
     borderColor: '#FDBA74',
@@ -1897,44 +2031,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     writingDirection: 'rtl',
   },
-  unlockPanel: {
-    width: '100%',
-    maxWidth: 300,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(248,224,142,0.36)',
-    backgroundColor: 'rgba(20,12,4,0.62)',
-  },
-  unlockEquation: {
-    minHeight: 82,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,243,201,0.08)',
-  },
-  unlockEquationText: {
-    color: '#FFF4CF',
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: '900',
-    textAlign: 'center',
-    writingDirection: 'ltr',
-  },
-  unlockResultText: {
-    color: '#7BE08A',
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: '900',
-    textAlign: 'center',
-    writingDirection: 'ltr',
-  },
   operatorText: {
     color: '#F8E08E',
     fontSize: 24,
@@ -1942,13 +2038,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   slotBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 11,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: 'rgba(248,224,142,0.48)',
-    backgroundColor: 'rgba(255,243,201,0.04)',
+    backgroundColor: 'rgba(255,243,201,0.07)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1962,19 +2058,20 @@ const styles = StyleSheet.create({
   },
   // Operator slot mirrors the operand box but reads as a tappable control.
   opSlot: {
-    width: 44,
-    height: 44,
-    borderRadius: 11,
-    borderWidth: 1.5,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: 'rgba(248,224,142,0.6)',
-    backgroundColor: 'rgba(255,243,201,0.06)',
+    borderColor: 'rgba(255,204,128,0.78)',
+    backgroundColor: 'rgba(249,115,22,0.13)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   opSlotActive: {
     borderStyle: 'solid',
-    borderColor: '#F8E08E',
+    borderColor: '#FDBA74',
+    backgroundColor: 'rgba(249,115,22,0.23)',
   },
   opSlotLocked: {
     borderStyle: 'solid',
@@ -2114,36 +2211,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
   },
-  reviewArrowZone: {
-    position: 'absolute',
-    right: 22,
-    bottom: 18,
-    zIndex: 60,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  reviewArrowButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
-    borderColor: '#FFF4B8',
-    backgroundColor: '#F97316',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#F97316',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.78,
-    shadowRadius: 12,
-    elevation: 14,
-  },
-  reviewArrowText: {
-    color: '#FFFFFF',
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
   ctaBar: {
     position: 'absolute',
     left: 18,
@@ -2257,6 +2324,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     writingDirection: 'rtl',
+  },
+  completePrompt: {
+    color: '#FFF4CF',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    paddingVertical: 2,
   },
   completeBody: {
     display: 'none',

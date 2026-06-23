@@ -1141,12 +1141,12 @@ const SPECIALS_SALINDA_PRACTICE_TEXT =
   'עכשיו תורכם! הביטו בקלף הסלינדה שבמניפה. ביחרו את סימן הכפל (×)!';
 const SPECIALS_FERA_INTRO_TEXT =
   'הכירו את הנשק הסודי של המשחק: קלף הפרא! הקלף הזה הוא לוח חלק – הוא יכול להפוך לכל מספר שאתם צריכים כדי להשלים את התרגיל ולנצח.';
-const SPECIALS_FERA_SHOWCASE_TEXT =
-  "אין לכם את התוצאה ביד? בחרו בקלף הפרא במקום הקלף שחסר לכם, ואז לחצו על 'שגר'!";
+// Step 2 (wild_demo) is now a hands-off cinema demo — the top text just frames
+// the animation the player is meant to WATCH, with no instruction to act on.
+const SPECIALS_FERA_SHOWCASE_TEXT = 'צפו בהדגמה:';
 const SPECIALS_FERA_READY_TEXT =
   'ראיתם את זה? קלף הפרא השלים את המספר שהיה חסר לכם ופתר את התרגיל!';
-const SPECIALS_FERA_PRACTICE_TEXT =
-  "התור שלכם! אין לכם את התוצאה ביד — בחרו בקלף הפרא ולחצו על 'שגר' כדי לפתור!";
+const SPECIALS_FERA_PRACTICE_TEXT = 'עכשיו תורכם: השתמשו בקלף הפרא';
 // Shown the moment the player arms (selects) the wild, before pressing שגר.
 const SPECIALS_FERA_ARMED_TEXT = "מצוין! עכשיו לחצו על 'שגר' כדי לשלוח את קלף הפרא ולפתור את התרגיל!";
 // Sign-card lesson celebration — fires after the learner places the (−) sign.
@@ -1271,8 +1271,8 @@ function getSpecialsInstruction(state: SpecialsFlowState): string {
   }
   if (state.phase === 'feraIntro') return SPECIALS_FERA_INTRO_TEXT;
   if (state.phase === 'feraShowcase') {
+    // Hands-off demo: "watch this" while running, payoff line once it lands.
     if (state.feraDemoDone) return SPECIALS_FERA_READY_TEXT;
-    if (state.feraArmed) return SPECIALS_FERA_ARMED_TEXT;
     return SPECIALS_FERA_SHOWCASE_TEXT;
   }
   // feraPractice
@@ -1996,7 +1996,27 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
       bounceEquation();
       void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.55 });
     }, 2350);
-  }, [bounceEquation, schedule, state.feraShowcaseStarted, state.phase]);
+    // Cinema beat: the wild AUTO-launches into the result slot — no tap, no שגר.
+    // This is the hands-off "watch" step; the player only acts in feraPractice.
+    schedule(() => {
+      setState((c) => (c.phase === 'feraShowcase' ? { ...c, busy: true } : c));
+      beginFly({ kind: 'feraNumber', label: '6', target: 'result' }, () => {
+        setState((c) =>
+          c.phase === 'feraShowcase'
+            ? {
+                ...c,
+                busy: false,
+                feraResolvedCard: { id: 'specials-resolved-fera-6', type: 'wild', resolvedValue: 6 },
+                feraDemoDone: true,
+                feraShowcaseCardUsed: true,
+              }
+            : c,
+        );
+        bounceEquation();
+        void playSfx('complete', { cooldownMs: 0, volumeOverride: 0.62 });
+      });
+    }, 3300);
+  }, [beginFly, bounceEquation, schedule, state.feraShowcaseStarted, state.phase]);
 
   // ── Phase 1 "Show" demo for the sign-card lesson: on entering symbolsShowcase,
   // auto-place the correct sign (+) into the operator slot of 4 _ 2 = 6 — exactly
@@ -2071,10 +2091,8 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
   }, [beginFly, bounceEquation, schedule, state.busy, state.feraResult, state.phase]);
 
   const handleFeraTap = useCallback((card: Card) => {
-    if (state.busy || (state.phase !== 'feraPractice' && state.phase !== 'feraShowcase')) return;
-    // In the showcase the wild can't be armed until the dice storyboard has rolled
-    // the operands in and revealed the result.
-    if (state.phase === 'feraShowcase' && !state.feraDiceDone) return;
+    // Practice-only: the demo (feraShowcase) is hands-off and plays itself.
+    if (state.busy || state.phase !== 'feraPractice') return;
     if (state.feraArmed) return; // already armed — the launch happens via "שגר".
     // Only the wild can win — the decoy numbers never equal the result, so a tap
     // on one is gently rejected ("try again"). Tapping the wild ARMS it; the player
@@ -2085,7 +2103,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
     }
     setState((current) => ({ ...current, feraArmed: true }));
     void playSfx('tap', { cooldownMs: 0, volumeOverride: 0.55 });
-  }, [showToast, state.busy, state.feraArmed, state.feraDiceDone, state.phase]);
+  }, [showToast, state.busy, state.feraArmed, state.phase]);
 
   const handleNext = useCallback(() => {
     if (state.busy) return;
@@ -2265,7 +2283,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
            *     the fan NEVER shifts. The "שגר" button inherits the same GoldButton
            *     config as the tutorial nav buttons and appears here once armed. */}
           <View style={styles.specialsLaunchSlot} pointerEvents="box-none">
-            {(state.phase === 'feraShowcase' || state.phase === 'feraPractice') && state.feraArmed && !state.feraResolvedCard ? (
+            {state.phase === 'feraPractice' && state.feraArmed && !state.feraResolvedCard ? (
               <GoldButton label="שגר" onPress={launchFera} accessibilityLabel="שגר" fullWidth height={56} fontSize={22} radius={28} />
             ) : null}
           </View>
@@ -2297,7 +2315,7 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
                   : state.phase === 'salindaPractice' || state.phase === 'salindaShowcase'
                   ? card.id === SPECIALS_SALINDA_ID && state.pendingPlacement !== 'salindaOperator' && !state.op
                   : state.phase === 'feraShowcase'
-                  ? state.feraDiceDone && !state.busy && !state.feraShowcaseCardUsed && !state.feraArmed
+                  ? false // hands-off cinema demo — board is locked while watching
                   : state.phase === 'feraPractice'
                   ? !state.busy && !state.feraPracticeCardUsed && !state.feraArmed
                   : false
@@ -2316,7 +2334,17 @@ function SpecialsFlow({ onComplete, onExit }: { onComplete?: () => void; onExit?
         </View>
       )}
 
-      {showNext ? (
+      {state.phase === 'feraIntro' ? (
+        // Step 1 (wild_intro): read at leisure, then advance to the demo.
+        <View style={styles.specialsArrowWrap}>
+          <GoldButton label="המשך  ›" onPress={handleNext} accessibilityLabel="המשך" height={54} fontSize={20} radius={27} />
+        </View>
+      ) : state.phase === 'feraShowcase' && state.feraDemoDone ? (
+        // Step 2 (wild_demo) finished: hand control to the player for practice.
+        <View style={styles.specialsArrowWrap}>
+          <GoldButton label="הבנתי, תן לי לנסות" onPress={handleNext} accessibilityLabel="הבנתי, תן לי לנסות" height={54} fontSize={18} radius={27} />
+        </View>
+      ) : showNext ? (
         <View style={styles.specialsArrowWrap}>
           <SpecialsNextArrow onPress={handleNext} disabled={state.busy} />
         </View>
