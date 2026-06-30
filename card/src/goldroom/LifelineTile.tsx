@@ -71,6 +71,7 @@ type BasicRound = {
 const LIFELINE_REWARD_COINS = SALINDA_TUTORIAL_REWARDS.basic;
 const LIFELINE_REWARD_SOURCE = 'gold_room_lifeline_tile';
 const LIFELINE_REWARD_IDEMPOTENCY_KEY = 'gold_room_lifeline_tile_v1';
+const LIFELINE_MAX_RESULT = 25;
 
 // Every parentheses exercise REQUIRES the shift: the board evaluates with ×
 // precedence, so the no-parens value is a+(b×c). The target is (a+b)×c — reachable
@@ -193,8 +194,12 @@ function buildRandomParensExercise(): ParensExercise {
     const naturalValue = a + b * c; // a + (b × c) — what the board shows without help
     const target = (a + b) * c; // (a + b) × c — the goal; needs the parens shifted left
     if (target === naturalValue) continue; // safety; never true for these ranges
-    if (target > 30 || naturalValue > 30) continue; // keep readable + in mini-card range
-    return { target, values: [a, b, c] as [number, number, number], op1: '+', op2: '*', correctGroup: 'left' };
+    if (target > LIFELINE_MAX_RESULT || naturalValue > LIFELINE_MAX_RESULT) continue;
+    const exercise: ParensExercise = { target, values: [a, b, c] as [number, number, number], op1: '+', op2: '*', correctGroup: 'left' };
+    const startingGroup = wrongStartingParenGroup(exercise);
+    if (computeParensResult(exercise, exercise.correctGroup) !== target) continue;
+    if (computeParensResult(exercise, startingGroup) === target) continue;
+    return exercise;
   }
   return DEFAULT_PARENS_EXERCISE;
 }
